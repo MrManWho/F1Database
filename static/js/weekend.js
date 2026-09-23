@@ -84,7 +84,7 @@
     };
   }
 
-  const ICONS = { saved: "✓ ", saving: "", dirty: "● ", error: "⚠ " };
+  const ICONS = { saved: "✓ ", saving: "", dirty: "● ", error: "⚠ ", offline: "⟳ " };
   function setState(state, text) {
     if (!stateEl) return;
     stateEl.dataset.state = state;
@@ -116,52 +116,268 @@
     });
   });
 
-  let timer = null, saving = false, queued = false, dirty = false;
+  // ---- Saving, offline queue and recovery ------------------------------------------------------------
+  // Every edit is kept in this browser (scoped to account, league, season and round) until the server has it.
+  // Each save carries the round's revision; if someone else saved in between, the server refuses and we merge.
+  let timer = null, saving = false, queued = false, dirty = false, retryTimer = null, locked = false;
+  let revision = parseInt(table.dataset.revision || "0", 10);
+  let lastError = null;
+  const RKEY = "f1-recovery:" + (table.dataset.scope || location.pathname);
+  function store(key, value) { try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ } }
+  function load(key) { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }
 
   function schedule() {
-    if (readOnly) return;
+    if (readOnly || locked) return;
     dirty = true;
+    remember();
     setState("dirty", "Unsaved changes");
     clearTimeout(timer);
     timer = setTimeout(function () { save(false); }, 850);
   }
+  function remember() {
+    // What the server last confirmed (base) stays fixed until a save succeeds, so conflicts can be detected later.
+    const rec = load(RKEY) || { base: baseline, revision: revision };
+    rec.payload = payload(false);
+    rec.savedAt = new Date().toISOString();
+    store(RKEY, rec);
+  }
+  function forget() { store(RKEY, null); }
+
+  function waitForConnection() {
+    setState("offline", "Offline — changes waiting to save");
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(function () { if (dirty) save(false); }, 15000);
+  }
+  window.addEventListener("online", function () { if (dirty && !locked) save(false); });
+  window.addEventListener("offline", function () { if (dirty) waitForConnection(); });
+
+  function send(body) {
+    return fetch(table.dataset.url, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') || {}).content || "" },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().catch(function () { return { ok: false, error: "Server error (" + r.status + ")" }; })
+        .then(function (res) { res.httpStatus = r.status; return res; });
+    });
+  }
+
+  function lockOut(message) {
+    locked = true; dirty = false;
+    clearTimeout(timer); clearTimeout(retryTimer);
+    setState("error", "Locked");
+    table.querySelectorAll("input, select, textarea, button").forEach(function (el) { el.disabled = true; });
+    showBanner("🔒 " + (message || "This round has been submitted.") + " Your unsent changes weren't applied. " +
+      "Contact the Race Master if something needs fixing.", true);
+  }
 
   function save(markComplete) {
     clearTimeout(timer);
+    if (locked) return Promise.resolve(false);
     if (recalc() > 0) {
       setState("error", "Fix highlighted positions to save");
-      if (markComplete) window.F1.toast("Fix duplicate or invalid positions first.", "error");
+      lastError = "Some positions are invalid or duplicated.";
       return Promise.resolve(false);
     }
     if (saving) { queued = true; return Promise.resolve(false); }
+    if (navigator.onLine === false) { dirty = true; waitForConnection(); return Promise.resolve(false); }
     saving = true;
-    dirty = false;
+    const sent = payload(markComplete);
+    sent.base_revision = revision;
+    const editsAtSend = JSON.stringify(payload(false));
     setState("saving", "Saving…");
-    return window.F1.postJSON(table.dataset.url, payload(markComplete)).then(function (res) {
+    return send(sent).then(function (res) {
       saving = false;
+      if (res.httpStatus === 409 && res.conflict) { resolveConflict(res.server); return false; }
+      if (res.httpStatus === 403 && res.locked) { lockOut(res.error); return false; }
+      if (res.httpStatus === 422 && res.blocked) { revision = res.revision || revision; renderChecklist(res.checklist); return false; }
       if (!res.ok) {
         dirty = true;
-        setState("error", "Save failed");
-        window.F1.toast(res.error || "Save failed", "error");
+        lastError = res.error || "Save failed";
+        setState("error", "Save failed: " + lastError);
+        window.F1.toast(lastError, "error");
         return false;
       }
+      lastError = null;
+      revision = res.revision;
+      baseline = JSON.parse(editsAtSend);
+      if (JSON.stringify(payload(false)) === editsAtSend) { dirty = false; forget(); }
+      else { const rec = load(RKEY) || {}; rec.base = baseline; rec.revision = revision; store(RKEY, rec); }
       statusEl.textContent = res.status;
       statusEl.className = "status-badge status-" + res.status.toLowerCase().replace(/ /g, "-");
       setState("saved", "Saved");
       if (res.market_opened) window.F1.toast("Silly season! The transfer market just opened for next year.", "success");
-      if (queued) { queued = false; return save(false); }
-      return true;
+      if (queued || dirty) { queued = false; return save(false).then(function () { return true; }); }
+      return res;
     }).catch(function () {
       saving = false;
       dirty = true;
-      setState("error", "Save failed");
+      remember();
+      waitForConnection();
       return false;
     });
+  }
+
+  // ---- Conflicts: compare what we started from (base), what's on screen (mine) and what's saved (server).
+  const FIELDS = ["qualifying_position", "sprint_position", "sprint_status_override", "race_position", "status_override", "notes"];
+  const LABELS = { qualifying_position: "Qualifying", sprint_position: "Sprint position", sprint_status_override: "Sprint status",
+    race_position: "Race position", status_override: "Race status", notes: "Notes", fastest_lap: "Fastest Lap",
+    driver_of_day: "Driver of the Day", ai_difficulty: "AI difficulty", event_notes: "Weekend notes" };
+  function norm(v) { return v === null || v === undefined || v === false ? "" : v === true ? "1" : String(v); }
+  function flat(p) {
+    // One flat map of every value, with Fastest Lap / Driver of the Day as a single driver id each.
+    const out = { ai_difficulty: norm(p.ai_difficulty), event_notes: norm(p.event_notes), fastest_lap: "", driver_of_day: "" };
+    const results = Array.isArray(p.results) ? p.results : Object.keys(p.results || {}).map(function (id) {
+      return Object.assign({ driver_id: id }, p.results[id]);
+    });
+    results.forEach(function (r) {
+      FIELDS.forEach(function (f) {
+        let v = norm(r[f]);
+        if ((f === "status_override" || f === "sprint_status_override") && v === "") v = "Auto";
+        out[r.driver_id + ":" + f] = v;
+      });
+      if (r.fastest_lap) out.fastest_lap = String(r.driver_id);
+      if (r.driver_of_day) out.driver_of_day = String(r.driver_id);
+    });
+    return out;
+  }
+  function driverName(id) {
+    const tr = table.querySelector('tbody tr[data-driver-id="' + id + '"]');
+    return tr ? tr.querySelector(".driver-cell strong").textContent : "Driver " + id;
+  }
+  function describe(key, value) {
+    if (key === "fastest_lap" || key === "driver_of_day") return value ? driverName(value) : "nobody";
+    if (/_position$/.test(key)) return value ? "P" + value : "blank";
+    return value === "" ? "blank" : value;
+  }
+  function writeValues(values) {
+    Object.keys(values).forEach(function (key) {
+      const v = values[key];
+      if (key === "ai_difficulty") { diffInput.value = v; return; }
+      if (key === "event_notes") { notesEl.value = v; return; }
+      if (key === "fastest_lap" || key === "driver_of_day") {
+        table.querySelectorAll('input[data-field="' + key + '"]').forEach(function (r) { r.checked = r.closest("tr").dataset.driverId === v; });
+        return;
+      }
+      const parts = key.split(":");
+      const tr = table.querySelector('tbody tr[data-driver-id="' + parts[0] + '"]');
+      const el = tr && tr.querySelector('[data-field="' + parts[1] + '"]');
+      if (el) el.value = v;
+    });
+  }
+  function resolveConflict(server) {
+    const b = flat(baseline), mine = flat(payload(false)), theirs = flat(server);
+    const merged = {}, conflicts = [];
+    Object.keys(theirs).forEach(function (key) {
+      if (!(key in mine)) return;
+      const bv = key in b ? b[key] : "", mv = mine[key], sv = theirs[key];
+      if (mv === bv) merged[key] = sv;                // I didn't touch it: take the server's value
+      else if (sv === bv || sv === mv) merged[key] = mv;  // only I changed it (or we agree)
+      else conflicts.push({ key: key, mine: mv, server: sv });
+    });
+    revision = server.revision;
+    baseline = serverPayload(server);
+    if (server.status === "Complete" && table.dataset.master !== "1") { lockOut("This round was submitted while your edits were waiting."); return; }
+    writeValues(merged);
+    recalc();
+    if (!conflicts.length) {
+      window.F1.toast("Merged with newer changes from the server.", "success");
+      dirty = true; remember(); save(false);
+      return;
+    }
+    setState("error", "Conflict: choose which values to keep");
+    const list = document.getElementById("conflict-list");
+    list.innerHTML = "";
+    conflicts.forEach(function (c, i) {
+      const parts = c.key.split(":");
+      const what = parts.length > 1 ? driverName(parts[0]) + " · " + LABELS[parts[1]] : LABELS[c.key];
+      const row = document.createElement("fieldset");
+      row.className = "conflict-row";
+      row.innerHTML = "<legend></legend>" +
+        '<label class="check"><input type="radio" name="c' + i + '" value="mine"> <span>Mine: <b></b></span></label>' +
+        '<label class="check"><input type="radio" name="c' + i + '" value="server"> <span>Server: <b></b></span></label>';
+      row.querySelector("legend").textContent = what;
+      const bs = row.querySelectorAll("b");
+      bs[0].textContent = describe(parts[1] || c.key, c.mine);
+      bs[1].textContent = describe(parts[1] || c.key, c.server);
+      row.dataset.key = c.key; row.dataset.mine = c.mine; row.dataset.server = c.server;
+      list.appendChild(row);
+    });
+    const dlg = document.getElementById("conflict-dialog");
+    const apply = document.getElementById("conflict-apply");
+    const check = function () { apply.disabled = list.querySelectorAll("input:checked").length < conflicts.length; };
+    list.onchange = check;
+    document.getElementById("conflict-all-mine").onclick = function () { list.querySelectorAll('input[value="mine"]').forEach(function (r) { r.checked = true; }); check(); };
+    document.getElementById("conflict-all-server").onclick = function () { list.querySelectorAll('input[value="server"]').forEach(function (r) { r.checked = true; }); check(); };
+    apply.onclick = function () {
+      const chosen = {};
+      list.querySelectorAll(".conflict-row").forEach(function (row) {
+        const pick = row.querySelector("input:checked").value;
+        chosen[row.dataset.key] = pick === "mine" ? row.dataset.mine : row.dataset.server;
+      });
+      writeValues(chosen);
+      recalc();
+      dlg.close();
+      dirty = true; remember(); save(false);
+    };
+    check();
+    if (dlg.showModal) dlg.showModal();
+  }
+  function serverPayload(server) {
+    return { ai_difficulty: server.ai_difficulty, event_notes: server.event_notes,
+      results: Object.keys(server.results).map(function (id) { return Object.assign({ driver_id: parseInt(id, 10) }, server.results[id]); }) };
+  }
+
+  function showBanner(html, isError) {
+    const bn = document.getElementById("recovery-banner");
+    if (!bn) return;
+    bn.hidden = false;
+    bn.classList.toggle("banner-warn", !!isError);
+    bn.setAttribute("role", isError ? "alert" : "status");
+    bn.textContent = "";
+    const span = document.createElement("span");
+    span.textContent = html;
+    bn.appendChild(span);
+    if (isError && load(RKEY)) {
+      const discard = document.createElement("button");
+      discard.type = "button"; discard.className = "btn btn-sm btn-ghost"; discard.textContent = "Discard my unsent changes";
+      discard.addEventListener("click", function () { forget(); location.reload(); });
+      bn.appendChild(document.createTextNode(" "));
+      bn.appendChild(discard);
+    }
   }
 
   applyFilter();
   if (readOnly) return;  // read-only views are plain text: nothing to edit or save
   recalc();
+  let baseline = payload(false);  // what the server had when this page loaded
+  restore();
+
+  // ---- Coming back to an interrupted entry: put the unsent edits back, then sync (or explain why not).
+  function restore() {
+    const rec = load(RKEY);
+    if (!rec || !rec.payload) return;
+    if (JSON.stringify(rec.payload) === JSON.stringify(baseline)) { forget(); return; }
+    fetch(table.dataset.stateUrl, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (state) {
+      if (!state.ok) return;
+      if (state.locked) { lockOut("This round was submitted after you last edited it."); return; }
+      writeValues(flat(rec.payload));
+      recalc();
+      baseline = rec.base || baseline;
+      revision = typeof rec.revision === "number" ? rec.revision : revision;
+      const when = rec.savedAt ? new Date(rec.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "earlier";
+      showBanner("↺ Restored edits you made " + when + " that hadn't reached the server yet. Saving them now.", false);
+      dirty = true;
+      save(false);
+    }).catch(function () {
+      writeValues(flat(rec.payload)); recalc();
+      baseline = rec.base || baseline;
+      revision = typeof rec.revision === "number" ? rec.revision : revision;
+      dirty = true;
+      showBanner("↺ Restored unsent edits. You're offline; they'll save when the connection returns.", false);
+      waitForConnection();
+    });
+  }
 
   function markEdited(el) {
     const tr = el.closest("tbody tr");
@@ -234,29 +450,85 @@
     table.querySelectorAll('input[type=radio]').forEach(function (r) { r.checked = false; });
     schedule();
   });
-  document.getElementById("mark-complete").addEventListener("click", function () {
-    let gpLeft = 0, spLeft = 0;
-    rows.forEach(function (tr) {
-      const race = parsePos(tr.querySelector('[data-field="race_position"]').value);
-      if (resolve(tr.querySelector('[data-field="status_override"]').value, race) === "Not Run") gpLeft++;
-      if (isSprint) {
-        const sp = parsePos(tr.querySelector('[data-field="sprint_position"]').value);
-        if (resolve(tr.querySelector('[data-field="sprint_status_override"]').value, sp) === "Not Run") spLeft++;
-      }
-    });
-    if (gpLeft || spLeft) {
-      const parts = [];
-      if (spLeft) parts.push(spLeft + " Sprint");
-      if (gpLeft) parts.push(gpLeft + " GP");
-      window.F1.toast(parts.join(" and ") + " result(s) still incomplete.", "error");
-      return;
+  // ---- Review and submit: the server checks the saved results; nothing is submitted with a blocking error.
+  const submitBtn = document.getElementById("mark-complete");
+  const submitDlg = document.getElementById("submit-dialog");
+  const submitBody = document.getElementById("submit-body");
+  const submitGo = document.getElementById("submit-go");
+  const confirmBox = document.getElementById("confirm-submit");
+  const acceptBox = document.getElementById("accept-warnings");
+  const acceptRow = document.getElementById("accept-warnings-row");
+  let lastCheck = null;
+  function esc(t) { const d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
+  function renderChecklist(check, clientBlocking) {
+    lastCheck = check;
+    const blocking = (clientBlocking || []).concat(check.blocking || []);
+    const warnings = check.warnings || [];
+    const s = check.summary || {};
+    const out = s.out || {};
+    const list = function (items) { return items && items.length ? items.map(esc).join(", ") : "—"; };
+    let html = '<dl class="submit-summary">' +
+      "<div><dt>Round</dt><dd>R" + esc(s.round) + " " + esc(s.event) + " · " + (s.sprint ? "Sprint weekend" : "Standard weekend") + "</dd></div>" +
+      "<div><dt>Pole</dt><dd>" + esc(s.pole || "—") + "</dd></div>" +
+      (s.sprint ? "<div><dt>Sprint winner</dt><dd>" + esc(s.sprint_winner || "—") + "</dd></div>" : "") +
+      "<div><dt>Grand Prix winner</dt><dd>" + esc(s.winner || "—") + "</dd></div>" +
+      "<div><dt>Podium</dt><dd>" + list(s.podium) + "</dd></div>" +
+      "<div><dt>DNF / DNS / DSQ</dt><dd>" + list(out.DNF) + " / " + list(out.DNS) + " / " + list(out.DSQ) + "</dd></div>" +
+      "<div><dt>Fastest Lap</dt><dd>" + esc(s.fastest_lap || "—") + "</dd></div>" +
+      "<div><dt>Driver of the Day</dt><dd>" + esc(s.dotd || "—") + "</dd></div>" +
+      "<div><dt>AI difficulty</dt><dd>" + (s.ai_difficulty == null ? "Not tracked" : esc(s.ai_difficulty)) + "</dd></div></dl>";
+    if (s.players && s.players.length) {
+      html += '<h3 class="mini-head">Player results</h3><ul class="plain-list small">' + s.players.map(function (p) {
+        return "<li><b>" + esc(p.name) + "</b>: Q " + (p.quali ? "P" + esc(p.quali) : "—") + (p.sprint ? " · Sprint " + esc(p.sprint) : "") +
+          " · Race " + esc(p.race) + " · " + esc(p.points) + " pts</li>";
+      }).join("") + "</ul>";
     }
-    const master = table.dataset.master === "1";
-    if (!master && !confirm("Submit these results? After submitting, only the Race Master can change them.")) return;
-    save(true).then(function (ok) {
-      if (!ok) return;
-      window.F1.toast(master ? "Weekend complete." : "Results submitted.", "success");
-      if (!master) { dirty = false; setTimeout(function () { window.location.reload(); }, 900); }
+    html += '<div class="check-block" role="alert"><h3 class="mini-head">⛔ Blocking errors (' + blocking.length + ")</h3>" +
+      (blocking.length ? "<ul>" + blocking.map(function (b) { return "<li>" + esc(b) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
+    html += '<div class="check-warn"><h3 class="mini-head">⚠️ Warnings (' + warnings.length + ")</h3>" +
+      (warnings.length ? "<ul>" + warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
+    submitBody.innerHTML = html;
+    acceptRow.hidden = !warnings.length;
+    acceptBox.checked = false; confirmBox.checked = false;
+    submitGo.dataset.blocked = blocking.length ? "1" : "0";
+    updateGo();
+    if (submitDlg && !submitDlg.open && submitDlg.showModal) submitDlg.showModal();
+  }
+  function updateGo() {
+    submitGo.disabled = submitGo.dataset.blocked === "1" || !confirmBox.checked || (!acceptRow.hidden && !acceptBox.checked);
+  }
+  if (confirmBox) { confirmBox.addEventListener("change", updateGo); acceptBox.addEventListener("change", updateGo); }
+  if (submitBtn) submitBtn.addEventListener("click", function () {
+    submitBody.innerHTML = '<p class="muted">Saving and checking the results…</p>';
+    if (submitDlg.showModal && !submitDlg.open) submitDlg.showModal();
+    // Wait for any save in flight, then push the latest edits, so the check runs on what's really on the server.
+    const idle = function () { return new Promise(function (done) {
+      let n = 0; (function wait() { if (!saving || n++ > 40) done(); else setTimeout(wait, 250); })();
+    }); };
+    const flush = idle().then(function () { return dirty ? save(false).then(idle) : true; });
+    flush.then(function () {
+      const pending = [];
+      if (locked) pending.push("This round is locked. Only the Race Master can change it.");
+      if (dirty || saving) pending.push(navigator.onLine === false ? "You're offline: some edits haven't reached the server yet." : "Some edits haven't saved yet.");
+      if (lastError) pending.push("Last save failed: " + lastError);
+      if (recalc() > 0) pending.push("Some positions are invalid or duplicated (highlighted in the table).");
+      return fetch(table.dataset.checklistUrl, { credentials: "same-origin" }).then(function (r) { return r.json(); })
+        .then(function (check) {
+          if (!check.ok) { submitBody.innerHTML = '<p class="form-error" role="alert">' + esc(check.error || "Couldn't check the results.") + "</p>"; return; }
+          renderChecklist(check, pending);
+        });
+    }).catch(function () {
+      submitBody.innerHTML = '<p class="form-error" role="alert">You appear to be offline. Results can be submitted once your edits have reached the server.</p>';
+    });
+  });
+  if (submitGo) submitGo.addEventListener("click", function () {
+    submitGo.disabled = true;
+    save(true).then(function (res) {
+      if (!res) { updateGo(); return; }
+      forget();
+      submitDlg.close();
+      window.F1.toast("Results submitted. Standings and records have been recalculated.", "success");
+      setTimeout(function () { window.location.href = (res.summary_url || table.dataset.summaryUrl) + "?submitted=1"; }, 700);
     });
   });
 
@@ -375,6 +647,6 @@
   }
 
   window.addEventListener("beforeunload", function (e) {
-    if (dirty || saving) { e.preventDefault(); e.returnValue = ""; }
+    if ((dirty || saving) && !locked) { remember(); e.preventDefault(); e.returnValue = ""; }
   });
 })();

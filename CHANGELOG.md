@@ -3,6 +3,18 @@
 Every version of F1 Universe Tracker, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.18 · Usability and data safety
+- **Submitted rounds stay locked.** Scorekeepers edit only the open round; once it's submitted only the Race Master can correct it, or **reopen** it for a Scorekeeper. A reopened round doesn't repeat its headlines, team reactions or emails when it's submitted again.
+- **Review before submitting.** Submitting now opens a review: pole, winners, podium, DNFs/DNSs/DSQs, Fastest Lap, Driver of the Day, player results and AI difficulty. **Blocking errors** (missing results, half-entered qualifying, DNS with a position, unsaved edits) must be fixed; **warnings** (no Fastest Lap, AI difficulty not tracked) can be accepted. The server enforces the blocking checks too. After submitting you land on the race summary.
+- **Autosave that survives a bad connection.** Edits are kept in your browser until the server has them. You'll see Saving, Saved, "Offline — changes waiting to save" or Save failed. Saving resumes when you're back online, unsent edits come back if you return to the page, and you're warned before leaving with edits unsaved.
+- **No silent overwrites.** If someone saved the same round while your edits were waiting, you see both values and choose which to keep. If the round was submitted in the meantime, a Scorekeeper's queued edits are stopped and they're told to contact the Race Master.
+- **Race-time states:** "Starts in 2h 15m", then "Race window open", then "Scheduled time passed · awaiting results", then "Completed". The window length is in League Settings. Nothing is completed automatically.
+- **Control Room season card** now shows completion %, rounds and Sprint weekends done, the WDC and WCC leaders, average AI difficulty and the next milestone.
+- **Joining a league:** "Join requests enabled", "Invite only" (invite someone from Players & Logins; they accept from their League Library) or "Closed to new members". Leagues that were open to join keep taking requests; closed ones become invite only. Before joining, people only see a league's name, season and join status.
+- **Accounts:** race-result emails can only be switched on with a valid email address (existing accounts without one have it switched off). Changing your password now asks you to type the new one twice, with show/hide buttons and a Caps Lock warning.
+- **Help** has search, grouped topics with a sticky list (a dropdown on phones), highlighting of the section you're reading and "Back to top" links. New topics: Scorekeeper, Race Master, assigned drivers, joining, racecraft, entering results, Sprint weekends, race times, notifications, comments, predictions, public results and Discord.
+- **Tidier pages:** driver-profile stats sit in balanced rows, the Incidents page explains what to do for your role when there's nothing reported, and AI driver names on the grid, records and reviews are no longer red (players keep their own colour).
+
 ## 1.17 · Fair pledges
 - **Pledges are fair in every car.** A pledge is now an average finishing position, measured against where your car should finish. Each pledge closes the same share of the gap to P1 (Steady 0%, Solid 12%, Strong 25%, Breakout 40%). Before, the fastest car kept every pledge just by driving normally, and the slowest car couldn't keep anything above Steady however well it drove, because Reputation barely moves without points.
 - **DNFs and bad luck.** A DNF or DSQ counts as last place, and from round 5 your single worst weekend is dropped.

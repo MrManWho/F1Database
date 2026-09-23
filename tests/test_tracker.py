@@ -794,7 +794,7 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
     assert steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full).get_json()["ok"]
     again = steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full)
     assert again.status_code == 403 and "Race Master" in again.get_json()["error"]
-    assert "have been submitted" in steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
+    assert "Submitted and locked" in steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
     assert master_client.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
                               json=full).get_json()["ok"]
     # ...but never sees Carson's side of the market, and can't open windows or write storylines.

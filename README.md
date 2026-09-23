@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.17
+# F1 Universe Tracker v1.18
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a
@@ -84,8 +84,13 @@ Possible combinations include Race Master + driver, Scorekeeper + driver, Scorek
 and Spectator without a driver. A league always keeps at least one Race Master, and the last one can't
 be demoted or removed.
 
-People ask to join an open league from their League Library and choose a role. The Race Master
-accepts as asked, accepts with a different role, or declines.
+**Joining** (League Settings, or Players & Logins):
+- **Join requests enabled**: people ask from their League Library and choose a role. The Race Master
+  accepts as asked, accepts with a different role, or declines.
+- **Invite only**: the Race Master invites a login from Players & Logins; they accept from their League Library.
+- **Closed to new members**: no requests, and invitations can't be accepted.
+
+Existing members are never affected. Before joining, people only see a league's name, season and status.
 
 **Upgrading from 1.15 or earlier:** the old account-wide "Scorekeeper" switch is gone. Anyone who had it
 becomes Scorekeeper in every league they belong to (keeping their driver), members without a driver
@@ -99,7 +104,13 @@ autosaves, and there are three ways to enter results:
 - tap drivers in finishing order;
 - import screenshots of the game's classification.
 
-A Scorekeeper presses **Submit results** when done.
+Edits are kept in the browser until the server confirms them, so a dropped connection doesn't lose
+anything: saving resumes when you're back online, and unsent edits come back if you reopen the page. If
+someone else changed the same values meanwhile, you choose which to keep.
+
+When done, **Review and submit** shows a summary with **blocking errors** (must be fixed) and
+**warnings** (can be accepted). Once submitted the round is locked: only the Race Master can correct it
+or **reopen** it for a Scorekeeper.
 
 Points: GP 25-18-15-12-10-8-6-4-2-1, Sprint 8-7-6-5-4-3-2-1. There's no Fastest Lap point, and only a
 Finished result scores.

@@ -414,7 +414,8 @@ def migrate(conn):
                spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
                role and members without a driver become Spectators, so nobody loses access. Human drivers get a
                persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
-    v14 -> v15: league join modes (meta join_mode: requests / invite / closed; an old "open to join" league
+    v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
+               (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
     v13 -> v14: growth pledges are judged on average finishing position against the car
                (team_relations.finish_base / finish_target), with the season's outcome and Reputation reward
@@ -423,7 +424,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "invitations" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "revision" in _columns(conn, "events"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -474,6 +475,12 @@ def migrate(conn):
     for name, ddl in OFFER_V5_COLUMNS:
         if name not in offer_columns:
             conn.execute(f"ALTER TABLE offers ADD COLUMN {name} {ddl}")
+    if "revision" not in _columns(conn, "events"):
+        # v1.18: every saved edit bumps the round's revision, so an offline edit can't silently overwrite newer data;
+        # submitted_at remembers the first submission so a reopened round doesn't repeat its news and team reactions.
+        conn.execute("ALTER TABLE events ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE events ADD COLUMN submitted_at TEXT")
+        conn.execute("UPDATE events SET submitted_at = 'before-v1.18' WHERE status = 'Complete'")
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

@@ -21,8 +21,15 @@
   </div>
 </div>
 
-{% if locked %}
-<div class="banner">These results have been submitted. Only the Race Master can change them now.</div>
+{% if event.status == 'Complete' and not ctx.is_master %}
+<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Submitted and locked.</b> This round's results are final.
+  Only the Race Master can reopen or correct it{% if ctx.can_run %}, so contact them if something needs fixing{% endif %}.</div>
+{% elif event.status == 'Complete' and ctx.is_master %}
+<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Submitted.</b> Scorekeepers can't edit this round.
+  You can correct it here directly, or reopen it so a Scorekeeper can.
+  <form method="post" action="{{ url_for('weekend_reopen', token=ctx.token, event_id=event.id) }}" class="inline"
+        onsubmit="return confirm('Reopen this round? Scorekeepers will be able to edit it until it is submitted again.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
 {% endif %}
 
 {% set full = True %}{% include "_race_night.html" with context %}
@@ -92,6 +99,11 @@
   <table class="data-table entry-table {{ 'is-readonly' if ro }}" id="entry-table"
          data-url="{{ url_for('api_weekend', token=ctx.token, event_id=event.id) }}"
          data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}" data-master="{{ 1 if ctx.is_master else 0 }}"
+         data-revision="{{ event.revision }}" data-complete="{{ 1 if event.status == 'Complete' else 0 }}"
+         data-state-url="{{ url_for('api_weekend_state', token=ctx.token, event_id=event.id) }}"
+         data-checklist-url="{{ url_for('api_weekend_checklist', token=ctx.token, event_id=event.id) }}"
+         data-summary-url="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}"
+         data-scope="{{ user.username }}|{{ ctx.token }}|{{ event.season_id }}|{{ event.id }}"
          data-max="{{ [rows|length, C.MAX_POSITION]|max }}"
          data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'>
     <thead>
@@ -169,7 +181,7 @@
     </label>
     <div class="button-row">
       <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
-      <button type="button" class="btn btn-primary" id="mark-complete">{{ 'Mark weekend complete' if ctx.is_master else 'Submit results' }}</button>
+      {% if event.status != 'Complete' %}<button type="button" class="btn btn-primary" id="mark-complete">{{ 'Review and complete' if ctx.is_master else 'Review and submit' }}</button>{% endif %}
     </div>
     {% endif %}
   </div>
@@ -218,6 +230,32 @@
 </section>
 {% endif %}
 {% if not ro %}
+{% if not ro %}
+<div class="banner recovery-banner" id="recovery-banner" role="status" aria-live="polite" hidden></div>
+<dialog id="submit-dialog" class="dialog submit-dialog" aria-labelledby="submit-title">
+  <div class="dialog-head"><h2 id="submit-title">Review before {{ 'completing' if ctx.is_master else 'submitting' }}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+  <div id="submit-body" aria-live="polite"><p class="muted">Checking the results…</p></div>
+  <div class="submit-confirm">
+    <label class="check" id="accept-warnings-row" hidden><input type="checkbox" id="accept-warnings"> I've read the warnings and want to submit anyway</label>
+    <label class="check"><input type="checkbox" id="confirm-submit"> These results are correct. {% if not ctx.is_master %}After submitting, only the Race Master can change them.{% endif %}</label>
+    <div class="button-row">
+      <button type="button" class="btn btn-ghost" data-close>Keep editing</button>
+      <button type="button" class="btn btn-primary" id="submit-go" disabled>{{ 'Complete round' if ctx.is_master else 'Submit results' }}</button>
+    </div>
+  </div>
+</dialog>
+<dialog id="conflict-dialog" class="dialog conflict-dialog" aria-labelledby="conflict-title">
+  <div class="dialog-head"><h2 id="conflict-title">Someone else changed these results</h2></div>
+  <p class="muted small">While your edits were waiting to save, the same values were changed on the server. Choose which to keep for each one.
+    Everything else has been merged.</p>
+  <div id="conflict-list"></div>
+  <div class="button-row">
+    <button type="button" class="btn btn-ghost" id="conflict-all-mine">Keep all mine</button>
+    <button type="button" class="btn btn-ghost" id="conflict-all-server">Use all server values</button>
+    <button type="button" class="btn btn-primary" id="conflict-apply" disabled>Apply and save</button>
+  </div>
+</dialog>
+{% endif %}
 <dialog id="keys-dialog" class="dialog">
   <div class="dialog-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close>✕</button></div>
   <dl class="keys">

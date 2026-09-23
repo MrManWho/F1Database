@@ -12,6 +12,10 @@
   </div>
 </div>
 
+{% if request.args.get('submitted') %}
+<div class="banner banner-ok" role="status">✓ Results submitted. Standings, records and the championship have been recalculated, and the round is now locked{{ ' for Scorekeepers' if ctx.is_master else '' }}.
+  {% if not ctx.is_master %}Only the Race Master can reopen it.{% endif %}</div>
+{% endif %}
 <section class="card summary-hero">
   <div class="podium">
     {% for r in s.podium %}

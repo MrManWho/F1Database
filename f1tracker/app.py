@@ -49,7 +49,7 @@ AUDIT_LABELS = {
     "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
     "public_rotate": "Made a new public link", "discord_test": "Sent a Discord test message",
     "incident_report": "Reported an incident", "incident_rule": "Ruled on an incident",
-    "incident_delete": "Deleted an incident report", "request_pledge": "Asked for a new growth pledge",
+    "incident_delete": "Deleted an incident report", "weekend_reopen": "Reopened a submitted round", "request_pledge": "Asked for a new growth pledge",
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
 }
@@ -786,6 +786,22 @@ def register_routes(app):
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/reopen", methods=["POST"])
+    @career_page(master_only=True)
+    def weekend_reopen(conn, ctx, event_id):
+        """Race Master only: reopen a submitted round so it can be corrected (Scorekeepers can edit it again)."""
+        event = S.get_event(conn, event_id)
+        if not event:
+            abort(404)
+        if event["status"] != C.EVENT_COMPLETE:
+            flash("That round isn't submitted, so there's nothing to reopen.", "info")
+        else:
+            conn.execute("UPDATE events SET status = ?, revision = revision + 1 WHERE id = ?",
+                         (C.EVENT_IN_PROGRESS, event_id))
+            flash(f"R{event['round_number']} {event['name']} reopened. Standings keep counting its results; submit it "
+                  "again when the corrections are done.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
 
     @app.route("/career/<token>/weekend/<int:event_id>/summary")
     @career_page()
@@ -1746,18 +1762,35 @@ def register_routes(app):
                 if not before:
                     return jsonify(ok=False, error="Event not found"), 404
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
-                    return jsonify(ok=False, error="This weekend has been submitted. Only the Race Master can change it now."), 403
+                    return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
+                                   "can reopen or change it now."), 403
+                base = payload.get("base_revision")
+                if base is not None and str(base).lstrip("-").isdigit() and int(base) != before["revision"]:
+                    # Someone saved this round after the edits being sent were started (e.g. while offline).
+                    return jsonify(ok=False, conflict=True, error="This round changed on the server since your edits.",
+                                   server=S.weekend_snapshot(conn, event_id)), 409
+                if payload.get("mark_complete") and before["status"] != C.EVENT_COMPLETE:
+                    S.save_weekend(conn, event_id, {**payload, "mark_complete": False})
+                    check = S.submission_check(conn, event_id)
+                    if check["blocking"]:
+                        return jsonify(ok=False, blocked=True, error="Fix the blocking problems before submitting.",
+                                       checklist=check, revision=check["revision"]), 422
                 result = S.save_weekend(conn, event_id, payload)
-                community.audit(conn, g.user["username"],
-                                "Submitted results" if result["complete"] and before["status"] != C.EVENT_COMPLETE
-                                else "Edited results", f"R{before['round_number']} {before['name']}")
-                opened = None
                 newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
+                community.audit(conn, g.user["username"],
+                                "Submitted results" if newly_complete else "Edited results",
+                                f"R{before['round_number']} {before['name']}")
+                opened = None
+                first_submission = newly_complete and not before["submitted_at"]
                 if newly_complete:
+                    conn.execute("UPDATE events SET submitted_at = COALESCE(submitted_at, ?) WHERE id = ?",
+                                 (storage.now_iso(), event_id))
+                if first_submission:  # a reopened round doesn't repeat its headlines, team reactions or emails
                     feed.on_weekend_complete(conn, event_id, f"weekend/{event_id}")
                     teamlife.after_race(conn, event_id)
                     opened = market.maybe_open_silly_season(conn, before["season_id"])
                 result["market_opened"] = bool(opened)
+                result["summary_url"] = url_for("race_summary", token=token, event_id=event_id) if result["complete"] else None
         except CareerNotFound:
             return jsonify(ok=False, error="League not found"), 404
         except ValidationError as exc:
@@ -1769,6 +1802,7 @@ def register_routes(app):
                 storage.auto_backup(token, f"after-round-{before['round_number']}", force=True)
             except Exception:
                 app.logger.exception("automatic backup failed")
+        if first_submission:
             try:
                 _email_results(token, event_id)
             except Exception:
@@ -1808,6 +1842,34 @@ def register_routes(app):
         except importer.ScreenshotError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, kind=kind, **result)
+
+    @app.route("/api/career/<token>/weekend/<int:event_id>/state")
+    def api_weekend_state(token, event_id):
+        """The saved round, for recovering offline edits: revision, lock state and every value."""
+        if not _may_enter_results(token):
+            return jsonify(ok=False, error="Only the Race Master or a Scorekeeper can enter results"), 403
+        try:
+            with storage.session(token) as conn:
+                if not S.get_event(conn, event_id):
+                    return jsonify(ok=False, error="Event not found"), 404
+                snap = S.weekend_snapshot(conn, event_id)
+        except CareerNotFound:
+            return jsonify(ok=False, error="League not found"), 404
+        snap["locked"] = snap["status"] == C.EVENT_COMPLETE and not is_master()
+        return jsonify(ok=True, **snap)
+
+    @app.route("/api/career/<token>/weekend/<int:event_id>/checklist")
+    def api_weekend_checklist(token, event_id):
+        if not _may_enter_results(token):
+            return jsonify(ok=False, error="Only the Race Master or a Scorekeeper can enter results"), 403
+        try:
+            with storage.session(token) as conn:
+                if not S.get_event(conn, event_id):
+                    return jsonify(ok=False, error="Event not found"), 404
+                check = S.submission_check(conn, event_id)
+        except CareerNotFound:
+            return jsonify(ok=False, error="League not found"), 404
+        return jsonify(ok=True, **check)
 
     @app.route("/api/career/<token>/notifications")
     @career_page()

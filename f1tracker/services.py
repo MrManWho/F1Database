@@ -691,10 +691,113 @@ def save_weekend(conn, event_id, payload):
         status = C.EVENT_IN_PROGRESS
     else:
         status = C.EVENT_NOT_RUN
-    conn.execute("UPDATE events SET status=?, notes=?, ai_difficulty=? WHERE id=?",
+    conn.execute("UPDATE events SET status=?, notes=?, ai_difficulty=?, revision = revision + 1 WHERE id=?",
                  (status, event_notes, difficulty, event_id))
+    revision = conn.execute("SELECT revision FROM events WHERE id = ?", (event_id,)).fetchone()[0]
     return {"status": status, "complete": status == C.EVENT_COMPLETE, "ai_difficulty": difficulty,
-            "gp_left": gp_left, "sprint_left": sprint_left}
+            "gp_left": gp_left, "sprint_left": sprint_left, "revision": revision}
+
+
+RESULT_FIELDS = ("qualifying_position", "sprint_position", "sprint_status", "race_position", "result_status",
+                 "fastest_lap", "driver_of_day", "notes")
+
+
+def weekend_snapshot(conn, event_id):
+    """The saved state of a round, in the shape the entry page sends, for conflict checks after offline edits."""
+    event = get_event(conn, event_id)
+    rows = {}
+    for r in _rows(conn, "SELECT * FROM results WHERE event_id = ?", (event_id,)):
+        rows[str(r["driver_id"])] = {
+            "qualifying_position": r["qualifying_position"], "race_position": r["race_position"],
+            "sprint_position": r["sprint_position"],
+            "status_override": r["result_status"] if r["result_status"] in C.OVERRIDE_STATUSES else "Auto",
+            "sprint_status_override": r["sprint_status"] if r["sprint_status"] in C.OVERRIDE_STATUSES else "Auto",
+            "fastest_lap": bool(r["fastest_lap"]), "driver_of_day": bool(r["driver_of_day"]), "notes": r["notes"] or ""}
+    return {"revision": event["revision"], "status": event["status"], "ai_difficulty": event["ai_difficulty"],
+            "event_notes": event["notes"] or "", "results": rows}
+
+
+def submission_check(conn, event_id):
+    """Final review before a round is submitted: blocking errors, warnings and a summary, from the saved data."""
+    event = get_event(conn, event_id)
+    rows = weekend_rows(conn, event_id)
+    sprint = bool(event["is_sprint"])
+    blocking, warnings = [], []
+    name = lambda r: r["driver"]["name"]
+    gp_left = [name(r) for r in rows if r["result_status"] == C.STATUS_NOT_RUN]
+    if gp_left:
+        blocking.append(f"Grand Prix result missing for {len(gp_left)} driver{'s' if len(gp_left) != 1 else ''}: "
+                        + ", ".join(gp_left[:6]) + ("…" if len(gp_left) > 6 else ""))
+    if sprint:
+        sp_left = [name(r) for r in rows if r["sprint_status"] == C.STATUS_NOT_RUN]
+        if sp_left:
+            blocking.append(f"Sprint result missing for {len(sp_left)} driver{'s' if len(sp_left) != 1 else ''}: "
+                            + ", ".join(sp_left[:6]) + ("…" if len(sp_left) > 6 else ""))
+    # Qualifying is required once any is entered (a half-entered session is an error); none at all is only a warning.
+    any_quali = any(r["qualifying_position"] for r in rows)
+    no_quali = [name(r) for r in rows if r["result_status"] in C.START_STATUSES and not r["qualifying_position"]]
+    if not any_quali:
+        warnings.append("No qualifying positions entered (pole and racecraft won't count this round)")
+    elif no_quali:
+        blocking.append(f"Qualifying position missing for {len(no_quali)} driver{'s' if len(no_quali) != 1 else ''} "
+                        "who started: " + ", ".join(no_quali[:6]) + ("…" if len(no_quali) > 6 else ""))
+    for field, label in (("qualifying_position", "qualifying"), ("race_position", "Grand Prix"), ("sprint_position", "Sprint")):
+        values = [r[field] for r in rows if r[field]]
+        if len(values) != len(set(values)):
+            blocking.append(f"Two drivers share a {label} position")
+    for r in rows:
+        if r["result_status"] == "DNS" and r["race_position"]:
+            blocking.append(f"{name(r)} is DNS but has a Grand Prix position (P{r['race_position']})")
+        if sprint and r["sprint_status"] == "DNS" and r["sprint_position"]:
+            blocking.append(f"{name(r)} is DNS in the Sprint but has a Sprint position (P{r['sprint_position']})")
+    fl = [r for r in rows if r["fastest_lap"]]
+    dotd = [r for r in rows if r["driver_of_day"]]
+    if len(fl) > 1:
+        blocking.append("More than one driver has Fastest Lap")
+    elif fl and fl[0]["result_status"] not in C.START_STATUSES:
+        blocking.append(f"Fastest Lap is given to {name(fl[0])}, who didn't start the race")
+    elif not fl:
+        warnings.append("No Fastest Lap selected")
+    if len(dotd) > 1:
+        blocking.append("More than one driver has Driver of the Day")
+    elif not dotd:
+        warnings.append("No Driver of the Day selected")
+    if event["ai_difficulty"] is None:
+        warnings.append("AI difficulty not tracked for this round (the recommender will skip it)")
+    finished = sorted(r["race_position"] for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"])
+    if finished and finished != list(range(1, len(finished) + 1)):
+        missing = [p for p in range(1, finished[-1] + 1) if p not in finished]
+        if missing:
+            warnings.append("Gaps in the finishing order: " + ", ".join(f"P{p}" for p in missing[:6]))
+    for r in rows:
+        if r["result_status"] in ("DNF", "DSQ") and r["race_position"]:
+            warnings.append(f"{name(r)} is {r['result_status']} with a position (P{r['race_position']}); they score no points")
+    if not (event["notes"] or "").strip():
+        warnings.append("No weekend notes")
+
+    def finisher(field, status_field, pos):
+        return next((r for r in rows if r[field] == pos and r[status_field] == C.STATUS_FINISHED), None)
+    order = sorted((r for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"]),
+                   key=lambda r: r["race_position"])
+    summary = {
+        "round": event["round_number"], "event": event["name"], "sprint": sprint,
+        "pole": next((name(r) for r in rows if r["qualifying_position"] == 1), None),
+        "sprint_winner": name(finisher("sprint_position", "sprint_status", 1)) if sprint and finisher("sprint_position", "sprint_status", 1) else None,
+        "winner": name(order[0]) if order else None,
+        "podium": [name(r) for r in order[:3]],
+        "out": {s: [name(r) for r in rows if r["result_status"] == s] for s in ("DNF", "DNS", "DSQ")},
+        "fastest_lap": name(fl[0]) if len(fl) == 1 else None,
+        "dotd": name(dotd[0]) if len(dotd) == 1 else None,
+        "players": [{"name": name(r), "color": r["driver"]["player_color"],
+                     "quali": r["qualifying_position"], "race": (f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED
+                                                                 else r["result_status"]),
+                     "sprint": (f"P{r['sprint_position']}" if r["sprint_status"] == C.STATUS_FINISHED else r["sprint_status"]) if sprint else None,
+                     "points": r["gp_points"] + r["sprint_pts"]}
+                    for r in rows if r["driver"]["is_player"]],
+        "ai_difficulty": event["ai_difficulty"],
+    }
+    return {"blocking": blocking, "warnings": warnings, "summary": summary, "revision": event["revision"],
+            "status": event["status"]}
 
 
 # --------------------------------------------------------------------------- AI difficulty
