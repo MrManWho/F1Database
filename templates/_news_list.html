@@ -1,0 +1,11 @@
+<ul class="news-list">
+  {% for n in news %}
+  <li class="news-{{ n.kind }}" style="--team: {{ n.team.color if n.team else 'var(--line)' }}">
+    <span class="news-kind">{{ {'result': 'Race', 'player': 'Spotlight', 'market': 'Market', 'rumour': 'Rumour', 'season': 'Season', 'tech': 'Tech', 'paddock': 'Paddock'}.get(n.kind, n.kind) }}</span>
+    {% if n.link %}<a href="/career/{{ ctx.token }}/{{ n.link }}"><strong>{{ n.headline }}</strong></a>{% else %}<strong>{{ n.headline }}</strong>{% endif %}
+    {% if n.body %}<small>{{ n.body }}</small>{% endif %}
+  </li>
+  {% else %}
+  <li class="muted">No news yet. Headlines appear as races are completed and deals are done.</li>
+  {% endfor %}
+</ul>

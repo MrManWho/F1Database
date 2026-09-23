@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'First-time setup' if mode == 'setup' else 'Log in' }}{% endblock %}
+{% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up'}.get(mode, 'Log in') }}{% endblock %}
 {% block plain %}
 <section class="auth-card card">
   <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
@@ -14,6 +14,22 @@
     <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
     <button class="btn btn-primary">Create account</button>
   </form>
+  {% elif mode == 'register' %}
+  <h1>Create your login</h1>
+  {% if signups %}
+  <p class="muted">Once you've signed up, the Race Master links your login to your driver. Until then you won't see any careers.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
+    <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
+    <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+    <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
+    <button class="btn btn-primary">Create account</button>
+  </form>
+  {% else %}
+  <p class="muted">Sign-ups are turned off. Ask the Race Master to create your login.</p>
+  {% endif %}
+  <p class="muted small">Already have a login? <a href="{{ url_for('login') }}">Log in</a></p>
   {% else %}
   <h1>Log in</h1>
   <form method="post" class="stack">
@@ -22,7 +38,9 @@
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
     <button class="btn btn-primary">Log in</button>
   </form>
-  <p class="muted small">Forgot your password? Ask the Race Master to reset it from Accounts.</p>
+  <p class="muted small">Forgot your password? Ask the Race Master to reset it from Accounts.
+    {% if signups %}<br>New here? <a href="{{ url_for('register') }}">Create a login</a>{% endif %}</p>
+  <p class="muted small">After {{ C.LOGIN_MAX_FAILURES }} wrong passwords the login locks for {{ C.LOGIN_LOCK_MINUTES }} minutes.</p>
   {% endif %}
 </section>
 {% endblock %}

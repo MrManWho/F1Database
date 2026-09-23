@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}Paddock Admin{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Race Master · {{ season.year }}</div><h1>Paddock admin</h1></div></div>
+
+<section class="card">
+  <div class="card-head"><h2>Car ratings</h2><span class="muted small">Set these to match the game's car performance</span></div>
+  <p class="muted small">Car ratings decide which cars count as fast before three rounds of this season are done. That affects the bar teams set in the
+    transfer market and the "vs the car" part of the difficulty score. Every winter the cars develop on their own: they drift toward the pack,
+    better finishers get more money, and there's some luck. You can always correct them here.</p>
+  <form method="post" action="{{ url_for('paddock_cars', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="rating-grid">
+      {% for t in all_teams if t.active %}{% set cr = ratings.get(t.id) %}
+      <label style="--team: {{ t.color }}">{{ team_dot(t) }}{{ t.name }}
+        <input type="number" name="rating_{{ t.id }}" step="0.1" min="{{ C.CAR_RATING_MIN }}" max="{{ C.CAR_RATING_MAX }}" value="{{ '%.1f'|format(cr.rating) if cr }}">
+        {% if cr and cr.change %}<small class="{{ 'up' if cr.change > 0 else 'down' }}">{{ '%+.1f'|format(cr.change) }} over winter</small>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary">Save car ratings</button>
+  </form>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Add a driver</h2>
+    <form method="post" action="{{ url_for('paddock_driver', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Name<input name="name" required maxlength="60" placeholder="A new F2 graduate"></label>
+      <label>Starting Reputation (1–100)<input name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="60" required></label>
+      <p class="muted small">New drivers start without a seat. Put them in a car from Grid &amp; Transfers.</p>
+      <button class="btn btn-primary">Add driver</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Add a team</h2>
+    <form method="post" action="{{ url_for('paddock_team', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Team name<input name="name" required maxlength="40"></label>
+      <div class="grid-2">
+        <label>Code<input name="abbreviation" required maxlength="4" placeholder="NEW"></label>
+        <label>Colour<input name="color" type="color" value="#9085e9"></label>
+      </div>
+      <p class="muted small">A new team adds two empty seats to the {{ season.year }} grid. Fill them before the next round.</p>
+      <button class="btn btn-primary">Add team</button>
+    </form>
+  </section>
+</div>
+
+<section class="card table-card">
+  <h2>Teams</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Code</th><th>Colour</th><th>Active</th><th></th></tr></thead>
+    <tbody>{% for t in all_teams %}
+      {% set f = 'team-' ~ t.id %}
+      <tr>
+        <td><input form="{{ f }}" name="name" value="{{ t.name }}" maxlength="40" required></td>
+        <td><input form="{{ f }}" name="abbreviation" value="{{ t.abbreviation }}" maxlength="4" class="narrow" required></td>
+        <td><input form="{{ f }}" name="color" type="color" value="{{ t.color }}"></td>
+        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if t.active }}></td>
+        <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% for t in all_teams %}
+  <form id="team-{{ t.id }}" method="post" action="{{ url_for('paddock_team', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="team_id" value="{{ t.id }}"></form>
+  {% endfor %}
+  <p class="muted small">Turning a team off removes its seats from the current season (its drivers become free agents) and from future seasons. Past results stay.</p>
+</section>
+
+<section class="card table-card">
+  <h2>Drivers</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Seat</th><th>Baseline Rep</th><th>Rep now</th><th>Active</th><th></th></tr></thead>
+    <tbody>{% for d in all_drivers %}
+      {% set f = 'driver-' ~ d.id %}
+      <tr class="{{ 'player-row' if d.is_player }}">
+        <td><input form="{{ f }}" name="name" value="{{ d.name }}" maxlength="60" required></td>
+        <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td><input form="{{ f }}" name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="{{ d.baseline_reputation }}" class="narrow"></td>
+        <td class="num">{{ d.rep_now }}</td>
+        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if d.active }}></td>
+        <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% for d in all_drivers %}
+  <form id="driver-{{ d.id }}" method="post" action="{{ url_for('paddock_driver', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="driver_id" value="{{ d.id }}"></form>
+  {% endfor %}
+  <p class="muted small">Untick Active to retire a driver. If they have a seat, the best free AI driver takes it. Their history stays.
+    Baseline Reputation only matters for seasons that haven't started yet; earned Reputation carries on as before.</p>
+</section>
+{% endblock %}

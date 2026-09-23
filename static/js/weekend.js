@@ -11,7 +11,7 @@
   const diffInput = document.getElementById("ai-difficulty");
   const notesEl = document.getElementById("event-notes");
   const rows = Array.from(table.querySelectorAll("tbody tr"));
-  const MAX = 22;
+  const MAX = parseInt(table.dataset.max || "22", 10);
 
   function parsePos(v) {
     v = (v || "").trim();
@@ -178,6 +178,120 @@
     }
     save(true).then(function (ok) { if (ok) window.F1.toast("Weekend complete.", "success"); });
   });
+
+  // ---- Quick order (tap mode): tap drivers in finishing order to number a column.
+  const banner = document.getElementById("tap-banner");
+  const labels = { qualifying_position: "qualifying", sprint_position: "Sprint", race_position: "race" };
+  let tapField = null, tapStack = [];
+  function nextFree(field) {
+    const used = {};
+    table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) {
+      const p = parsePos(i.value); if (p) used[p] = true;
+    });
+    for (let n = 1; n <= MAX; n++) if (!used[n]) return n;
+    return null;
+  }
+  function refreshTap() {
+    if (!tapField) return;
+    const n = nextFree(tapField);
+    document.getElementById("tap-next").textContent = n ? "P" + n : "all placed";
+    rows.forEach(function (tr) {
+      const inp = tr.querySelector('[data-field="' + tapField + '"]');
+      tr.classList.toggle("tap-placed", !!inp.value);
+    });
+  }
+  function stopTap() {
+    tapField = null; tapStack = [];
+    banner.hidden = true;
+    table.classList.remove("tap-mode");
+    rows.forEach(function (tr) { tr.classList.remove("tap-placed"); });
+    document.querySelectorAll("[data-tap]").forEach(function (b) { b.classList.remove("btn-primary"); });
+  }
+  document.querySelectorAll("[data-tap]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (tapField === btn.dataset.tap) { stopTap(); return; }
+      stopTap();
+      tapField = btn.dataset.tap;
+      btn.classList.add("btn-primary");
+      document.getElementById("tap-field").textContent = labels[tapField];
+      banner.hidden = false;
+      table.classList.add("tap-mode");
+      refreshTap();
+    });
+  });
+  table.addEventListener("click", function (e) {
+    if (!tapField || e.target.closest("input, select, button")) return;
+    const tr = e.target.closest("tbody tr");
+    if (!tr) return;
+    const inp = tr.querySelector('[data-field="' + tapField + '"]');
+    if (inp.value) return;
+    const n = nextFree(tapField);
+    if (!n) return;
+    inp.value = n;
+    tapStack.push(inp);
+    recalc(); schedule(); refreshTap();
+  });
+  if (banner) {
+    document.getElementById("tap-undo").addEventListener("click", function () {
+      const inp = tapStack.pop();
+      if (inp) { inp.value = ""; recalc(); schedule(); refreshTap(); }
+    });
+    document.getElementById("tap-clear").addEventListener("click", function () {
+      if (!confirm("Clear every " + labels[tapField] + " position?")) return;
+      table.querySelectorAll('input[data-field="' + tapField + '"]').forEach(function (i) { i.value = ""; });
+      tapStack = []; recalc(); schedule(); refreshTap();
+    });
+    document.getElementById("tap-done").addEventListener("click", stopTap);
+  }
+
+  // ---- Screenshot import: fill a column from the game's classification screen.
+  const importForm = document.getElementById("import-form");
+  if (importForm) {
+    importForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const go = document.getElementById("import-go");
+      go.disabled = true;
+      go.textContent = "Reading screenshots…";
+      const csrf = document.querySelector('meta[name="csrf-token"]').content;
+      fetch(importForm.dataset.url, { method: "POST", body: new FormData(importForm), credentials: "same-origin",
+        headers: { "X-CSRF-Token": csrf } })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Server error (" + r.status + ")" }; }); })
+        .then(function (res) {
+          go.disabled = false;
+          go.textContent = "Read screenshots";
+          if (!res.ok) { window.F1.toast(res.error || "Import failed", "error"); return; }
+          applyImport(res);
+          importForm.closest("dialog").close();
+        })
+        .catch(function () {
+          go.disabled = false; go.textContent = "Read screenshots";
+          window.F1.toast("Couldn't reach the server.", "error");
+        });
+    });
+  }
+  function applyImport(res) {
+    const field = { qualifying: "qualifying_position", sprint: "sprint_position", race: "race_position" }[res.kind];
+    const statusField = { sprint: "sprint_status_override", race: "status_override" }[res.kind];
+    const byDriver = {};
+    rows.forEach(function (tr) { byDriver[tr.dataset.driverId] = tr; });
+    table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) { i.value = ""; i.classList.remove("imported"); });
+    res.rows.forEach(function (r) {
+      const tr = byDriver[r.driver_id];
+      if (!tr) return;
+      const inp = tr.querySelector('[data-field="' + field + '"]');
+      inp.value = r.position;
+      inp.classList.add("imported");
+      if (statusField) tr.querySelector('[data-field="' + statusField + '"]').value = r.status === "Finished" ? "Auto" : r.status;
+    });
+    if (res.kind === "race" && res.fastest_lap_driver_id && byDriver[res.fastest_lap_driver_id]) {
+      byDriver[res.fastest_lap_driver_id].querySelector('[data-field="fastest_lap"]').checked = true;
+    }
+    recalc(); schedule();
+    let msg = "Filled " + res.rows.length + " " + res.kind + " positions. Check the highlighted boxes.";
+    if (rows.length - res.rows.length > 0) msg += " " + (rows.length - res.rows.length) + " driver(s) weren't found.";
+    if (res.notes) msg += " Note: " + res.notes;
+    window.F1.toast(msg, res.rows.length ? "success" : "error");
+  }
 
   window.addEventListener("beforeunload", function (e) {
     if (dirty || saving) { e.preventDefault(); e.returnValue = ""; }

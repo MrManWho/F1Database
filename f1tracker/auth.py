@@ -8,11 +8,16 @@ garage and offers.
 import re
 import secrets
 import sqlite3
+import time
 from contextlib import contextmanager
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .constants import LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILURES
 from .storage import data_dir, now_iso
+
+IP_MAX_FAILURES = 20          # a single address guessing across many usernames
+SIGNUPS_PER_IP_PER_HOUR = 5
 
 USERNAME_RE = re.compile(r"^[a-z0-9_.-]{2,32}$")
 
@@ -32,6 +37,12 @@ def accounts():
         password_hash TEXT NOT NULL,
         is_master INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS login_failures (
+        key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0,
+        first_at REAL NOT NULL,
+        locked_until REAL NOT NULL DEFAULT 0)""")
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     try:
         yield conn
         conn.commit()
@@ -121,3 +132,92 @@ def delete_user(username):
         if user["is_master"] and conn.execute("SELECT COUNT(*) FROM users WHERE is_master = 1").fetchone()[0] <= 1:
             raise AuthError("You cannot delete the last Race Master")
         conn.execute("DELETE FROM users WHERE username = ?", (normalise(username),))
+
+
+# --------------------------------------------------------------------------- settings
+
+def get_setting(key, default=None):
+    with accounts() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key, value):
+    with accounts() as conn:
+        if value is None:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        else:
+            conn.execute("INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (key, str(value)))
+
+
+def signups_allowed():
+    return get_setting("allow_signups", "1") == "1"
+
+
+# --------------------------------------------------------------------------- login protection
+
+def _keys(username, ip):
+    return [f"user:{normalise(username)}", f"ip:{ip or '?'}"]
+
+
+def lock_remaining(username, ip):
+    """Seconds until this username or address may try again (0 = not locked)."""
+    now = time.time()
+    with accounts() as conn:
+        rows = conn.execute("SELECT locked_until FROM login_failures WHERE key IN (?, ?)", _keys(username, ip)).fetchall()
+    return max([int(r["locked_until"] - now) for r in rows if r["locked_until"] > now] + [0])
+
+
+def record_failure(username, ip):
+    now = time.time()
+    window = LOGIN_LOCK_MINUTES * 60
+    with accounts() as conn:
+        for key, limit in zip(_keys(username, ip), (LOGIN_MAX_FAILURES, IP_MAX_FAILURES)):
+            row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
+            if not row or now - row["first_at"] > window:
+                count, first = 1, now
+            else:
+                count, first = row["count"] + 1, row["first_at"]
+            locked = now + window if count >= limit else 0
+            conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,?)
+                            ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at,
+                            locked_until=excluded.locked_until""", (key, count, first, locked))
+
+
+def clear_failures(username, ip):
+    with accounts() as conn:
+        conn.execute("DELETE FROM login_failures WHERE key = ?", (_keys(username, ip)[0],))
+
+
+def login(username, password, ip):
+    """Verify a login with lockout. Returns the user, or raises AuthError with a friendly reason."""
+    remaining = lock_remaining(username, ip)
+    if remaining:
+        raise AuthError(f"Too many wrong passwords. Try again in {max(1, remaining // 60 + 1)} minute(s).")
+    user = verify(username, password)
+    if not user:
+        record_failure(username, ip)
+        raise AuthError("Wrong username or password.")
+    clear_failures(username, ip)
+    return user
+
+
+def register(username, display_name, password, ip):
+    """Self sign-up. New accounts are Drivers and see nothing until a Race Master links them."""
+    if not signups_allowed():
+        raise AuthError("Sign-ups are turned off. Ask the Race Master to create your login.")
+    key = f"signup:{ip or '?'}"
+    now = time.time()
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
+        count = row["count"] if row and now - row["first_at"] < 3600 else 0
+        if count >= SIGNUPS_PER_IP_PER_HOUR:
+            raise AuthError("Too many sign-ups from this connection. Try again later.")
+    name = create_user(username, display_name, password, is_master=False)
+    with accounts() as conn:
+        first = row["first_at"] if row and count else now
+        conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
+                        ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
+                     (key, count + 1, first))
+    return name

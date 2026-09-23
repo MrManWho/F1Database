@@ -10,13 +10,14 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from .constants import SCHEMA_VERSION
+from .constants import AUTO_BACKUP_EVERY_HOURS, AUTO_BACKUPS_KEPT, SCHEMA_VERSION
 from .schema import REQUIRED_TABLES, migrate
 
 CAREER_EXT = ".f1career"
 EXPORT_TABLES = [
     "meta", "teams", "drivers", "seasons", "season_grid", "season_driver_state",
     "events", "results", "contracts", "market_windows", "offers", "offer_messages", "career_members",
+    "team_seasons", "news", "notifications",
 ]
 
 
@@ -226,6 +227,51 @@ def make_backup(token):
     finally:
         src.close()
         dst.close()
+    return target
+
+
+def auto_backups_dir(token):
+    path = backups_dir() / "auto" / sanitize_token(token)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def list_auto_backups(token):
+    files = sorted(auto_backups_dir(token).glob(f"*{CAREER_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return [{"name": p.name, "size_kb": round(p.stat().st_size / 1024, 1),
+             "when": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")} for p in files]
+
+
+def auto_backup_path(token, name):
+    path = auto_backups_dir(token) / Path(name).name
+    if not path.exists() or path.suffix != CAREER_EXT:
+        raise CareerNotFound(name)
+    return path
+
+
+def auto_backup(token, reason="daily", force=False):
+    """Keep a rolling set of automatic backups: daily, and after every completed race weekend."""
+    source = career_path(token)
+    if not source.exists():
+        return None
+    folder = auto_backups_dir(token)
+    existing = sorted(folder.glob(f"*{CAREER_EXT}"), key=lambda p: p.stat().st_mtime)
+    if not force and existing:
+        age_hours = (datetime.now().timestamp() - existing[-1].stat().st_mtime) / 3600
+        if age_hours < AUTO_BACKUP_EVERY_HOURS:
+            return None
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = folder / f"{stamp}-{re.sub(r'[^a-z0-9-]', '', reason.lower())}{CAREER_EXT}"
+    src = _connect(source)
+    dst = sqlite3.connect(str(target))
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    existing.append(target)
+    for old in existing[:-AUTO_BACKUPS_KEPT]:
+        old.unlink(missing_ok=True)
     return target
 
 

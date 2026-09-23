@@ -1,6 +1,7 @@
 """Career rules: seeding, scoring, standings, Form, Reputation, grid, seasons, difficulty."""
 
 import math
+import re
 
 from . import constants as C
 from .storage import get_meta, now_iso, set_meta
@@ -24,15 +25,15 @@ def _rows(conn, sql, params=()):
     return conn.execute(sql, params).fetchall()
 
 
-def parse_position(value, label="Position"):
+def parse_position(value, label="Position", max_position=C.MAX_POSITION):
     if value is None or value == "":
         return None
     try:
         number = int(str(value).strip())
     except (TypeError, ValueError):
-        raise ValidationError(f"{label} must be a whole number from 1 to {C.MAX_POSITION}")
-    if not 1 <= number <= C.MAX_POSITION:
-        raise ValidationError(f"{label} must be a whole number from 1 to {C.MAX_POSITION}")
+        raise ValidationError(f"{label} must be a whole number from 1 to {max_position}")
+    if not 1 <= number <= max_position:
+        raise ValidationError(f"{label} must be a whole number from 1 to {max_position}")
     return number
 
 
@@ -324,13 +325,13 @@ def write_grid(conn, season_id, mapping):
 def save_full_grid(conn, season_id, submitted):
     """submitted: {(team_id, seat_no): driver_id-or-blank} for all 22 seats."""
     expected = set(grid_map(conn, season_id))
-    if set(submitted) != expected or len(expected) != C.GRID_SIZE:
-        raise ValidationError(f"All {C.GRID_SIZE} seats must be submitted")
+    if set(submitted) != expected or not expected:
+        raise ValidationError(f"All {len(expected)} seats must be submitted")
     valid = {d["id"] for d in drivers(conn, active_only=True)}
     mapping, seen = {}, set()
     for key, raw in submitted.items():
         if raw in (None, ""):
-            raise ValidationError(f"All {C.GRID_SIZE} seats must be filled")
+            raise ValidationError(f"All {len(expected)} seats must be filled")
         try:
             did = int(raw)
         except (TypeError, ValueError):
@@ -470,24 +471,90 @@ def _ai_points_per_entry(conn, season_id):
 def team_strength_ranks(conn, season_id):
     """Car-strength rank per team (1 = fastest car).
 
-    Built from AI drivers' points only, so a player winning in a slow car doesn't make the car look
-    fast. Uses this season once three rounds are complete, otherwise the previous season, otherwise the
-    default team order.
+    Once three rounds are complete it comes from AI drivers' points only, so a player winning in a
+    slow car doesn't make the car look fast. Before that it follows the season's car ratings, which
+    develop over each winter (and which the Race Master can edit to match the game).
     """
-    season = get_season(conn, season_id)
     default = [t["id"] for t in teams(conn)]
     done = _row(conn, "SELECT COUNT(*) AS n FROM events WHERE season_id = ? AND status = ?",
                 (season_id, C.EVENT_COMPLETE))["n"]
-    sources = [season_id] if done >= 3 else []
-    prev = _row(conn, "SELECT id FROM seasons WHERE year < ? ORDER BY year DESC LIMIT 1", (season["year"],))
-    if prev:
-        sources.append(prev["id"])
-    for sid in sources:
-        strength = _ai_points_per_entry(conn, sid)
+    if done >= 3:
+        strength = _ai_points_per_entry(conn, season_id)
         if any(strength.values()):
             order = sorted(default, key=lambda t: (-strength.get(t, -1), default.index(t)))
             return {tid: pos for pos, tid in enumerate(order, start=1)}
-    return {tid: pos for pos, tid in enumerate(default, start=1)}
+    ratings = car_ratings(conn, season_id)
+    order = sorted(default, key=lambda t: (-ratings.get(t, {"rating": 0})["rating"], default.index(t)))
+    return {tid: pos for pos, tid in enumerate(order, start=1)}
+
+
+# --------------------------------------------------------------------------- car ratings & development
+
+def ensure_car_ratings(conn, season_id):
+    """Every active team gets a car rating per season: carried from the previous season, else seeded
+    from the default team order."""
+    have = {r["team_id"] for r in _rows(conn, "SELECT team_id FROM team_seasons WHERE season_id = ?", (season_id,))}
+    active = teams(conn)
+    missing = [t for t in active if t["id"] not in have]
+    if not missing:
+        return
+    season = get_season(conn, season_id)
+    prev = _row(conn, "SELECT id FROM seasons WHERE year < ? ORDER BY year DESC LIMIT 1", (season["year"],)) if season else None
+    prev_ratings = {r["team_id"]: r["car_rating"] for r in _rows(
+        conn, "SELECT * FROM team_seasons WHERE season_id = ?", (prev["id"],))} if prev else {}
+    floor = min(list(prev_ratings.values()) + [C.CAR_RATING_TOP - (len(active) - 1) * C.CAR_RATING_STEP])
+    for pos, team in enumerate(active, start=1):
+        if team["id"] in have:
+            continue
+        if team["id"] in prev_ratings:
+            rating = prev_ratings[team["id"]]
+        elif team["id"] <= len(C.TEAMS):
+            rating = C.CAR_RATING_TOP - (pos - 1) * C.CAR_RATING_STEP
+        else:
+            rating = floor - 2  # a brand-new team starts at the back
+        conn.execute("INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,0)",
+                     (season_id, team["id"], round(clamp(rating, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)))
+
+
+def car_ratings(conn, season_id):
+    ensure_car_ratings(conn, season_id)
+    return {r["team_id"]: {"rating": r["car_rating"], "change": r["change"]}
+            for r in _rows(conn, "SELECT * FROM team_seasons WHERE season_id = ?", (season_id,))}
+
+
+def set_car_rating(conn, season_id, team_id, rating):
+    try:
+        rating = round(float(rating), 1)
+    except (TypeError, ValueError):
+        raise ValidationError("Car ratings must be numbers")
+    if not C.CAR_RATING_MIN <= rating <= C.CAR_RATING_MAX:
+        raise ValidationError(f"Car ratings run from {C.CAR_RATING_MIN:.0f} to {C.CAR_RATING_MAX:.0f}")
+    ensure_car_ratings(conn, season_id)
+    conn.execute("UPDATE team_seasons SET car_rating = ? WHERE season_id = ? AND team_id = ?",
+                 (rating, season_id, team_id))
+
+
+def develop_cars(conn, source_id, new_id, rng):
+    """Winter development: every car moves toward the pack (cost cap, wind-tunnel handicaps), results
+    bring money (constructors' position), and there is always some luck. Returns the changes."""
+    old = car_ratings(conn, source_id)
+    table = {t["team"]["id"]: t["position"] for t in constructor_standings(conn, source_id)}
+    mean = sum(v["rating"] for v in old.values()) / max(1, len(old))
+    field = len(table) or 11
+    changes = []
+    for team in teams(conn):
+        base = old.get(team["id"], {"rating": mean - 2})["rating"]
+        pos = table.get(team["id"], field)
+        change = (mean - base) * 0.2 + ((field + 1) / 2 - pos) * 0.35 + rng.gauss(0, 2.2)
+        change = round(clamp(change, -8, 8), 1)
+        rating = round(clamp(base + change, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)
+        change = round(rating - base, 1)
+        conn.execute("""INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,?)
+                        ON CONFLICT(season_id, team_id) DO UPDATE SET car_rating = excluded.car_rating,
+                        change = excluded.change""", (new_id, team["id"], rating, change))
+        changes.append({"team": team, "rating": rating, "change": change})
+    changes.sort(key=lambda c: -c["change"])
+    return changes
 
 
 # --------------------------------------------------------------------------- race entry
@@ -530,6 +597,7 @@ def save_weekend(conn, event_id, payload):
     if not isinstance(entries, list):
         raise ValidationError("Results must be a list")
     final = {did: dict(r) for did, r in existing.items()}
+    max_pos = max(C.MAX_POSITION, len(final))
     for item in entries:
         try:
             did = int(item.get("driver_id"))
@@ -538,15 +606,15 @@ def save_weekend(conn, event_id, payload):
         if did not in final:
             raise ValidationError("Driver is not entered in this event")
         row = final[did]
-        row["qualifying_position"] = parse_position(item.get("qualifying_position"), "Qualifying position")
-        row["race_position"] = parse_position(item.get("race_position"), "Race position")
+        row["qualifying_position"] = parse_position(item.get("qualifying_position"), "Qualifying position", max_pos)
+        row["race_position"] = parse_position(item.get("race_position"), "Race position", max_pos)
         override = item.get("status_override") or "Auto"
         s_override = item.get("sprint_status_override") or "Auto"
         if override not in C.OVERRIDE_STATUSES or s_override not in C.OVERRIDE_STATUSES:
             raise ValidationError("Unknown result status")
         row["result_status"] = _resolve(override, row["race_position"])
         if is_sprint:
-            row["sprint_position"] = parse_position(item.get("sprint_position"), "Sprint position")
+            row["sprint_position"] = parse_position(item.get("sprint_position"), "Sprint position", max_pos)
             row["sprint_status"] = _resolve(s_override, row["sprint_position"])
         else:
             row["sprint_position"], row["sprint_status"] = None, C.STATUS_NOT_RUN
@@ -933,3 +1001,131 @@ def team_history(conn, team_id):
     totals["titles"] = sum(1 for a in archive if a["position"] == 1 and a["season"]["status"] == C.SEASON_COMPLETE
                            and a["points"] > 0)
     return archive, totals
+
+
+# --------------------------------------------------------------------------- paddock admin (drivers, teams, calendar)
+
+HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _unseat(conn, season_id, driver_id):
+    """Take a driver out of their seat; an AI replacement fills it (players' seats too)."""
+    gmap = grid_map(conn, season_id)
+    seat = next((k for k, v in gmap.items() if v == driver_id), None)
+    if not seat:
+        return
+    gmap[seat] = None
+    gmap[seat] = best_free_ai(conn, season_id, set(gmap.values()), exclude={driver_id})
+    write_grid(conn, season_id, gmap)
+
+
+def _clean_name(name, label="Name", limit=60):
+    name = " ".join((name or "").split())[:limit]
+    if len(name) < 2:
+        raise ValidationError(f"{label} is too short")
+    return name
+
+
+def _parse_rep(value):
+    try:
+        rep = round(float(value), 1)
+    except (TypeError, ValueError):
+        raise ValidationError("Reputation must be a number")
+    if not 1 <= rep <= 100:
+        raise ValidationError("Reputation runs from 1 to 100")
+    return rep
+
+
+def add_driver(conn, name, baseline_reputation, season_id):
+    name = _clean_name(name, "Driver name")
+    if _row(conn, "SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (name,)):
+        raise ValidationError("A driver with that name already exists")
+    rep = _parse_rep(baseline_reputation)
+    did = conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player, active) VALUES(?,?,0,1)",
+                       (name, rep)).lastrowid
+    conn.execute("INSERT OR IGNORE INTO season_driver_state VALUES(?,?,?,NULL)", (season_id, did, rep))
+    return did
+
+
+def update_driver(conn, driver_id, season_id, name, baseline_reputation, active):
+    driver = _row(conn, "SELECT * FROM drivers WHERE id = ?", (driver_id,))
+    if not driver:
+        raise ValidationError("Driver not found")
+    name = _clean_name(name, "Driver name")
+    if _row(conn, "SELECT 1 FROM drivers WHERE lower(name) = lower(?) AND id != ?", (name, driver_id)):
+        raise ValidationError("Another driver already has that name")
+    rep = _parse_rep(baseline_reputation)
+    active = bool(active)
+    conn.execute("UPDATE drivers SET name = ?, baseline_reputation = ?, active = ? WHERE id = ?",
+                 (name, rep, int(active), driver_id))
+    if not active and driver["active"]:
+        _unseat(conn, season_id, driver_id)
+
+
+def add_team(conn, name, code, color, season_id):
+    name = _clean_name(name, "Team name", 40)
+    code = (code or "").strip().upper()
+    if not 2 <= len(code) <= 4 or not code.isalnum():
+        raise ValidationError("Team codes are 2-4 letters or numbers")
+    if not HEX_RE.match(color or ""):
+        raise ValidationError("Pick a team colour")
+    if _row(conn, "SELECT 1 FROM teams WHERE lower(name) = lower(?)", (name,)):
+        raise ValidationError("A team with that name already exists")
+    tid = conn.execute("INSERT INTO teams(name, abbreviation, color, active) VALUES(?,?,?,1)",
+                       (name, code, color.lower())).lastrowid
+    for seat in (1, 2):
+        conn.execute("INSERT INTO season_grid VALUES(?,?,?,NULL)", (season_id, tid, seat))
+    ensure_car_ratings(conn, season_id)
+    return tid
+
+
+def update_team(conn, team_id, season_id, name, code, color, active):
+    team = _row(conn, "SELECT * FROM teams WHERE id = ?", (team_id,))
+    if not team:
+        raise ValidationError("Team not found")
+    name = _clean_name(name, "Team name", 40)
+    code = (code or "").strip().upper()
+    if not 2 <= len(code) <= 4 or not code.isalnum():
+        raise ValidationError("Team codes are 2-4 letters or numbers")
+    if not HEX_RE.match(color or ""):
+        raise ValidationError("Pick a team colour")
+    if _row(conn, "SELECT 1 FROM teams WHERE lower(name) = lower(?) AND id != ?", (name, team_id)):
+        raise ValidationError("Another team already has that name")
+    active = bool(active)
+    if not active and team["active"] and len(teams(conn)) <= 2:
+        raise ValidationError("The grid needs at least two teams")
+    conn.execute("UPDATE teams SET name = ?, abbreviation = ?, color = ?, active = ? WHERE id = ?",
+                 (name, code, color.lower(), int(active), team_id))
+    if not active and team["active"]:
+        conn.execute("DELETE FROM season_grid WHERE season_id = ? AND team_id = ?", (season_id, team_id))
+        sync_not_run_results(conn, season_id)
+    elif active and not team["active"]:
+        for seat in (1, 2):
+            conn.execute("INSERT OR IGNORE INTO season_grid VALUES(?,?,?,NULL)", (season_id, team_id, seat))
+        ensure_car_ratings(conn, season_id)
+
+
+def add_event(conn, season_id, name, location, is_sprint):
+    name = _clean_name(name, "Grand Prix name", 80)
+    last = _row(conn, "SELECT MAX(round_number) AS n FROM events WHERE season_id = ?", (season_id,))["n"] or 0
+    eid = conn.execute("INSERT INTO events(season_id, round_number, name, location, is_sprint) VALUES(?,?,?,?,?)",
+                       (season_id, last + 1, name, (location or "").strip()[:80], int(bool(is_sprint)))).lastrowid
+    sync_not_run_results(conn, season_id)
+    return eid
+
+
+def delete_event(conn, event_id):
+    event = get_event(conn, event_id)
+    if not event:
+        raise ValidationError("Round not found")
+    if event["status"] != C.EVENT_NOT_RUN:
+        raise ValidationError("Only rounds that haven't been run can be removed")
+    if _row(conn, "SELECT COUNT(*) AS n FROM events WHERE season_id = ?", (event["season_id"],))["n"] <= 1:
+        raise ValidationError("A season needs at least one round")
+    conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    later = _rows(conn, "SELECT id, round_number FROM events WHERE season_id = ? AND round_number > ? ORDER BY round_number",
+                  (event["season_id"], event["round_number"]))
+    for e in later:
+        conn.execute("UPDATE events SET round_number = -id WHERE id = ?", (e["id"],))
+    for e in later:
+        conn.execute("UPDATE events SET round_number = ? WHERE id = ?", (e["round_number"] - 1, e["id"]))

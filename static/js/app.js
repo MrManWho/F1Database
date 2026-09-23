@@ -133,4 +133,72 @@
     document.getElementById("player-clash").hidden = !clash;
   }
   if (playerForm) { playerForm.addEventListener("change", playerPreview); playerPreview(); }
+
+  // Notifications bell: poll once a minute, optional chime, mark read when opened.
+  const bell = document.getElementById("bell");
+  if (bell) {
+    const countEl = document.getElementById("bell-count");
+    const list = document.getElementById("notif-list");
+    const sound = document.getElementById("notif-sound");
+    const baseTitle = document.title;
+    let last = parseInt(countEl.textContent || "0", 10) || 0;
+    let soundOn = false;
+    try { soundOn = localStorage.getItem("f1-notif-sound") === "1"; } catch (e) { soundOn = false; }
+    sound.checked = soundOn;
+    sound.addEventListener("change", function () {
+      soundOn = sound.checked;
+      try { localStorage.setItem("f1-notif-sound", soundOn ? "1" : "0"); } catch (e) { /* private mode */ }
+      if (soundOn) chime();
+    });
+    function chime() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [880, 1320].forEach(function (f, i) {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.frequency.value = f; o.type = "sine";
+          g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.15);
+          g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + i * 0.15 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.15 + 0.3);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(ctx.currentTime + i * 0.15); o.stop(ctx.currentTime + i * 0.15 + 0.32);
+        });
+      } catch (e) { /* audio blocked */ }
+    }
+    function setCount(n) {
+      countEl.textContent = n;
+      countEl.hidden = !n;
+      document.title = (n ? "(" + n + ") " : "") + baseTitle;
+    }
+    function render(items) {
+      list.innerHTML = "";
+      if (!items.length) { list.innerHTML = '<li class="muted">Nothing yet.</li>'; return; }
+      items.forEach(function (n) {
+        const li = document.createElement("li");
+        if (n.unread) li.className = "unread";
+        const body = n.link ? document.createElement("a") : document.createElement("span");
+        if (n.link) body.href = n.link;
+        body.textContent = n.text;
+        const when = document.createElement("small");
+        when.textContent = n.created_at;
+        li.append(body, when);
+        list.appendChild(li);
+      });
+    }
+    function poll() {
+      fetch(bell.dataset.url, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (res) {
+        if (!res.ok) return;
+        if (res.unread > last && soundOn) chime();
+        if (res.unread > last) toast(res.items[0] ? res.items[0].text : "New notification", "success");
+        last = res.unread;
+        setCount(res.unread);
+        render(res.items);
+      }).catch(function () { /* offline: try again next minute */ });
+    }
+    setCount(last);
+    setInterval(poll, 60000);
+    bell.addEventListener("click", function () {
+      if (!last) return;
+      postJSON(bell.dataset.read, {}).then(function () { last = 0; setCount(0); });
+    });
+  }
 })();

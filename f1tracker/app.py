@@ -12,7 +12,9 @@ from pathlib import Path
 from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file,
                    session, url_for)
 
-from . import auth, market, services as S, storage
+import random
+
+from . import auth, feed, importer, insights, market, services as S, storage
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -25,7 +27,7 @@ def _base_dir():
     return Path(__file__).resolve().parent.parent
 
 
-PUBLIC_ENDPOINTS = {"login", "setup", "static"}
+PUBLIC_ENDPOINTS = {"login", "setup", "static", "register"}
 
 
 def create_app(config=None):
@@ -136,6 +138,10 @@ def career_page(master_only=False):
         @wraps(fn)
         def wrapper(token, *args, **kwargs):
             try:
+                storage.auto_backup(token, "daily")
+            except Exception:  # a backup problem must never block the page
+                app.logger.exception("automatic backup failed")
+            try:
                 with storage.session(token) as conn:
                     linked = conn.execute("SELECT 1 FROM career_members WHERE username = ?",
                                           (g.user["username"],)).fetchone()
@@ -159,6 +165,8 @@ def career_page(master_only=False):
                     g.ctx["pending_offers"] = conn.execute(
                         "SELECT COUNT(*) FROM offers WHERE status = ?" + (" AND driver_id = ?" if mine and not is_master() else ""),
                         (C.OFFER_PENDING, mine["id"]) if mine and not is_master() else (C.OFFER_PENDING,)).fetchone()[0]
+                    g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
+                        conn, g.user["username"], mine["id"] if mine else None, is_master() and not mine)
                     storage.touch_opened(conn)
                     return fn(conn, g.ctx, *args, **kwargs)
             except CareerNotFound:
@@ -173,6 +181,8 @@ def career_page(master_only=False):
 
 
 def page(template, ctx, **kwargs):
+    if ctx.get("is_master"):
+        ctx["auto_backups"] = storage.list_auto_backups(ctx["token"])[:8]
     return render_template(template, ctx=ctx, **kwargs)
 
 
@@ -211,9 +221,10 @@ def register_routes(app):
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
-            user = auth.verify(request.form.get("username"), request.form.get("password"))
-            if not user:
-                flash("Wrong username or password.", "error")
+            try:
+                user = auth.login(request.form.get("username"), request.form.get("password"), request.remote_addr)
+            except AuthError as exc:
+                flash(str(exc), "error")
                 return redirect(url_for("login", next=request.args.get("next", "")))
             session.clear()
             session["user"] = user["username"]
@@ -221,7 +232,37 @@ def register_routes(app):
             if not target.startswith("/") or target.startswith("//"):
                 target = url_for("home")
             return redirect(target)
-        return render_template("login.html", mode="login")
+        return render_template("login.html", mode="login", signups=auth.signups_allowed())
+
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        if request.method == "POST":
+            if request.form.get("password") != request.form.get("confirm"):
+                flash("The two passwords don't match.", "error")
+                return redirect(url_for("register"))
+            try:
+                username = auth.register(request.form.get("username"), request.form.get("display_name"),
+                                         request.form.get("password"), request.remote_addr)
+            except AuthError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("register"))
+            session.clear()
+            session["user"] = username
+            flash("Account created. Ask the Race Master to link you to your driver.", "success")
+            return redirect(url_for("home"))
+        return render_template("login.html", mode="register", signups=auth.signups_allowed())
+
+    @app.route("/settings", methods=["POST"])
+    @master_required
+    def settings_save():
+        auth.set_setting("allow_signups", "1" if request.form.get("allow_signups") else "0")
+        key = (request.form.get("anthropic_api_key") or "").strip()
+        if request.form.get("clear_key"):
+            auth.set_setting("anthropic_api_key", None)
+        elif key:
+            auth.set_setting("anthropic_api_key", key)
+        flash("Settings saved.", "success")
+        return redirect(url_for("accounts_page"))
 
     @app.route("/logout", methods=["POST"])
     def logout():
@@ -231,7 +272,14 @@ def register_routes(app):
 
     @app.route("/accounts")
     def accounts_page():
-        return render_template("accounts.html", users=auth.list_users() if is_master() else [])
+        memberships = {}
+        if is_master():
+            for c in storage.list_careers():
+                for username in c["members"]:
+                    memberships.setdefault(username, []).append(c["name"])
+        return render_template("accounts.html", users=auth.list_users() if is_master() else [],
+                               memberships=memberships, signups=auth.signups_allowed(),
+                               key_set=importer.configured())
 
     @app.route("/accounts/new", methods=["POST"])
     @master_required
@@ -361,7 +409,8 @@ def register_routes(app):
                     drivers=S.driver_standings(conn, sid)[:6],
                     constructors=S.constructor_standings(conn, sid)[:5],
                     rec=S.difficulty_recommendation(conn, before),
-                    windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN])
+                    windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
+                    news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid))
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
@@ -379,6 +428,7 @@ def register_routes(app):
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=S.difficulty_recommendation(conn, (season["year"], event["round_number"])),
+                    importer_ready=importer.configured(),
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS)
 
     @app.route("/career/<token>/weekend")
@@ -393,7 +443,7 @@ def register_routes(app):
     @career_page()
     def drivers_page(conn, ctx):
         return page("drivers.html", ctx, standings=S.driver_standings(conn, ctx["season"]["id"]),
-                    teams=S.teams(conn))
+                    teams=S.teams(conn), chart=insights.progression_chart(conn, ctx["season"]["id"], top=6))
 
     @app.route("/career/<token>/driver/<int:driver_id>")
     @career_page()
@@ -403,13 +453,15 @@ def register_routes(app):
             abort(404)
         timeline = S.driver_timeline(conn, driver_id)
         return page("driver_profile.html", ctx, driver=driver, timeline=timeline,
-                    totals=S.career_totals(timeline), contract=market.current_contract(conn, driver_id))
+                    totals=S.career_totals(timeline), contract=market.current_contract(conn, driver_id),
+                    trend=insights.driver_round_timeline(conn, driver_id))
 
     @app.route("/career/<token>/teams")
     @career_page()
     def teams_page(conn, ctx):
         table = S.constructor_standings(conn, ctx["season"]["id"])
-        return page("teams.html", ctx, table=table, leader=max([t["points"] for t in table] + [1]))
+        return page("teams.html", ctx, table=table, leader=max([t["points"] for t in table] + [1]),
+                    ratings=S.car_ratings(conn, ctx["season"]["id"]))
 
     @app.route("/career/<token>/team/<int:team_id>")
     @career_page()
@@ -511,6 +563,8 @@ def register_routes(app):
     def season_new(conn, ctx):
         latest = S.list_seasons(conn)[-1]
         new_id = S.create_next_season(conn, latest["id"], request.form.get("year"))
+        changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
+        feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
         market.on_new_season(conn, new_id)
         session[f"season_{ctx['token']}"] = new_id
         flash("New season created. Signed contracts have been applied; review the grid.", "success")
@@ -572,7 +626,8 @@ def register_routes(app):
                     experience=market.experience(conn, driver["id"]), window=window,
                     approaches=market.approaches_left(conn, window["id"], driver["id"]) if window else 0,
                     approachable=market.approachable_teams(conn, window["id"], driver["id"]) if window else [],
-                    signed_in_window=signed_in_window, going_rate=market.market_salary(me["value"]))
+                    signed_in_window=signed_in_window, going_rate=market.market_salary(me["value"]),
+                    trend=insights.driver_round_timeline(conn, driver["id"]))
 
     @app.route("/career/<token>/market")
     @career_page()
@@ -660,6 +715,120 @@ def register_routes(app):
               "error" if result in ("rejected", "collapsed") else "success")
         return redirect(url_for("garage", token=ctx["token"], driver=driver_id) + f"#offer-{offer_id}")
 
+    @app.route("/career/<token>/news")
+    @career_page()
+    def news_page(conn, ctx):
+        return page("news.html", ctx, news=feed.latest(conn, 100))
+
+    @app.route("/career/<token>/rivalry")
+    @career_page()
+    def rivalry_page(conn, ctx):
+        players = S.player_drivers(conn)
+        if len(players) < 2:
+            abort(404)
+        a, b = players[0], players[1]
+        data = insights.rivalry(conn, a["id"], b["id"])
+        chart = {"labels": data["labels"], "yLabel": "Race head-to-head lead", "zero": True,
+                 "series": [{"name": f"{a['name']} ahead ↑ / {b['name']} ahead ↓", "values": data["swing"], "slot": 1}]}
+        sid = ctx["season"]["id"]
+        progress = insights.points_progression(conn, sid, [a["id"], b["id"]])
+        season_chart = {"labels": progress[0], "yLabel": "Points",
+                        "series": [{"name": a["name"], "values": progress[1][a["id"]], "player": True, "slot": 1},
+                                   {"name": b["name"], "values": progress[1][b["id"]], "player": True, "slot": 2}]}
+        return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart)
+
+    @app.route("/career/<token>/review/<int:season_id>")
+    @career_page()
+    def season_review(conn, ctx, season_id):
+        if not S.get_season(conn, season_id):
+            abort(404)
+        return page("review.html", ctx, review=insights.season_review(conn, season_id))
+
+    @app.route("/career/<token>/paddock")
+    @career_page(master_only=True)
+    def paddock_admin(conn, ctx):
+        sid = ctx["current_season_id"]
+        seats = S.driver_seats(conn, sid)
+        tmap = S.team_map(conn)
+        all_drivers = S.drivers(conn)
+        for d in all_drivers:
+            seat = seats.get(d["id"])
+            d["team"] = tmap.get(seat[0]) if seat else None
+            d["rep_now"] = S.starting_reputation(conn, sid, d["id"])
+        all_teams = [dict(t) for t in conn.execute("SELECT * FROM teams ORDER BY active DESC, id")]
+        return page("paddock.html", ctx, all_drivers=all_drivers, all_teams=all_teams,
+                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid))
+
+    @app.route("/career/<token>/paddock/driver", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_driver(conn, ctx):
+        sid = ctx["current_season_id"]
+        driver_id = _form_int("driver_id")
+        if driver_id:
+            S.update_driver(conn, driver_id, sid, request.form.get("name"), request.form.get("baseline_reputation"),
+                            request.form.get("active"))
+            flash("Driver updated.", "success")
+        else:
+            S.add_driver(conn, request.form.get("name"), request.form.get("baseline_reputation"), sid)
+            feed.post(conn, sid, "paddock", f"New face in the paddock: {request.form.get('name', '').strip()}",
+                      "Available to teams from today.", "drivers")
+            flash("Driver added. Put them in a seat from Grid & Transfers.", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
+
+    @app.route("/career/<token>/paddock/team", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_team(conn, ctx):
+        sid = ctx["current_season_id"]
+        team_id = _form_int("team_id")
+        if team_id:
+            S.update_team(conn, team_id, sid, request.form.get("name"), request.form.get("abbreviation"),
+                          request.form.get("color"), request.form.get("active"))
+            flash("Team updated.", "success")
+        else:
+            S.add_team(conn, request.form.get("name"), request.form.get("abbreviation"), request.form.get("color"), sid)
+            feed.post(conn, sid, "paddock", f"{request.form.get('name', '').strip()} join the grid",
+                      "Two new seats are open.", "teams")
+            flash("Team added with two empty seats. Fill them in Grid & Transfers.", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
+
+    @app.route("/career/<token>/paddock/cars", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_cars(conn, ctx):
+        sid = ctx["current_season_id"]
+        for team in S.teams(conn):
+            value = request.form.get(f"rating_{team['id']}")
+            if value not in (None, ""):
+                S.set_car_rating(conn, sid, team["id"], value)
+        flash("Car ratings saved.", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
+
+    @app.route("/career/<token>/calendar/add", methods=["POST"])
+    @career_page(master_only=True)
+    def calendar_add(conn, ctx):
+        S.add_event(conn, ctx["season"]["id"], request.form.get("name"), request.form.get("location"),
+                    request.form.get("is_sprint"))
+        flash("Round added to the end of the calendar.", "success")
+        return redirect(url_for("seasons_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/calendar/<int:event_id>/delete", methods=["POST"])
+    @career_page(master_only=True)
+    def calendar_delete(conn, ctx, event_id):
+        event = S.get_event(conn, event_id)
+        if not event or event["season_id"] != ctx["season"]["id"]:
+            abort(404)
+        S.delete_event(conn, event_id)
+        flash("Round removed.", "success")
+        return redirect(url_for("seasons_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/autobackup/<name>")
+    @master_required
+    def auto_backup_download(token, name):
+        try:
+            path = storage.auto_backup_path(token, name)
+        except CareerNotFound:
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=path.name)
+
     @app.route("/career/<token>/members", methods=["GET", "POST"])
     @career_page(master_only=True)
     def members(conn, ctx):
@@ -696,19 +865,63 @@ def register_routes(app):
             return jsonify(ok=False, error="Invalid request"), 400
         try:
             with storage.session(token) as conn:
-                if not S.get_event(conn, event_id):
+                before = S.get_event(conn, event_id)
+                if not before:
                     return jsonify(ok=False, error="Event not found"), 404
                 result = S.save_weekend(conn, event_id, payload)
                 opened = None
-                if result["complete"]:
-                    event = S.get_event(conn, event_id)
-                    opened = market.maybe_open_silly_season(conn, event["season_id"])
+                newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
+                if newly_complete:
+                    feed.on_weekend_complete(conn, event_id, f"weekend/{event_id}")
+                    opened = market.maybe_open_silly_season(conn, before["season_id"])
                 result["market_opened"] = bool(opened)
         except CareerNotFound:
             return jsonify(ok=False, error="Career not found"), 404
         except ValidationError as exc:
             return jsonify(ok=False, error=str(exc)), 400
+        if newly_complete:
+            try:
+                storage.auto_backup(token, f"after-round-{before['round_number']}", force=True)
+            except Exception:
+                app.logger.exception("automatic backup failed")
         return jsonify(ok=True, **result)
+
+    @app.route("/api/career/<token>/weekend/<int:event_id>/import", methods=["POST"])
+    def api_weekend_import(token, event_id):
+        if not is_master():
+            return jsonify(ok=False, error="Only the Race Master can enter results"), 403
+        kind = request.form.get("kind", "race")
+        images = []
+        for f in request.files.getlist("screenshots"):
+            if f and f.filename:
+                images.append((f.read(), f.mimetype))
+        try:
+            with storage.session(token) as conn:
+                if not S.get_event(conn, event_id):
+                    return jsonify(ok=False, error="Event not found"), 404
+                entrants = [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"]}
+                            for r in S.weekend_rows(conn, event_id)]
+        except CareerNotFound:
+            return jsonify(ok=False, error="Career not found"), 404
+        try:
+            result = importer.read_screenshots(images, kind, entrants)
+        except importer.ScreenshotError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, kind=kind, **result)
+
+    @app.route("/api/career/<token>/notifications")
+    @career_page()
+    def api_notifications(conn, ctx):
+        items = [{"id": n["id"], "text": n["text"], "unread": n["unread"], "created_at": n["created_at"],
+                  "link": f"/career/{ctx['token']}/{n['link']}" if n["link"] else None}
+                 for n in ctx["notifications"]]
+        return jsonify(ok=True, unread=ctx["unread"], items=items)
+
+    @app.route("/career/<token>/notifications/read", methods=["POST"])
+    @career_page()
+    def notifications_read(conn, ctx):
+        feed.mark_read(conn, g.user["username"])
+        return jsonify(ok=True)
 
     # ---------------------------------------------------------------- saves
     @app.route("/career/<token>/save", methods=["POST"])

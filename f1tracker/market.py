@@ -15,6 +15,7 @@ import math
 import random
 
 from . import constants as C
+from . import feed
 from . import services as S
 from .storage import now_iso
 
@@ -202,6 +203,7 @@ def open_window(conn, season_id, kind=None, rng=None):
         if not player["active"]:
             continue
         _generate_for(conn, window_id, season_id, player, standings, ranks, seats, signed, rng)
+    feed.on_window_opened(conn, window_id, "garage")
     return window_id
 
 
@@ -480,6 +482,7 @@ def counter_offer(conn, offer_id, role, years, salary, message="", rng=None):
     conn.execute("UPDATE offers SET stage = ? WHERE id = ?", ("Negotiating", offer_id))
     result = _evaluate(conn, get_offer(conn, offer_id), role, years, salary, rng)
     if result == "collapsed":
+        feed.on_talks_collapsed(conn, offer_id, "news")
         ensure_lifeline(conn, offer["window_id"], offer["driver_id"], rng)
     return result
 
@@ -611,6 +614,7 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
                              terms=("No. 2", 1, _floor_salary(ranks[team_id])))
     o = get_offer(conn, offer_id)
     _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["salary"])
+    feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "garage")
     return offer_id
 
 
@@ -648,6 +652,7 @@ def accept_offer(conn, offer_id):
                  (offer["window_season"], offer["driver_id"], offer["team_id"], "Signed", offer["role"],
                   "Offer accepted", f"Signed with {team['name']} from {offer['target_year']}",
                   f"{offer['years']}-year deal{salary}", offer["reason"], stamp))
+    feed.on_signed(conn, offer, "news")
     apply_signings(conn)
     return offer
 

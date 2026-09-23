@@ -174,6 +174,11 @@
   </section>
 </div>
 
+<section class="card">
+  <div class="card-head"><h2>Your trend</h2><span class="muted small">Reputation is what teams remember; Form is this season</span></div>
+  <div class="chart" data-height="220" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
+</section>
+
 {% set past = offers|rejectattr('status', 'equalto', 'Pending')|list %}
 {% if past %}
 <section class="card table-card">

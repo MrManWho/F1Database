@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.4"
-SCHEMA_VERSION = 5
+APP_VERSION = "1.5"
+SCHEMA_VERSION = 6
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -133,3 +133,18 @@ DIFF_THRESHOLD = 0.35
 DIFF_SENSITIVITY = 0.05      # performance score per difficulty point (sweet-spot model)
 DIFF_SWEETSPOT_SPREAD = 10   # max distance one round may pull the sweet spot
 DIFF_HALF_LIFE = 12          # rounds; older evidence fades but is never discarded
+
+# Login protection
+LOGIN_MAX_FAILURES = 5
+LOGIN_LOCK_MINUTES = 10
+
+# Automatic backups
+AUTO_BACKUPS_KEPT = 20
+AUTO_BACKUP_EVERY_HOURS = 24
+
+# Car ratings (team development)
+CAR_RATING_TOP, CAR_RATING_STEP = 94.0, 2.6   # default: fastest car 94, each rank 2.6 lower
+CAR_RATING_MIN, CAR_RATING_MAX = 50.0, 99.0
+
+# Screenshot import
+IMPORT_MODEL = "claude-opus-5"

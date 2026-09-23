@@ -29,15 +29,31 @@
 </div>
 {% if user.is_master %}
 <section class="card">
+  <h2>Settings</h2>
+  <form method="post" action="{{ url_for('settings_save') }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="check"><input type="checkbox" name="allow_signups" value="1" {{ 'checked' if signups }}>
+      Let people create their own Driver login from the login page (you still link them to a driver)</label>
+    <label>Anthropic API key for screenshot import {{ '(saved)' if key_set else '(not set)' }}
+      <input name="anthropic_api_key" type="password" autocomplete="off" placeholder="{{ 'Leave blank to keep the saved key' if key_set else 'sk-ant-…' }}"></label>
+    <p class="muted small">Screenshot import sends the pictures you upload to Anthropic's API, which reads the classification.
+      Each import costs a few cents on your Anthropic account. Get a key at console.anthropic.com. The key is stored in this PC's data folder.</p>
+    {% if key_set %}<label class="check"><input type="checkbox" name="clear_key" value="1"> Remove the saved key</label>{% endif %}
+    <button class="btn">Save settings</button>
+  </form>
+</section>
+
+<section class="card">
   <h2>All logins</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
+    <thead><tr><th>Username</th><th>Name</th><th>Careers</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td><strong>{{ u.username }}</strong></td>
         <td>{{ u.display_name }}</td>
+        <td>{% if memberships.get(u.username) %}{{ memberships[u.username]|join(', ') }}{% elif u.is_master %}<span class="muted">All (Race Master)</span>{% else %}<span class="pill pill-hot">Waiting to be assigned</span>{% endif %}</td>
         <td>
           <form method="post" action="{{ url_for('account_role', username=u.username) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

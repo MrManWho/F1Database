@@ -43,6 +43,8 @@
       <a href="{{ url_for('grid_page', token=ctx.token) }}">Transfers</a>
       <a href="{{ url_for('contracts_page', token=ctx.token) }}">Driver market</a>
       <a href="{{ url_for('records', token=ctx.token) }}">Records</a>
+      <a href="{{ url_for('rivalry_page', token=ctx.token) }}">Rivalry</a>
+      <a href="{{ url_for('season_review', token=ctx.token, season_id=ctx.season.id) }}">Season review</a>
     </div>
   </section>
 </div>
@@ -74,6 +76,17 @@
       </li>
       {% endfor %}
     </ul>
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>Title fight</h2><span class="muted small">Cumulative points, top 4 + both players</span></div>
+    <div class="chart" data-chart='{{ chart|tojson }}' data-height="250"></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Paddock news</h2><a href="{{ url_for('news_page', token=ctx.token) }}">All news →</a></div>
+    {% include "_news_list.html" %}
   </section>
 </div>
 

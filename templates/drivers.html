@@ -9,6 +9,10 @@
     <select id="team-filter"><option value="">All teams</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select>
   </div>
 </div>
+<section class="card">
+  <div class="card-head"><h2>Points progression</h2><span class="muted small">Top 6 + both players</span></div>
+  <div class="chart" data-chart='{{ chart|tojson }}' data-height="280"></div>
+</section>
 <section class="card table-card">
   <div class="table-wrap">
   <table class="data-table sortable" id="driver-table">

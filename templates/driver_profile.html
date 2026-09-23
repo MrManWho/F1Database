@@ -23,6 +23,10 @@
   <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
   {% endfor %}
 </div>
+<section class="card">
+  <div class="card-head"><h2>Form &amp; Reputation</h2><span class="muted small">After every round of the career</span></div>
+  <div class="chart" data-height="240" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
+</section>
 <section class="card table-card">
   <h2>Year by year</h2>
   {% if timeline %}

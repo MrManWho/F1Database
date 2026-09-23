@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.4
+# F1 Universe Tracker v1.5
 
 A companion database and "career control room" for a two-player F1 26 career (David Conley and
 Carson Hayes). The game handles the racing. This app remembers everything else: every result,
@@ -23,6 +23,43 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.5: what's new
+
+* **Login protection.** After 5 wrong passwords an account locks for 10 minutes; any single address
+  that keeps guessing gets locked too.
+* **Self sign-up.** Players can make their own login from the login page (**Create a login**). New
+  logins see nothing until the Race Master links them to a driver in **Player Logins**. Accounts shows
+  "Waiting to be assigned" for them. Sign-ups can be turned off in **Accounts → Settings**.
+* **Screenshot import.** On a race weekend, **📷 Import from screenshot** reads the game's qualifying,
+  Sprint or race classification (up to 4 screenshots) with Claude, fills the positions and statuses,
+  and highlights them for you to check. Needs an Anthropic API key in **Accounts → Settings**; each
+  import costs a few cents. Refused or unreadable screenshots show a message and nothing changes.
+* **Quick order.** On race entry, tap **Qualifying / Sprint / Race**, then tap drivers in finishing
+  order. Undo and Clear are there. On phones the table turns into one card per driver.
+* **Rivalry page.** David vs Carson all time: races, qualifying, points, wins, podiums and poles
+  head-to-head; streaks; biggest beatings; season-by-season and track-by-track records; every battle.
+* **Charts.** Title-fight points progression (dashboard and Drivers), Form and Reputation after
+  every round (driver profiles and My Garage), and the rivalry swing. Hover or tap a chart for values,
+  or open **Show data** for a table.
+* **Automatic backups.** One a day and one after every completed race weekend. The newest 20 are
+  kept in `backups/auto/<career>`. Download them from **Career & Saves**.
+* **Team development.** Every team has a car rating. Each winter cars converge toward the pack,
+  better constructors' finishers gain money, and there's some luck. Ratings drive the market's
+  "fast car" order until three rounds are done. Edit them in **Paddock Admin** to match the game.
+* **Season review.** Awards for every season: champion, runner-up, most wins, pole king, podium
+  regular, fan favourite, overtaker of the year, Mr Consistent, most improved, rookie of the year,
+  plus a player spotlight.
+* **Paddock news.** Headlines for wins (and where they started), maiden points, podiums and
+  wins, poles, big charges, DNFs, signings, collapsed talks, transfer windows, champions and winter
+  testing.
+* **Notifications.** The 🔔 shows new offers, signings, results and new seasons. It checks every
+  minute, updates the tab title, and can play an optional chime.
+* **Paddock Admin.** Add or retire drivers, edit names and baseline Reputation, add a team (a 12th
+  team adds two seats and positions up to 24), rename or recolour or retire teams, and set car
+  ratings.
+* **Calendar.** Add rounds to the end and remove rounds that haven't been run. The next season
+  copies the edited calendar.
 
 ## v1.3: logins, rookie offers and My Garage
 

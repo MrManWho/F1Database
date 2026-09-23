@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}{{ review.season.year }} Review{% endblock %}
+{% block content %}
+{% set s = review.season %}
+<div class="page-head">
+  <div><div class="kicker">Season in review{{ ' · still running' if s.status != 'Complete' }}</div><h1>The {{ s.year }} season</h1></div>
+  <div class="button-row">{% for other in ctx.seasons %}<a class="btn btn-sm {{ 'btn-primary' if other.id == s.id else 'btn-ghost' }}" href="{{ url_for('season_review', token=ctx.token, season_id=other.id) }}">{{ other.year }}</a>{% endfor %}</div>
+</div>
+
+<div class="award-grid">
+  {% for a in review.awards %}
+  <article class="award card" style="--team: {{ a.team.color if a.team else 'var(--red)' }}">
+    <small>{{ a.title }}</small>
+    <h3><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=a.driver.id) }}" class="{{ 'is-player' if a.driver.is_player }}">{{ a.driver.name }}</a></h3>
+    <div class="award-value">{{ a.value }}</div>
+    <div class="muted small">{% if a.team %}{{ team_dot(a.team) }}{{ a.team.name }}{% endif %}{{ ' · ' ~ a.note if a.note }}</div>
+  </article>
+  {% else %}
+  <p class="muted">No results yet this season.</p>
+  {% endfor %}
+  {% if review.champion_team %}
+  <article class="award card" style="--team: {{ review.champion_team.team.color }}">
+    <small>{{ "Constructors' Champions" if s.status == 'Complete' else "Constructors' leaders" }}</small>
+    <h3>{{ review.champion_team.team.name }}</h3>
+    <div class="award-value">{{ review.champion_team.points }} pts</div>
+    <div class="muted small">{{ review.champion_team.wins }} wins</div>
+  </article>
+  {% endif %}
+</div>
+
+{% if review.players %}
+<section class="card">
+  <h2>Player spotlight</h2>
+  <div class="grid-2">
+    {% for p in review.players %}
+    <div class="spotlight" style="--team: {{ p.team.color if p.team else 'var(--blue)' }}">
+      <h3>{{ p.driver.name }}</h3>
+      <p><b>P{{ p.position }}</b> in the championship with <b>{{ p.points }}</b> points{% if p.team %} for {{ p.team.name }}{% endif %}.</p>
+      <p class="muted small">{{ p.wins }} wins · {{ p.podiums }} podiums · {{ p.poles }} poles · best {{ 'P' ~ p.best_finish if p.best_finish else '—' }} ·
+        Reputation {{ p.starting_reputation }} → {{ p.reputation }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card table-card">
+    <h2>Final top 10</h2>
+    <table class="data-table compact"><tbody>{% for d in review.table %}
+      <tr class="{{ 'player-row' if d.driver.is_player }}"><td class="num">{{ d.position }}</td><td>{{ d.driver.name }}</td><td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% endif %}</td><td class="num"><b>{{ d.points }}</b></td></tr>
+    {% endfor %}</tbody></table>
+  </section>
+  <section class="card table-card">
+    <h2>Constructors</h2>
+    <table class="data-table compact"><tbody>{% for t in review.teams %}
+      <tr><td class="num">{{ t.position }}</td><td>{{ team_dot(t.team) }}{{ t.team.name }}</td><td class="num"><b>{{ t.points }}</b></td></tr>
+    {% endfor %}</tbody></table>
+  </section>
+</div>
+{% endblock %}

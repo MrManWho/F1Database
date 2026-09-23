@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Rivalry{% endblock %}
+{% block content %}
+{% set an = a.name.split(' ')[0] %}{% set bn = b.name.split(' ')[0] %}
+<div class="page-head"><div><div class="kicker">All-time head to head</div><h1>{{ a.name }} <span class="vs">vs</span> {{ b.name }}</h1></div></div>
+
+<div class="rival-board card">
+  {% for label, pair in [('Races', r.race), ('Qualifying', r.quali), ('Points', r.points), ('Wins', r.wins), ('Podiums', r.podiums), ('Poles', r.poles)] %}
+  {% set total = pair[0] + pair[1] %}
+  <div class="rival-row">
+    <b class="left {{ 'lead' if pair[0] > pair[1] }}">{{ pair[0] }}</b>
+    <div class="rival-bar"><span class="a" style="width: {{ (pair[0] / total * 100) if total else 50 }}%"></span><span class="b"></span></div>
+    <b class="right {{ 'lead' if pair[1] > pair[0] }}">{{ pair[1] }}</b>
+    <small>{{ label }}</small>
+  </div>
+  {% endfor %}
+  <div class="rival-legend"><span><i class="a"></i>{{ a.name }}</span><span><i class="b"></i>{{ b.name }}</span></div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat card"><small>Longest streak · {{ an }}</small><strong>{{ r.streak[0] }}</strong><span class="muted small">races in a row ahead</span></div>
+  <div class="stat card"><small>Longest streak · {{ bn }}</small><strong>{{ r.streak[1] }}</strong><span class="muted small">races in a row ahead</span></div>
+  <div class="stat card feature"><small>Current run</small>
+    {% if r.current %}<strong>{{ [an, bn][r.current[0]] }} ×{{ r.current[1] }}</strong>{% else %}<strong>—</strong>{% endif %}</div>
+  {% for i in [0, 1] %}{% set m = r.best_margin[i] %}
+  <div class="stat card"><small>Biggest beating · {{ [an, bn][i] }}</small>{% if m %}<strong>{{ m.margin }} places</strong><span class="muted small">{{ m.event }}</span>{% else %}<strong>—</strong>{% endif %}</div>
+  {% endfor %}
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>Who's on top</h2><span class="muted small">Running race head-to-head: above 0 = {{ an }} ahead, below = {{ bn }}</span></div>
+    <div class="chart" data-chart='{{ chart|tojson }}' data-height="230"></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>{{ ctx.season.year }} points race</h2></div>
+    <div class="chart" data-chart='{{ season_chart|tojson }}' data-height="230"></div>
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="card table-card">
+    <h2>Season by season</h2>
+    <table class="data-table compact">
+      <thead><tr><th>Year</th><th>Points</th><th>Races</th><th>Quali</th></tr></thead>
+      <tbody>{% for year, s in r.seasons %}
+        <tr><td><strong>{{ year }}</strong></td><td>{{ s.points[0] }}–{{ s.points[1] }}</td><td>{{ s.race[0] }}–{{ s.race[1] }}</td><td>{{ s.quali[0] }}–{{ s.quali[1] }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No races together yet.</td></tr>{% endfor %}</tbody>
+    </table>
+    <p class="muted small">Scores read {{ an }}–{{ bn }}.</p>
+  </section>
+  <section class="card table-card">
+    <h2>Track by track</h2>
+    <div class="table-wrap" style="max-height: 360px">
+    <table class="data-table compact">
+      <thead><tr><th>Circuit</th><th>Races</th><th>Best {{ an }}</th><th>Best {{ bn }}</th></tr></thead>
+      <tbody>{% for name, t in r.tracks %}
+        <tr><td>{{ name }}</td><td>{{ t.race[0] }}–{{ t.race[1] }}</td>
+          <td class="num">{{ 'P' ~ t.best[0] if t.best[0] else '—' }}</td><td class="num">{{ 'P' ~ t.best[1] if t.best[1] else '—' }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No races together yet.</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+  </section>
+</div>
+
+<section class="card table-card">
+  <h2>Every battle</h2>
+  <div class="table-wrap" style="max-height: 420px">
+  <table class="data-table compact">
+    <thead><tr><th>Race</th><th>{{ an }}</th><th>{{ bn }}</th><th>Winner</th></tr></thead>
+    <tbody>{% for t in r.timeline %}
+      {% set fa = ('P' ~ t.a.race_position) if t.a.result_status == 'Finished' else t.a.result_status %}
+      {% set fb = ('P' ~ t.b.race_position) if t.b.result_status == 'Finished' else t.b.result_status %}
+      <tr><td>{{ t.event }}</td><td class="{{ 'lead' if t.winner == 0 }}">{{ fa }}</td><td class="{{ 'lead' if t.winner == 1 }}">{{ fb }}</td>
+        <td>{{ [an, bn][t.winner] }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No races together yet.</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

@@ -509,3 +509,209 @@ def test_garage_negotiation_routes(app, master_client):
                                    "csrf_token": "tok"})
     assert res.status_code == 302
     assert "Conversation" in master_client.get(f"/career/{token}/garage").get_data(as_text=True)
+
+
+# --------------------------------------------------------------------------- v1.5
+
+from f1tracker import feed, importer, insights  # noqa: E402
+
+
+def _career_token(master_client, rookies=False):
+    data = {"name": "V15", "year": "2026", "account1": "david", "csrf_token": "tok"}
+    if rookies:
+        data["rookie_market"] = "1"
+    res = master_client.post("/careers/new", data=data)
+    return res.headers["Location"].split("/career/")[1].split("/")[0]
+
+
+def test_login_locks_after_repeated_wrong_passwords(app):
+    auth.create_user("david", "David", "password1", is_master=True)
+    client = app.test_client()
+    for _ in range(C.LOGIN_MAX_FAILURES):
+        client.post("/login", data={"username": "david", "password": "nope"})
+    res = client.post("/login", data={"username": "david", "password": "password1"}, follow_redirects=True)
+    assert "Too many wrong passwords" in res.get_data(as_text=True)
+    with pytest.raises(auth.AuthError, match="Too many"):
+        auth.login("david", "password1", "10.0.0.9")  # the account stays locked from any address
+    with auth.accounts() as conn:  # ...until the lock expires
+        conn.execute("UPDATE login_failures SET locked_until = 0")
+    assert auth.login("david", "password1", "10.0.0.9")["username"] == "david"
+
+
+def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client):
+    token = _career_token(master_client)
+    client = app.test_client()
+    client.get("/register")
+    with client.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    res = client.post("/register", data={"username": "carson", "display_name": "Carson", "password": "password1",
+                                         "confirm": "password1", "csrf_token": "tok"})
+    assert res.status_code == 302 and auth.get_user("carson")["is_master"] == 0
+    assert token not in client.get("/").get_data(as_text=True)
+    assert client.get(f"/career/{token}/dashboard").status_code == 403
+    assert "Waiting to be assigned" in master_client.get("/accounts").get_data(as_text=True)
+    with storage.session(token) as conn:
+        carson = players(conn)[1]
+    master_client.post(f"/career/{token}/members", data={f"user_{carson}": "carson", "csrf_token": "tok"})
+    assert client.get(f"/career/{token}/garage").status_code == 200
+    auth.set_setting("allow_signups", "0")
+    with pytest.raises(auth.AuthError, match="turned off"):
+        auth.register("someone", "", "password1", "1.2.3.4")
+
+
+def test_automatic_backups_daily_and_after_each_weekend(career, master_client):
+    assert storage.auto_backup(career, "daily")
+    assert storage.auto_backup(career, "daily") is None  # once a day
+    for i in range(C.AUTO_BACKUPS_KEPT + 3):
+        storage.auto_backup(career, f"after-round-{i}", force=True)
+    assert len(storage.list_auto_backups(career)) == C.AUTO_BACKUPS_KEPT
+
+
+def test_weekend_completion_posts_news_notifications_and_backup(master_client):
+    token = _career_token(master_client)
+    with storage.session(token) as conn:
+        event = S.events(conn, S.current_season_id(conn))[0]
+        rows = S.weekend_rows(conn, event["id"])
+    payload = {"mark_complete": True, "results": [
+        {"driver_id": r["driver_id"], "race_position": i + 1, "qualifying_position": i + 1} for i, r in enumerate(rows)]}
+    for _ in range(2):  # saving a completed weekend again must not repeat the headlines
+        assert master_client.post(f"/api/career/{token}/weekend/{event['id']}", json=payload,
+                                  headers={"X-CSRF-Token": "tok"}).get_json()["ok"]
+    with storage.session(token) as conn:
+        news = feed.latest(conn)
+        assert len([n for n in news if n["kind"] == "result"]) == 1
+        assert rows[0]["driver"]["name"] in news[-1]["headline"]
+        items, unread = feed.notifications_for(conn, "david", players(conn)[0])
+        assert unread == 1 and "Results are in" in items[0]["text"]
+        feed.mark_read(conn, "david")
+        assert feed.notifications_for(conn, "david", players(conn)[0])[1] == 0
+    assert any("after-round-1" in b["name"] for b in storage.list_auto_backups(token))
+    page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    assert "wins the 2026 Australian GP" in page and "data-chart" in page
+
+
+def test_signing_is_announced_to_the_other_player(db, rng):
+    sid = S.current_season_id(db)
+    market.open_window(db, sid, rng=rng)
+    david, carson = players(db)
+    offer = market.offers(db, driver_id=david)[0]
+    market.accept_offer(db, offer["id"])
+    assert any("signs with" in n["headline"] for n in feed.latest(db))
+    items, _ = feed.notifications_for(db, "carson", carson)
+    assert any("David Conley just signed" in n["text"] for n in items)
+    mine, _ = feed.notifications_for(db, "david", david)
+    assert not any("David Conley just signed" in n["text"] for n in mine)
+
+
+def test_cars_develop_over_winter_and_ratings_drive_early_ranks(db):
+    sid = S.current_season_id(db)
+    ratings = S.car_ratings(db, sid)
+    assert ratings[1]["rating"] > ratings[11]["rating"]
+    S.set_car_rating(db, sid, 11, 98)
+    assert S.team_strength_ranks(db, sid)[11] == 1
+    run_event(db, S.events(db, sid)[0])
+    new_id = S.create_next_season(db, sid, 2027)
+    changes = S.develop_cars(db, sid, new_id, random.Random(3))
+    new = S.car_ratings(db, new_id)
+    assert len(changes) == 11 and all(C.CAR_RATING_MIN <= r["rating"] <= C.CAR_RATING_MAX for r in new.values())
+    assert any(r["change"] for r in new.values())
+    feed.on_new_season(db, sid, new_id, changes, f"review/{sid}")
+    assert any(n["kind"] == "tech" for n in feed.latest(db, 20))
+
+
+def test_rivalry_and_season_review(db):
+    sid, david, carson, _ = seat_players_at_cadillac(db)
+    _player_rounds(db, [(1, 5), (6, 2), (3, 9)], 90)
+    r = insights.rivalry(db, david, carson)
+    assert r["race"] == [2, 1] and r["quali"] == [2, 1]
+    assert r["streak"][0] == 1 and r["current"] == (0, 1) and r["swing"] == [1, 0, 1]
+    assert r["best_margin"][0]["margin"] == 6
+    review = insights.season_review(db, sid)
+    titles = [a["title"] for a in review["awards"]]
+    assert "Championship leader" in titles and "Rookie of the year" in titles
+    assert {p["driver_id"] for p in review["players"]} == {david, carson}
+    trend = insights.driver_round_timeline(db, david)
+    assert len(trend["labels"]) == 3 and trend["form"][0] > 50
+
+
+def test_paddock_admin_teams_drivers_and_calendar(db):
+    sid = S.current_season_id(db)
+    new_team = S.add_team(db, "Andretti", "and", "#123abc", sid)
+    assert len(S.grid_map(db, sid)) == 24
+    rookie = S.add_driver(db, "Test Rookie", 60, sid)
+    with pytest.raises(S.ValidationError):
+        S.add_driver(db, "test rookie", 60, sid)
+    gmap = {k: str(v) if v else "" for k, v in S.grid_map(db, sid).items()}
+    gmap[(new_team, 1)], gmap[(new_team, 2)] = str(rookie), str(players(db)[0])
+    S.save_full_grid(db, sid, gmap)
+    event = S.events(db, sid)[0]
+    assert len(S.weekend_rows(db, event["id"])) == 24
+    res = run_event(db, event)
+    assert res["complete"]  # positions up to 24 are accepted
+
+    verstappen = driver_id(db, "Max Verstappen")
+    seat = S.driver_seats(db, sid)[verstappen]
+    S.update_driver(db, verstappen, sid, "Max Verstappen", 97, False)
+    assert verstappen not in S.driver_seats(db, sid)
+    assert S.grid_map(db, sid)[seat] is None  # every AI driver already has a seat, so it waits for the Race Master
+    S.update_team(db, new_team, sid, "Andretti", "AND", "#123abc", False)
+    assert len(S.grid_map(db, sid)) == 22 and rookie not in S.driver_seats(db, sid)
+
+    count = len(S.events(db, sid))
+    added = S.add_event(db, sid, "Portuguese GP", "Portimão", True)
+    assert S.get_event(db, added)["round_number"] == count + 1
+    S.delete_event(db, S.events(db, sid)[3]["id"])
+    rounds = [e["round_number"] for e in S.events(db, sid)]
+    assert rounds == list(range(1, count + 1))
+    with pytest.raises(S.ValidationError, match="haven't been run"):
+        S.delete_event(db, event["id"])
+
+
+def test_screenshot_import_matching_and_setup_message(master_client, monkeypatch):
+    entrants = [{"id": 1, "name": "Lando Norris", "team": "McLaren"},
+                {"id": 2, "name": "Oscar Piastri", "team": "McLaren"},
+                {"id": 3, "name": "George Russell", "team": "Mercedes"}]
+    matched = importer.match({"rows": [
+        {"driver": "Oscar Piastri", "position": 1, "status": "Finished"},
+        {"driver": "Lando Norris", "position": 2, "status": "Finished"},
+        {"driver": "Lando Norris", "position": 3, "status": "DNF"},       # duplicate driver
+        {"driver": "Somebody", "position": 3, "status": "Finished"},       # unknown
+        {"driver": "George Russell", "position": 40, "status": "DNF"}],    # out of range
+        "fastest_lap_driver": "George Russell", "notes": ""}, entrants)
+    assert [(r["driver_id"], r["position"]) for r in matched["rows"]] == [(2, 1), (1, 2)]
+    assert matched["skipped"] == 3 and matched["fastest_lap_driver_id"] == 3
+
+    token = _career_token(master_client)
+    with storage.session(token) as conn:
+        event = S.events(conn, S.current_season_id(conn))[0]
+    url = f"/api/career/{token}/weekend/{event['id']}/import"
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    import io
+    res = master_client.post(url, data={"kind": "race", "screenshots": (io.BytesIO(b"png"), "r.png", "image/png")},
+                             headers={"X-CSRF-Token": "tok"}, content_type="multipart/form-data")
+    assert res.status_code == 400 and "API key" in res.get_json()["error"]
+
+    def fake_read(images, kind, entrants_):
+        assert kind == "race" and images[0][1] == "image/png"
+        return {"rows": [{"driver_id": entrants_[0]["id"], "position": 1, "status": "Finished"}],
+                "fastest_lap_driver_id": None, "skipped": 0, "notes": ""}
+    monkeypatch.setattr(importer, "read_screenshots", fake_read)
+    res = master_client.post(url, data={"kind": "race", "screenshots": (io.BytesIO(b"png"), "r.png", "image/png")},
+                             headers={"X-CSRF-Token": "tok"}, content_type="multipart/form-data")
+    assert res.get_json()["ok"] and res.get_json()["rows"][0]["position"] == 1
+
+
+def test_new_v15_pages_render(master_client):
+    token = _career_token(master_client, rookies=True)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        david, carson = players(conn)
+        S.place_players(conn, sid, {david: (11, 1), carson: (11, 2)})
+        _player_rounds(conn, [(2, 4)], 90)
+    for path in ["rivalry", f"review/{sid}", "news", "paddock", "garage", "drivers", f"driver/{david}", "teams",
+                 "seasons", "api/notifications"]:
+        url = f"/api/career/{token}/notifications" if path.startswith("api") else f"/career/{token}/{path}"
+        assert master_client.get(url).status_code == 200, path
+    master_client.post(f"/career/{token}/paddock/cars", data={"rating_1": "90.5", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        assert S.car_ratings(conn, sid)[1]["rating"] == 90.5

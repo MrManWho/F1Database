@@ -147,6 +147,39 @@ CREATE TABLE IF NOT EXISTS career_members (
     driver_id INTEGER REFERENCES drivers(id)
 );
 
+CREATE TABLE IF NOT EXISTS team_seasons (
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    car_rating REAL NOT NULL,
+    change REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (season_id, team_id)
+);
+
+CREATE TABLE IF NOT EXISTS news (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER REFERENCES seasons(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    link TEXT,
+    driver_id INTEGER REFERENCES drivers(id),
+    team_id INTEGER REFERENCES teams(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY,
+    driver_id INTEGER REFERENCES drivers(id),
+    text TEXT NOT NULL,
+    link TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notification_reads (
+    username TEXT PRIMARY KEY,
+    last_seen_id INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_event ON results(event_id);
 CREATE INDEX IF NOT EXISTS idx_results_driver ON results(driver_id);
 CREATE INDEX IF NOT EXISTS idx_events_season ON events(season_id);
@@ -182,11 +215,13 @@ def migrate(conn):
     v3 -> v4: transfer market tables and career membership (created empty).
     v4 -> v5: negotiation columns on offers plus the offer_messages log. Older offers get their
               team limits filled in the first time someone negotiates on them.
+    v5 -> v6: car ratings per team and season, the paddock news feed and notifications. Car
+              ratings for existing seasons are seeded from the team order when first needed.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "offer_messages" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "team_seasons" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
