@@ -66,6 +66,16 @@ def run_event(conn, event, order=None, overrides=None, sprint_order=None, sprint
                                              "ai_difficulty": difficulty})
 
 
+def pledge_all(token):
+    """Give every seated player driver a (Solid) pledge, as if they'd signed after v1.15."""
+    from f1tracker import relations
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        relations.ensure(conn, sid)
+        for row in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (sid,)).fetchall():
+            relations.set_pledge(conn, sid, row["driver_id"], 1)
+
+
 @pytest.fixture
 def app():
     return create_app({"TESTING": True, "SECRET_KEY": "test-secret"})
@@ -91,4 +101,4 @@ def rng():
     return random.Random(7)
 
 
-__all__ = ["driver_id", "players", "run_event", "login", "market"]
+__all__ = ["driver_id", "players", "run_event", "login", "market", "pledge_all"]

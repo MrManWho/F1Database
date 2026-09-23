@@ -2,7 +2,7 @@
 
 import io
 
-from conftest import driver_id, login, players, run_event
+from conftest import driver_id, login, players, pledge_all, run_event
 from f1tracker import auth, community, feed, insights, services as S, storage
 from f1tracker import constants as C
 
@@ -17,6 +17,7 @@ def _league(master_client, **extra):
         cad = conn.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
         a, b = players(conn)
         S.place_players(conn, sid, {a: (cad, 1), b: (cad, 2)})
+    pledge_all(token)
     return token
 
 

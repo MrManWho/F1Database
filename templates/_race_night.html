@@ -55,6 +55,16 @@
   </div>
   {% endif %}
   {% endif %}
+  {% if hub.order is defined %}
+  <div class="hub-block team-order order-{{ hub.order.status|lower }}">
+    <div class="hub-title">📻 Team order</div>
+    {% if hub.order.status == 'Issued' %}
+    <p>If you're racing <b>{{ hub.order.beneficiary.name }}</b>, let them through. Finishing ahead of them counts as ignoring the order.</p>
+    {% else %}
+    <p>Order to let <b>{{ hub.order.beneficiary.name }}</b> through: <b>{{ {'Obeyed': 'followed', 'Ignored': 'ignored', 'Void': 'void (one of you didn\'t finish)'}[hub.order.status] }}</b>.</p>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if hub.checkins is defined %}
   <div class="hub-block">
     <div class="hub-title">Who's racing?

@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from markupsafe import escape
 
-from conftest import driver_id, login, players, run_event
+from conftest import driver_id, login, players, pledge_all, run_event
 from f1tracker import auth, market, services as S, storage
 from f1tracker import constants as C
 
@@ -751,6 +751,7 @@ def test_new_v15_pages_render(master_client):
         david, carson = players(conn)
         S.place_players(conn, sid, {david: (11, 1), carson: (11, 2)})
         _player_rounds(conn, [(2, 4)], 90)
+    pledge_all(token)
     for path in ["rivalry", f"review/{sid}", "news", "paddock", "garage", "drivers", f"driver/{david}", "teams",
                  "seasons", "api/notifications"]:
         url = f"/api/career/{token}/notifications" if path.startswith("api") else f"/career/{token}/{path}"

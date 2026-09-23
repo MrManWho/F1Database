@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Incidents{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.season.year }} · stewarding</div><h1>Incidents</h1></div></div>
+<p class="muted">Report an incident from any race weekend page. {% if ctx.is_master %}Rule on each one below: rulings go in the news and in the rivalry between the drivers.
+  For a penalty, adjust the race results yourself too.{% else %}The Race Master reviews every report.{% endif %}
+  <a href="{{ url_for('help_page') }}#incidents">How incidents work</a></p>
+<section class="card">{% include "_incident_list.html" %}</section>
+{% endblock %}

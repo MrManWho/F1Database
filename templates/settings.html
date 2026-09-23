@@ -20,8 +20,21 @@
     <span class="switch"></span>
     <span><b>Open to join requests</b><small class="muted">Anyone with a login can ask to join from the League Library. You approve each one in Players &amp; Logins.</small></span>
   </label>
+  <h2>Discord <small class="muted">(optional)</small></h2>
+  <p class="muted small">Post race results and paddock headlines to a Discord channel. In Discord: channel settings → Integrations → Webhooks →
+    New Webhook → Copy Webhook URL, then paste it here. Leave it empty to turn Discord off. Garages, offers and team messages are never posted.</p>
+  <label>Webhook URL<input name="discord_webhook" value="{{ discord.url }}" placeholder="https://discord.com/api/webhooks/…" autocomplete="off"></label>
+  <label class="check"><input type="checkbox" name="discord_results" value="1" {{ 'checked' if discord.results }}> Post race results (podium, player results, top 5)</label>
+  <label class="check"><input type="checkbox" name="discord_news" value="1" {{ 'checked' if discord.news }}> Post paddock headlines (signings, drops, press quotes, rulings)</label>
   <div><button class="btn btn-primary">Save settings</button></div>
 </form>
+{% if discord.url %}
+<form method="post" action="{{ url_for('discord_test', token=ctx.token) }}" class="card inline-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <span class="muted small grow">Discord is connected.</span>
+  <button class="btn btn-sm">Send a test message</button>
+</form>
+{% endif %}
 
 {% if public_link %}
 <section class="card">

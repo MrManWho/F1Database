@@ -1,0 +1,26 @@
+{# Needs: ctx, rows #}
+<ul class="incident-list">
+  {% for i in rows %}
+  <li class="incident incident-{{ 'open' if i.status == 'Open' else (i.ruling or 'none') }}">
+    <div class="incident-head">
+      <b>{{ i.accused.name if i.accused else 'Unknown driver' }}</b>
+      <span class="muted small">reported by {{ i.reporter_driver.name if i.reporter_driver else i.reporter_name }} · R{{ i.round_number }} {{ i.event_name }}</span>
+      <span class="pill">{{ i.ruling_label if i.status != 'Open' else 'Under review' }}</span>
+    </div>
+    <p>{{ i.description }}</p>
+    {% if i.ruling_note %}<p class="ruling-note"><b>Race Master:</b> {{ i.ruling_note }}</p>{% endif %}
+    {% if ctx.is_master %}
+    <div class="button-row tight">
+      <form method="post" action="{{ url_for('incident_rule', token=ctx.token, incident_id=i.id) }}" class="inline-form tight">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <select name="ruling">{% for key, label in C.INCIDENT_RULINGS.items() %}<option value="{{ key }}" {{ 'selected' if i.ruling == key }}>{{ label }}</option>{% endfor %}</select>
+        <input name="note" maxlength="500" placeholder="Explanation (optional)" value="{{ i.ruling_note }}">
+        <button class="btn btn-sm btn-primary">{{ 'Update ruling' if i.status != 'Open' else 'Rule' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('incident_delete', token=ctx.token, incident_id=i.id) }}" onsubmit="return confirm('Delete this report?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>
+    </div>
+    {% endif %}
+  </li>
+  {% else %}<li class="muted small">No incidents reported.</li>{% endfor %}
+</ul>

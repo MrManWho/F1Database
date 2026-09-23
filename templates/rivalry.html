@@ -87,4 +87,10 @@
   </div>
 </section>
 {% endif %}
+{% if b and incidents %}
+<section class="card">
+  <h2>Incidents between them</h2>
+  {% with rows = incidents %}{% include "_incident_list.html" %}{% endwith %}
+</section>
+{% endif %}
 {% endblock %}

@@ -266,7 +266,12 @@ def auto_backup(token, reason="daily", force=False):
         if age_hours < AUTO_BACKUP_EVERY_HOURS:
             return None
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target = folder / f"{stamp}-{re.sub(r'[^a-z0-9-]', '', reason.lower())}{CAREER_EXT}"
+    label = re.sub(r'[^a-z0-9-]', '', reason.lower())
+    target = folder / f"{stamp}-{label}{CAREER_EXT}"
+    n = 2
+    while target.exists():  # two backups in the same second must never overwrite each other
+        target = folder / f"{stamp}-{label}-{n}{CAREER_EXT}"
+        n += 1
     src = _connect(source)
     dst = sqlite3.connect(str(target))
     try:
@@ -288,8 +293,7 @@ def export_json(token):
     return json.dumps(data, indent=2, ensure_ascii=False, default=str)
 
 
-def import_career(file_path):
-    """Validate an uploaded .f1career file and store it under a fresh token."""
+def _validate_save(file_path):
     try:
         conn = sqlite3.connect(str(file_path))
         try:
@@ -301,6 +305,31 @@ def import_career(file_path):
     missing = REQUIRED_TABLES - tables
     if missing:
         raise ValueError("Save is missing required tables: " + ", ".join(sorted(missing)))
+
+
+def restore(token, file_path):
+    """Replace a league with a backup, in place. The current state is backed up first, so it can be undone."""
+    _validate_save(file_path)
+    target = career_path(token)
+    if not target.exists():
+        raise CareerNotFound(token)
+    safety = auto_backup(token, "before-restore", force=True)
+    checkpoint(token)
+    src = sqlite3.connect(str(file_path))
+    dst = _connect(target)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    with session(token) as conn:
+        set_meta(conn, "career_id", token)
+    return safety
+
+
+def import_career(file_path):
+    """Validate an uploaded .f1career file and store it under a fresh token."""
+    _validate_save(file_path)
     token = new_token()
     shutil.copyfile(file_path, career_path(token))
     with session(token) as conn:

@@ -442,3 +442,73 @@ def contract_history(conn, driver_id):
         r["end_year"] = r["target_year"] + r["years"] - 1
         out.append(r)
     return out
+
+
+# --------------------------------------------------------------------------- incidents
+
+def report_incident(conn, event_id, username, reporter_driver_id, accused_id, description):
+    event = S.get_event(conn, event_id)
+    if not event or event["status"] == C.EVENT_NOT_RUN:
+        raise ValidationError("You can report incidents once a race has results")
+    entrants = {r["driver_id"] for r in conn.execute("SELECT driver_id FROM results WHERE event_id = ?", (event_id,))}
+    if accused_id not in entrants:
+        raise ValidationError("Pick a driver who was in that race")
+    if accused_id == reporter_driver_id:
+        raise ValidationError("You can't report yourself")
+    description = (description or "").strip()
+    if len(description) < 5:
+        raise ValidationError("Say what happened (lap, corner, what they did)")
+    if len(description) > 1000:
+        raise ValidationError("Keep it under 1000 characters")
+    cur = conn.execute("""INSERT INTO incidents(event_id, reporter, reporter_driver_id, accused_driver_id, description,
+                          status, created_at) VALUES(?,?,?,?,?, 'Open', ?)""",
+                       (event_id, username, reporter_driver_id, accused_id, description, now_iso()))
+    return cur.lastrowid
+
+
+def rule_incident(conn, incident_id, ruling, note, username):
+    from . import feed
+    inc = conn.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
+    if not inc:
+        raise ValidationError("That report no longer exists")
+    if ruling not in C.INCIDENT_RULINGS:
+        raise ValidationError("Choose a ruling")
+    note = (note or "").strip()[:500]
+    conn.execute("UPDATE incidents SET status = 'Decided', ruling = ?, ruling_note = ?, decided_by = ?, decided_at = ? "
+                 "WHERE id = ?", (ruling, note, username, now_iso(), incident_id))
+    event = S.get_event(conn, inc["event_id"])
+    dmap = S.driver_map(conn)
+    accused = dmap[inc["accused_driver_id"]]["name"]
+    where = f"R{event['round_number']} {event['name']}"
+    headline = (f"No further action for {accused} after {where} incident" if ruling == "none"
+                else f"{accused} given a {C.INCIDENT_RULINGS[ruling].split(' (')[0].lower()} for {where} incident")
+    feed.post(conn, event["season_id"], "paddock", headline, note or inc["description"][:200], "incidents",
+              driver_id=inc["accused_driver_id"])
+    feed.notify(conn, inc["accused_driver_id"], f"Ruling on the {where} incident: {C.INCIDENT_RULINGS[ruling]}.", "incidents")
+    if inc["reporter_driver_id"]:
+        feed.notify(conn, inc["reporter_driver_id"], f"Your {where} report was decided: {C.INCIDENT_RULINGS[ruling]}.",
+                    "incidents")
+
+
+def incidents(conn, event_id=None, driver_ids=None, season_id=None):
+    sql = """SELECT i.*, e.round_number, e.name AS event_name, e.season_id FROM incidents i
+             JOIN events e ON e.id = i.event_id WHERE 1=1"""
+    params = []
+    if event_id:
+        sql += " AND i.event_id = ?"
+        params.append(event_id)
+    if season_id:
+        sql += " AND e.season_id = ?"
+        params.append(season_id)
+    rows = [dict(r) for r in conn.execute(sql + " ORDER BY i.id DESC", params)]
+    if driver_ids:
+        a, b = driver_ids
+        rows = [r for r in rows if {r["reporter_driver_id"], r["accused_driver_id"]} == {a, b}]
+    dmap = S.driver_map(conn)
+    names = _names(r["reporter"] for r in rows)
+    for r in rows:
+        r["accused"] = dmap.get(r["accused_driver_id"])
+        r["reporter_driver"] = dmap.get(r["reporter_driver_id"])
+        r["reporter_name"] = names.get(r["reporter"], r["reporter"])
+        r["ruling_label"] = C.INCIDENT_RULINGS.get(r["ruling"])
+    return rows

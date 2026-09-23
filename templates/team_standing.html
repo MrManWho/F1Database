@@ -22,6 +22,21 @@
   {% endif %}
 </div>
 
+{% if needs_pledge %}
+<div class="banner banner-hot">{% if own %}You need to choose your growth pledge for this season. <a href="{{ url_for('pledge_page', token=ctx.token) }}">Choose it now →</a>
+  {% else %}{{ driver.name }} hasn't chosen a growth pledge for this season yet. They'll be asked next time they open the league.{% endif %}</div>
+{% endif %}
+{% if rel and ctx.is_master %}
+<div class="button-row master-tools">
+  <form method="post" action="{{ url_for('request_pledge', token=ctx.token, driver_id=driver.id) }}"
+        onsubmit="return confirm('Ask {{ driver.name }} to choose their growth pledge again? Their targets will reset.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Ask {{ driver.name.split()[0] }} for a new pledge</button></form>
+  <form method="post" action="{{ url_for('request_pledge', token=ctx.token, driver_id=driver.id) }}"
+        onsubmit="return confirm('Ask every seated player driver to choose their growth pledge again?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="all" value="1">
+    <button class="btn btn-sm btn-ghost">Ask everyone for a new pledge</button></form>
+</div>
+{% endif %}
 {% if rel %}
 {% set tone = {'Delighted': 'good', 'Happy': 'good', 'Concerned': 'warn', 'Unhappy': 'bad', 'Seat at risk': 'bad', 'Released': 'bad'}[rel.status] %}
 <div class="grid-2">
@@ -57,10 +72,29 @@
       <div class="target-bar"><span class="{{ 'ok' if rel.rep >= rel.rep_expected else ('near' if rel.rep >= rel.rep_expected - 1 else 'short') }}" style="width: {{ [rel.rep, 100]|min }}%"></span>
         <i style="left: {{ [rel.rep_target, 100]|min }}%" title="Season target"></i></div>
     </div>
+    {% if not rel.rebased %}<p class="muted small">Targets are re-set to the car's real pace after round 3.</p>{% endif %}
     <div class="h2h">
       <div><small>Race vs {{ teammate.name if teammate else 'teammate' }}</small><strong>{{ rel.h2h.race_won }}–{{ rel.h2h.race_total - rel.h2h.race_won }}</strong></div>
       <div><small>Quali vs teammate</small><strong>{{ rel.h2h.quali_won }}–{{ rel.h2h.quali_total - rel.h2h.quali_won }}</strong></div>
     </div>
+  </section>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Season goals <span class="info-dot" title="Each goal on track adds to the relationship, each one behind takes away. The effect grows as the season goes on."><a href="{{ url_for('help_page') }}#goals">ⓘ</a></span></h2>
+    <p class="muted small">Set by {{ team.name }} for {{ 'an' if rel.role.startswith('E') else 'a' }} {{ rel.role }} driver in this car.</p>
+    <ul class="goal-list">
+      {% for g in rel.goals %}<li class="goal-{{ g.state|lower|replace(' ', '-') }}"><span>{{ g.label }}</span><b>{{ g.now }}</b><em>{{ g.state }}</em></li>
+      {% else %}<li class="muted">No goals set.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>Team orders</h2>
+    {% if orders %}
+    <ul class="goal-list">{% for o in orders %}<li class="order-{{ o.status|lower }}"><span>R{{ o.round_number }} {{ o.event_name }}: let {{ o.beneficiary.name }} through</span>
+      <em>{{ {'Issued': 'Pending', 'Obeyed': 'Followed', 'Ignored': 'Ignored', 'Void': 'Void'}[o.status] }}</em></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">{% if rel.role == 'No. 2' %}None yet. As a No. 2 you may be asked to give way to your teammate.{% else %}As {{ 'the No. 1' if rel.role == 'No. 1' else 'an Equal Status driver' }} you won't be asked to give way.{% endif %}</p>{% endif %}
+    {% if rel.bonus %}<p class="muted small">Press answers and team orders have moved the relationship by <b>{{ '%+.0f'|format(rel.bonus) }}</b> this season.</p>{% endif %}
   </section>
 </div>
 {% elif driver %}

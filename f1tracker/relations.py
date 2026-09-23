@@ -7,6 +7,11 @@ The targets are measured against what the car should manage, so a pledge means t
 As results come in the team rates the relationship (0-100). Falling behind brings a quiet word, then a
 formal warning, then "seat at risk". A driver still at risk when Silly Season opens, or at the end of the
 season, is released: the team won't renew them, and without a new deal they lose the seat for next year.
+
+Every seated player must have chosen a pledge (pledged = 1). Contracts from before pledges existed, and
+seats with no contract, start unpledged, and the app asks the driver to choose before anything else.
+After three rounds the targets are re-based on how the car is really performing (AI drivers' points).
+The team also sets season goals, and press answers and team orders add a small bonus (+/-15).
 """
 
 from . import constants as C
@@ -69,22 +74,31 @@ def ensure(conn, season_id):
         if not seat:
             continue
         if row and row["team_id"] == seat[0]:
+            if not conn.execute("SELECT 1 FROM team_goals WHERE season_id = ? AND driver_id = ?",
+                                (season_id, player["id"])).fetchone():  # rows from before goals existed
+                set_goals(conn, season_id, player["id"], seat[0], _role(conn, row))
             continue
         ranks = ranks or S.team_strength_ranks(conn, season_id)
         contract = _contract_for(conn, season["year"], player["id"], seat[0])
-        growth = contract["growth"] if contract and contract["growth"] is not None else 0
+        pledged = bool(contract and contract["growth"] is not None)
+        growth = contract["growth"] if pledged else 0
         t = targets_for(conn, season_id, player["id"], seat[0], growth, ranks)
         conn.execute("""INSERT INTO team_relations(season_id, driver_id, team_id, offer_id, growth, form_base,
-                        form_target, rep_start, rep_target, score, status, warning_level, released, updated_at)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+                        form_target, rep_start, rep_target, score, status, warning_level, released, updated_at,
+                        pledged, rebased, bonus)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,0,0)
                         ON CONFLICT(season_id, driver_id) DO UPDATE SET team_id = excluded.team_id,
                         offer_id = excluded.offer_id, growth = excluded.growth, form_base = excluded.form_base,
                         form_target = excluded.form_target, rep_start = excluded.rep_start,
                         rep_target = excluded.rep_target, score = excluded.score, status = excluded.status,
-                        warning_level = 0, released = 0, updated_at = excluded.updated_at""",
+                        warning_level = 0, released = 0, updated_at = excluded.updated_at,
+                        pledged = excluded.pledged, rebased = 0, bonus = 0""",
                      (season_id, player["id"], seat[0], contract["id"] if contract else None, growth,
                       t["form_base"], t["form_target"], t["rep_start"], t["rep_target"], C.RELATION_START,
-                      band(C.RELATION_START), now_iso()))
+                      band(C.RELATION_START), now_iso(), int(pledged)))
+        set_goals(conn, season_id, player["id"], seat[0], contract["role"] if contract else "Equal Status", ranks,
+                  replace=True)
+    rebase(conn, season_id)  # leagues already past round 3 get their targets re-based straight away
 
 
 def assess(conn, season_id, driver_id, standings=None):
@@ -110,13 +124,16 @@ def assess(conn, season_id, driver_id, standings=None):
     form_gap = form - rel["form_target"]
     rep_gap = rep - rep_expected
     confidence = min(1.0, done / max(3.0, total * 0.3))
-    raw = form_gap * 1.2 + rep_gap * 3 + h2h_bonus
-    score = round(S.clamp(C.RELATION_START + confidence * raw, 0, 100), 1)
+    goals = goal_progress(conn, season_id, driver_id, row, h2h, done, total)
+    goal_part = sum(C.GOAL_WEIGHT if g["state"] in ("Met", "On track") else -C.GOAL_WEIGHT for g in goals)
+    raw = form_gap * 1.2 + rep_gap * 3 + h2h_bonus + goal_part
+    score = round(S.clamp(C.RELATION_START + confidence * raw + (rel["bonus"] or 0), 0, 100), 1)
     status = "Released" if rel["released"] else band(score)
     return {**rel, "team": S.team_map(conn).get(rel["team_id"]), "level": growth_level(rel["growth"]),
             "form": form, "rep": rep, "rep_expected": round(rep_expected, 1), "form_gap": round(form_gap, 1),
             "rep_gap": round(rep_gap, 1), "h2h": h2h, "score": score, "status": status, "done": done,
-            "total": total, "confidence": confidence, "live_status": band(score)}
+            "total": total, "confidence": confidence, "live_status": band(score), "goals": goals,
+            "role": _role(conn, rel)}
 
 
 WARNINGS = {
@@ -137,6 +154,7 @@ def note(conn, season_id, driver_id, team_id, tone, text, notify=True):
 def review(conn, season_id):
     """After a completed round: store the latest rating and have teams react to big changes."""
     ensure(conn, season_id)
+    rebase(conn, season_id)
     standings = {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
     for rel in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (season_id,)).fetchall():
         a = assess(conn, season_id, rel["driver_id"], standings)
@@ -208,3 +226,139 @@ def interest_bonus(conn, season_id, driver_id, team_id):
 def notes(conn, season_id, driver_id):
     return [dict(r) for r in conn.execute("SELECT * FROM team_notes WHERE season_id = ? AND driver_id = ? "
                                           "ORDER BY id DESC", (season_id, driver_id))]
+
+
+# --------------------------------------------------------------------------- pledges
+
+def needs_pledge(conn, season_id, driver_id):
+    row = conn.execute("SELECT pledged, released FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (season_id, driver_id)).fetchone()
+    return bool(row and not row["pledged"] and not row["released"])
+
+
+def set_pledge(conn, season_id, driver_id, growth):
+    """The driver chooses (or re-chooses) their pledge for this season; targets are worked out again."""
+    try:
+        growth = int(growth)
+    except (TypeError, ValueError):
+        raise S.ValidationError("Choose a growth pledge")
+    if not 0 <= growth < len(C.GROWTH_LEVELS):
+        raise S.ValidationError("Choose a growth pledge")
+    level = C.GROWTH_LEVELS[growth]
+    rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (season_id, driver_id)).fetchone()
+    if not rel:
+        raise S.ValidationError("You don't have a race seat this season")
+    t = targets_for(conn, season_id, driver_id, rel["team_id"], growth)
+    conn.execute("""UPDATE team_relations SET growth = ?, form_base = ?, form_target = ?, rep_target = ?,
+                    pledged = 1, updated_at = ? WHERE season_id = ? AND driver_id = ?""",
+                 (growth, t["form_base"], t["form_target"], t["rep_target"], now_iso(), season_id, driver_id))
+    if rel["offer_id"]:
+        conn.execute("UPDATE offers SET growth = ? WHERE id = ?", (growth, rel["offer_id"]))
+    team = S.team_map(conn)[rel["team_id"]]["name"]
+    note(conn, season_id, driver_id, rel["team_id"], "good",
+         f"You've pledged a {level['name']} season to {team}: Form {t['form_target']:.0f}+ and Reputation "
+         f"{t['rep_target']:.1f}+ by the end of the year.", notify=False)
+    return t
+
+
+def request_pledge(conn, season_id, driver_id):
+    """Race Master: make a driver choose their pledge again before they carry on."""
+    rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (season_id, driver_id)).fetchone()
+    if not rel:
+        raise S.ValidationError("That driver has no race seat this season")
+    conn.execute("UPDATE team_relations SET pledged = 0 WHERE season_id = ? AND driver_id = ?", (season_id, driver_id))
+    feed.notify(conn, driver_id, "Your team wants your growth pledge for this season. Choose it to carry on.", "pledge")
+
+
+def rebase(conn, season_id):
+    """After three rounds, reset the Form baseline to the car's real pace (from AI drivers' points)."""
+    evs = S.events(conn, season_id)
+    if sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE) < 3:
+        return
+    ranks = None
+    for rel in conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND rebased = 0",
+                            (season_id,)).fetchall():
+        ranks = ranks or S.team_strength_ranks(conn, season_id)
+        base = car_baseline_form(ranks.get(rel["team_id"], len(ranks)))
+        level = growth_level(rel["growth"])
+        target = round(min(97.0, base + level["form"]), 1)
+        conn.execute("UPDATE team_relations SET rebased = 1, form_base = ?, form_target = ? "
+                     "WHERE season_id = ? AND driver_id = ?", (base, target, season_id, rel["driver_id"]))
+        if abs(base - rel["form_base"]) >= 1:
+            team = S.team_map(conn)[rel["team_id"]]["name"]
+            quicker = base > rel["form_base"]
+            note(conn, season_id, rel["driver_id"], rel["team_id"], "concerned" if quicker else "good",
+                 f"After three rounds {team} have re-set your targets to match the car's real pace. It's "
+                 f"{'quicker' if quicker else 'slower'} than expected, so your Form target is now {target:.0f} "
+                 f"(was {rel['form_target']:.0f}).")
+        set_goals(conn, season_id, rel["driver_id"], rel["team_id"], _role(conn, rel), ranks, replace=True)
+
+
+def add_bonus(conn, season_id, driver_id, delta):
+    conn.execute("UPDATE team_relations SET bonus = MAX(?, MIN(?, bonus + ?)) WHERE season_id = ? AND driver_id = ?",
+                 (-C.RELATION_EXTRA_CAP, C.RELATION_EXTRA_CAP, delta, season_id, driver_id))
+
+
+# --------------------------------------------------------------------------- season goals
+
+def _role(conn, rel):
+    if rel["offer_id"]:
+        row = conn.execute("SELECT role FROM offers WHERE id = ?", (rel["offer_id"],)).fetchone()
+        if row:
+            return row["role"]
+    return "Equal Status"
+
+
+def set_goals(conn, season_id, driver_id, team_id, role, ranks=None, replace=False):
+    """The team's goals for the season, pitched at what the car can do."""
+    if not replace and conn.execute("SELECT 1 FROM team_goals WHERE season_id = ? AND driver_id = ?",
+                                    (season_id, driver_id)).fetchone():
+        return
+    conn.execute("DELETE FROM team_goals WHERE season_id = ? AND driver_id = ?", (season_id, driver_id))
+    ranks = ranks or S.team_strength_ranks(conn, season_id)
+    rank = ranks.get(team_id, len(ranks) or 11)
+    total = len(S.events(conn, season_id)) or 1
+    share = 0.85 if rank <= 2 else 0.7 if rank <= 4 else 0.5 if rank <= 6 else 0.3 if rank <= 8 else 0.15
+    points = max(1, round(total * share))
+    wdc = min(20, 2 * rank + 1)
+    goals = [("points", points, f"Score points in {points} race{'s' if points != 1 else ''}"),
+             ("championship", wdc, f"Finish P{wdc} or better in the championship")]
+    if role == "No. 1":
+        goals.append(("teammate", 1, "Beat your teammate in most races (you're the No. 1)"))
+    elif role == "Equal Status":
+        goals.append(("teammate", 1, "Beat your teammate in at least half the races"))
+    for kind, target, label in goals:
+        conn.execute("INSERT INTO team_goals(season_id, driver_id, kind, target, label) VALUES(?,?,?,?,?)",
+                     (season_id, driver_id, kind, target, label))
+
+
+def goal_progress(conn, season_id, driver_id, row, h2h, done, total):
+    frac = done / (total or 1)
+    out = []
+    for g in conn.execute("SELECT * FROM team_goals WHERE season_id = ? AND driver_id = ? ORDER BY id",
+                          (season_id, driver_id)).fetchall():
+        g = dict(g)
+        if g["kind"] == "points":
+            count = conn.execute("""SELECT COUNT(*) FROM results r JOIN events e ON e.id = r.event_id
+                                    WHERE e.season_id = ? AND r.driver_id = ? AND e.status = ?
+                                    AND r.result_status = ? AND r.race_position <= 10""",
+                                 (season_id, driver_id, C.EVENT_COMPLETE, C.STATUS_FINISHED)).fetchone()[0]
+            g["now"] = f"{count} of {g['target']}"
+            g["state"] = "Met" if count >= g["target"] else \
+                "On track" if count >= g["target"] * frac - 0.5 else "Behind"
+        elif g["kind"] == "championship":
+            pos = row["position"] if row and row["has_results"] else None
+            g["now"] = f"P{pos}" if pos else "—"
+            g["state"] = "On track" if not pos or pos <= g["target"] else "Behind"
+            if pos and pos <= g["target"] and done == total:
+                g["state"] = "Met"
+        else:
+            won, raced = h2h["race_won"], h2h["race_total"]
+            g["now"] = f"{won}–{raced - won}"
+            g["state"] = "On track" if raced == 0 or won * 2 >= raced else "Behind"
+            if raced and done == total and won * 2 >= raced:
+                g["state"] = "Met"
+        out.append(g)
+    return out

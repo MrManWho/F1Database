@@ -3,6 +3,22 @@
 Every version of F1 Universe Tracker, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.15 · Life inside the team
+- **Everyone has a pledge.** Every seated driver must have a growth pledge. If yours is missing (a contract from before pledges, or a seat given by hand), the app asks you to choose one before anything else. Pledges are locked for the season.
+- **Race Master: ask for a new pledge.** On Team Standings there's a button to ask one driver, or everyone, to choose again. They'll be asked next time they open the league.
+- **Targets re-set after round 3.** Once three races are done, your targets are re-based on how fast the car really is in your league, using the AI drivers' points. The team tells you what changed.
+- **Season goals.** Each team sets goals pitched at its car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers) beating your teammate. They count toward the relationship.
+- **Press pen.** After each race you get two questions based on how it went. Answers nudge your relationship, and some make headlines. It's optional, and questions close when the next race is completed.
+- **Team orders.** A No. 2 driver can be told to let their teammate through at the next race. Finishing ahead of them means you ignored it: that costs relationship points and makes the news.
+- **Incident reports.** Report an incident from any race weekend. The Race Master rules on it (no further action, reprimand, warning or penalty), and the ruling goes in the news and in the rivalry between the drivers.
+- **Driver Value breakdown** in My Garage: what your number is made of, and how far you are from the next team up.
+- **How it works** page explaining Form, Reputation, Driver Value, car strength, pledges, relationships, goals, team orders, the press pen and incidents, with ⓘ links from the stats.
+- **Discord (optional).** Paste a channel webhook in League Settings to post race results and paddock headlines. It's off unless you set it up, and there's a test button.
+- **Result cards.** A shareable picture of the podium and your weekend, from any completed race.
+- **Restore backups in the app.** Roll a league back to any automatic backup, or restore from a downloaded file. The current state is backed up first, so a restore can be undone.
+- **Fixes:**
+  - Two backups made in the same second overwrote each other. This could lose the "before restore" copy.
+
 ## 1.14 · Contracts about growth, team relationships
 - **No more salaries.** Contracts are now about **seat status**, **length** and a **growth pledge**: how much you promise to improve. The four pledges are Steady, Solid, Strong and Breakout.
 - **Pledges are fair at every team.** Targets are measured against what your car should manage. A backmarker isn't expected to win; a Breakout season in a slow car means clearly beating it.

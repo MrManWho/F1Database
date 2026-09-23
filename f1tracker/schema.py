@@ -271,7 +271,53 @@ CREATE TABLE IF NOT EXISTS team_relations (
     warning_level INTEGER NOT NULL DEFAULT 0,
     released INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
+    pledged INTEGER NOT NULL DEFAULT 0,
+    rebased INTEGER NOT NULL DEFAULT 0,
+    bonus REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (season_id, driver_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_goals (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    target INTEGER NOT NULL,
+    label TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS press_answers (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    effect REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, driver_id, question)
+);
+
+CREATE TABLE IF NOT EXISTS team_orders (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    beneficiary_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'Issued',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, driver_id)
+);
+
+CREATE TABLE IF NOT EXISTS incidents (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    reporter TEXT NOT NULL,
+    reporter_driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+    accused_driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Open',
+    ruling TEXT,
+    ruling_note TEXT NOT NULL DEFAULT '',
+    decided_by TEXT,
+    created_at TEXT NOT NULL,
+    decided_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS team_notes (
@@ -332,11 +378,14 @@ def migrate(conn):
                predictions and the Race Master's activity log (all created empty).
     v10 -> v11: contracts are about growth instead of money (offers.growth / min_growth, the growth asked
                for in each message), plus team relationships and team notes. Old salaries are kept but unused.
+    v11 -> v12: pledges must be chosen (team_relations.pledged), targets re-based after three rounds, press
+               answers and team orders (team_relations.bonus), season goals, incidents. Relationships whose
+               contract has no growth pledge are marked unpledged so the driver chooses one.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "growth" in _columns(conn, "offer_messages"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "incidents" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -347,6 +396,13 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    rel_cols = _columns(conn, "team_relations")
+    if "pledged" not in rel_cols:
+        conn.execute("ALTER TABLE team_relations ADD COLUMN pledged INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE team_relations ADD COLUMN rebased INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE team_relations ADD COLUMN bonus REAL NOT NULL DEFAULT 0")
+        conn.execute("UPDATE team_relations SET pledged = 1 WHERE offer_id IN "
+                     "(SELECT id FROM offers WHERE growth IS NOT NULL)")
     if "growth" not in _columns(conn, "offer_messages"):
         conn.execute("ALTER TABLE offer_messages ADD COLUMN growth INTEGER")
     if "race_at" not in _columns(conn, "events"):

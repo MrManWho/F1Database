@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.14"
-SCHEMA_VERSION = 11
+APP_VERSION = "1.15"
+SCHEMA_VERSION = 12
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -188,3 +188,16 @@ GROWTH_LEVELS = [
 # Team relationship (0-100) bands, best first: (minimum score, status)
 RELATION_BANDS = [(80, "Delighted"), (55, "Happy"), (40, "Concerned"), (25, "Unhappy"), (0, "Seat at risk")]
 RELATION_START = 60.0
+
+# Relationship extras: press answers and team orders nudge the score directly (capped).
+RELATION_EXTRA_CAP = 15.0
+TEAM_ORDER_IGNORED = -6.0
+TEAM_ORDER_OBEYED = 2.0
+GOAL_WEIGHT = 4.0   # each season goal adds or removes this much (scaled by how far into the season)
+
+INCIDENT_RULINGS = {
+    "none": "No further action",
+    "reprimand": "Reprimand",
+    "warning": "Warning",
+    "penalty": "Penalty (results adjusted)",
+}

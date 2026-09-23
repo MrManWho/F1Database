@@ -8,10 +8,21 @@ from . import services as S
 from .storage import now_iso
 
 
+def _token(conn):
+    try:
+        return Path(conn.execute("PRAGMA database_list").fetchone()[2]).stem
+    except Exception:
+        return None
+
+
 def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, team_id=None, ref=None):
     conn.execute("""INSERT INTO news(season_id, kind, headline, body, link, driver_id, team_id, created_at, ref)
                     VALUES(?,?,?,?,?,?,?,?,?)""",
                  (season_id, kind, headline, body, link, driver_id, team_id, now_iso(), ref))
+    token = _token(conn)
+    if token and kind != "result":  # race results go to Discord as one summary instead
+        from . import discord
+        discord.queue_news(token, headline, body)
 
 
 _outbox = threading.local()
@@ -21,10 +32,7 @@ def notify(conn, driver_id, text, link=None, ref=None):
     """driver_id None = everyone in the career."""
     conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref) VALUES(?,?,?,?,?)",
                  (driver_id, text, link, now_iso(), ref))
-    try:
-        token = Path(conn.execute("PRAGMA database_list").fetchone()[2]).stem
-    except Exception:
-        token = None
+    token = _token(conn)
     if token:
         if not hasattr(_outbox, "items"):
             _outbox.items = []

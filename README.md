@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.14
+# F1 Universe Tracker v1.15
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a
@@ -184,6 +184,30 @@ and the warning is lifted.
 - everything the team has said to you;
 - how eager every other team is.
 
+### Pledges, goals, the press and team orders
+
+* **Everyone needs a pledge.** If a seated driver has none, they choose it before using the league.
+  Pledges are locked for the season. The Race Master can ask a driver, or everyone, for a new one on
+  **Team Standings**.
+* **Targets re-set after round 3** to the car's real pace in your league (from AI drivers' points).
+* **Season goals** from the team:
+  - points in a number of races;
+  - a championship position;
+  - beating your teammate (No. 1 and Equal Status drivers only).
+
+  Each goal that's on track helps the relationship, and each one behind hurts it.
+* **Press pen:** after every race you get two questions based on your result. Answers nudge the
+  relationship, and some make headlines. It's optional.
+* **Team orders:** No. 2 drivers can be told to let their teammate through. Finishing ahead of them
+  counts as ignoring the order: −6 relationship and a headline. Following it is +2.
+* Press answers and team orders can move the relationship by up to ±15 in total per season.
+
+### Incidents
+
+Anyone driving can report an incident from a race weekend. The Race Master rules on it: no further
+action, a reprimand, a warning, or a penalty (for a penalty, they adjust the results themselves).
+Rulings go in the news and in the rivalry page between the two drivers.
+
 ### Extras (League Settings)
 
 | Extra | Default | What it does |
@@ -192,6 +216,7 @@ and the warning is lifted.
 | Comments & reactions | on | Chat and emoji reactions on race weekends and news, and a fans' Driver of the Day vote |
 | Predictions game | on | Pick pole (3), winner (5), fastest lap (2) and the top player driver (2). Picks lock at race time. |
 | Public results page | off | A read-only link with the standings, calendar and results |
+| Discord | off | Paste a channel webhook to post race results and paddock headlines |
 
 **Race night:**
 * The Race Master sets a race time, shown to everyone as a countdown in their own time zone.
@@ -209,6 +234,10 @@ and the warning is lifted.
 * **Install it as an app** (account menu → Install, or Safari → Share → Add to Home Screen) and turn
   on phone alerts (account menu). Alerts need the https website address.
 * **Themes:** light, dark or match your device.
+* **How it works** (menu) explains every number in the app.
+* **Result cards:** share a picture of the podium and your weekend from any completed race.
+* **Restore:** roll a league back to any automatic backup from **League & Saves**. The current state
+  is backed up first, so a restore can be undone.
 
 ## Security
 
@@ -236,8 +265,10 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 | `storage` | Saves |
 | `services` | Rules, standings and difficulty |
 | `market` | Offers and negotiations |
-| `relations` | Team relationships |
-| `community` | Extras, profiles and the activity log |
+| `relations` | Team relationships, pledges and season goals |
+| `teamlife` | The press pen and team orders |
+| `discord` | Optional Discord posts |
+| `community` | Extras, profiles, incidents and the activity log |
 | `feed` | News and notifications |
 | `insights` | Charts, rivalry and awards |
 | `auth` | Logins |

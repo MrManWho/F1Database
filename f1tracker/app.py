@@ -14,7 +14,8 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import random
 
-from . import auth, community, feed, importer, insights, mailer, market, push, relations, services as S, storage
+from . import (auth, community, discord, feed, importer, insights, mailer, market, push, relations, services as S,
+               storage, teamlife)
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -43,7 +44,10 @@ AUDIT_LABELS = {
     "calendar_add": "Added a race", "calendar_delete": "Removed a race", "members": "Changed league members",
     "members_add_player": "Added a player driver", "members_request": "Answered a join request",
     "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
-    "public_rotate": "Made a new public link", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
+    "public_rotate": "Made a new public link", "discord_test": "Sent a Discord test message",
+    "incident_report": "Reported an incident", "incident_rule": "Ruled on an incident",
+    "incident_delete": "Deleted an incident report", "request_pledge": "Asked for a new growth pledge",
+    "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
 }
 QUIET_ENDPOINTS = {"notifications_read", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
@@ -81,6 +85,7 @@ def register_hooks(app):
     @app.before_request
     def guard():
         feed.take_outbox()
+        discord.take()
         g.user = None
         endpoint = request.endpoint or ""
         if endpoint == "static":
@@ -106,6 +111,9 @@ def register_hooks(app):
 
     @app.after_request
     def send_alerts(response):
+        news = discord.take()
+        if news and response.status_code < 400 and not app.config.get("TESTING"):
+            _discord_news(news)
         items = feed.take_outbox()
         if items and response.status_code < 400 and not app.config.get("TESTING"):
             try:
@@ -136,6 +144,20 @@ def register_hooks(app):
     @app.errorhandler(413)
     def too_large(_e):
         return render_template("error.html", code=413, message="Uploads are limited to 100 MB."), 413
+
+
+def _discord_news(items):
+    by_token = {}
+    for token, message in items:
+        by_token.setdefault(token, []).append(message)
+    for token, messages in by_token.items():
+        try:
+            with storage.session(token) as conn:
+                cfg = discord.settings(conn)
+            if cfg["url"] and cfg["news"]:
+                discord.send_later(cfg["url"], messages)
+        except Exception:
+            pass
 
 
 def is_master():
@@ -224,6 +246,9 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
                         conn, g.user["username"], mine["id"] if mine else None, is_master() and not mine)
                     storage.touch_opened(conn)
+                    gate = _pledge_gate(conn, g.ctx, master_only)
+                    if gate is not None:
+                        return gate
                     result = fn(conn, g.ctx, *args, **kwargs)
                     if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS:
                         detail = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in kwargs.items())
@@ -234,12 +259,32 @@ def career_page(master_only=False, ops_only=False):
                 abort(404)
             except (ValidationError, AuthError) as exc:
                 feed.take_outbox()  # nothing was saved, so nothing to alert about
+                discord.take()
                 if request.method != "POST":
                     raise
                 flash(str(exc), "error")
                 return redirect(request.referrer or url_for("dashboard", token=token))
         return wrapper
     return deco
+
+
+PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "help_page"}
+
+
+def _pledge_gate(conn, ctx, master_only):
+    """A seated player driver with no growth pledge must choose one before using the league."""
+    mine = ctx.get("my_driver")
+    if not mine or request.endpoint in PLEDGE_EXEMPT or (master_only and ctx["is_master"]):
+        return None
+    sid = ctx["current_season_id"]
+    relations.ensure(conn, sid)
+    if not relations.needs_pledge(conn, sid, mine["id"]):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(ok=False, error="Choose your growth pledge first"), 409
+    if request.method == "POST":
+        flash("Choose your growth pledge for this season first.", "error")
+    return redirect(url_for("pledge_page", token=ctx["token"]))
 
 
 def page(template, ctx, **kwargs):
@@ -657,7 +702,9 @@ def register_routes(app):
                     rec=S.difficulty_recommendation(conn, before),
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
                     news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
-                    hub=_hub(conn, ctx, nxt) if nxt else None)
+                    hub=_hub(conn, ctx, nxt) if nxt else None,
+                    press=teamlife.press_pen(conn, ctx["current_season_id"], ctx["my_driver"]["id"])
+                    if ctx["my_driver"] and sid == ctx["current_season_id"] else None)
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
@@ -676,7 +723,28 @@ def register_routes(app):
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=S.difficulty_recommendation(conn, (season["year"], event["round_number"])),
                     importer_ready=importer.configured(),
-                    gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True))
+                    gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
+                    incidents=community.incidents(conn, event_id=event_id),
+                    share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None)
+
+    def _share_card(conn, ctx, event):
+        """Everything the result card image needs (it's drawn in the browser)."""
+        story = community.race_story(conn, event["id"])
+        card = {"league": ctx["career_name"], "season": ctx["season"]["year"], "round": event["round_number"],
+                "event": event["name"], "location": event["location"],
+                "podium": [{"name": r["driver"]["name"], "team": r["team"]["name"], "color": r["team"]["color"]}
+                           for r in story["podium"]]}
+        if ctx["my_driver"]:
+            row = next((r for r in S.weekend_rows(conn, event["id"]) if r["driver_id"] == ctx["my_driver"]["id"]), None)
+            if row:
+                finished = row["result_status"] == C.STATUS_FINISHED and row["race_position"]
+                card["me"] = {"name": row["driver"]["name"], "team": row["team"]["name"], "color": row["team"]["color"],
+                              "result": f"P{row['race_position']}" if finished else row["result_status"],
+                              "grid": f"P{row['qualifying_position']}" if row["qualifying_position"] else "—",
+                              "points": row["gp_points"] + row["sprint_pts"],
+                              "gained": (row["qualifying_position"] - row["race_position"])
+                              if finished and row["qualifying_position"] else None}
+        return card
 
     @app.route("/career/<token>/weekend")
     @career_page()
@@ -888,9 +956,21 @@ def register_routes(app):
                     approaches=market.approaches_left(conn, window["id"], driver["id"]) if window else 0,
                     approachable=market.approachable_teams(conn, window["id"], driver["id"]) if window else [],
                     signed_in_window=signed_in_window, pledges=_pledge_preview(conn, sid, driver["id"]),
+                    value_parts=_value_parts(me, interest),
                     locked=market.locked_in(conn, ctx["current_season_id"], driver["id"],
                                             window["target_year"] if window else ctx["season"]["year"] + 1),
                     trend=insights.driver_round_timeline(conn, driver["id"]))
+
+    def _value_parts(me, interest):
+        """Driver Value split into what it's made of, plus how far the next team up is."""
+        parts = [("Reputation", round(0.4 * me["reputation"], 1), f"{me['reputation']} × 0.4"),
+                 ("Form", round(0.4 * me["form"], 1), f"{me['form']} × 0.4"),
+                 ("Beating the car", round(0.2 * me["car"], 1), f"{me['car']} × 0.2"),
+                 ("Teammate head-to-head", me["h2h_bonus"], "±4")]
+        cleared = [i for i in interest if i["bar"] <= me["value"] and not i["current"]]
+        above = sorted((i for i in interest if i["bar"] > me["value"] and not i["current"]), key=lambda i: i["bar"])
+        return {"parts": parts, "cleared": len(cleared), "next": above[0] if above else None,
+                "gap": round(above[0]["bar"] - me["value"], 1) if above else 0}
 
     def _pledge_preview(conn, season_id, driver_id):
         """What each growth pledge would mean at each team, for the offer cards and counter forms."""
@@ -900,6 +980,128 @@ def register_routes(app):
             out[team["id"]] = [relations.targets_for(conn, season_id, driver_id, team["id"], i, ranks)
                                for i in range(len(C.GROWTH_LEVELS))]
         return out
+
+    @app.route("/career/<token>/press/<int:event_id>", methods=["POST"])
+    @career_page()
+    def press_answer(conn, ctx, event_id):
+        if not ctx["my_driver"]:
+            abort(403)
+        effect = teamlife.answer(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
+                                 request.form.get("answer"))
+        flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
+                                  if effect < 0 else "Nobody reads much into it."), "success")
+        return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/incident", methods=["POST"])
+    @career_page()
+    def incident_report(conn, ctx, event_id):
+        if not (ctx["my_driver"] or ctx["is_master"]):
+            abort(403)
+        mine = ctx["my_driver"]["id"] if ctx["my_driver"] else None
+        iid = community.report_incident(conn, event_id, g.user["username"], mine, _form_int("accused_id"),
+                                        request.form.get("description"))
+        who = next(i for i in community.incidents(conn, event_id=event_id) if i["id"] == iid)
+        feed.notify(conn, who["accused_driver_id"], f"You've been reported for an incident at R{who['round_number']} "
+                    f"{who['event_name']}. The Race Master will rule on it.", "incidents")
+        flash("Incident reported. The Race Master will review it.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#incidents")
+
+    @app.route("/career/<token>/incidents")
+    @career_page()
+    def incidents_page(conn, ctx):
+        return page("incidents.html", ctx, rows=community.incidents(conn, season_id=ctx["season"]["id"]))
+
+    @app.route("/career/<token>/incidents/<int:incident_id>/rule", methods=["POST"])
+    @career_page(master_only=True)
+    def incident_rule(conn, ctx, incident_id):
+        community.rule_incident(conn, incident_id, request.form.get("ruling"), request.form.get("note"),
+                                g.user["username"])
+        flash("Ruling published.", "success")
+        return redirect(request.referrer or url_for("incidents_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/incidents/<int:incident_id>/delete", methods=["POST"])
+    @career_page(master_only=True)
+    def incident_delete(conn, ctx, incident_id):
+        conn.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
+        flash("Report deleted.", "success")
+        return redirect(request.referrer or url_for("incidents_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/autobackup/<name>/restore", methods=["POST"])
+    @master_required
+    def auto_backup_restore(token, name):
+        try:
+            path = storage.auto_backup_path(token, name)
+            storage.restore(token, path)
+        except CareerNotFound:
+            abort(404)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("dashboard", token=token))
+        flash("League restored from the backup. The state just before restoring was saved as a new backup, "
+              "so you can undo this.", "success")
+        return redirect(url_for("dashboard", token=token))
+
+    @app.route("/career/<token>/restore", methods=["POST"])
+    @master_required
+    def restore_upload(token):
+        upload = request.files.get("file")
+        if not upload or not upload.filename.lower().endswith(".f1career"):
+            flash("Choose a .f1career backup file.", "error")
+            return redirect(url_for("dashboard", token=token))
+        fd, tmp = tempfile.mkstemp(suffix=".f1career")
+        os.close(fd)
+        try:
+            upload.save(tmp)
+            storage.restore(token, tmp)
+        except CareerNotFound:
+            abort(404)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("dashboard", token=token))
+        finally:
+            os.unlink(tmp)
+        flash("League restored from your file. The state just before was saved as a backup.", "success")
+        return redirect(url_for("dashboard", token=token))
+
+    @app.route("/career/<token>/pledge")
+    @career_page()
+    def pledge_page(conn, ctx):
+        mine = ctx["my_driver"]
+        sid = ctx["current_season_id"]
+        relations.ensure(conn, sid)
+        rel = relations.assess(conn, sid, mine["id"]) if mine else None
+        if not rel:
+            return redirect(url_for("dashboard", token=ctx["token"]))
+        ranks = S.team_strength_ranks(conn, sid)
+        options = [relations.targets_for(conn, sid, mine["id"], rel["team_id"], i, ranks)
+                   for i in range(len(C.GROWTH_LEVELS))]
+        return page("pledge.html", ctx, rel=rel, options=options, required=relations.needs_pledge(conn, sid, mine["id"]))
+
+    @app.route("/career/<token>/pledge", methods=["POST"])
+    @career_page()
+    def pledge_save(conn, ctx):
+        if not ctx["my_driver"]:
+            abort(403)
+        if not relations.needs_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"]):
+            raise ValidationError("Your pledge is locked in for this season. The Race Master can ask you for a new one.")
+        t = relations.set_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"], request.form.get("growth"))
+        flash(f"Pledge locked in: Form {t['form_target']:.0f}+ and Reputation {t['rep_target']:.1f}+ this season.", "success")
+        return redirect(url_for("team_standing", token=ctx["token"]))
+
+    @app.route("/career/<token>/team-standing/<int:driver_id>/request-pledge", methods=["POST"])
+    @career_page(master_only=True)
+    def request_pledge(conn, ctx, driver_id):
+        if request.form.get("all"):
+            relations.ensure(conn, ctx["current_season_id"])
+            ids = [r["driver_id"] for r in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?",
+                                                        (ctx["current_season_id"],))]
+            for did in ids:
+                relations.request_pledge(conn, ctx["current_season_id"], did)
+            flash(f"Asked {len(ids)} driver(s) for a new pledge. They'll choose it next time they open the league.", "success")
+        else:
+            relations.request_pledge(conn, ctx["current_season_id"], driver_id)
+            flash("Asked for a new pledge. The driver will choose it next time they open the league.", "success")
+        return redirect(url_for("team_standing", token=ctx["token"], driver=driver_id))
 
     @app.route("/career/<token>/team-standing")
     @career_page()
@@ -923,6 +1125,8 @@ def register_routes(app):
             if seat:
                 teammate = S.driver_map(conn).get(S.grid_map(conn, sid).get((seat[0], 2 if seat[1] == 1 else 1)))
         return page("team_standing.html", ctx, driver=driver, players=players, rel=rel, interest=interest, me=me,
+                    orders=teamlife.orders_for(conn, sid, driver["id"]),
+                    needs_pledge=relations.needs_pledge(conn, sid, driver["id"]),
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
                     own=bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]))
@@ -1073,7 +1277,8 @@ def register_routes(app):
         season_chart = {"labels": progress[0], "yLabel": "Points",
                         "series": [{"name": a["name"], "values": progress[1][a["id"]], "player": True, "slot": 1},
                                    {"name": b["name"], "values": progress[1][b["id"]], "player": True, "slot": 2}]}
-        return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart, options=options)
+        return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart, options=options,
+                    incidents=community.incidents(conn, driver_ids=(a["id"], b["id"])))
 
     @app.route("/career/<token>/review/<int:season_id>")
     @career_page()
@@ -1347,13 +1552,14 @@ def register_routes(app):
                 newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
                 if newly_complete:
                     feed.on_weekend_complete(conn, event_id, f"weekend/{event_id}")
-                    relations.review(conn, before["season_id"])
+                    teamlife.after_race(conn, event_id)
                     opened = market.maybe_open_silly_season(conn, before["season_id"])
                 result["market_opened"] = bool(opened)
         except CareerNotFound:
             return jsonify(ok=False, error="League not found"), 404
         except ValidationError as exc:
             feed.take_outbox()
+            discord.take()
             return jsonify(ok=False, error=str(exc)), 400
         if newly_complete:
             try:
@@ -1364,6 +1570,14 @@ def register_routes(app):
                 _email_results(token, event_id)
             except Exception:
                 app.logger.exception("results email failed")
+            try:
+                with storage.session(token) as conn:
+                    cfg = discord.settings(conn)
+                    if cfg["url"] and cfg["results"] and not app.config.get("TESTING"):
+                        discord.send_later(cfg["url"], [discord.results_message(
+                            conn, event_id, storage.get_meta(conn, "career_name", "League"))])
+            except Exception:
+                app.logger.exception("Discord results post failed")
         return jsonify(ok=True, **result)
 
     @app.route("/api/career/<token>/weekend/<int:event_id>/import", methods=["POST"])
@@ -1419,6 +1633,11 @@ def register_routes(app):
         feats = ctx["features"]
         me = g.user["username"]
         hub = {"event": event, "started": community.race_started(event), "complete": event["status"] == C.EVENT_COMPLETE}
+        if ctx["my_driver"]:
+            order = conn.execute("SELECT * FROM team_orders WHERE event_id = ? AND driver_id = ?",
+                                 (event["id"], ctx["my_driver"]["id"])).fetchone()
+            if order:
+                hub["order"] = {**dict(order), "beneficiary": S.driver_map(conn).get(order["beneficiary_id"])}
         if feats["checkin"] and not hub["complete"]:
             hub["checkins"], hub["checkin_counts"] = community.checkins(conn, event["id"])
             hub["my_checkin"] = next((r["status"] for r in hub["checkins"] if r["username"] == me), None)
@@ -1457,13 +1676,28 @@ def register_routes(app):
         if request.method == "POST":
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
             storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+            discord.save_settings(conn, request.form.get("discord_webhook"), request.form.get("discord_results"),
+                                  request.form.get("discord_news"))
             flash("League settings saved.", "success")
             return redirect(url_for("league_settings", token=ctx["token"]))
         feats = community.features(conn)
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
-        return page("settings.html", ctx, feats=feats, public_link=link,
+        return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
                     join_open=storage.get_meta(conn, "join_open") == "1")
+
+    @app.route("/career/<token>/settings/discord-test", methods=["POST"])
+    @career_page(master_only=True)
+    def discord_test(conn, ctx):
+        cfg = discord.settings(conn)
+        if not cfg["url"]:
+            raise ValidationError("Save a Discord webhook URL first")
+        try:
+            discord.post(cfg["url"], f"👋 F1 Universe Tracker is connected to **{ctx['career_name']}**.")
+        except Exception as exc:
+            raise ValidationError(f"Discord didn't accept the message ({exc}). Check the webhook URL.")
+        flash("Test message sent to Discord.", "success")
+        return redirect(url_for("league_settings", token=ctx["token"]))
 
     @app.route("/career/<token>/settings/public-link", methods=["POST"])
     @career_page(master_only=True)
@@ -1667,6 +1901,10 @@ def register_routes(app):
                     next_event=S.next_incomplete_event(conn, sid))
         except CareerNotFound:
             abort(404)
+
+    @app.route("/help")
+    def help_page():
+        return render_template("help.html")
 
     @app.route("/changelog")
     def changelog_page():

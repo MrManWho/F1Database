@@ -2,7 +2,7 @@
 
 import random
 
-from conftest import login, players, run_event
+from conftest import login, players, pledge_all, run_event
 from f1tracker import auth, feed, market, relations, services as S, storage
 from f1tracker import constants as C
 
@@ -105,6 +105,7 @@ def test_team_standing_page_and_admin_menu(app, master_client):
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         _seat(conn)
+    pledge_all(token)
     carson = app.test_client()
     login(carson, "carson")
     page = carson.get(f"/career/{token}/team-standing").get_data(as_text=True)

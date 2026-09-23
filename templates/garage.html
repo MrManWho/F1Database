@@ -21,13 +21,25 @@
 </div>
 
 <div class="stat-grid">
-  <div class="stat card feature"><small>Driver value</small><strong>{{ me.value }}</strong><span class="muted small">What teams judge you on</span></div>
-  <div class="stat card"><small>Reputation</small><strong>{{ me.reputation }}</strong></div>
-  <div class="stat card"><small>Form</small><strong>{{ me.form }}</strong></div>
-  <div class="stat card"><small>Car-adjusted</small><strong>{{ me.car }}</strong><span class="muted small">50 = matching the car</span></div>
+  <div class="stat card feature"><small>Driver value <a class="info-link" href="{{ url_for('help_page') }}#driver-value" title="How Driver Value works">ⓘ</a></small><strong>{{ me.value }}</strong><span class="muted small">What teams judge you on</span></div>
+  <div class="stat card"><small>Reputation <a class="info-link" href="{{ url_for('help_page') }}#reputation" title="Your long-term name">ⓘ</a></small><strong>{{ me.reputation }}</strong></div>
+  <div class="stat card"><small>Form <a class="info-link" href="{{ url_for('help_page') }}#form" title="This season's level">ⓘ</a></small><strong>{{ me.form }}</strong></div>
+  <div class="stat card"><small>Car-adjusted <a class="info-link" href="{{ url_for('help_page') }}#car" title="How much you beat the car">ⓘ</a></small><strong>{{ me.car }}</strong><span class="muted small">50 = matching the car</span></div>
   <div class="stat card"><small>Market tier</small><strong>{{ tier(row.market) if row else '—' }}</strong></div>
   <div class="stat card"><small>Points</small><strong>{{ row.points if row else 0 }}</strong><span class="muted small">{{ 'P' ~ row.position ~ ' in WDC' if row else '' }}</span></div>
 </div>
+
+<section class="card value-card">
+  <div class="card-head"><h2>Where your Driver Value comes from</h2><a class="small" href="{{ url_for('help_page') }}#driver-value">How it works</a></div>
+  {% set total = value_parts.parts|map(attribute=1)|map('abs')|sum or 1 %}
+  <div class="value-bar">{% for label, pts, how in value_parts.parts if pts > 0 %}<span class="vb-{{ loop.index }}" style="flex: {{ pts }}" title="{{ label }}: {{ pts }}"></span>{% endfor %}</div>
+  <ul class="value-parts">
+    {% for label, pts, how in value_parts.parts %}<li><i class="vb-{{ loop.index }}"></i><span>{{ label }} <small class="muted">{{ how }}</small></span><b>{{ '%+.1f'|format(pts) if loop.last else '%.1f'|format(pts) }}</b></li>{% endfor %}
+    <li class="value-total"><span>Driver Value</span><b>{{ me.value }}</b></li>
+  </ul>
+  <p class="muted small">You clear the entry bar of <b>{{ value_parts.cleared }}</b> other team{{ 's' if value_parts.cleared != 1 }}.
+    {% if value_parts.next %}Next team up: <b>{{ value_parts.next.team.name }}</b> (bar {{ value_parts.next.bar }}), <b>{{ value_parts.gap }}</b> away.{% else %}Every team's bar is within reach.{% endif %}</p>
+</section>
 
 {% macro pledge_text(team_id, growth) -%}
 {%- set t = pledges[team_id][growth or 0] -%}

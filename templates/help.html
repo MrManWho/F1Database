@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}How it works{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Help</div><h1>How it works</h1></div>
+  <a class="btn btn-ghost" href="{{ request.referrer or url_for('home') }}">← Back</a></div>
+
+<nav class="card help-toc">
+  <a href="#roles">Who can do what</a><a href="#form">Form</a><a href="#reputation">Reputation</a>
+  <a href="#driver-value">Driver Value</a><a href="#car">Car strength</a><a href="#market">Transfer market</a>
+  <a href="#pledges">Growth pledges</a><a href="#relationship">Team relationship</a><a href="#goals">Season goals</a>
+  <a href="#orders">Team orders</a><a href="#press">Press pen</a><a href="#incidents">Incidents</a>
+  <a href="#extras">Extras</a><a href="#difficulty">AI difficulty</a>
+</nav>
+
+<section class="card help" id="roles">
+  <h2>Who can do what</h2>
+  <ul>
+    <li><b>Race Master</b>: runs every league (results, grid, calendar, seasons, transfer market, logins, saves) and can see every garage. They're an admin, not a driver, unless linked to a player driver.</li>
+    <li><b>Driver</b>: their own garage, contract talks, Team Standing and press pen. Everything else is view-only.</li>
+    <li><b>Scorekeeper</b>: enters results until a weekend is submitted. After that only the Race Master can change it.</li>
+    <li><b>Spectator</b>: follows the league (standings, results, news, chat and predictions).</li>
+  </ul>
+</section>
+
+<section class="card help" id="form">
+  <h2>Form</h2>
+  <p>How well you're driving <b>this season</b>, from 1 to 100 (50 is average). It's rebuilt from your results every time, so it reacts quickly and starts again each season.</p>
+  <p>It goes up with a better average finish and qualifying, wins, podiums, poles, fastest laps, Driver of the Day and <b>racecraft</b>
+    (places gained from the grid, weighted by where you finish: P20 → P1 counts far more than P20 → P19). It goes down with DNFs.</p>
+</section>
+
+<section class="card help" id="reputation">
+  <h2>Reputation</h2>
+  <p>Your <b>long-term name</b> in the paddock. It builds slowly from points, wins, podiums, poles, Form and racecraft, and is locked at the end of each
+    season and carried forward. Every rookie starts on {{ '%.0f'|format(C.ROOKIE_REPUTATION) }}.</p>
+</section>
+
+<section class="card help" id="driver-value">
+  <h2>Driver Value</h2>
+  <p>The single number teams judge you on when deciding whether to make an offer. It updates after every race.</p>
+  <pre class="formula">Driver Value = 0.5 × Market Score  (0.8 × Reputation + 0.2 × Form)
+             + 0.3 × Form
+             + 0.2 × Car-adjusted rating
+             + teammate head-to-head bonus (−4 to +4)</pre>
+  <p>In practice that's about <b>40% Reputation, 40% Form, 20% beating the car</b>, plus the teammate bonus.
+    The <b>car-adjusted rating</b> starts at 50 and moves 5 for every place you average ahead of (or behind) where your car should finish.</p>
+  <p>Each team has an <b>entry bar</b> from its car's rank: 86 for the fastest car down to 44 for the slowest. Clear a team's bar and it'll make you an offer
+    when a window opens; the further above, the keener they are. My Garage shows your value broken down, and how far you are from the next team up.</p>
+</section>
+
+<section class="card help" id="car">
+  <h2>Car strength</h2>
+  <p>The tracker can't see the game's car stats, so it ranks the cars from <b>how the AI drivers score for each team in your league</b> once three rounds are done.
+    Player drivers' points are ignored, so winning in a slow car makes you look good, not the car. Before round 3 it uses each team's car rating,
+    which changes each winter and which the Race Master can edit in Paddock Admin to match the game.</p>
+  <p>Only the order matters, not the size of the gap: the 7th-best car is expected to finish around P13–14.</p>
+</section>
+
+<section class="card help" id="market">
+  <h2>Transfer market</h2>
+  <ul>
+    <li><b>Windows</b>: the Rookie Draft when a league starts with rookies, Silly Season at half-distance, or whenever the Race Master opens one.</li>
+    <li><b>Offers are negotiations.</b> Counter with a different status, length or pledge. Each counter uses up the team's patience (greedy asks use it twice as fast). When patience runs out they make a final offer; push past that and they walk away.</li>
+    <li><b>Approach teams</b> yourself, up to {{ C.APPROACHES_PER_WINDOW }} per window. If you run out of options, the weakest team with a free seat offers a last-chance lifeline.</li>
+    <li><b>Contract length matters</b>: while your deal covers next season, teams won't talk to you, unless your team releases you.</li>
+  </ul>
+</section>
+
+<section class="card help" id="pledges">
+  <h2>Growth pledges</h2>
+  <p>There's no money in contracts. Instead you <b>pledge how much you'll improve</b>, measured against what your car should manage, so it's fair at every team:</p>
+  <table class="data-table compact"><thead><tr><th>Pledge</th><th>Form target</th><th>Reputation</th><th></th></tr></thead><tbody>
+    {% for g in C.GROWTH_LEVELS %}<tr><td><b>{{ g.name }}</b></td><td>car + {{ g.form }}</td><td>+{{ g.rep }} a season</td><td class="muted small">{{ g.blurb }}</td></tr>{% endfor %}
+  </tbody></table>
+  <p>Better status and longer deals need a bigger pledge. Promise more than a team needs and you can win an extra year, or (for experienced drivers) one step more status.
+    Your pledge is set when you sign, and every seated driver must have one: if yours is missing (or the Race Master asks for a new one) you'll choose it before carrying on.
+    After three rounds your targets are re-set to the car's real pace in your league.</p>
+</section>
+
+<section class="card help" id="relationship">
+  <h2>Team relationship</h2>
+  <p>Your team rates you out of 100 after every race: <b>Delighted, Happy, Concerned, Unhappy</b> or <b>Seat at risk</b>. It compares your Form with your target,
+    your Reputation with where it should be by now, your head-to-head with your teammate, and your season goals, plus a small bonus or penalty from the press pen and team orders.
+    Early results count for less; the judgement firms up after about a third of the season.</p>
+  <p>Fall behind and you'll get a quiet word, then a formal warning, then "seat at risk". Still at risk when Silly Season opens or the season ends and you're
+    <b>released</b>: no renewal, and without a new deal you start next season as a reserve. A team that's happy with you always offers a renewal.</p>
+</section>
+
+<section class="card help" id="goals">
+  <h2>Season goals</h2>
+  <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers)
+    beating your teammate. Each goal that's on track adds {{ '%.0f'|format(C.GOAL_WEIGHT) }} to the relationship and each one behind takes {{ '%.0f'|format(C.GOAL_WEIGHT) }} away, growing as the season goes on.</p>
+</section>
+
+<section class="card help" id="orders">
+  <h2>Team orders</h2>
+  <p>Seat status matters. A <b>No. 2</b> driver can be told before a race to let their teammate through (more likely when the teammate is ahead in the championship).
+    It's judged from the result: finish ahead of them and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }} relationship, and a headline); finish behind and you followed it
+    ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). If either of you doesn't finish, the order is void.</p>
+</section>
+
+<section class="card help" id="press">
+  <h2>Press pen</h2>
+  <p>After each race the press have two questions for you, based on how it went. Answers nudge your relationship a little (the total from press and team orders is capped at
+    ±{{ '%.0f'|format(C.RELATION_EXTRA_CAP) }}) and some make headlines. It's optional; questions close when the next race is completed.</p>
+</section>
+
+<section class="card help" id="incidents">
+  <h2>Incidents</h2>
+  <p>Anyone driving can report an incident from a race weekend. The Race Master reviews it and rules: no further action, a reprimand, a warning, or a penalty
+    (they adjust the results themselves). Rulings appear in the news and in the rivalry between the two drivers.</p>
+</section>
+
+<section class="card help" id="extras">
+  <h2>Extras</h2>
+  <p>The Race Master switches these on or off in League Settings: race-night check-in, comments &amp; reactions, the predictions game, the public results page and Discord posts.</p>
+</section>
+
+<section class="card help" id="difficulty">
+  <h2>AI difficulty</h2>
+  <p>Enter the AI level you raced on for each weekend. The recommender only suggests a change after 3–5 rounds at the same level point the same way, learns across seasons,
+    ignores DNFs, and never moves more than one step at a time.</p>
+</section>
+{% endblock %}

@@ -119,6 +119,42 @@
     {% endif %}
   </div>
 </section>
+{% if share %}
+<section class="card share-strip">
+  <div><b>Share this result</b> <span class="muted small">A picture of the podium{{ ' and your weekend' if share.me }} for your group chat.</span></div>
+  <button type="button" class="btn btn-sm" id="share-card" data-card='{{ share|tojson }}'>📸 Make result card</button>
+</section>
+<dialog id="share-dialog" class="dialog share-dialog">
+  <div class="dialog-head"><h2>Result card</h2><button class="icon-btn" data-close>✕</button></div>
+  <canvas id="share-canvas" width="1080" height="1080"></canvas>
+  <div class="button-row"><button type="button" class="btn btn-primary" id="share-go">Share</button>
+    <a class="btn btn-ghost" id="share-download" download="result.png">Download</a></div>
+</dialog>
+{% endif %}
+
+{% if event.status != 'Not Run' %}
+<section class="card" id="incidents">
+  <div class="card-head"><h2>Incidents</h2>
+    {% if ctx.my_driver or ctx.is_master %}<button type="button" class="btn btn-sm" data-dialog="incident-dialog">Report an incident</button>{% endif %}</div>
+  {% with rows = incidents %}{% include "_incident_list.html" %}{% endwith %}
+</section>
+{% if ctx.my_driver or ctx.is_master %}
+<dialog id="incident-dialog" class="dialog">
+  <div class="dialog-head"><h2>Report an incident</h2><button class="icon-btn" data-close>✕</button></div>
+  <form method="post" action="{{ url_for('incident_report', token=ctx.token, event_id=event.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Who was involved?
+      <select name="accused_id" required><option value="">Pick a driver…</option>
+        {% for r in rows|sort(attribute='driver.name') if not ctx.my_driver or r.driver_id != ctx.my_driver.id %}<option value="{{ r.driver_id }}">{{ r.driver.name }}</option>{% endfor %}
+      </select></label>
+    <label>What happened?<textarea name="description" rows="3" maxlength="1000" required placeholder="Lap 12, Turn 1: divebombed and took me out"></textarea></label>
+    <p class="muted small">The Race Master reviews every report and rules on it. Rulings show up in the news.</p>
+    <button class="btn btn-primary">Send report</button>
+  </form>
+</dialog>
+{% endif %}
+{% endif %}
+
 {% if hub.comments is defined %}
 <section class="card" id="comments">
   <div class="card-head"><h2>Paddock chat</h2><span class="muted small">{{ hub.comments|length }} comment{{ 's' if hub.comments|length != 1 }}</span></div>
@@ -151,4 +187,5 @@
 </dialog>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
+<script src="{{ url_for('static', filename='js/share.js') }}"></script>{% endblock %}

@@ -5,7 +5,7 @@ import random
 import re
 
 from conftest import login
-from f1tracker import auth, community, market, services as S, storage
+from f1tracker import auth, community, market, relations, services as S, storage, teamlife
 from f1tracker import constants as C
 
 LINK = re.compile(r'href="(/(?:career|public)/[^"#]*)"')
@@ -133,15 +133,31 @@ def test_two_season_simulation_and_crawl(app, master_client):
                                 data={"target": f"event:{ev['id']}", "body": f"Round {i + 1}!", "csrf_token": "tok"})
             clients["viv"].post(f"/career/{token}/weekend/{ev['id']}/fan-vote",
                                 data={"driver_id": ana_id, "csrf_token": "tok"})
+            for name, did in drivers.items():
+                with storage.session(token) as conn:
+                    pen = teamlife.press_pen(conn, sid, did)
+                    pledge = relations.needs_pledge(conn, sid, did)
+                if pledge:
+                    clients[name].post(f"/career/{token}/pledge", data={"growth": rng.randint(0, 3), "csrf_token": "tok"})
+                for q in (pen["questions"] if pen else []):
+                    clients[name].post(f"/career/{token}/press/{ev['id']}", data={
+                        "question": q["key"], "answer": rng.choice(q["answers"])["key"], "csrf_token": "tok"})
+            if i % 3 == 1:
+                clients["ben"].post(f"/career/{token}/weekend/{ev['id']}/incident", data={
+                    "accused_id": ana_id, "description": f"Contact at turn {i}", "csrf_token": "tok"})
+                with storage.session(token) as conn:
+                    open_ids = [x["id"] for x in community.incidents(conn) if x["status"] == "Open"]
+                for iid in open_ids:
+                    master_client.post(f"/career/{token}/incidents/{iid}/rule", data={
+                        "ruling": rng.choice(list(C.INCIDENT_RULINGS)), "note": "Reviewed", "csrf_token": "tok"})
             for c in clients.values():
                 _flashes(c)
         # finish the rest of the season quickly
         with storage.session(token) as conn:
             for ev in S.events(conn, sid)[8:]:
                 S.save_weekend(conn, ev["id"], {"results": _results(conn, ev["id"], rng), "mark_complete": True})
-            from f1tracker import relations
-            relations.review(conn, sid)
-            market.maybe_open_silly_season(conn, sid)
+                teamlife.after_race(conn, ev["id"])
+                market.maybe_open_silly_season(conn, sid)
         negotiate()
         r = master_client.post(f"/career/{token}/seasons/new", data={"year": season + 1, "csrf_token": "tok"})
         assert r.status_code == 302
@@ -155,6 +171,8 @@ def test_two_season_simulation_and_crawl(app, master_client):
 
     errors = []
     for name, client in clients.items():
+        for path in ("/help", "/changelog"):
+            assert client.get(path).status_code == 200
         _seen, errs = _crawl(client, [f"/career/{token}/dashboard", "/"])
         print(name, len(_seen))
         errors += [(name,) + e for e in errs]
