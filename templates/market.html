@@ -3,12 +3,15 @@
 {% block title %}Transfer Market{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><div class="kicker">Race Master · Transfer Market</div><h1>Offers &amp; windows</h1></div>
+  <div><div class="kicker">{{ ctx.role }} · Transfer Market</div><h1>Offers &amp; windows</h1></div>
   <form method="post" action="{{ url_for('market_open', token=ctx.token) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-primary">Open window for {{ target }}</button>
   </form>
 </div>
+{% if not ctx.is_master %}
+<div class="banner">You're a Race Steward: you can open and close windows, but each player's offers and negotiations stay private to them.</div>
+{% endif %}
 <p class="muted">Opening a window has every team judge each player driver and send offers. Before the first round they're for this season; after that they're for next season.
   The Rookie Draft opens by itself when a career starts as rookies, and Silly Season opens by itself once half the calendar is complete. Players accept offers from their own login.</p>
 
@@ -25,6 +28,7 @@
       {% endif %}
     </div>
   </div>
+  {% if ctx.is_master %}
   <div class="table-wrap">
   <table class="data-table">
     <thead><tr><th>Driver</th><th>Team</th><th>Role</th><th>Term</th><th>Salary</th><th>Interest</th><th>Stage</th><th>Status</th><th>Talks</th></tr></thead>
@@ -45,6 +49,9 @@
     </tbody>
   </table>
   </div>
+  {% else %}
+  <p class="muted small">Opened {{ w.opened_at }}{{ ' · closed ' ~ w.closed_at if w.closed_at }}.</p>
+  {% endif %}
 </section>
 {% else %}
 <section class="card empty-state"><p class="muted">No transfer windows yet.</p></section>

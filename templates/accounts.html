@@ -21,7 +21,12 @@
       <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
       <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
       <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
-      <label class="check"><input type="checkbox" name="is_master" value="1"> Also a Race Master (can enter results)</label>
+      <label>Role
+        <select name="role">
+          <option value="driver">Driver: own garage and offers only</option>
+          <option value="steward">Race Steward: also enters results and runs seasons</option>
+          <option value="master">Race Master: full admin, sees everything</option>
+        </select></label>
       <button class="btn btn-primary">Create login</button>
     </form>
   </section>
@@ -45,6 +50,13 @@
 
 <section class="card">
   <h2>All logins</h2>
+  <div class="role-help small muted">
+    <p><b>Race Master</b>: full admin. Manages logins, saves and backups, and can see every garage, offer and negotiation.
+      Best kept as a separate admin login you rarely use.</p>
+    <p><b>Race Steward</b>: enters qualifying, Sprint and race results, and runs the grid, calendar, seasons, car ratings and
+      transfer windows. Only sees their own garage, offers and notifications.</p>
+    <p><b>Driver</b>: their own garage and offers. Everything else is read-only.</p>
+  </div>
   <div class="table-wrap">
   <table class="data-table">
     <thead><tr><th>Username</th><th>Name</th><th>Careers</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
@@ -57,9 +69,10 @@
         <td>
           <form method="post" action="{{ url_for('account_role', username=u.username) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select name="is_master" onchange="this.form.submit()">
-              <option value="1" {{ 'selected' if u.is_master }}>Race Master</option>
-              <option value="0" {{ 'selected' if not u.is_master }}>Driver</option>
+            <select name="role" onchange="this.form.submit()">
+              {% for key, label in [('master', 'Race Master'), ('steward', 'Race Steward'), ('driver', 'Driver')] %}
+              <option value="{{ key }}" {{ 'selected' if u.role == key }}>{{ label }}</option>
+              {% endfor %}
             </select>
           </form>
         </td>

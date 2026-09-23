@@ -43,6 +43,8 @@ def accounts():
         first_at REAL NOT NULL,
         locked_until REAL NOT NULL DEFAULT 0)""")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    if "is_steward" not in {r[1] for r in conn.execute("PRAGMA table_info(users)")}:
+        conn.execute("ALTER TABLE users ADD COLUMN is_steward INTEGER NOT NULL DEFAULT 0")
     try:
         yield conn
         conn.commit()
@@ -71,8 +73,41 @@ def user_count():
 
 def list_users():
     with accounts() as conn:
-        return [dict(r) for r in conn.execute("SELECT id, username, display_name, is_master, created_at "
-                                              "FROM users ORDER BY is_master DESC, username")]
+        users = [dict(r) for r in conn.execute("SELECT id, username, display_name, is_master, is_steward, created_at "
+                                               "FROM users ORDER BY is_master DESC, is_steward DESC, username")]
+    for u in users:
+        u["role"] = role_of(u)
+    return users
+
+
+ROLES = {
+    "master": "Race Master",     # full admin: logins, saves, every garage and negotiation
+    "steward": "Race Steward",   # runs race weekends and seasons, but only sees their own garage
+    "driver": "Driver",          # their own garage and offers, everything else read-only
+}
+
+
+def role_of(user):
+    if not user:
+        return None
+    if user["is_master"]:
+        return "master"
+    return "steward" if user.get("is_steward") else "driver"
+
+
+def set_role(username, role):
+    if role not in ROLES:
+        raise AuthError("Unknown role")
+    with accounts() as conn:
+        if role != "master":
+            masters = conn.execute("SELECT COUNT(*) FROM users WHERE is_master = 1 AND username != ?",
+                                   (normalise(username),)).fetchone()[0]
+            if masters == 0:
+                raise AuthError("At least one Race Master account is required")
+        cur = conn.execute("UPDATE users SET is_master = ?, is_steward = ? WHERE username = ?",
+                           (int(role == "master"), int(role == "steward"), normalise(username)))
+        if not cur.rowcount:
+            raise AuthError("Unknown user")
 
 
 def get_user(username):
@@ -81,7 +116,7 @@ def get_user(username):
         return dict(row) if row else None
 
 
-def create_user(username, display_name, password, is_master=False):
+def create_user(username, display_name, password, is_master=False, is_steward=False):
     username = normalise(username)
     if not USERNAME_RE.match(username):
         raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
@@ -91,9 +126,9 @@ def create_user(username, display_name, password, is_master=False):
     with accounts() as conn:
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
             raise AuthError("That username is taken")
-        conn.execute("INSERT INTO users(username, display_name, password_hash, is_master, created_at) "
-                     "VALUES(?,?,?,?,?)", (username, display_name, generate_password_hash(password),
-                                           int(bool(is_master)), now_iso()))
+        conn.execute("INSERT INTO users(username, display_name, password_hash, is_master, is_steward, created_at) "
+                     "VALUES(?,?,?,?,?,?)", (username, display_name, generate_password_hash(password),
+                                             int(bool(is_master)), int(bool(is_steward) and not is_master), now_iso()))
     return username
 
 

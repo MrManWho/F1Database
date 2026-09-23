@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.5
+# F1 Universe Tracker v1.6
 
 A companion database and "career control room" for a two-player F1 26 career (David Conley and
 Carson Hayes). The game handles the racing. This app remembers everything else: every result,
@@ -23,6 +23,21 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.6: the Race Steward role
+
+There are three roles, set per login in **Accounts**:
+
+| Role | Can do | Can't see |
+|---|---|---|
+| **Race Master** | Everything: logins, player links, saves, backups and export, every garage, every offer and negotiation thread | nothing is hidden |
+| **Race Steward** | Enter qualifying, Sprint and race results (including screenshot import and AI difficulty). Run the grid, calendar, seasons, car ratings and Driver Market storylines. Open and close transfer windows. | Other players' garages, offers, negotiation threads and notifications; logins; backups and exports (these contain everyone's offers) |
+| **Driver** | Their own garage and offers; everything else read-only | same as Steward |
+
+To keep the career honest, give the person entering results (e.g. David) the **Race Steward** role
+linked to their driver, and keep a separate **Race Master** login (e.g. `admin`) for setup and
+emergencies. At least one Race Master always exists. Paddock rumours about collapsed talks are
+public on purpose. Everything else about a player's negotiations stays private to that player.
 
 ## v1.5: what's new
 

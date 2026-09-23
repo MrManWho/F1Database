@@ -24,7 +24,7 @@
       <span class="status-badge status-{{ next_event.status|lower|replace(' ', '-') }}">{{ next_event.status }}</span>
     </div>
     {{ difficulty(rec) }}
-    <a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">{{ 'Enter results' if ctx.is_master else 'View weekend' }} →</a>
+    <a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">{{ 'Enter results' if ctx.can_run else 'View weekend' }} →</a>
     {% else %}
     <div class="kicker">Season complete</div>
     <h2 class="hero-title">All {{ events|length }} rounds are in the books</h2>

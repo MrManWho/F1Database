@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><div class="kicker">Driver Market · storylines</div><h1>Negotiations</h1></div>
-  {% if ctx.is_master %}<button class="btn btn-primary" data-dialog="contract-dialog">Add negotiation</button>{% endif %}
+  {% if ctx.can_run %}<button class="btn btn-primary" data-dialog="contract-dialog">Add negotiation</button>{% endif %}
 </div>
 <p class="muted">These entries are the story of the paddock and never change the grid on their own. Accepted team offers show up here automatically as <em>Signed</em>.</p>
 <div class="contract-grid">
@@ -19,7 +19,7 @@
     {% if c.outcome %}<p><b>Outcome:</b> {{ c.outcome }}</p>{% endif %}
     {% if c.conditions %}<p><b>Conditions:</b> {{ c.conditions }}</p>{% endif %}
     {% if c.notes %}<p class="muted">{{ c.notes }}</p>{% endif %}
-    {% if ctx.is_master %}
+    {% if ctx.can_run %}
     <form method="post" action="{{ url_for('contract_delete', token=ctx.token, contract_id=c.id) }}" onsubmit="return confirm('Delete this negotiation?');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-sm btn-ghost">Delete</button>
@@ -30,7 +30,7 @@
   <p class="muted">No negotiations this season yet.</p>
   {% endfor %}
 </div>
-{% if ctx.is_master %}
+{% if ctx.can_run %}
 <dialog id="contract-dialog" class="dialog">
   <div class="dialog-head"><h2>Add negotiation</h2><button class="icon-btn" data-close>✕</button></div>
   <form method="post" class="stack">

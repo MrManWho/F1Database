@@ -2,7 +2,7 @@
 {% from "_macros.html" import team_dot, difficulty with context %}
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
-{% set ro = not ctx.is_master %}
+{% set ro = not ctx.can_run %}
 <div class="weekend-head">
   <div>
     <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>

@@ -2,7 +2,7 @@
 {% from "_macros.html" import team_dot with context %}
 {% block title %}Paddock Admin{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="kicker">Race Master · {{ season.year }}</div><h1>Paddock admin</h1></div></div>
+<div class="page-head"><div><div class="kicker">{{ ctx.role }} · {{ season.year }}</div><h1>Paddock admin</h1></div></div>
 
 <section class="card">
   <div class="card-head"><h2>Car ratings</h2><span class="muted small">Set these to match the game's car performance</span></div>

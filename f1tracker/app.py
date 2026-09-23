@@ -105,6 +105,11 @@ def is_master():
     return bool(g.user and g.user["is_master"])
 
 
+def can_run():
+    """Race Master or Race Steward: may run race weekends and seasons."""
+    return bool(g.user and (g.user["is_master"] or g.user.get("is_steward")))
+
+
 def master_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -132,7 +137,7 @@ def _selected_season(conn, token):
     return sid
 
 
-def career_page(master_only=False):
+def career_page(master_only=False, ops_only=False):
     """Open the career, enforce access, and turn ValidationErrors into flashed messages."""
     def deco(fn):
         @wraps(fn)
@@ -149,6 +154,8 @@ def career_page(master_only=False):
                         abort(403)
                     if master_only and not is_master():
                         abort(403)
+                    if ops_only and not can_run():
+                        abort(403)
                     season_id = _selected_season(conn, token)
                     g.ctx = {
                         "token": token,
@@ -157,6 +164,8 @@ def career_page(master_only=False):
                         "current_season_id": S.current_season_id(conn),
                         "seasons": S.list_seasons(conn),
                         "is_master": is_master(),
+                        "can_run": can_run(),
+                        "role": auth.ROLES[auth.role_of(g.user)],
                         "my_driver": _member_driver(conn),
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
                                                      (C.WINDOW_OPEN,)).fetchone()[0],
@@ -285,8 +294,9 @@ def register_routes(app):
     @master_required
     def account_new():
         try:
+            role = request.form.get("role", "driver")
             auth.create_user(request.form.get("username"), request.form.get("display_name"),
-                             request.form.get("password"), is_master=bool(request.form.get("is_master")))
+                             request.form.get("password"), is_master=role == "master", is_steward=role == "steward")
             flash("Account created.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
@@ -306,7 +316,7 @@ def register_routes(app):
     @master_required
     def account_role(username):
         try:
-            auth.set_master(username, request.form.get("is_master") == "1")
+            auth.set_role(username, request.form.get("role"))
             flash("Role updated.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
@@ -481,7 +491,7 @@ def register_routes(app):
                     all_drivers=S.drivers(conn, active_only=True))
 
     @app.route("/career/<token>/grid/players", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def grid_players(conn, ctx):
         targets = {}
         for p in S.player_drivers(conn):
@@ -499,7 +509,7 @@ def register_routes(app):
         return redirect(url_for("grid_page", token=ctx["token"]))
 
     @app.route("/career/<token>/grid/save", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def grid_save(conn, ctx):
         sid = ctx["season"]["id"]
         submitted = {}
@@ -515,7 +525,7 @@ def register_routes(app):
     @career_page()
     def contracts_page(conn, ctx):
         if request.method == "POST":
-            if not ctx["is_master"]:
+            if not ctx["can_run"]:
                 abort(403)
             S.add_contract(conn, ctx["season"]["id"], request.form)
             flash("Negotiation added.", "success")
@@ -524,7 +534,7 @@ def register_routes(app):
                     drivers=S.drivers(conn, active_only=True), teams=S.teams(conn))
 
     @app.route("/career/<token>/contracts/<int:contract_id>/delete", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def contract_delete(conn, ctx, contract_id):
         conn.execute("DELETE FROM contracts WHERE id = ?", (contract_id,))
         flash("Negotiation deleted.", "success")
@@ -550,7 +560,7 @@ def register_routes(app):
                     all_complete=all(e["status"] == C.EVENT_COMPLETE for e in S.events(conn, latest["id"])))
 
     @app.route("/career/<token>/seasons/switch", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def season_switch(conn, ctx):
         sid = _form_int("season_id")
         S.make_current(conn, sid)
@@ -559,7 +569,7 @@ def register_routes(app):
         return redirect(url_for("seasons_page", token=ctx["token"]))
 
     @app.route("/career/<token>/seasons/new", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def season_new(conn, ctx):
         latest = S.list_seasons(conn)[-1]
         new_id = S.create_next_season(conn, latest["id"], request.form.get("year"))
@@ -571,7 +581,7 @@ def register_routes(app):
         return redirect(url_for("grid_page", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/save", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_save(conn, ctx):
         sid = ctx["season"]["id"]
         entries = []
@@ -632,20 +642,21 @@ def register_routes(app):
     @app.route("/career/<token>/market")
     @career_page()
     def market_page(conn, ctx):
-        if not ctx["is_master"]:
+        if not ctx["can_run"]:
             return redirect(url_for("garage", token=ctx["token"]))
-        return page("market.html", ctx, windows=market.windows(conn), offers=market.offers(conn),
+        offers = market.offers(conn) if ctx["is_master"] else []
+        return page("market.html", ctx, windows=market.windows(conn), offers=offers,
                     target=market.target_year(conn, ctx["current_season_id"]))
 
     @app.route("/career/<token>/market/open", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def market_open(conn, ctx):
         market.open_window(conn, ctx["current_season_id"])
         flash("Market window opened. Each player can now review their offers in My Garage.", "success")
         return redirect(url_for("market_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market/<int:window_id>/close", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def market_close(conn, ctx, window_id):
         market.close_window(conn, window_id)
         flash("Market window closed. Unanswered offers expired.", "success")
@@ -745,7 +756,7 @@ def register_routes(app):
         return page("review.html", ctx, review=insights.season_review(conn, season_id))
 
     @app.route("/career/<token>/paddock")
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def paddock_admin(conn, ctx):
         sid = ctx["current_season_id"]
         seats = S.driver_seats(conn, sid)
@@ -760,7 +771,7 @@ def register_routes(app):
                     ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid))
 
     @app.route("/career/<token>/paddock/driver", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def paddock_driver(conn, ctx):
         sid = ctx["current_season_id"]
         driver_id = _form_int("driver_id")
@@ -776,7 +787,7 @@ def register_routes(app):
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/team", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def paddock_team(conn, ctx):
         sid = ctx["current_season_id"]
         team_id = _form_int("team_id")
@@ -792,7 +803,7 @@ def register_routes(app):
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/cars", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def paddock_cars(conn, ctx):
         sid = ctx["current_season_id"]
         for team in S.teams(conn):
@@ -803,7 +814,7 @@ def register_routes(app):
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/add", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_add(conn, ctx):
         S.add_event(conn, ctx["season"]["id"], request.form.get("name"), request.form.get("location"),
                     request.form.get("is_sprint"))
@@ -811,7 +822,7 @@ def register_routes(app):
         return redirect(url_for("seasons_page", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/<int:event_id>/delete", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_delete(conn, ctx, event_id):
         event = S.get_event(conn, event_id)
         if not event or event["season_id"] != ctx["season"]["id"]:
@@ -856,10 +867,22 @@ def register_routes(app):
         return page("members.html", ctx, players=players, users=auth.list_users(), links=links)
 
     # ---------------------------------------------------------------- race API
+    def _may_enter_results(token):
+        if is_master():
+            return True
+        if not can_run():
+            return False
+        try:
+            with storage.session(token) as conn:
+                return bool(conn.execute("SELECT 1 FROM career_members WHERE username = ?",
+                                         (g.user["username"],)).fetchone())
+        except CareerNotFound:
+            return False
+
     @app.route("/api/career/<token>/weekend/<int:event_id>", methods=["POST"])
     def api_weekend(token, event_id):
-        if not is_master():
-            return jsonify(ok=False, error="Only the Race Master can enter results"), 403
+        if not _may_enter_results(token):
+            return jsonify(ok=False, error="Only the Race Master or a Race Steward can enter results"), 403
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify(ok=False, error="Invalid request"), 400
@@ -888,8 +911,8 @@ def register_routes(app):
 
     @app.route("/api/career/<token>/weekend/<int:event_id>/import", methods=["POST"])
     def api_weekend_import(token, event_id):
-        if not is_master():
-            return jsonify(ok=False, error="Only the Race Master can enter results"), 403
+        if not _may_enter_results(token):
+            return jsonify(ok=False, error="Only the Race Master or a Race Steward can enter results"), 403
         kind = request.form.get("kind", "race")
         images = []
         for f in request.files.getlist("screenshots"):
@@ -925,7 +948,7 @@ def register_routes(app):
 
     # ---------------------------------------------------------------- saves
     @app.route("/career/<token>/save", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def save_now(conn, ctx):
         flash("Career saved.", "success")
         return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))

@@ -715,3 +715,62 @@ def test_new_v15_pages_render(master_client):
     master_client.post(f"/career/{token}/paddock/cars", data={"rating_1": "90.5", "csrf_token": "tok"})
     with storage.session(token) as conn:
         assert S.car_ratings(conn, sid)[1]["rating"] == 90.5
+
+
+# --------------------------------------------------------------------------- v1.6: Race Steward role
+
+def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master_client):
+    auth.create_user("davidd", "David", "password1", is_steward=True)
+    auth.create_user("carson", "Carson", "password1")
+    assert auth.role_of(auth.get_user("davidd")) == "steward"
+    res = master_client.post("/careers/new", data={"name": "Steward", "year": "2026", "rookie_market": "1",
+                                                   "account1": "davidd", "account2": "carson", "csrf_token": "tok"})
+    token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    with storage.session(token) as conn:
+        david, carson = players(conn)
+        carson_offer = market.offers(conn, driver_id=carson)[0]
+        event = S.events(conn, S.current_season_id(conn))[0]
+        ids = [r["driver_id"] for r in S.weekend_rows(conn, event["id"])]
+
+    steward = app.test_client()
+    login(steward, "davidd")
+    # Can run the race weekend...
+    res = steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
+                       json={"results": [{"driver_id": ids[0], "race_position": 1}], "ai_difficulty": 88})
+    assert res.get_json()["ok"]
+    page = steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
+    assert "Mark weekend complete" in page and "View only" not in page
+    assert steward.get(f"/career/{token}/paddock").status_code == 200
+    steward.post(f"/career/{token}/calendar/add", data={"name": "Portuguese GP", "location": "Portimão", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        assert S.events(conn, S.current_season_id(conn))[-1]["name"] == "Portuguese GP"
+    # ...but never sees Carson's side of the market.
+    market_page = steward.get(f"/career/{token}/market").get_data(as_text=True)
+    assert "Race Steward" in market_page and carson_offer["reason"] not in market_page
+    assert "Carson Hayes" not in steward.get(f"/career/{token}/garage?driver={carson}").get_data(as_text=True).split("<h1>")[1][:40]
+    assert steward.post(f"/career/{token}/offers/{carson_offer['id']}/accept", data={"csrf_token": "tok"}).status_code == 403
+    with storage.session(token) as conn:
+        items, _ = feed.notifications_for(conn, "davidd", david, is_master=False)
+        assert not any("made you an offer" in n["text"] and n["driver_id"] == carson for n in items)
+    for path in ("/accounts", f"/career/{token}/members", f"/career/{token}/backup", f"/career/{token}/export"):
+        res = steward.get(path)
+        assert res.status_code == 403 or "All logins" not in res.get_data(as_text=True), path
+
+    # A plain driver still can't enter results.
+    driver = app.test_client()
+    login(driver, "carson")
+    assert driver.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
+                       json={"results": []}).status_code == 403
+    assert driver.get(f"/career/{token}/paddock").status_code == 403
+
+
+def test_roles_can_be_changed_but_one_race_master_remains(app):
+    auth.create_user("boss", "Boss", "password1", is_master=True)
+    auth.create_user("davidd", "David", "password1")
+    auth.set_role("davidd", "steward")
+    assert auth.role_of(auth.get_user("davidd")) == "steward"
+    auth.set_role("davidd", "master")
+    auth.set_role("boss", "driver")
+    with pytest.raises(auth.AuthError):
+        auth.set_role("davidd", "steward")
+    assert [u["role"] for u in auth.list_users()] == ["master", "driver"]

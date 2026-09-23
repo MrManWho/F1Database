@@ -29,21 +29,23 @@
       <a href="{{ url_for('drivers_page', token=t) }}" class="{{ 'active' if ep in ('drivers_page', 'driver_profile') }}"><i>☰</i>Drivers</a>
       <a href="{{ url_for('teams_page', token=t) }}" class="{{ 'active' if ep in ('teams_page', 'team_profile') }}"><i>▦</i>Constructors</a>
       <a href="{{ url_for('grid_page', token=t) }}" class="{{ 'active' if ep == 'grid_page' }}"><i>⇄</i>Grid &amp; Transfers</a>
-      {% if ctx.is_master %}
+      {% if ctx.can_run %}
       <a href="{{ url_for('market_page', token=t) }}" class="{{ 'active' if ep == 'market_page' }}"><i>✉</i>Transfer Market</a>
       {% endif %}
       <a href="{{ url_for('contracts_page', token=t) }}" class="{{ 'active' if ep == 'contracts_page' }}"><i>✎</i>Driver Market</a>
       <a href="{{ url_for('records', token=t) }}" class="{{ 'active' if ep == 'records' }}"><i>♛</i>Hall of Records</a>
       <a href="{{ url_for('seasons_page', token=t) }}" class="{{ 'active' if ep == 'seasons_page' }}"><i>▤</i>Seasons &amp; Calendar</a>
-      {% if ctx.is_master %}
+      {% if ctx.can_run %}
       <a href="{{ url_for('paddock_admin', token=t) }}" class="{{ 'active' if ep == 'paddock_admin' }}"><i>⚙</i>Paddock Admin</a>
+      {% endif %}
+      {% if ctx.is_master %}
       <a href="{{ url_for('members', token=t) }}" class="{{ 'active' if ep == 'members' }}"><i>⚑</i>Player Logins</a>
       <button type="button" data-dialog="career-dialog"><i>⛁</i>Career &amp; Saves</button>
       {% endif %}
       <a href="{{ url_for('home') }}"><i>⌂</i>Career Library</a>
     </nav>
     <div class="sidebar-foot">
-      <span class="role-chip {{ 'master' if ctx.is_master else '' }}">{{ 'Race Master' if ctx.is_master else 'Driver' }}</span>
+      <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}">{{ ctx.role }}</span>
       <span>{{ user.display_name }}{% if ctx.my_driver %} · {{ ctx.my_driver.name }}{% endif %}</span>
     </div>
   </aside>
@@ -61,7 +63,7 @@
         <span class="status-badge status-{{ ctx.season.status|lower }}">{{ ctx.season.status }}</span>
       </form>
       <div class="topbar-actions">
-        {% if ctx.is_master %}
+        {% if ctx.can_run %}
         <form method="post" action="{{ url_for('save_now', token=t) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
@@ -140,7 +142,7 @@
 {% if user %}
 <dialog id="account-dialog" class="dialog">
   <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
-  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else 'Driver' }}</p>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Race Steward' if user.is_steward else 'Driver') }}</p>
   <div class="button-row">
     <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Change password' }}</a>
     <form method="post" action="{{ url_for('logout') }}">

@@ -2,7 +2,7 @@
 {% from "_macros.html" import team_dot with context %}
 {% block title %}Grid & Transfers{% endblock %}
 {% block content %}
-{% set ro = not ctx.is_master %}
+{% set ro = not ctx.can_run %}
 <div class="page-head"><div><div class="kicker">Grid &amp; Transfers · {{ ctx.season.year }}</div><h1>The {{ ctx.season.year }} grid</h1></div></div>
 
 <section class="card">

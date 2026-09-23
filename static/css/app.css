@@ -52,6 +52,8 @@ code { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; }
 .sidebar-foot { padding: .9rem 1rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); display: flex; flex-direction: column; gap: .3rem; }
 .role-chip { align-self: flex-start; font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); color: var(--blue); }
 .role-chip.master { color: var(--red); background: var(--red-soft); }
+.role-chip.steward { color: var(--amber); background: rgba(255, 176, 32, .12); }
+.role-help p { margin: .2rem 0 .5rem; }
 .main { margin-left: var(--sidebar); min-height: 100vh; }
 .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 1rem; padding: .7rem 1.5rem;
   background: rgba(7, 9, 15, .85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
