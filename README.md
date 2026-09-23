@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.15
+# F1 Universe Tracker v1.16
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a
@@ -70,19 +70,26 @@ when `requirements.txt` changes. On Render there's nothing to do: updates deploy
 
 ### Who can do what
 
-| In a league | Can do |
+Everyone in a league has **one access role**, set on the league's **Players & Logins** page. Having a
+driver is separate from the role, so any role except Spectator can also drive.
+
+| Role | Can do |
 |---|---|
-| **Race Master** | Everything in every league: results, grid, calendar, seasons, transfer market, logins, saves, every garage and negotiation, the Activity Log. They're an admin, not a driver, unless linked to a player driver. |
-| **Driver** | Their own garage, contract talks and Team Standing. Everything else is view-only. |
-| **Scorekeeper** | Enters results until a weekend is submitted. After that, only the Race Master can change it. Can be combined with Driver. |
-| **Spectator** | Follows the league: standings, results, news, chat and predictions. |
+| **Race Master** | Runs the league: results (including reopening submitted rounds), grid, calendar, seasons, transfer market, members and roles, settings, saves, every garage, the Activity Log. Site Race Masters (set in **Accounts**) are Race Master of every league. |
+| **Scorekeeper** | Enters and edits results, statuses, Fastest Lap, Driver of the Day, notes and AI difficulty, and submits a round. After submitting, only the Race Master can change it. Can't change settings, roles, seasons or delete anything. |
+| **Member** | Views everything. With a driver: their own garage, contract talks, Team Standing and press pen. |
+| **Spectator** | View only. Pages show plain text instead of greyed-out forms, and the server refuses any change. Can't have a driver. |
+
+Possible combinations include Race Master + driver, Scorekeeper + driver, Scorekeeper without a driver
+and Spectator without a driver. A league always keeps at least one Race Master, and the last one can't
+be demoted or removed.
 
 People ask to join an open league from their League Library and choose a role. The Race Master
 accepts as asked, accepts with a different role, or declines.
 
-The Race Master manages everyone in **Players & Logins**:
-- each player driver has a login and a **Can enter results** tick;
-- everyone else is set to *Not in this league*, *Spectator* or *Scorekeeper*.
+**Upgrading from 1.15 or earlier:** the old account-wide "Scorekeeper" switch is gone. Anyone who had it
+becomes Scorekeeper in every league they belong to (keeping their driver), members without a driver
+become Spectators, and everyone else keeps what they had. This happens automatically on first start.
 
 ### Race weekends
 
@@ -219,7 +226,9 @@ Rulings go in the news and in the rivalry page between the two drivers.
 | Discord | off | Paste a channel webhook to post race results and paddock headlines |
 
 **Race night:**
-* The Race Master sets a race time, shown to everyone as a countdown in their own time zone.
+* The Race Master sets a race time in the league's time zone (League Settings; detected from the Race
+  Master's browser the first time). Every date and time in the league is shown in that zone, e.g.
+  "Lights out Wed, Sep 23 at 11:30 AM" and "Starts in 9h 56m".
 * After the race, the page tells the story: podium, biggest movers, pole, fastest lap and DNFs.
 
 ### Everything else
@@ -236,6 +245,13 @@ Rulings go in the news and in the rivalry page between the two drivers.
 * **Themes:** light, dark or match your device.
 * **How it works** (menu) explains every number in the app.
 * **Result cards:** share a picture of the podium and your weekend from any completed race.
+* **Post-race summary** for every completed round: podium, pole, each player's weekend, Form and
+  Reputation changes, championship movement, the rivalry and the next AI difficulty.
+* **Player colours:** every human-controlled driver keeps one accent colour (separate from the team
+  colour) across tables, charts, the grid and profiles.
+* **Change since last round** in My Garage and on driver profiles, with sparklines once there are three
+  completed rounds.
+* **Density:** Comfortable or Compact (account menu).
 * **Restore:** roll a league back to any automatic backup from **League & Saves**. The current state
   is backed up first, so a restore can be undone.
 

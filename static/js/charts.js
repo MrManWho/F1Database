@@ -38,33 +38,51 @@
     });
   }
 
+  function colour(s) { return s.color || "var(--series-" + s.slot + ")"; }
+
   function render(host) {
     const data = JSON.parse(host.dataset.chart);
     const labels = data.labels || [];
-    const series = (data.series || []).filter(function (s) { return s.values && s.values.length; });
+    const all = (data.series || []).filter(function (s) { return s.values && s.values.length; });
+    host._hidden = host._hidden || {};
+    const series = all.filter(function (s) { return !host._hidden[s.name]; });
     host.innerHTML = "";
-    if (!labels.length || !series.length) {
-      host.innerHTML = '<p class="muted small chart-empty">No results to chart yet.</p>';
+    if (!labels.length || !all.length) {
+      host.innerHTML = '<p class="muted small chart-empty">No results to chart yet. The chart starts after the first completed round.</p>';
       return;
     }
-    assignSlots(series);
+    assignSlots(all);
     const multi = series.length > 1;
+    const hasPlayers = series.some(function (s) { return s.player; });
+    const dimAi = hasPlayers && series.some(function (s) { return !s.player; });
 
-    if (multi) {
+    if (all.length > 1) {
       const legend = document.createElement("div");
       legend.className = "chart-legend";
-      series.forEach(function (s) {
-        const item = document.createElement("span");
-        item.innerHTML = '<i style="background: var(--series-' + s.slot + ')"></i>';
+      all.forEach(function (s) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "legend-item" + (s.player ? " is-player" : "") + (host._hidden[s.name] ? " off" : "");
+        item.setAttribute("aria-pressed", host._hidden[s.name] ? "false" : "true");
+        item.title = (host._hidden[s.name] ? "Show " : "Hide ") + s.name;
+        item.innerHTML = '<i style="background: ' + colour(s) + '"></i>';
         item.appendChild(document.createTextNode(s.name));
+        item.addEventListener("click", function () {
+          host._hidden[s.name] = !host._hidden[s.name];
+          if (Object.keys(host._hidden).filter(function (k) { return host._hidden[k]; }).length >= all.length) host._hidden[s.name] = false;
+          render(host);
+        });
         legend.appendChild(item);
       });
       host.appendChild(legend);
     }
 
     const width = Math.max(280, host.clientWidth);
-    const height = parseInt(host.dataset.height || "240", 10);
-    const directLabels = multi && series.length <= 4 && width > 520;
+    const early = labels.length < 4;
+    const height = Math.min(parseInt(host.dataset.height || "240", 10), early ? 170 : 1000);
+    const markers = data.markers !== undefined ? data.markers : labels.length < 12;
+    const labelled = series.length <= 4 ? series : series.filter(function (s) { return s.player; });
+    const directLabels = multi && labelled.length && labelled.length <= 4 && width > 520;
     const pad = { top: 12, right: directLabels ? 118 : 16, bottom: 26, left: 40 };
     const w = width - pad.left - pad.right;
     const h = height - pad.top - pad.bottom;
@@ -95,21 +113,33 @@
     });
     el("line", { x1: pad.left, x2: pad.left + w, y1: pad.top + h, y2: pad.top + h, class: "chart-axis" }, svg);
 
-    series.forEach(function (s) {
+    if (dimAi) svg.classList.add("dim-ai");
+    // AI lines first so the players' lines sit on top
+    series.slice().sort(function (a, b) { return (a.player ? 1 : 0) - (b.player ? 1 : 0); }).forEach(function (s) {
+      const g = el("g", { class: "chart-series" + (s.player ? " is-player" : " is-ai") }, svg);
       const d = s.values.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
-      el("path", { d: d, class: "chart-line" + (s.player ? " is-player" : ""), style: "stroke: var(--series-" + s.slot + ")" }, svg);
-      if (s.values.length === 1) el("circle", { cx: x(0), cy: y(s.values[0]), r: 4, style: "fill: var(--series-" + s.slot + ")" }, svg);
+      el("path", { d: d, class: "chart-line" + (s.player ? " is-player" : ""), style: "stroke: " + colour(s) }, g);
+      if (markers || s.values.length === 1) {
+        s.values.forEach(function (v, i) {
+          el("circle", { cx: x(i), cy: y(v), r: s.player ? 3.5 : 2.5, class: "chart-marker", style: "fill: " + colour(s) }, g);
+        });
+      }
+      if (s.player && s.values.length > 1 && !directLabels) {
+        const last = s.values.length - 1;
+        const t = el("text", { x: x(last) - 4, y: y(s.values[last]) - 8, class: "chart-point-label", "text-anchor": "end" }, g);
+        t.textContent = s.values[last];
+      }
     });
 
     if (directLabels) {
-      const placed = series.map(function (s) {
+      const placed = labelled.map(function (s) {
         return { s: s, y: y(s.values[s.values.length - 1]) };
       }).sort(function (a, b) { return a.y - b.y; });
       for (let i = 1; i < placed.length; i++) {
         if (placed[i].y - placed[i - 1].y < 13) placed[i].y = placed[i - 1].y + 13;
       }
       placed.forEach(function (p) {
-        const t = el("text", { x: pad.left + w + 8, y: p.y + 4, class: "chart-direct" }, svg);
+        const t = el("text", { x: pad.left + w + 8, y: p.y + 4, class: "chart-direct" + (p.s.player ? " is-player" : ""), style: "fill: " + colour(p.s) }, svg);
         t.textContent = shortName(p.s.name) + " " + p.s.values[p.s.values.length - 1];
       });
     }
@@ -117,7 +147,7 @@
     // Crosshair + tooltip
     const cross = el("line", { y1: pad.top, y2: pad.top + h, class: "chart-cross", visibility: "hidden" }, svg);
     const dots = series.map(function (s) {
-      return el("circle", { r: 4.5, class: "chart-dot", style: "fill: var(--series-" + s.slot + ")", visibility: "hidden" }, svg);
+      return el("circle", { r: 4.5, class: "chart-dot", style: "fill: " + colour(s), visibility: "hidden" }, svg);
     });
     const tip = document.createElement("div");
     tip.className = "chart-tip";
@@ -136,10 +166,12 @@
         dots[k].setAttribute("cx", x(i));
         dots[k].setAttribute("cy", y(s.values[i]));
         dots[k].setAttribute("visibility", "visible");
-        return { s: s, v: s.values[i] };
+        return { s: s, v: s.values[i], p: s.positions ? s.positions[i] : null };
       }).sort(function (a, b) { return b.v - a.v; });
-      tip.innerHTML = "<strong>" + labels[i] + "</strong>" + rows.map(function (r) {
-        return '<div><i style="background: var(--series-' + r.s.slot + ')"></i><span>' + escapeHtml(r.s.name) + "</span><b>" + r.v + "</b></div>";
+      const unit = data.yLabel === "Points" ? " pts" : "";
+      tip.innerHTML = "<strong>" + (/^R\d+$/.test(labels[i]) ? "Round " + labels[i].slice(1) : labels[i]) + "</strong>" + rows.map(function (r) {
+        return '<div class="' + (r.s.player ? "is-player" : "") + '"><i style="background: ' + colour(r.s) + '"></i><span>' + escapeHtml(r.s.name) +
+          (r.p ? ' <em>P' + r.p + "</em>" : "") + "</span><b>" + r.v + unit + "</b></div>";
       }).join("");
       tip.hidden = false;
       const left = x(i) + 14 + tip.offsetWidth > width ? x(i) - tip.offsetWidth - 14 : x(i) + 14;
@@ -168,6 +200,12 @@
       }).join("") + "</tbody>";
     details.appendChild(table);
     host.appendChild(details);
+    if (early && !host.dataset.noNote) {
+      const note = document.createElement("p");
+      note.className = "muted small chart-note";
+      note.textContent = "More meaningful trends will appear as the season develops.";
+      host.appendChild(note);
+    }
   }
 
   function shortName(name) {

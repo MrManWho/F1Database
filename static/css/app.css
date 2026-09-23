@@ -5,7 +5,7 @@
   --panel-2: #161e2d;
   --line: #222c3d;
   --text: #e8ecf3;
-  --muted: #8d97a8;
+  --muted: #9ba5b6;
   --red: #e10600;
   --red-soft: rgba(225, 6, 0, 0.14);
   --green: #2bd576;
@@ -102,6 +102,7 @@ legend { color: var(--muted); font-size: .8rem; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
 .grid-2 > .card { margin-bottom: 0; }
+.grid-2 > * { min-width: 0; }
 .grid-2 + .card, .grid-2 + section { margin-top: 1.1rem; }
 .empty-state { text-align: center; padding: 3rem 1.5rem; max-width: 560px; margin: 2rem auto; }
 .big-code { font-size: 3rem; font-weight: 900; color: var(--red); }
@@ -188,7 +189,7 @@ legend { color: var(--muted); font-size: .8rem; }
 /* Tables: the page scrolls vertically, never the card. Wide screens let tables flow so headers stick to the top
    of the window; narrower screens scroll sideways on purpose, with the driver column frozen. */
 .table-wrap { overflow-x: auto; border-radius: 8px; }
-@media (min-width: 1200px) { .table-wrap { overflow: visible; } }
+@media (min-width: 1200px) { .table-wrap:not(.scroll-x) { overflow: visible; } }
 .data-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
 .data-table th { position: sticky; top: var(--sticky-top, 0px); background: #0f1520; z-index: 3; text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: .55rem .5rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .data-table th[data-sort] { cursor: pointer; user-select: none; }
@@ -208,7 +209,9 @@ tr.row-link { cursor: pointer; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .center { text-align: center; }
 /* Human-controlled drivers: a tint and accent bar in their own persistent colour (team colour stays separate). */
-.player-row > td, li.player-row { background-image: linear-gradient(90deg, color-mix(in srgb, var(--player, var(--blue)) 13%, transparent), transparent 70%); }
+li.player-row { background-image: linear-gradient(90deg, color-mix(in srgb, var(--player, var(--blue)) 13%, transparent), transparent 70%); }
+.player-row > td { background-color: color-mix(in srgb, var(--player, var(--blue)) 10%, var(--panel)); }
+.player-row:hover > td { background-color: color-mix(in srgb, var(--player, var(--blue)) 16%, var(--panel)); }
 .player-row > td:first-child, li.player-row { box-shadow: inset 3px 0 0 var(--player, var(--blue)); }
 .player-badge { display: inline-block; font-size: .56rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; vertical-align: middle;
   color: var(--player, var(--blue)); border: 1px solid color-mix(in srgb, var(--player, var(--blue)) 55%, transparent); border-radius: 4px; padding: 0 .3rem; margin-left: .3rem; line-height: 1.5; }
@@ -841,3 +844,131 @@ body.plain { --sticky-top: 0px; }
 .stat .sparkline { width: 100%; height: 18px; margin-top: 4px; }
 .stat .sparkline polyline { stroke: var(--player, var(--blue)); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: .85; }
 .stat-grid.tight { margin: 0; }
+
+/* v1.16 charts */
+.chart-line { stroke-width: 1.75; }
+.chart-line.is-player { stroke-width: 3.25; }
+.chart-marker { stroke: var(--panel); stroke-width: 1; }
+.chart-series { transition: opacity .15s; }
+.chart-svg.dim-ai .chart-series.is-ai { opacity: .38; }
+.chart:hover .chart-svg.dim-ai .chart-series.is-ai { opacity: .8; }
+.chart-point-label { fill: var(--text); font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.chart-direct.is-player { font-weight: 800; }
+.chart-legend .legend-item { background: none; border: 1px solid transparent; color: var(--muted); font: inherit; padding: 2px 6px; border-radius: 6px; cursor: pointer; }
+.chart-legend .legend-item:hover { border-color: var(--line); color: var(--text); }
+.chart-legend .legend-item:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.chart-legend .legend-item.is-player { color: var(--text); font-weight: 700; }
+.chart-legend .legend-item.off { opacity: .45; text-decoration: line-through; }
+.chart-tip .is-player span { color: var(--text); font-weight: 700; }
+.chart-tip em { font-style: normal; color: var(--muted); font-size: .72rem; margin-left: 4px; }
+.chart-note { margin-top: .4rem; }
+
+/* v1.16 constructors */
+.team-grid { display: flex; flex-wrap: wrap; justify-content: center; }
+.team-grid > .team-card { flex: 0 1 calc(33.333% - .67rem); min-width: 0; }
+@media (min-width: 1500px) { .team-grid > .team-card { flex-basis: calc(25% - .75rem); } }
+@media (max-width: 1000px) { .team-grid > .team-card { flex-basis: calc(50% - .5rem); } }
+@media (max-width: 600px) { .team-grid > .team-card { flex-basis: 100%; } }
+.team-card { transition: transform .12s, box-shadow .12s, border-color .12s; }
+.team-card:hover, .team-card:focus-visible { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.team-card:focus-visible { outline: 2px solid var(--team); outline-offset: 2px; }
+.team-card .more { color: var(--muted); font-size: .75rem; margin-top: .5rem; display: block; }
+.rating-bars { display: grid; gap: .45rem; }
+.rating-row { display: grid; grid-template-columns: 3.2rem 1fr 3rem 4rem; align-items: center; gap: .6rem; }
+.rating-row .bar { height: 8px; }
+.lineups { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; }
+.lineups dt { font-weight: 800; }
+.lineups dd { margin: 0; }
+
+/* v1.16 paddock news story cards */
+.news-cards { display: grid; gap: .75rem; }
+.story-card { position: relative; background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--cat); border-radius: 10px; padding: .75rem .9rem .7rem; transition: border-color .12s, background .12s; }
+.story-card:hover { border-color: color-mix(in srgb, var(--cat) 45%, var(--line)); border-left-color: var(--cat); }
+.story-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding-right: 2rem; }
+.story-cat { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cat); }
+.story-round { font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+.story-time { margin-left: auto; }
+.story-title { font-size: 1rem; margin: .35rem 0 .2rem; line-height: 1.3; }
+.story-title a { color: var(--text); }
+.story-body { margin: 0; color: var(--muted); font-size: .88rem; }
+.story-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-top: .45rem; }
+.team-tag i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+.story-more { margin-left: auto; }
+.story-card .news-del { position: absolute; top: .45rem; right: .45rem; }
+.news-empty { display: flex; gap: .8rem; align-items: center; padding: 1rem; border: 1px dashed var(--line); border-radius: 10px; }
+.news-empty > span { font-size: 1.6rem; }
+.news-empty p { margin: 0; }
+
+/* v1.16 driver market overview */
+.market-status .ms-head { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--line); }
+.ms-state { font-size: 1.35rem; font-weight: 800; }
+.ms-state.state-open { color: var(--green); }
+.ms-state.state-closed { color: var(--muted); }
+.ms-next p { margin: .2rem 0 0; }
+.ms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem 1.5rem; margin-top: .8rem; }
+.ms-grid h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 .4rem; }
+.ms-grid ul li { padding: .25rem 0; }
+.section-title { font-size: 1.05rem; margin: 1.2rem 0 .3rem; }
+@media (max-width: 700px) { .market-status .ms-head { grid-template-columns: 1fr; } }
+
+/* v1.16 notifications */
+.notif-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-bottom: .4rem; }
+.notif-list li { display: flex; gap: .6rem; align-items: flex-start; }
+.notif-list li.read { opacity: .78; }
+.notif-list li.read a, .notif-list li.read span { color: var(--muted); }
+.notif-list li.unread .notif-body > a, .notif-list li.unread .notif-body > span { font-weight: 700; }
+.notif-ico { flex: none; width: 1.6rem; text-align: center; font-size: 1rem; line-height: 1.3; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-new { color: var(--red); font-weight: 800; }
+.notif-list li.notif-empty { display: block; color: var(--muted); padding: 1rem .4rem; border: 0; }
+
+/* v1.16 post-race summary */
+.summary-hero { display: grid; grid-template-columns: 2fr 1fr; gap: 1.2rem; align-items: center; }
+.podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; align-items: end; }
+.podium-step { display: flex; flex-direction: column; gap: .2rem; padding: .8rem; border-radius: 10px; background: var(--panel-2); border-top: 3px solid var(--team); }
+.podium-step.p1 { order: 2; padding-top: 1.4rem; }
+.podium-step.p2 { order: 1; }
+.podium-step.p3 { order: 3; }
+.podium-step.player-row { box-shadow: inset 0 0 0 1px var(--player); }
+.podium-pos { font-weight: 800; font-size: 1.2rem; }
+.summary-facts { margin: 0; display: grid; gap: .45rem; }
+.summary-facts div { display: flex; justify-content: space-between; gap: .6rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
+.summary-facts dt { color: var(--muted); }
+.summary-facts dd { margin: 0; text-align: right; }
+.mini-head { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: .6rem 0 .3rem; }
+.mini-table { list-style: none; margin: 0; padding: 0; }
+.mini-table li { display: flex; align-items: center; gap: .6rem; padding: .3rem .3rem; border-bottom: 1px solid var(--line); }
+.mini-table .pos { width: 2.2rem; color: var(--muted); font-weight: 700; }
+.mini-table .grow { flex: 1; min-width: 0; }
+.big-num { font-size: 1.8rem; font-weight: 800; }
+@media (max-width: 800px) { .summary-hero { grid-template-columns: 1fr; } .podium { grid-template-columns: 1fr; } .podium-step.p1, .podium-step.p2, .podium-step.p3 { order: 0; } }
+.mini-table a, .summary-facts a { color: var(--text); }
+
+/* v1.16 branding, legibility, density, focus, skeletons */
+.brand-mark { width: 34px; height: 34px; padding: 0; background: none; flex: none; border-radius: 8px; }
+
+.nav-title { color: #7f8a9c; }
+[data-theme="light"] .nav-title { color: #6b7485; }
+.rail-season { display: none; }
+body.rail .rail-season { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); text-align: center; margin-top: .3rem; }
+body.rail .sidebar-foot span.role-chip { display: inline-block; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px; }
+.sidebar nav a:focus-visible { outline-offset: -2px; }
+.strip-dot { transition: transform .12s, box-shadow .12s; }
+.strip-dot:hover, .strip-dot:focus-visible { transform: translateY(-2px); box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+.btn { transition: background-color .12s, border-color .12s, transform .08s; }
+.btn:active { transform: translateY(1px); }
+.card.stat, .contract-card, .season-card { transition: border-color .15s; }
+.card.stat:hover, .contract-card:hover, .season-card:hover { border-color: color-mix(in srgb, var(--text) 18%, var(--line)); }
+/* Skeleton while charts draw */
+.chart:empty { min-height: 160px; border-radius: 8px; background: linear-gradient(90deg, var(--panel-2) 0%, color-mix(in srgb, var(--panel-2) 60%, var(--line)) 50%, var(--panel-2) 100%); background-size: 200% 100%; animation: skel 1.2s ease-in-out infinite; }
+@keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .chart:empty { animation: none; } .team-card:hover, .strip-dot:hover { transform: none; } }
+/* Compact density */
+body.compact .card { padding: .8rem .9rem; margin-bottom: .75rem; }
+body.compact .data-table td, body.compact .data-table th { padding-top: .3rem; padding-bottom: .3rem; }
+body.compact .stat strong { font-size: 1.3rem; }
+body.compact .sidebar nav a, body.compact .sidebar nav button { padding-top: .38rem; padding-bottom: .38rem; }
+body.compact .leader-list li, body.compact .bar-list li, body.compact .interest-list li { padding: .35rem .3rem; }
+body.compact .story-card { padding: .55rem .75rem; }

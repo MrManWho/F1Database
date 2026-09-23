@@ -1,10 +1,46 @@
 {% extends "base.html" %}
+{% from "_macros.html" import driver_link, team_dot with context %}
 {% block title %}Driver Market{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><div class="kicker">Driver Market · storylines</div><h1>Negotiations</h1></div>
+  <div><div class="kicker">Driver Market</div><h1>The market</h1></div>
   {% if ctx.is_master %}<button class="btn btn-primary" data-dialog="contract-dialog">Add negotiation</button>{% endif %}
 </div>
+{% set o = overview %}
+<section class="card market-status">
+  <div class="ms-head">
+    <div><small class="muted">Market status</small><div class="ms-state state-{{ 'open' if o.window else 'closed' }}">{{ o.status }}</div><span class="muted small">{{ o.detail }}{% if o.window %} · opened {{ o.window.opened_at|ago }}{% endif %}</span></div>
+    <div class="ms-next"><small class="muted">What happens next</small><p>{{ o.next }}</p></div>
+  </div>
+  <div class="ms-grid">
+    <div>
+      <h3>Player contracts</h3>
+      <ul class="plain-list small">{% for c in o.contracts %}<li>{{ driver_link(ctx, c.driver) }}:
+        {% if c.deal %}{{ team_dot(c.deal.team) }}{{ c.deal.team.name }} through <b>{{ c.deal.end_year }}</b>{% if c.deal.end_year == ctx.season.year %} <span class="pill pill-hot">Expires this season</span>{% endif %}
+        {% elif c.team %}{{ team_dot(c.team) }}{{ c.team.name }} <span class="muted">(no signed deal on file)</span>{% else %}<span class="muted">No seat</span>{% endif %}</li>
+        {% else %}<li class="muted">No player drivers yet.</li>{% endfor %}</ul>
+    </div>
+    <div>
+      <h3>Teams showing interest</h3>
+      <ul class="plain-list small">{% for i in o.interest %}<li>{{ driver_link(ctx, i.driver) }}:
+        {% if i.teams %}{% for t in i.teams %}{{ team_dot(t.team) }}{{ t.team.name }} <span class="muted">({{ t.label }})</span>{{ ', ' if not loop.last }}{% endfor %}{% else %}<span class="muted">No other team is keen right now</span>{% endif %}</li>
+        {% else %}<li class="muted">Nothing to show yet.</li>{% endfor %}</ul>
+      <p class="muted small">From each team's current read of Driver Value. It changes after every round.</p>
+    </div>
+    <div>
+      <h3>Available seats</h3>
+      {% if o.vacant %}<ul class="plain-list small">{% for v in o.vacant %}<li>{{ team_dot(v.team) }}{{ v.team.name }} · seat {{ v.seat }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted small">Every {{ ctx.season.year }} seat is filled.{% if o.expiring %} Seats held on expiring deals may open up for {{ ctx.season.year + 1 }}.{% endif %}</p>{% endif %}
+    </div>
+    <div>
+      <h3>Recent signings</h3>
+      {% if o.recent %}<ul class="plain-list small">{% for r in o.recent %}<li>{{ driver_link(ctx, r.driver) }} → {{ team_dot(r.team) }}{{ r.team.name }} <span class="muted">· {{ r.role }}, {{ r.years }} yr from {{ r.target_year }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="muted small">No signings yet.</p>{% endif %}
+      {% if o.rumours %}<h3>Paddock whispers</h3><ul class="plain-list small">{% for r in o.rumours %}<li>{{ r.headline }} <span class="muted">· {{ r.created_at|ago }}</span></li>{% endfor %}</ul>{% endif %}
+    </div>
+  </div>
+</section>
+<h2 class="section-title">Negotiation storylines</h2>
 <p class="muted">These entries are the story of the paddock and never change the grid on their own. Accepted team offers show up here automatically as <em>Signed</em>.</p>
 <div class="contract-grid">
   {% for c in contracts %}

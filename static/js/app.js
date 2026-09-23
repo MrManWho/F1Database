@@ -175,36 +175,51 @@
       countEl.hidden = !n;
       document.title = (n ? "(" + n + ") " : "") + baseTitle;
     }
+    const markBtn = document.getElementById("notif-mark");
+    const clearBtn = document.getElementById("notif-clear");
     function render(items) {
       list.innerHTML = "";
-      if (!items.length) { list.innerHTML = '<li class="muted">Nothing yet.</li>'; return; }
+      if (!items.length) {
+        list.innerHTML = '<li class="notif-empty"><span aria-hidden="true">🔕</span> You\'re all caught up. Results, offers and comments will show up here.</li>';
+        return;
+      }
       items.forEach(function (n) {
         const li = document.createElement("li");
-        if (n.unread) li.className = "unread";
+        li.className = n.unread ? "unread" : "read";
+        const ico = document.createElement("span");
+        ico.className = "notif-ico"; ico.title = n.category || ""; ico.textContent = n.icon || "🔔";
+        const wrap = document.createElement("div");
+        wrap.className = "notif-body";
         const body = n.link ? document.createElement("a") : document.createElement("span");
         if (n.link) body.href = n.link;
         body.textContent = n.text;
         const when = document.createElement("small");
-        when.textContent = n.created_at;
-        li.append(body, when);
+        when.title = n.when || "";
+        when.textContent = (n.unread ? "New · " : "") + (n.category ? n.category + " · " : "") + n.created_at;
+        wrap.append(body, when);
+        li.append(ico, wrap);
         list.appendChild(li);
       });
     }
     function poll() {
-      fetch(bell.dataset.url, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (res) {
+      return fetch(bell.dataset.url, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (res) {
         if (!res.ok) return;
         if (res.unread > last && soundOn) chime();
         if (res.unread > last) toast(res.items[0] ? res.items[0].text : "New notification", "success");
         last = res.unread;
         setCount(res.unread);
+        if (markBtn) markBtn.disabled = !res.unread;
         render(res.items);
       }).catch(function () { /* offline: try again next minute */ });
     }
     setCount(last);
     setInterval(poll, 60000);
-    bell.addEventListener("click", function () {
-      if (!last) return;
-      postJSON(bell.dataset.read, {}).then(function () { last = 0; setCount(0); });
+    // Opening the panel only shows notifications; reading them is the person's choice.
+    if (markBtn) markBtn.addEventListener("click", function () {
+      postJSON(bell.dataset.read, {}).then(function () { last = 0; setCount(0); markBtn.disabled = true; poll(); });
+    });
+    if (clearBtn) clearBtn.addEventListener("click", function () {
+      postJSON(clearBtn.dataset.url, {}).then(poll);
     });
   }
 })();
@@ -309,6 +324,16 @@
     });
   }
 
+  // Density
+  var dens = document.getElementById("density-pick");
+  if (dens) {
+    try { dens.value = localStorage.getItem("f1-density") || "comfortable"; } catch (e) {}
+    dens.addEventListener("change", function () {
+      try { localStorage.setItem("f1-density", dens.value); } catch (e) {}
+      document.body.classList.toggle("compact", dens.value === "compact");
+    });
+  }
+
   // Service worker (installable app + alerts). Needs HTTPS or localhost.
   var swReady = null;
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
@@ -397,4 +422,19 @@
     var tr = e.target.closest && e.target.closest("tr[data-href]");
     if (tr && e.target === tr) window.location.href = tr.dataset.href;
   });
+})();
+
+/* Wide tables: let headers stick to the page when the table fits; scroll sideways (frozen first column) when it doesn't. */
+(function () {
+  function fit() {
+    document.querySelectorAll(".table-wrap").forEach(function (w) {
+      var t = w.querySelector("table");
+      if (!t) return;
+      w.classList.remove("scroll-x");
+      if (t.scrollWidth > w.clientWidth + 1) w.classList.add("scroll-x");
+    });
+  }
+  fit();
+  var timer;
+  window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(fit, 120); });
 })();

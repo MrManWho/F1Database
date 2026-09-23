@@ -52,7 +52,7 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
 }
-QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -308,7 +308,8 @@ def career_page(master_only=False, ops_only=False):
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect"}
 
-PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "help_page"}
+PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
+                 "help_page"}
 
 
 def _pledge_gate(conn, ctx, master_only):
@@ -768,6 +769,22 @@ def register_routes(app):
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None)
 
+    @app.route("/career/<token>/weekend/<int:event_id>/summary")
+    @career_page()
+    def race_summary(conn, ctx, event_id):
+        event = S.get_event(conn, event_id)
+        if not event:
+            abort(404)
+        if event["status"] != C.EVENT_COMPLETE:
+            flash("The summary appears once this round is marked complete.", "info")
+            return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+        season = S.get_season(conn, event["season_id"])
+        if season["id"] != ctx["season"]["id"]:
+            ctx["season"] = season
+        evs = S.events(conn, season["id"])
+        nxt = next((e for e in evs if e["round_number"] > event["round_number"]), None)
+        return page("race_summary.html", ctx, s=insights.race_summary(conn, event_id), next_event=nxt)
+
     def _share_card(conn, ctx, event):
         """Everything the result card image needs (it's drawn in the browser)."""
         story = community.race_story(conn, event["id"])
@@ -839,7 +856,8 @@ def register_routes(app):
         if not team:
             abort(404)
         archive, totals = S.team_history(conn, team_id)
-        return page("team_profile.html", ctx, team=team, archive=archive, totals=totals)
+        return page("team_profile.html", ctx, team=team, archive=archive, totals=totals,
+                    details=S.team_details(conn, team_id, ctx["season"]["id"]))
 
     @app.route("/career/<token>/grid")
     @career_page()
@@ -890,7 +908,8 @@ def register_routes(app):
             flash("Negotiation added.", "success")
             return redirect(url_for("contracts_page", token=ctx["token"]))
         return page("contracts.html", ctx, contracts=S.contracts(conn, ctx["season"]["id"]),
-                    drivers=S.drivers(conn, active_only=True), teams=S.teams(conn))
+                    drivers=S.drivers(conn, active_only=True), teams=S.teams(conn),
+                    overview=market.overview(conn, ctx["current_season_id"]))
 
     @app.route("/career/<token>/contracts/<int:contract_id>/delete", methods=["POST"])
     @career_page(master_only=True)
@@ -1322,11 +1341,15 @@ def register_routes(app):
             return page("rivalry.html", ctx, a=a, b=None, options=options, r=None, chart=None, season_chart=None)
         data = insights.rivalry(conn, a["id"], b["id"])
         chart = {"labels": data["labels"], "yLabel": "Race head-to-head lead", "zero": True,
-                 "series": [{"name": f"{a['name']} ahead ↑ / {b['name']} ahead ↓", "values": data["swing"], "slot": 1}]}
+                 "series": [{"name": f"{a['name']} ahead ↑ / {b['name']} ahead ↓", "values": data["swing"], "slot": 1}],
+                 "markers": len(data["labels"]) < 12}
         progress = insights.points_progression(conn, sid, [a["id"], b["id"]])
         season_chart = {"labels": progress[0], "yLabel": "Points",
-                        "series": [{"name": a["name"], "values": progress[1][a["id"]], "player": True, "slot": 1},
-                                   {"name": b["name"], "values": progress[1][b["id"]], "player": True, "slot": 2}]}
+                        "series": [{"name": a["name"], "values": progress[1][a["id"]], "player": bool(a["is_player"]),
+                                    "slot": 1, "color": a["player_color"]},
+                                   {"name": b["name"], "values": progress[1][b["id"]], "player": bool(b["is_player"]),
+                                    "slot": 2, "color": b["player_color"]}],
+                        "markers": len(progress[0]) < 12}
         return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart, options=options,
                     incidents=community.incidents(conn, driver_ids=(a["id"], b["id"])))
 
@@ -1691,7 +1714,8 @@ def register_routes(app):
     @app.route("/api/career/<token>/notifications")
     @career_page()
     def api_notifications(conn, ctx):
-        items = [{"id": n["id"], "text": n["text"], "unread": n["unread"], "created_at": timefmt.ago(n["created_at"], g.tz),
+        items = [{"id": n["id"], "text": n["text"], "unread": n["unread"], "icon": n["icon"], "category": n["category"],
+                  "created_at": timefmt.ago(n["created_at"], g.tz),
                   "when": timefmt.stamp(n["created_at"], g.tz),
                   "link": f"/career/{ctx['token']}/{n['link']}" if n["link"] else None}
                  for n in ctx["notifications"]]
@@ -1701,6 +1725,12 @@ def register_routes(app):
     @career_page()
     def notifications_read(conn, ctx):
         feed.mark_read(conn, g.user["username"])
+        return jsonify(ok=True)
+
+    @app.route("/career/<token>/notifications/clear", methods=["POST"])
+    @career_page()
+    def notifications_clear(conn, ctx):
+        feed.clear_read(conn, g.user["username"])
         return jsonify(ok=True)
 
 

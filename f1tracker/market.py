@@ -928,3 +928,50 @@ def delete_window(conn, window_id):
     conn.execute("DELETE FROM offers WHERE window_id = ?", (window_id,))
     conn.execute("DELETE FROM market_windows WHERE id = ?", (window_id,))
     return applied
+
+
+def overview(conn, season_id):
+    """Read-only market picture for the Driver Market page. Everything comes from stored data; nothing changes."""
+    season = S.get_season(conn, season_id)
+    evs = S.events(conn, season_id)
+    done = sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE)
+    half = math.ceil(len(evs) / 2) if evs else 0
+    open_w = conn.execute("SELECT * FROM market_windows WHERE status = ? ORDER BY id DESC", (C.WINDOW_OPEN,)).fetchone()
+    next_year = season["year"] + 1
+    if open_w:
+        status, detail = open_w["kind"], f"Open for {open_w['target_year']} contracts"
+    else:
+        status, detail = "Closed", "No transfer window is open"
+    if open_w:
+        next_cond = "Closes when the Race Master closes it. Unanswered offers then expire."
+    elif conn.execute("SELECT 1 FROM market_windows WHERE target_year = ?", (next_year,)).fetchone():
+        next_cond = f"The {next_year} window has already run. The next one opens during the {next_year} season."
+    elif evs and done < half:
+        next_cond = f"Silly Season opens automatically after round {evs[half - 1]['round_number']} ({done} of {half} rounds done)."
+    else:
+        next_cond = "Silly Season can open at any time. The Race Master can also open a window by hand."
+    players = S.player_drivers(conn)
+    seats = S.driver_seats(conn, season_id)
+    dmap = S.driver_map(conn)
+    tmap = S.team_map(conn)
+    expiring, contracts = [], []
+    for p in players:
+        deal = contract_covering(conn, p["id"], season["year"])
+        team = tmap.get(seats[p["id"]][0]) if p["id"] in seats else None
+        contracts.append({"driver": p, "team": team, "deal": deal})
+        if deal and deal["end_year"] == season["year"]:
+            expiring.append({"driver": p, "team": deal["team"], "end_year": deal["end_year"]})
+    vacant = [{"team": t, "seat": s["seat_no"]} for t in S.grid(conn, season_id) for s in t["seats"] if not s["driver"]]
+    interest = []
+    for p in players:
+        _, teams = team_interest(conn, season_id, p["id"])
+        keen = [t for t in teams if not t["current"] and t["interest"] >= 0][:3]
+        interest.append({"driver": p, "teams": keen})
+    recent = [dict(r) for r in conn.execute("""SELECT o.*, w.target_year FROM offers o JOIN market_windows w ON w.id = o.window_id
+                                             WHERE o.status = ? ORDER BY o.id DESC LIMIT 6""", (C.OFFER_ACCEPTED,))]
+    for r in recent:
+        r["driver"], r["team"] = dmap.get(r["driver_id"]), tmap.get(r["team_id"])
+    rumours = [dict(r) for r in conn.execute("SELECT * FROM news WHERE kind = 'rumour' ORDER BY id DESC LIMIT 4")]
+    return {"status": status, "detail": detail, "next": next_cond, "window": dict(open_w) if open_w else None,
+            "expiring": expiring, "contracts": contracts, "vacant": vacant, "interest": interest,
+            "recent": recent, "rumours": rumours, "done": done, "total": len(evs)}

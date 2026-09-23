@@ -448,12 +448,13 @@ def driver_standings(conn, season_id, upto_round=None):
     return rows
 
 
-def constructor_standings(conn, season_id):
+def constructor_standings(conn, season_id, upto_round=None):
     tmap = team_map(conn)
     totals = {tid: {"team": t, "points": 0, "wins": 0, "podiums": 0, "fastest_laps": 0, "dnfs": 0}
               for tid, t in tmap.items() if t["active"]}
     rows = _rows(conn, """SELECT r.*, e.is_sprint FROM results r JOIN events e ON e.id = r.event_id
-                          WHERE e.season_id = ?""", (season_id,))
+                          WHERE e.season_id = ? AND e.round_number <= ?""",
+                 (season_id, upto_round if upto_round is not None else 10 ** 6))
     for r in rows:
         t = totals.setdefault(r["team_id"], {"team": tmap[r["team_id"]], "points": 0, "wins": 0,
                                              "podiums": 0, "fastest_laps": 0, "dnfs": 0})
@@ -1024,6 +1025,35 @@ def team_history(conn, team_id):
     totals["titles"] = sum(1 for a in archive if a["position"] == 1 and a["season"]["status"] == C.SEASON_COMPLETE
                            and a["points"] > 0)
     return archive, totals
+
+
+def team_details(conn, team_id, season_id):
+    """Extra constructor-profile facts: current lineup, car rating by year, everyone who raced for the team."""
+    dmap = driver_map(conn)
+    by_driver = {r["driver_id"]: r for r in driver_standings(conn, season_id)}
+    gmap = grid_map(conn, season_id)
+    current = []
+    for seat in (1, 2):
+        d = dmap.get(gmap.get((team_id, seat)))
+        current.append({"seat": seat, "driver": d, "row": by_driver.get(d["id"]) if d else None})
+    ratings = []
+    for s in list_seasons(conn):
+        ensure_car_ratings(conn, s["id"])
+        r = _row(conn, "SELECT * FROM team_seasons WHERE season_id = ? AND team_id = ?", (s["id"], team_id))
+        if r:
+            ratings.append({"year": s["year"], "rating": r["car_rating"], "change": r["change"]})
+    lineups = {}
+    for r in _rows(conn, """SELECT s.year, r.driver_id, COUNT(*) AS starts FROM results r
+                            JOIN events e ON e.id = r.event_id JOIN seasons s ON s.id = e.season_id
+                            WHERE r.team_id = ? AND e.status != ? GROUP BY s.year, r.driver_id
+                            ORDER BY s.year DESC, starts DESC""", (team_id, C.EVENT_NOT_RUN)):
+        if dmap.get(r["driver_id"]):
+            lineups.setdefault(r["year"], []).append({"driver": dmap[r["driver_id"]], "events": r["starts"]})
+    moves = [dict(r) for r in _rows(conn, """SELECT * FROM news WHERE team_id = ? AND kind IN ('market', 'rumour')
+                                            ORDER BY id DESC LIMIT 12""", (team_id,))]
+    for m in moves:
+        m["driver"] = dmap.get(m["driver_id"])
+    return {"current": current, "ratings": ratings, "lineups": sorted(lineups.items(), reverse=True), "moves": moves}
 
 
 # --------------------------------------------------------------------------- paddock admin (drivers, teams, calendar)

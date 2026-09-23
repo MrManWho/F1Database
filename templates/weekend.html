@@ -15,6 +15,7 @@
     </div>
   </div>
   <div class="button-row">
+    {% if event.status == 'Complete' %}<a class="btn" href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">📋 Race summary</a>{% endif %}
     {% if prev_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}">← R{{ prev_event.round_number }}</a>{% endif %}
     {% if next_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">R{{ next_event.round_number }} →</a>{% endif %}
   </div>

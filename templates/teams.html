@@ -12,6 +12,7 @@
     {% set cr = ratings.get(t.team.id) %}
     {% if cr %}<div class="car-rating small">Car rating <b>{{ '%.1f'|format(cr.rating) }}</b>{% if cr.change %} <span class="{{ 'up' if cr.change > 0 else 'down' }}">{{ '%+.1f'|format(cr.change) }} over winter</span>{% endif %}</div>{% endif %}
     <div class="team-stats"><span><b>{{ t.points }}</b> pts</span><span><b>{{ t.wins }}</b> wins</span><span><b>{{ t.podiums }}</b> podiums</span><span><b>{{ t.dnfs }}</b> DNF</span></div>
+    <span class="more">Team profile →</span>
   </a>
   {% endfor %}
 </div>

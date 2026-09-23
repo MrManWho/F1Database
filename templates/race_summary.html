@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_macros.html" import driver_link, team_dot, delta, pattrs with context %}
+{% block title %}R{{ s.event.round_number }} summary · {{ s.event.name }}{% endblock %}
+{% block content %}
+{% set e = s.event %}
+<div class="page-head">
+  <div><div class="kicker">Post-race summary · {{ s.season.year }} · Round {{ e.round_number }}{{ ' · Sprint weekend' if e.is_sprint }}</div>
+    <h1>{{ e.name }}</h1>{% if e.location %}<div class="muted">{{ e.location }}{% if e.race_at %} · {{ e.race_at|race_time }}{% endif %}</div>{% endif %}</div>
+  <div class="button-row">
+    <a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">Full results</a>
+    {% if next_event %}<a class="btn" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">Next: R{{ next_event.round_number }} {{ next_event.name }} →</a>{% endif %}
+  </div>
+</div>
+
+<section class="card summary-hero">
+  <div class="podium">
+    {% for r in s.podium %}
+    <div class="podium-step p{{ loop.index }} {{ 'player-row' if r.driver.is_player }}" style="--team: {{ r.team.color }};{% if r.driver.is_player %} --player: {{ r.driver.player_color or 'var(--blue)' }};{% endif %}">
+      <span class="podium-pos">P{{ loop.index }}</span>
+      <b>{{ driver_link(ctx, r.driver) }}</b>
+      <span class="muted small">{{ team_dot(r.team) }}{{ r.team.name }}</span>
+      {% if loop.first %}<span class="small">{{ r.gp_points + r.sprint_pts }} pts</span>{% endif %}
+    </div>
+    {% else %}<p class="muted">No classified finishers were recorded.</p>{% endfor %}
+  </div>
+  <dl class="summary-facts">
+    <div><dt>Pole</dt><dd>{% if s.pole %}{{ driver_link(ctx, s.pole.driver) }}{% else %}—{% endif %}</dd></div>
+    {% if e.is_sprint %}<div><dt>Sprint winner</dt><dd>{% if s.sprint_winner %}{{ driver_link(ctx, s.sprint_winner.driver) }}{% else %}—{% endif %}</dd></div>{% endif %}
+    <div><dt><abbr title="Fastest lap">FL</abbr></dt><dd>{% if s.fastest %}{{ driver_link(ctx, s.fastest.driver) }}{% else %}—{% endif %}</dd></div>
+    <div><dt><abbr title="Driver of the Day">DOTD</abbr></dt><dd>{% if s.dotd %}{{ driver_link(ctx, s.dotd.driver) }}{% else %}—{% endif %}</dd></div>
+    {% if e.ai_difficulty is not none %}<div><dt>AI difficulty</dt><dd>{{ e.ai_difficulty }}</dd></div>{% endif %}
+  </dl>
+</section>
+
+<section class="card table-card">
+  <h2>Player weekends</h2>
+  {% if s.humans %}
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Driver</th><th class="num"><abbr title="Qualifying position">Quali</abbr></th>{% if e.is_sprint %}<th class="num">Sprint</th>{% endif %}<th class="num">Race</th>
+      <th class="num"><abbr title="Places gained (+) or lost (−) from the grid">+/−</abbr></th><th class="num"><abbr title="Points this weekend">Pts</abbr></th>
+      <th class="num">Form</th><th class="num"><abbr title="Reputation">Rep</abbr></th><th class="num"><abbr title="Drivers' Championship position">WDC</abbr></th></tr></thead>
+    <tbody>
+    {% for h in s.humans %}
+    <tr {{ pattrs(h.driver, href=url_for('driver_profile', token=ctx.token, driver_id=h.driver.id)) }}>
+      <td>{{ driver_link(ctx, h.driver) }} <span class="muted small">{{ h.team.name }}</span></td>
+      <td class="num">{{ h.quali }}</td>{% if e.is_sprint %}<td class="num">{{ h.sprint }}</td>{% endif %}
+      <td class="num"><strong>{{ h.race }}</strong></td>
+      <td class="num">{% if h.gained is not none %}{{ delta(h.gained, 0) }}{% else %}—{% endif %}</td>
+      <td class="num"><strong>{{ h.points }}</strong></td>
+      <td class="num">{{ h.form if h.form is not none else '—' }} {% if h.form_change is not none %}{{ delta(h.form_change) }}{% endif %}</td>
+      <td class="num">{{ h.rep if h.rep is not none else '—' }} {% if h.rep_change is not none %}{{ delta(h.rep_change) }}{% endif %}</td>
+      <td class="num">{{ 'P' ~ h.wdc if h.wdc else '—' }} {% if h.wdc_change is not none %}{{ delta(h.wdc_change, 0) }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Changes are since {{ 'the start of the season' if s.first_round else 'the previous completed round' }}.</p>
+  {% else %}<p class="muted">No player drivers took part in this round.</p>{% endif %}
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Championship after R{{ e.round_number }}</h2>
+    <h3 class="mini-head">Drivers</h3>
+    <ol class="mini-table">{% for w in s.wdc %}<li {{ pattrs(w.row.driver) }}><span class="pos">P{{ w.row.position }}</span><span class="grow">{{ driver_link(ctx, w.row.driver) }}</span><b>{{ w.row.points }}</b>{% if w.change is not none %}{{ delta(w.change, 0) }}{% else %}<span class="delta none">new</span>{% endif %}</li>{% endfor %}</ol>
+    <h3 class="mini-head">Constructors</h3>
+    <ol class="mini-table">{% for w in s.wcc %}<li><span class="pos">P{{ w.row.position }}</span><span class="grow">{{ team_dot(w.row.team) }}<a href="{{ url_for('team_profile', token=ctx.token, team_id=w.row.team.id) }}">{{ w.row.team.name }}</a></span><b>{{ w.row.points }}</b>{% if w.change is not none %}{{ delta(w.change, 0) }}{% else %}<span class="delta none">new</span>{% endif %}</li>{% endfor %}</ol>
+  </section>
+  <section class="card">
+    {% if s.rivalry %}
+    <h2>Rivalry</h2>
+    <ul class="plain-list">{% for p in s.rivalry %}<li>
+      {% if p.ahead %}<b>{{ p.ahead.name }}</b> finished ahead{% else %}Neither was classified ahead{% endif %}
+      ({{ p.a.name }} {{ p.a_points }} pts · {{ p.b.name }} {{ p.b_points }} pts this weekend).
+      {% if p.gap is not none %}<span class="muted small">Season gap: {% if p.gap == 0 %}level on points{% else %}{{ p.a.name if p.gap > 0 else p.b.name }} leads by {{ p.gap|abs }}{% endif %}.</span>{% endif %}
+      <a class="small" href="{{ url_for('rivalry_page', token=ctx.token, a=p.a.id, b=p.b.id) }}">Head-to-head →</a></li>{% endfor %}</ul>
+    {% endif %}
+    <h2>Milestones &amp; headlines</h2>
+    {% if s.headlines %}<ul class="plain-list small">{% for n in s.headlines %}<li>{{ '⭐ ' if n.kind == 'player' }}{{ n.headline }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted small">No new records or milestones this weekend.</p>{% endif %}
+    <h2>Next round's AI difficulty</h2>
+    {% if s.rec.recommended is not none %}
+    <p><span class="big-num">{{ s.rec.recommended }}</span> {% if s.rec.direction == 'up' %}<span class="diff-move up">▲ Raise</span>{% elif s.rec.direction == 'down' %}<span class="diff-move down">▼ Lower</span>{% else %}<span class="muted small">Hold</span>{% endif %}</p>
+    <p class="muted small">{{ s.rec.reason }}</p>
+    {% else %}<p class="muted small">{{ s.rec.reason }}</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

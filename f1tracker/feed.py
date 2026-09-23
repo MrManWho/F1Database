@@ -68,7 +68,60 @@ def latest(conn, limit=10, season_id=None):
         r = dict(r)
         r["team"] = tmap.get(r["team_id"])
         out.append(r)
-    return out
+    return decorate(conn, out)
+
+
+CATEGORY_COLORS = {"Race": "#e10600", "Sprint": "#ff8a3d", "Transfer": "#4aa3ff", "Contract": "#6d8bff",
+                   "Milestone": "#e8d44d", "Rivalry": "#ff6fae", "Championship": "#c07cff", "Record": "#2ec4b6",
+                   "Rumour": "#9aa4b2", "Tech": "#48d1f0", "Paddock": "#9bd14b"}
+CATEGORY_ICONS = {"Race": "🏁", "Sprint": "⚡", "Transfer": "🔁", "Contract": "✍️", "Milestone": "⭐", "Rivalry": "⚔️",
+                  "Championship": "🏆", "Record": "📈", "Rumour": "💬", "Tech": "🔧", "Paddock": "📰"}
+
+
+def category(kind, headline):
+    """A reader-facing story category, worked out from what was stored (never invented)."""
+    h = (headline or "").lower()
+    if kind == "result":
+        return "Sprint" if "sprint" in h else "Race"
+    if kind == "player":
+        if any(w in h for w in ("maiden", "first", "record")):
+            return "Record" if "record" in h else "Milestone"
+        return "Race"
+    if kind == "market":
+        if any(w in h for w in ("signs", "renew", "extends", "release", "contract", "stays")):
+            return "Contract"
+        return "Transfer"
+    if kind == "rumour":
+        return "Rumour"
+    if kind == "season":
+        return "Championship"
+    if kind == "tech":
+        return "Tech"
+    if "team orders" in h or "rival" in h or "teammate" in h:
+        return "Rivalry"
+    if "incident" in h or "penalty" in h or "ruling" in h or "stewards" in h:
+        return "Race"
+    if "rookie" in h or "joins" in h or "join the grid" in h:
+        return "Transfer"
+    return "Paddock"
+
+
+def decorate(conn, rows):
+    """Add category, colour, round and driver to news rows for the story cards."""
+    dmap = S.driver_map(conn)
+    events = {r["id"]: r for r in conn.execute("SELECT id, round_number, name, is_sprint FROM events")}
+    for r in rows:
+        cat = category(r["kind"], r["headline"])
+        r["category"], r["color"], r["icon"] = cat, CATEGORY_COLORS[cat], CATEGORY_ICONS[cat]
+        r["driver"] = dmap.get(r.get("driver_id"))
+        r["event"] = None
+        link = r.get("link") or ""
+        if link.startswith("weekend/"):
+            try:
+                r["event"] = events.get(int(link.split("/")[1].split("?")[0].split("#")[0]))
+            except ValueError:
+                pass
+    return rows
 
 
 def _visible(driver_id):
@@ -77,16 +130,39 @@ def _visible(driver_id):
     return "(driver_id IS NULL OR driver_id = ?)", (driver_id,)
 
 
+NOTIFY_KINDS = [  # (words in the text, icon, category)
+    (("results are in", "race night"), "🏁", "Race"),
+    (("offer", "signed", "contract", "released", "seat"), "✍️", "Market"),
+    (("pledge",), "🎯", "Team"),
+    (("press",), "🎤", "Press"),
+    (("incident", "reported", "ruling", "report was"), "⚖️", "Stewards"),
+    (("season has begun",), "🏆", "Season"),
+    (("commented",), "💬", "Comment"),
+    (("asked to join",), "👋", "League"),
+]
+
+
+def notify_kind(text):
+    low = (text or "").lower()
+    for words, icon, cat in NOTIFY_KINDS:
+        if any(w in low for w in words):
+            return icon, cat
+    return "🔔", "Update"
+
+
 def notifications_for(conn, username, driver_id, is_master=False, limit=15):
+    """Recent notifications for this person. "Clear" only hides older ones from the panel; nothing is deleted."""
     where, params = ("1=1", ()) if is_master else _visible(driver_id)
-    seen = conn.execute("SELECT last_seen_id FROM notification_reads WHERE username = ?", (username,)).fetchone()
+    seen = conn.execute("SELECT last_seen_id, cleared_id FROM notification_reads WHERE username = ?", (username,)).fetchone()
+    cleared = seen["cleared_id"] if seen else 0
     seen = seen["last_seen_id"] if seen else 0
-    rows = [dict(r) for r in conn.execute(f"SELECT * FROM notifications WHERE {where} ORDER BY id DESC LIMIT ?",
-                                          (*params, limit))]
+    rows = [dict(r) for r in conn.execute(f"SELECT * FROM notifications WHERE {where} AND id > ? ORDER BY id DESC LIMIT ?",
+                                          (*params, cleared, limit))]
     dmap = S.driver_map(conn)
     for r in rows:
         r["unread"] = r["id"] > seen
         r["driver"] = dmap.get(r["driver_id"])
+        r["icon"], r["category"] = notify_kind(r["text"])
     unread = conn.execute(f"SELECT COUNT(*) FROM notifications WHERE {where} AND id > ?", (*params, seen)).fetchone()[0]
     return rows, unread
 
@@ -95,6 +171,15 @@ def mark_read(conn, username):
     top = conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
     conn.execute("""INSERT INTO notification_reads(username, last_seen_id) VALUES(?, ?)
                     ON CONFLICT(username) DO UPDATE SET last_seen_id = excluded.last_seen_id""", (username, top))
+
+
+def clear_read(conn, username):
+    """Hide notifications already read from this person's panel. They stay in the league's history."""
+    row = conn.execute("SELECT last_seen_id FROM notification_reads WHERE username = ?", (username,)).fetchone()
+    upto = row["last_seen_id"] if row else 0
+    conn.execute("""INSERT INTO notification_reads(username, last_seen_id, cleared_id) VALUES(?, ?, ?)
+                    ON CONFLICT(username) DO UPDATE SET cleared_id = excluded.cleared_id""", (username, upto, upto))
+    return upto
 
 
 # --------------------------------------------------------------------------- generators

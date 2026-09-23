@@ -24,13 +24,13 @@
 </head>
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
-<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); } catch (e) {}</script>
+<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
   <aside class="sidebar" id="sidebar">
     <a class="brand" href="{{ url_for('dashboard', token=t) }}">
-      <span class="brand-mark">F1</span>
+      <svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Universe Tracker"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M9.5 8.5v8.5a6.5 6.5 0 0 0 13 0V8.5" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><g fill="#fff"><rect x="12.3" y="7.5" width="2.5" height="2.5"/><rect x="17.2" y="7.5" width="2.5" height="2.5"/><rect x="14.75" y="10" width="2.5" height="2.5"/></g></svg>
       <span><strong>Universe Tracker</strong><small>v{{ APP_VERSION }} · {{ ctx.career_name }}</small></span>
     </a>
     <nav>
@@ -90,7 +90,8 @@
     </nav>
     <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
     <div class="sidebar-foot">
-      <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}">{{ ctx.role }}</span>
+      <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}" title="Your role in this league: {{ ctx.role }}">{{ ctx.role }}</span>
+      <a class="rail-season" href="{{ url_for('seasons_page', token=t) }}" title="Viewing the {{ ctx.season.year }} season">{{ ctx.season.year }}</a>
       <span>{{ user.display_name }}{% if ctx.my_driver %} · {{ ctx.my_driver.name }}{% endif %}</span>
     </div>
   </aside>
@@ -125,14 +126,19 @@
     </main>
   </div>
 
-  <dialog id="notif-dialog" class="dialog">
-    <div class="dialog-head"><h2>Notifications</h2><button class="icon-btn" data-close>✕</button></div>
+  <dialog id="notif-dialog" class="dialog notif-dialog">
+    <div class="dialog-head"><h2>Notifications</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+    <div class="notif-actions">
+      <button type="button" class="btn btn-sm" id="notif-mark" {{ 'disabled' if not ctx.unread }}>Mark all as read</button>
+      <button type="button" class="btn btn-sm btn-ghost" id="notif-clear" data-url="{{ url_for('notifications_clear', token=t) }}" title="Hide notifications you've already read. They aren't deleted.">Clear read</button>
+    </div>
     <ul class="notif-list" id="notif-list">
       {% for n in ctx.notifications %}
-      <li class="{{ 'unread' if n.unread }}">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}<small title="{{ n.created_at|stamp }}">{{ n.created_at|ago }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small>
+      <li class="{{ 'unread' if n.unread else 'read' }}"><span class="notif-ico" title="{{ n.category }}" aria-hidden="true">{{ n.icon }}</span>
+        <div class="notif-body">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}<span>{{ n.text }}</span>{% endif %}<small title="{{ n.created_at|stamp }}">{% if n.unread %}<b class="notif-new">New</b> · {% endif %}{{ n.category }} · {{ n.created_at|ago }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small></div>
         {% if ctx.is_master %}<form method="post" action="{{ url_for('notification_delete', token=t, notification_id=n.id) }}" class="notif-del">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>{% endif %}</li>
-      {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete for everyone" aria-label="Delete notification">✕</button></form>{% endif %}</li>
+      {% else %}<li class="notif-empty"><span aria-hidden="true">🔕</span> You're all caught up. Results, offers and comments will show up here.</li>{% endfor %}
     </ul>
     <label class="check small"><input type="checkbox" id="notif-sound"> Play a sound when something new arrives</label>
   </dialog>
@@ -183,7 +189,7 @@
   {% endif %}
 {% else %}
   <header class="plain-head">
-    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">F1</span><span><strong>Universe Tracker</strong><small>v{{ APP_VERSION }}</small></span></a>
+    <a class="brand" href="{{ url_for('home') }}"><svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Universe Tracker"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M9.5 8.5v8.5a6.5 6.5 0 0 0 13 0V8.5" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><g fill="#fff"><rect x="12.3" y="7.5" width="2.5" height="2.5"/><rect x="17.2" y="7.5" width="2.5" height="2.5"/><rect x="14.75" y="10" width="2.5" height="2.5"/></g></svg><span><strong>Universe Tracker</strong><small>v{{ APP_VERSION }}</small></span></a>
     {% if user %}
     <div class="topbar-actions">
       <a class="btn btn-ghost btn-sm" href="{{ url_for('accounts_page') }}">Accounts</a>
@@ -199,11 +205,15 @@
 {% if user %}
 <dialog id="account-dialog" class="dialog">
   <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
-  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Scorekeeper' if user.is_steward else 'Member') }}</p>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Site Race Master' if user.is_master else 'Member' }}{% if ctx is defined and ctx %} · {{ ctx.role }} in {{ ctx.career_name }}{% endif %}</p>
   <div class="stack">
     <label>Theme
       <select id="theme-pick">
         <option value="dark">Dark</option><option value="light">Light</option><option value="auto">Match my device</option>
+      </select></label>
+    <label>Density
+      <select id="density-pick">
+        <option value="comfortable">Comfortable</option><option value="compact">Compact (more rows on screen)</option>
       </select></label>
     <div class="device-box">
       <strong>Phone &amp; desktop alerts</strong>

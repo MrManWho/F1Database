@@ -4,7 +4,21 @@ Every version of F1 Universe Tracker, newest first. The same list is in the app 
 **account menu → What's new**.
 
 ## 1.16 · Polish, clearer roles and easier reading
-- **One place for roles.** Each league member has one role: Race Master, Scorekeeper, Member or Spectator, set on the league's Players & Logins page. The old account-wide Scorekeeper switch is gone; anyone who had it keeps Scorekeeper in every league they belong to.
+- **One place for roles.** Each league member has one role: Race Master, Scorekeeper, Member or Spectator, set on the league's Players & Logins page. A driver is assigned separately, so a Race Master or Scorekeeper can also drive. The old account-wide Scorekeeper switch is gone; anyone who had it keeps Scorekeeper in every league they belong to. A league always keeps at least one Race Master.
+- **Spectator view.** Spectators see plain text instead of greyed-out forms (results, calendar, grid, notes), with a "View only" badge. The server refuses any change from them.
+- **Times in your league's time zone.** Every date reads the same way, e.g. "Wed, Sep 23 · 11:30 AM", "Lights out Wed, Sep 23 at 11:30 AM", "Starts in 9h 56m" and "3 hours ago". Set the zone in League Settings.
+- **Player colours.** Every human driver gets a persistent accent colour, separate from the team colour, used in tables, charts, the grid, profiles and the rivalry page. Player rows are tinted with a Player badge.
+- **Change since last round.** My Garage and driver profiles show how Form, Reputation, Driver Value, Car-Adjusted, points and WDC position moved since the previous round, with sparklines after three rounds. No formulas changed.
+- **Post-race summary.** Every completed round has a summary: podium, pole, sprint winner, each player's weekend, Form and Reputation changes, championship movement, the rivalry and the next AI difficulty.
+- **Better charts.** Point markers, player lines thicker and in their own colour, AI lines dimmed until you hover, tooltips with round, position and points, and legend buttons to hide lines.
+- **Constructors.** Cards line up evenly and open a fuller team profile: current drivers, car rating by season, season-by-season results, everyone who raced for the team, and transfer news.
+- **Paddock News story cards** with a category, round badge, driver and team, and a link to the full results.
+- **Driver Market overview:** market status, what happens next, player contracts, teams showing interest, available seats, recent signings and paddock whispers. Read-only; it never changes the grid.
+- **Notifications:** icons, New / read styling, **Mark all as read** and **Clear read** (hides them for you; nothing is deleted). Opening the panel no longer marks everything read.
+- **Clearer early-season pages.** Unfinished-season awards are shown as Current projections (Provisional); records with nothing yet say so; one-round Form/Reputation shows the current value and change instead of a one-point chart; a 0–0 rivalry shows a neutral Tied bar.
+- **Easier results entry.** Grouped column headings, filters (players, incomplete, points, DNFs), clear a driver or a whole session (with confirmation), Saving / Saved / Error states, a last-edited marker and keyboard shortcuts (press ?).
+- **Tables:** headers stay visible, driver names stay put while scrolling sideways, numbers line up, abbreviations have tooltips, and clicking a driver row opens their profile.
+- **Polish:** a new Universe Tracker logo, brighter labels, keyboard focus outlines, gentle hover states, loading placeholders for charts, Comfortable/Compact density, and the season shown in the collapsed menu.
 
 ## 1.15 · Life inside the team
 - **Everyone has a pledge.** Every seated driver must have a growth pledge. If yours is missing (a contract from before pledges, or a seat given by hand), the app asks you to choose one before anything else. Pledges are locked for the season.

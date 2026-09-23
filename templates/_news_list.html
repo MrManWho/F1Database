@@ -1,10 +1,15 @@
-{% from "_macros.html" import reaction_bar, comment_thread with context %}
-<ul class="news-list">
+{% from "_macros.html" import reaction_bar, comment_thread, driver_link with context %}
+<div class="news-cards">
   {% for n in news %}
-  <li class="news-{{ n.kind }}" id="news-{{ n.id }}" style="--team: {{ n.team.color if n.team else 'var(--line)' }}">
-    <span class="news-kind">{{ {'result': 'Race', 'player': 'Spotlight', 'market': 'Market', 'rumour': 'Rumour', 'season': 'Season', 'tech': 'Tech', 'paddock': 'Paddock'}.get(n.kind, n.kind) }}</span>
-    {% if n.link %}<a href="/career/{{ ctx.token }}/{{ n.link }}"><strong>{{ n.headline }}</strong></a>{% else %}<strong>{{ n.headline }}</strong>{% endif %}
-    {% if n.body %}<small>{{ n.body }}</small>{% endif %}
+  <article class="story-card news-{{ n.kind }}" id="news-{{ n.id }}" style="--cat: {{ n.color }}; --team: {{ n.team.color if n.team else 'var(--line)' }}">
+    <header class="story-top">
+      <span class="story-cat"><span aria-hidden="true">{{ n.icon }}</span> {{ n.category }}</span>
+      {% if n.event %}<span class="story-round" title="{{ n.event.name }}">R{{ n.event.round_number }}{{ ' · Sprint' if n.event.is_sprint }}</span>{% endif %}
+      <time class="story-time muted small" datetime="{{ n.created_at }}" title="{{ n.created_at|stamp }}">{{ n.created_at|ago }}</time>
+    </header>
+    <h3 class="story-title">{% if n.link %}<a href="/career/{{ ctx.token }}/{{ n.link }}">{{ n.headline }}</a>{% else %}{{ n.headline }}{% endif %}</h3>
+    {% if n.body %}<p class="story-body">{{ n.body }}</p>{% endif %}
+    {% if n.driver or n.team %}<div class="story-meta small">{% if n.driver %}{{ driver_link(ctx, n.driver) }}{% endif %}{% if n.team %}<span class="team-tag"><i style="background: {{ n.team.color }}"></i>{{ n.team.name }}</span>{% endif %}{% if n.link %}<a class="story-more" href="/career/{{ ctx.token }}/{{ n.link }}">{{ 'Full results' if n.link.startswith('weekend/') else 'Read more' }} →</a>{% endif %}</div>{% endif %}
     {% if reacts is defined and reacts %}{% set tgt = 'news:' ~ n.id %}
     <div class="news-social">
       {{ reaction_bar(ctx, tgt, reacts[tgt]) }}
@@ -13,9 +18,9 @@
     </div>
     {% endif %}
     {% if ctx.is_master %}<form method="post" action="{{ url_for('news_delete', token=ctx.token, news_id=n.id) }}" class="news-del"
-      onsubmit="return confirm('Delete this headline?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete headline">✕</button></form>{% endif %}
-  </li>
+      onsubmit="return confirm('Delete this headline?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete headline" aria-label="Delete headline">✕</button></form>{% endif %}
+  </article>
   {% else %}
-  <li class="muted">No news yet. Headlines appear as races are completed and deals are done.</li>
+  <div class="news-empty"><span aria-hidden="true">📰</span><p><b>No news yet.</b><br><span class="muted small">Stories appear here as rounds are completed, deals are signed and records fall.</span></p></div>
   {% endfor %}
-</ul>
+</div>

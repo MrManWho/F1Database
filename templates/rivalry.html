@@ -54,17 +54,19 @@
 <div class="grid-2">
   <section class="card table-card">
     <h2>Season by season</h2>
+    <div class="table-wrap">
     <table class="data-table compact">
       <thead><tr><th>Year</th><th>Points</th><th>Races</th><th>Quali</th></tr></thead>
       <tbody>{% for year, s in r.seasons %}
         <tr><td><strong>{{ year }}</strong></td><td>{{ s.points[0] }}–{{ s.points[1] }}</td><td>{{ s.race[0] }}–{{ s.race[1] }}</td><td>{{ s.quali[0] }}–{{ s.quali[1] }}</td></tr>
       {% else %}<tr><td colspan="4" class="muted">No races together yet.</td></tr>{% endfor %}</tbody>
     </table>
+    </div>
     <p class="muted small">Scores read {{ an }}–{{ bn }}.</p>
   </section>
   <section class="card table-card">
     <h2>Track by track</h2>
-    <div class="table-wrap" style="max-height: 360px">
+    <div class="table-wrap">
     <table class="data-table compact">
       <thead><tr><th>Circuit</th><th>Races</th><th>Best {{ an }}</th><th>Best {{ bn }}</th></tr></thead>
       <tbody>{% for name, t in r.tracks %}
@@ -78,7 +80,7 @@
 
 <section class="card table-card">
   <h2>Every battle</h2>
-  <div class="table-wrap" style="max-height: 420px">
+  <div class="table-wrap">
   <table class="data-table compact">
     <thead><tr><th>Race</th><th>{{ an }}</th><th>{{ bn }}</th><th>Winner</th></tr></thead>
     <tbody>{% for t in r.timeline %}

@@ -5,6 +5,8 @@
 <div class="page-head">
   <div><div class="kicker">Control Room · {{ ctx.career_name }}</div><h1>{{ ctx.season.year }} Championship</h1></div>
   <div class="button-row">
+    {% set last_done = events|selectattr('status', 'equalto', 'Complete')|list|last if completed else none %}
+    {% if last_done %}<a class="btn btn-ghost" href="{{ url_for('race_summary', token=ctx.token, event_id=last_done.id) }}">📋 R{{ last_done.round_number }} summary</a>{% endif %}
     {% if next_event %}<a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">{{ 'Enter results' if ctx.can_run else 'Next race' }} →</a>{% endif %}
   </div>
 </div>

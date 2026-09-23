@@ -1,24 +1,61 @@
 {% extends "base.html" %}
+{% from "_macros.html" import driver_link, pattrs, delta with context %}
 {% block title %}{{ team.name }}{% endblock %}
 {% block content %}
 <div class="profile-head" style="--team: {{ team.color }}">
-  <div><div class="kicker">Constructor profile · {{ team.abbreviation }}</div><h1>{{ team.name }}</h1></div>
+  <div><div class="kicker">Constructor profile · {{ team.abbreviation }}</div><h1>{{ team.name }}</h1>
+    {% set cr = details.ratings[-1] if details.ratings else none %}
+    <div class="hero-meta">{% if cr %}<span>Car rating {{ '%.1f'|format(cr.rating) }} ({{ cr.year }})</span>{% endif %}<span>{{ archive|length }} season{{ 's' if archive|length != 1 }} in this league</span></div>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('teams_page', token=ctx.token) }}">← All constructors</a>
 </div>
 <div class="stat-grid">
   {% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Fastest Laps', totals.fastest_laps), ('DNFs', totals.dnfs), ('Championships', totals.titles)] %}
-  <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
+  <div class="stat card"><small>{{ label }}{{ ' (all seasons)' if loop.first }}</small><strong>{{ value }}</strong></div>
   {% endfor %}
 </div>
+<div class="grid-2">
+  <section class="card table-card">
+    <h2>{{ ctx.season.year }} drivers</h2>
+    <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Seat</th><th>Driver</th><th class="num">Pts</th><th class="num"><abbr title="Drivers' Championship position">WDC</abbr></th><th class="num">Wins</th><th class="num"><abbr title="Podiums">Pod</abbr></th><th class="num"><abbr title="Did not finish">DNF</abbr></th></tr></thead>
+      <tbody>
+      {% for c in details.current %}
+      <tr {{ pattrs(c.driver, href=url_for('driver_profile', token=ctx.token, driver_id=c.driver.id) if c.driver else '') }}>
+        <td>{{ c.seat }}</td>
+        <td>{% if c.driver %}{{ driver_link(ctx, c.driver, badge=True) }}{% else %}<span class="muted">Vacant</span>{% endif %}</td>
+        <td class="num"><strong>{{ c.row.points if c.row else 0 }}</strong></td><td class="num">{{ 'P' ~ c.row.position if c.row else '—' }}</td>
+        <td class="num">{{ c.row.wins if c.row else 0 }}</td><td class="num">{{ c.row.podiums if c.row else 0 }}</td><td class="num">{{ c.row.dnfs if c.row else 0 }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section class="card table-card">
+    <h2>Car rating by season</h2>
+    {% if details.ratings %}
+    <div class="rating-bars">
+      {% for r in details.ratings %}
+      <div class="rating-row"><span class="muted small">{{ r.year }}</span><span class="bar"><span style="width: {{ r.rating }}%; background: var(--team)"></span></span><b class="num">{{ '%.1f'|format(r.rating) }}</b>{% if r.change %}{{ delta(r.change) }}{% else %}<span class="delta same">—</span>{% endif %}</div>
+      {% endfor %}
+    </div>
+    <p class="muted small">Ratings change over each winter. The Race Master can adjust them to match the game.</p>
+    {% else %}<p class="muted small">No car ratings yet.</p>{% endif %}
+  </section>
+</div>
 <section class="card table-card">
-  <h2>Season archive</h2>
+  <h2>Season by season</h2>
+  {% if archive %}
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Year</th><th>WCC</th><th>Driver 1</th><th>Driver 2</th><th>Pts</th><th>Wins</th><th>Pod</th><th>FL</th><th>DNF</th></tr></thead>
+    <thead><tr><th>Year</th><th class="num"><abbr title="Constructors' Championship position">WCC</abbr></th><th>Driver 1</th><th>Driver 2</th><th class="num">Pts</th><th class="num">Wins</th><th class="num"><abbr title="Podiums">Pod</abbr></th><th class="num"><abbr title="Fastest laps">FL</abbr></th><th class="num"><abbr title="Did not finish">DNF</abbr></th></tr></thead>
     <tbody>
-    {% for a in archive %}
+    {% for a in archive|reverse %}
     <tr>
-      <td><strong>{{ a.season.year }}</strong></td><td class="num">P{{ a.position }}</td>
-      {% for d in a.drivers %}<td>{% if d %}<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=d.id) }}" class="{{ 'is-player' if d.is_player }}">{{ d.name }}</a>{% else %}—{% endif %}</td>{% endfor %}
+      <td><strong>{{ a.season.year }}</strong>{% if a.position == 1 and a.season.status == 'Complete' and a.points > 0 %} <span title="Constructors' champions">🏆</span>{% endif %}</td><td class="num">P{{ a.position }}</td>
+      {% for d in a.drivers %}<td>{% if d %}{{ driver_link(ctx, d) }}{% else %}—{% endif %}</td>{% endfor %}
       <td class="num"><strong>{{ a.points }}</strong></td><td class="num">{{ a.wins }}</td><td class="num">{{ a.podiums }}</td>
       <td class="num">{{ a.fastest_laps }}</td><td class="num">{{ a.dnfs }}</td>
     </tr>
@@ -27,5 +64,22 @@
   </table>
   </div>
   <p class="muted small">Points always stay with the team a driver represented at each event. Driver columns show the season's final lineup.</p>
+  {% else %}<p class="muted small">No seasons yet.</p>{% endif %}
 </section>
+<div class="grid-2">
+  <section class="card">
+    <h2>Everyone who raced for {{ team.name }}</h2>
+    {% if details.lineups %}
+    <dl class="lineups">
+      {% for year, drivers in details.lineups %}<dt>{{ year }}</dt><dd>{% for d in drivers %}{{ driver_link(ctx, d.driver) }} <span class="muted small">({{ d.events }} round{{ 's' if d.events != 1 }})</span>{{ ', ' if not loop.last }}{% endfor %}</dd>{% endfor %}
+    </dl>
+    {% else %}<p class="muted small">Nobody has raced for this team yet. Lineups appear once a round has results.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Transfers &amp; market news</h2>
+    {% if details.moves %}
+    <ul class="plain-list small">{% for m in details.moves %}<li><b>{{ m.headline }}</b>{% if m.body %}<br><span class="muted">{{ m.body }}</span>{% endif %} <span class="muted">· {{ m.created_at|ago }}</span></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">No signings or transfer stories involving {{ team.name }} yet.</p>{% endif %}
+  </section>
+</div>
 {% endblock %}

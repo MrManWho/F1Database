@@ -39,6 +39,13 @@ def progression_chart(conn, season_id, top=4, max_series=8):
         if r["driver"]["is_player"] and r["driver_id"] not in ids and len(ids) < max_series:
             ids.append(r["driver_id"])
     labels, series = points_progression(conn, season_id, ids)
+    everyone = [r["driver_id"] for r in table]
+    _, all_series = points_progression(conn, season_id, everyone)
+    ranks = {d: [] for d in ids}  # championship position after each round (ties share the better place)
+    for i in range(len(labels)):
+        col = [all_series[d][i] for d in everyone]
+        for d in ids:
+            ranks[d].append(1 + sum(1 for v in col if v > series[d][i]))
     dmap = S.driver_map(conn)
     # Colour follows the driver: player drivers keep their own slot (by join order); others fill the rest.
     player_slots = {p["id"]: i + 1 for i, p in enumerate(S.player_drivers(conn)) if i < max_series}
@@ -47,8 +54,9 @@ def progression_chart(conn, season_id, top=4, max_series=8):
     out = []
     for d in ids:
         slot = player_slots.get(d) or free.pop(0)
-        out.append({"name": dmap[d]["name"], "values": series[d], "player": bool(dmap[d]["is_player"]), "slot": slot})
-    return {"labels": labels, "yLabel": "Points", "series": out}
+        out.append({"name": dmap[d]["name"], "values": series[d], "player": bool(dmap[d]["is_player"]), "slot": slot,
+                    "color": dmap[d]["player_color"] if dmap[d]["is_player"] else None, "positions": ranks[d]})
+    return {"labels": labels, "yLabel": "Points", "series": out, "markers": len(labels) < 12}
 
 
 def driver_round_timeline(conn, driver_id):
@@ -404,3 +412,72 @@ def stat_changes(conn, season_id, driver_id):
     out["since"] = f"R{rounds[-2]}" if prev else None
     out["latest"] = f"R{rounds[-1]}" if rounds else None
     return out
+
+
+# --------------------------------------------------------------------------- post-race summary
+
+def race_summary(conn, event_id):
+    """Everything that happened at one completed weekend, from the stored results (scoring untouched)."""
+    event = S.get_event(conn, event_id)
+    season = S.get_season(conn, event["season_id"])
+    sid, rn = season["id"], event["round_number"]
+    rows = S.weekend_rows(conn, event_id)
+    finished = sorted((r for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"]),
+                      key=lambda r: r["race_position"])
+    podium = finished[:3]
+    pole = next((r for r in rows if r["qualifying_position"] == 1), None)
+    sprint_winner = next((r for r in rows if event["is_sprint"] and r["sprint_position"] == 1
+                          and r["sprint_status"] == C.STATUS_FINISHED), None)
+    fastest = next((r for r in rows if r["fastest_lap"]), None)
+    dotd = next((r for r in rows if r["driver_of_day"]), None)
+    earlier = [e["round_number"] for e in S.events(conn, sid)
+               if e["status"] == C.EVENT_COMPLETE and e["round_number"] < rn]
+    prev_rn = earlier[-1] if earlier else None
+    after = {r["driver_id"]: r for r in S.driver_standings(conn, sid, rn)}
+    before = {r["driver_id"]: r for r in S.driver_standings(conn, sid, prev_rn)} if prev_rn else {}
+    wcc_after = S.constructor_standings(conn, sid, rn)
+    wcc_before = {t["team"]["id"]: t["position"] for t in S.constructor_standings(conn, sid, prev_rn)} if prev_rn else {}
+    humans = []
+    for r in rows:
+        if not r["driver"]["is_player"]:
+            continue
+        a, b = after.get(r["driver_id"]), before.get(r["driver_id"])
+        done = r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+        humans.append({
+            "row": r, "driver": r["driver"], "team": r["team"],
+            "race": f"P{r['race_position']}" if done else r["result_status"],
+            "sprint": (f"P{r['sprint_position']}" if r["sprint_status"] == C.STATUS_FINISHED and r["sprint_position"]
+                       else r["sprint_status"]) if event["is_sprint"] else None,
+            "quali": f"P{r['qualifying_position']}" if r["qualifying_position"] else "—",
+            "gained": (r["qualifying_position"] - r["race_position"]) if done and r["qualifying_position"] else None,
+            "points": r["gp_points"] + r["sprint_pts"],
+            "form": a["form"] if a else None, "form_change": round(a["form"] - (b["form"] if b else 50.0), 1) if a else None,
+            "rep": a["reputation"] if a else None,
+            "rep_change": round(a["reputation"] - (b["reputation"] if b else a["starting_reputation"]), 1) if a else None,
+            "wdc": a["position"] if a else None,
+            "wdc_change": (b["position"] - a["position"]) if a and b else None,
+        })
+    rivalry = None
+    if len(humans) >= 2:
+        pairs = []
+        for i in range(len(humans)):
+            for j in range(i + 1, len(humans)):
+                x, y = humans[i], humans[j]
+                rx, ry = _race_rank(x["row"]), _race_rank(y["row"])
+                ahead = x if rx and (not ry or rx < ry) else y if ry and (not rx or ry < rx) else None
+                pairs.append({"a": x["driver"], "b": y["driver"], "ahead": ahead["driver"] if ahead else None,
+                              "a_points": x["points"], "b_points": y["points"],
+                              "gap": (after[x["driver"]["id"]]["points"] - after[y["driver"]["id"]]["points"])
+                              if x["driver"]["id"] in after and y["driver"]["id"] in after else None})
+        rivalry = pairs
+    top = sorted(after.values(), key=lambda r: r["position"])[:5]
+    wdc_top = [{"row": r, "change": (before[r["driver_id"]]["position"] - r["position"]) if r["driver_id"] in before else None}
+               for r in top]
+    wcc_top = [{"row": t, "change": (wcc_before[t["team"]["id"]] - t["position"]) if t["team"]["id"] in wcc_before else None}
+               for t in wcc_after[:5]]
+    headlines = [dict(n) for n in conn.execute("SELECT * FROM news WHERE link = ? ORDER BY id", (f"weekend/{event_id}",))]
+    milestones = [n for n in headlines if n["kind"] in ("player",)]
+    nxt = S.difficulty_recommendation(conn, (season["year"], rn + 1))
+    return {"event": event, "season": season, "podium": podium, "pole": pole, "sprint_winner": sprint_winner,
+            "fastest": fastest, "dotd": dotd, "humans": humans, "rivalry": rivalry, "wdc": wdc_top, "wcc": wcc_top,
+            "milestones": milestones, "headlines": headlines, "rec": nxt, "first_round": prev_rn is None}
