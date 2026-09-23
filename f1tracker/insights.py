@@ -74,25 +74,7 @@ def driver_round_timeline(conn, driver_id):
 
 
 def _accumulate(s, r):
-    s["has_results"] = True
-    gp = S.gp_points(r["race_position"], r["result_status"])
-    sp = S.sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
-    s["points"] += gp + sp
-    s["gp_points"] += gp
-    s["sprint_points"] += sp
-    finished = r["result_status"] == C.STATUS_FINISHED
-    pos = r["race_position"]
-    s["wins"] += int(finished and pos == 1)
-    s["podiums"] += int(bool(finished and pos and pos <= 3))
-    s["poles"] += int(r["qualifying_position"] == 1)
-    s["fastest_laps"] += int(bool(r["fastest_lap"]))
-    s["dotds"] += int(bool(r["driver_of_day"]))
-    s["dnfs"] += int(r["result_status"] == "DNF")
-    s["starts"] += int(r["result_status"] in C.START_STATUSES)
-    if pos:
-        s["finishes"].append(pos)
-    if r["qualifying_position"]:
-        s["qualis"].append(r["qualifying_position"])
+    S.accumulate_result(s, r, r["is_sprint"])
 
 
 # --------------------------------------------------------------------------- rivalry

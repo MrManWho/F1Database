@@ -9,6 +9,7 @@
     After this you can add a login for the other driver so each of you can check your own garage and offers.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if needs_code %}<label>Setup code (from your host's environment settings)<input name="setup_code" required autocomplete="off"></label>{% endif %}
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="david"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="David"></label>
     <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>

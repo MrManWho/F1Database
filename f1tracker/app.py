@@ -215,6 +215,10 @@ def register_routes(app):
                     and app.config.get("CSRF_ENABLED"):
                 flash("Session expired. Please try again.", "error")
                 return redirect(url_for("setup"))
+            code = os.environ.get("F1_TRACKER_SETUP_CODE", "")
+            if code and not hmac.compare_digest(request.form.get("setup_code", "").strip(), code):
+                flash("That setup code is wrong. It's in your host's environment settings (F1_TRACKER_SETUP_CODE).", "error")
+                return redirect(url_for("setup"))
             try:
                 username = auth.create_user(request.form.get("username"), request.form.get("display_name"),
                                             request.form.get("password"), is_master=True)
@@ -225,7 +229,7 @@ def register_routes(app):
             session["user"] = username
             flash("Race Master account created. Add logins for the other player in Accounts.", "success")
             return redirect(url_for("home"))
-        return render_template("login.html", mode="setup")
+        return render_template("login.html", mode="setup", needs_code=bool(os.environ.get("F1_TRACKER_SETUP_CODE")))
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -811,6 +815,17 @@ def register_routes(app):
             if value not in (None, ""):
                 S.set_car_rating(conn, sid, team["id"], value)
         flash("Car ratings saved.", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
+
+    @app.route("/career/<token>/paddock/recalculate", methods=["POST"])
+    @career_page(ops_only=True)
+    def paddock_recalculate(conn, ctx):
+        storage.auto_backup(ctx["token"], "before-recalculate", force=True)
+        changes = S.recalculate_reputation_history(conn)
+        dmap = S.driver_map(conn)
+        moved = [f"{dmap[d]['name']} {b} → {a}" for d, (b, a) in changes.items()
+                 if dmap[d]["is_player"] and b is not None and b != a]
+        flash("Reputation history recalculated." + (" " + "; ".join(moved) if moved else ""), "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/add", methods=["POST"])

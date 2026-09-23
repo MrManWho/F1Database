@@ -164,7 +164,49 @@ def _blank_stats():
         "points": 0, "gp_points": 0, "sprint_points": 0, "wins": 0, "podiums": 0, "poles": 0,
         "fastest_laps": 0, "dotds": 0, "dnfs": 0, "starts": 0, "best_finish": None,
         "finishes": [], "qualis": [], "has_results": False, "last_team_id": None, "last_round": 0,
+        "gained": 0, "racecraft": 0.0, "racecraft_races": 0,
     }
+
+
+def racecraft_score(quali, finish, field=C.MAX_POSITION):
+    """How impressive a finish was compared with the grid slot.
+
+    Places gained count for more the closer to the front they end up: P20 to P1 scores 19.0,
+    P20 to P19 only 0.2. Places lost cost 0.4 each (often it's the car, not the driver).
+    """
+    gained = quali - finish
+    if gained > 0:
+        return gained * (field + 1 - finish) / field
+    return gained * 0.4
+
+
+def accumulate_result(s, r, is_sprint):
+    """Add one weekend's result row to a running stats dict."""
+    s["has_results"] = True
+    gp = gp_points(r["race_position"], r["result_status"])
+    sp = sprint_points(r["sprint_position"], r["sprint_status"], bool(is_sprint))
+    s["gp_points"] += gp
+    s["sprint_points"] += sp
+    s["points"] += gp + sp
+    finished = r["result_status"] == C.STATUS_FINISHED
+    pos = r["race_position"]
+    s["wins"] += int(bool(finished and pos == 1))
+    s["podiums"] += int(bool(finished and pos and pos <= 3))
+    s["poles"] += int(r["qualifying_position"] == 1)
+    s["fastest_laps"] += int(bool(r["fastest_lap"]))
+    s["dotds"] += int(bool(r["driver_of_day"]))
+    s["dnfs"] += int(r["result_status"] == "DNF")
+    s["starts"] += int(r["result_status"] in C.START_STATUSES)
+    if finished and pos and (s["best_finish"] is None or pos < s["best_finish"]):
+        s["best_finish"] = pos
+    if pos:
+        s["finishes"].append(pos)
+    if r["qualifying_position"]:
+        s["qualis"].append(r["qualifying_position"])
+    if finished and pos and r["qualifying_position"]:
+        s["gained"] += r["qualifying_position"] - pos
+        s["racecraft"] += racecraft_score(r["qualifying_position"], pos)
+        s["racecraft_races"] += 1
 
 
 def _finalise(stats):
@@ -189,34 +231,9 @@ def season_stats(conn, season_id):
         if not _result_has_data(r):
             continue
         s = out.setdefault(r["driver_id"], _blank_stats())
-        s["has_results"] = True
         s["last_team_id"] = r["team_id"]
         s["last_round"] = r["round_number"]
-        gp = gp_points(r["race_position"], r["result_status"])
-        sp = sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
-        s["gp_points"] += gp
-        s["sprint_points"] += sp
-        s["points"] += gp + sp
-        finished = r["result_status"] == C.STATUS_FINISHED
-        pos = r["race_position"]
-        if finished and pos == 1:
-            s["wins"] += 1
-        if finished and pos and pos <= 3:
-            s["podiums"] += 1
-        if r["qualifying_position"] == 1:
-            s["poles"] += 1
-        s["fastest_laps"] += int(bool(r["fastest_lap"]))
-        s["dotds"] += int(bool(r["driver_of_day"]))
-        if r["result_status"] == "DNF":
-            s["dnfs"] += 1
-        if r["result_status"] in C.START_STATUSES:
-            s["starts"] += 1
-        if finished and pos and (s["best_finish"] is None or pos < s["best_finish"]):
-            s["best_finish"] = pos
-        if pos:
-            s["finishes"].append(pos)
-        if r["qualifying_position"]:
-            s["qualis"].append(r["qualifying_position"])
+        accumulate_result(s, r, r["is_sprint"])
     return {k: _finalise(v) for k, v in out.items()}
 
 
@@ -225,9 +242,12 @@ def compute_form(stats):
         return 50.0
     avg_finish = stats.get("avg_finish") or 12
     avg_quali = stats.get("avg_quali") or 12
+    races = stats.get("racecraft_races") or 0
+    racecraft = clamp(stats.get("racecraft", 0) / races * 0.6, -6, 12) if races else 0
     value = (50 + (12 - avg_finish) * 2.4 + (12 - avg_quali) * 1.2
              + stats["wins"] * 1.5 + stats["podiums"] * 0.5 + stats["poles"] * 0.6
-             + stats["fastest_laps"] * 0.4 + stats["dotds"] * 0.3 - stats["dnfs"] * 1.2)
+             + stats["fastest_laps"] * 0.4 + stats["dotds"] * 0.3 - stats["dnfs"] * 1.2
+             + racecraft)
     return round(clamp(value, 1, 100), 1)
 
 
@@ -236,7 +256,7 @@ def compute_reputation(starting, stats, form):
         return round(clamp(starting, 1, 100), 1)
     value = (starting + stats["points"] / 80 + stats["wins"] * 1.3 + stats["podiums"] * 0.45
              + stats["poles"] * 0.25 + stats["fastest_laps"] * 0.15 + stats["dotds"] * 0.10
-             + (form - 50) / 20 - stats["dnfs"] * 0.15)
+             + (form - 50) / 20 - stats["dnfs"] * 0.15 + stats.get("racecraft", 0) * 0.08)
     return round(clamp(value, 1, 100), 1)
 
 
@@ -1129,3 +1149,44 @@ def delete_event(conn, event_id):
         conn.execute("UPDATE events SET round_number = -id WHERE id = ?", (e["id"],))
     for e in later:
         conn.execute("UPDATE events SET round_number = ? WHERE id = ?", (e["round_number"] - 1, e["id"]))
+
+
+
+# --------------------------------------------------------------------------- formula changes
+
+def recalculate_reputation_history(conn):
+    """Replay every season with the current Form/Reputation formula.
+
+    Completed seasons normally keep the Reputation they were locked with. After a formula change
+    this rebuilds the chain: season 1 starts from baseline, each later season starts from the
+    previous one's recalculated final value, and every finished season is locked again.
+    Returns {driver_id: (before, after)} for the current season.
+    """
+    seasons = list_seasons(conn)
+    if not seasons:
+        return {}
+    current = seasons[-1]["id"]
+    before = {r["driver_id"]: r["reputation"] for r in driver_standings(conn, current)}
+    prev_final = None
+    for idx, season in enumerate(seasons):
+        sid = season["id"]
+        if prev_final is not None:
+            for did, rep in prev_final.items():
+                conn.execute("""INSERT INTO season_driver_state(season_id, driver_id, starting_reputation)
+                                VALUES(?,?,?) ON CONFLICT(season_id, driver_id)
+                                DO UPDATE SET starting_reputation = excluded.starting_reputation""", (sid, did, rep))
+        else:
+            for d in drivers(conn):
+                conn.execute("""INSERT INTO season_driver_state(season_id, driver_id, starting_reputation)
+                                VALUES(?,?,?) ON CONFLICT(season_id, driver_id)
+                                DO UPDATE SET starting_reputation = excluded.starting_reputation""",
+                             (sid, d["id"], d["baseline_reputation"]))
+        conn.execute("UPDATE season_driver_state SET locked_reputation = NULL WHERE season_id = ?", (sid,))
+        final = season_final_reputation(conn, sid)
+        if idx < len(seasons) - 1:
+            for did, rep in final.items():
+                conn.execute("UPDATE season_driver_state SET locked_reputation = ? WHERE season_id = ? AND driver_id = ?",
+                             (rep, sid, did))
+        prev_final = final
+    after = {r["driver_id"]: r["reputation"] for r in driver_standings(conn, current)}
+    return {did: (before.get(did), after[did]) for did in after}

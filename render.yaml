@@ -1,0 +1,22 @@
+# Render Blueprint: New > Blueprint > pick this repo. Every push to the branch below redeploys the site.
+services:
+  - type: web
+    name: f1-universe-tracker
+    runtime: python
+    plan: starter            # persistent disks need a paid instance
+    branch: claude/gifted-lovelace-iqzlxy
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /login
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: F1_TRACKER_DATA_DIR
+        value: /data
+      - key: F1_TRACKER_SETUP_CODE   # needed to create the first Race Master; find it under Environment
+        generateValue: true
+    disk:
+      name: f1-data
+      mountPath: /data
+      sizeGB: 1

@@ -774,3 +774,60 @@ def test_roles_can_be_changed_but_one_race_master_remains(app):
     with pytest.raises(auth.AuthError):
         auth.set_role("davidd", "steward")
     assert [u["role"] for u in auth.list_users()] == ["master", "driver"]
+
+
+# --------------------------------------------------------------------------- v1.7: racecraft
+
+def test_places_gained_near_the_front_count_far_more(db):
+    assert S.racecraft_score(20, 1) == pytest.approx(19.0)
+    assert S.racecraft_score(20, 19) < 0.25
+    assert S.racecraft_score(3, 8) == pytest.approx(-2.0)
+    sid, david, carson, _ = seat_players_at_cadillac(db)
+    event = S.events(db, sid)[0]
+    ids = [r["driver_id"] for r in S.weekend_rows(db, event["id"])]
+    others = [d for d in ids if d not in (david, carson)]
+    quali = others[:18] + [carson, david] + others[18:]          # both start at the back (P19, P20)
+    order = [david] + others[:17] + [carson] + others[17:]        # David P1, Carson P19
+    run_event(db, event, order=order, quali=quali)
+    table = {r["driver_id"]: r for r in S.driver_standings(db, sid)}
+    comeback = dict(table[david])
+    assert comeback["gained"] == 19 and table[carson]["gained"] == 0
+    plain = dict(comeback, racecraft=0, racecraft_races=0)
+    assert S.compute_form(comeback) - S.compute_form(plain) > 10
+    assert S.compute_reputation(42, comeback, comeback["form"]) - S.compute_reputation(42, plain, comeback["form"]) > 1.4
+
+
+def test_reputation_history_can_be_recalculated(db):
+    sid = S.current_season_id(db)
+    run_event(db, S.events(db, sid)[0])
+    s2 = S.create_next_season(db, sid, 2027)
+    winner = S.driver_standings(db, sid)[0]["driver_id"]
+    locked = S.starting_reputation(db, s2, winner)
+    db.execute("UPDATE season_driver_state SET locked_reputation = 1 WHERE season_id = ?", (sid,))  # e.g. an old formula
+    db.execute("UPDATE season_driver_state SET starting_reputation = 1 WHERE season_id = ?", (s2,))
+    changes = S.recalculate_reputation_history(db)
+    assert S.starting_reputation(db, s2, winner) == locked
+    assert changes[winner][1] == locked
+    state = db.execute("SELECT locked_reputation FROM season_driver_state WHERE season_id = ? AND driver_id = ?",
+                       (s2, winner)).fetchone()
+    assert state["locked_reputation"] is None  # the current season stays live
+
+
+def test_hosted_setup_needs_the_setup_code(app, monkeypatch):
+    monkeypatch.setenv("F1_TRACKER_SETUP_CODE", "s3cret")
+    client = app.test_client()
+    assert "Setup code" in client.get("/setup").get_data(as_text=True)
+    with client.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    client.post("/setup", data={"username": "intruder", "password": "password1", "csrf_token": "tok", "setup_code": "nope"})
+    assert auth.user_count() == 0
+    client.post("/setup", data={"username": "admin", "password": "password1", "csrf_token": "tok", "setup_code": "s3cret"})
+    assert auth.get_user("admin")["is_master"] == 1
+
+
+def test_production_server_module_builds_the_app():
+    import importlib
+    server = importlib.import_module("server")
+    assert server.app.config["SESSION_COOKIE_SECURE"] is True
+    client = server.app.test_client()
+    assert client.get("/login", headers={"X-Forwarded-Proto": "https"}).status_code in (200, 302)

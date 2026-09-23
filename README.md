@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.6
+# F1 Universe Tracker v1.7
 
 A companion database and "career control room" for a two-player F1 26 career (David Conley and
 Carson Hayes). The game handles the racing. This app remembers everything else: every result,
@@ -23,6 +23,48 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## Hosting it as a website (Render)
+
+The tracker can live on a website, so your PC doesn't need to stay on. Every time new code is pushed
+to GitHub, the site updates itself in a couple of minutes.
+
+1. Create an account at render.com and connect your GitHub.
+2. Choose **New → Blueprint** and pick the `F1Database` repo. Render reads `render.yaml` and sets up:
+   a web service, a 1 GB persistent disk at `/data` for the careers, and auto-deploy from the branch.
+   Persistent disks need a paid instance (the Starter plan).
+3. When it's live, open **Environment** on the service and copy **F1_TRACKER_SETUP_CODE**.
+4. Visit your site (e.g. `https://f1-universe-tracker.onrender.com`). Create your Race Master with that
+   code. Without the code, nobody else can grab the admin account.
+5. Move your career: on your PC, **Career & Saves → Download backup**; on the website, **Import .f1career**.
+   Re-create the same usernames in **Accounts**. Player links are stored inside the career, so they
+   reconnect automatically.
+6. Optional: add `ANTHROPIC_API_KEY` under **Environment** for screenshot import (or paste it in Settings).
+
+Notes:
+* Updates restart the site for a few seconds; saves on the disk are untouched.
+* Automatic backups are kept on the same disk. Now and then, download one to your PC as well.
+* Other hosts work too: `Dockerfile` (Railway, Fly.io, any VPS) or `Procfile`. Set `F1_TRACKER_DATA_DIR`
+  to a persistent volume and optionally `F1_TRACKER_SETUP_CODE`. `server.py` is the production entry
+  point; `run.bat` / `launcher.py` stay the way to run it at home.
+
+## v1.7: racecraft (qualifying vs finish)
+
+Form and Reputation now reward places gained from the grid, weighted by where you end up:
+
+```
+racecraft per finished race = places gained × (23 − finish) / 22      (places lost: −0.4 each)
+Form       += average racecraft × 0.6   (capped between −6 and +12)
+Reputation += total racecraft × 0.08
+```
+
+P20 → P1 is worth 19.0 racecraft (about +11 Form for that weekend and +1.5 Reputation on top of the
+win), while P20 → P19 is worth 0.2. The Drivers table has a **Gained** column.
+
+**Do formula changes apply to the past?** Form is always recalculated from results, so yes, straight
+away, for every season. Reputation from finished seasons is locked when the next season starts, so
+it only changes when a Race Master or Steward presses **Paddock Admin → Recalculate Reputation
+history**. That replays every season with the current formula and makes a backup first.
 
 ## v1.6: the Race Steward role
 

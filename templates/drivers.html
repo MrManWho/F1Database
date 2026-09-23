@@ -19,7 +19,7 @@
     <thead><tr>
       <th data-sort>Pos</th><th data-sort>Driver</th><th data-sort>Team</th><th data-sort>Pts</th><th data-sort>Wins</th>
       <th data-sort>Pod</th><th data-sort>Poles</th><th data-sort title="Fastest Laps">FL</th><th data-sort title="Driver of the Day">DOTD</th>
-      <th data-sort>DNF</th><th data-sort>Starts</th><th data-sort>Best</th><th data-sort>Avg fin</th><th data-sort>Avg quali</th>
+      <th data-sort>DNF</th><th data-sort>Starts</th><th data-sort>Best</th><th data-sort>Avg fin</th><th data-sort>Avg quali</th><th data-sort title="Places gained from grid to flag in finished races">Gained</th>
       <th data-sort>Form</th><th data-sort>Rep</th><th data-sort>Market</th>
     </tr></thead>
     <tbody>
@@ -35,6 +35,7 @@
         <td class="num">{{ 'P' ~ d.best_finish if d.best_finish else '—' }}</td>
         <td class="num">{{ d.avg_finish if d.avg_finish is not none else '—' }}</td>
         <td class="num">{{ d.avg_quali if d.avg_quali is not none else '—' }}</td>
+        <td class="num">{{ '%+d'|format(d.gained) if d.racecraft_races else '—' }}</td>
         <td class="num">{{ d.form }}</td><td class="num">{{ d.reputation }}</td>
         <td data-value="{{ d.market.score }}">{{ tier(d.market) }}</td>
       </tr>
