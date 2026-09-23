@@ -50,4 +50,32 @@
   </table>
   </div>
 </section>
+<section class="card table-card" id="other-drivers">
+  <div class="card-head"><h2>Everyone else</h2><span class="muted small">Not in the {{ ctx.season.year }} standings: retired drivers, free agents and reserves</span></div>
+  {% if others %}
+  <div class="table-wrap">
+  <table class="data-table sortable">
+    <thead><tr>
+      <th data-sort class="sticky-col">Driver</th><th data-sort>Status</th><th data-sort>Last raced</th>
+      <th data-sort class="num"><abbr title="Seasons with results">Seasons</abbr></th><th data-sort class="num">Pts</th><th data-sort class="num">Wins</th>
+      <th data-sort class="num"><abbr title="Podiums">Pod</abbr></th><th data-sort class="num">Poles</th><th data-sort class="num">Starts</th>
+      <th data-sort class="num"><abbr title="Championships">Titles</abbr></th><th data-sort class="num"><abbr title="Reputation now">Rep</abbr></th>
+    </tr></thead>
+    <tbody>
+    {% for o in others %}
+      <tr {{ pattrs(o.driver, '', '', url_for('driver_profile', token=ctx.token, driver_id=o.driver.id)) }}>
+        <td class="sticky-col">{{ driver_link(ctx, o.driver, badge=True) }}</td>
+        <td><span class="pill {{ 'pill-muted' if o.status == 'Retired' }}">{{ o.status }}</span></td>
+        <td>{% if o.last_year %}{{ o.last_year }}{% if o.last_team %} · {{ team_dot(o.last_team) }}{{ o.last_team.abbreviation }}{% endif %}{% else %}<span class="muted">Never raced</span>{% endif %}</td>
+        <td class="num">{{ o.seasons }}</td><td class="num"><strong>{{ o.totals.points }}</strong></td>
+        <td class="num">{{ o.totals.wins }}</td><td class="num">{{ o.totals.podiums }}</td><td class="num">{{ o.totals.poles }}</td>
+        <td class="num">{{ o.totals.starts }}</td><td class="num">{{ o.totals.titles }}</td><td class="num">{{ o.reputation }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Click a driver for their full career profile. The Race Master can bring a driver back by ticking Active in Paddock Admin and giving them a seat.</p>
+  {% else %}<p class="muted small">Every driver in the league is in this season's standings.</p>{% endif %}
+</section>
 {% endblock %}

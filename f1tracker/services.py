@@ -1121,6 +1121,27 @@ def driver_timeline(conn, driver_id, cache=None):
     return timeline
 
 
+def drivers_off_grid(conn, season_id, standings=None):
+    """Everyone not in this season's table (retired, released, reserves), with their career numbers."""
+    standings = standings if standings is not None else driver_standings(conn, season_id)
+    shown = {r["driver_id"] for r in standings}
+    cache = all_season_standings(conn)
+    tmap = team_map(conn)
+    out = []
+    for d in drivers(conn):
+        if d["id"] in shown:
+            continue
+        timeline = driver_timeline(conn, d["id"], cache)
+        last = timeline[-1] if timeline else None
+        out.append({"driver": d, "totals": career_totals(timeline), "seasons": len(timeline),
+                    "last_year": last["season"]["year"] if last else None,
+                    "last_team": last["team"] if last else None,
+                    "reputation": starting_reputation(conn, season_id, d["id"]),
+                    "status": "Retired" if not d["active"] else ("Player, no seat" if d["is_player"] else "Free agent")})
+    out.sort(key=lambda r: (-r["totals"]["points"], r["driver"]["name"]))
+    return out
+
+
 def career_totals(timeline):
     keys = ["points", "wins", "podiums", "poles", "fastest_laps", "dotds", "starts", "dnfs"]
     totals = {k: sum(t[k] for t in timeline) for k in keys}

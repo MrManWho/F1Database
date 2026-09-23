@@ -8,7 +8,8 @@
   <div class="grow">
     <div class="kicker">Driver career profile{% if owner %} · {{ owner.display_name }}{% endif %}</div>
     <h1>{% if profile.number is not none %}<span class="car-num">#{{ profile.number }}</span> {% endif %}{{ driver.name }} {% if profile.flag %}<span title="{{ profile.country }}">{{ profile.flag }}</span>{% endif %}
-      {% if driver.is_player %}<span class="pill pill-player">Player driver</span>{% endif %}</h1>
+      {% if driver.is_player %}<span class="pill pill-player">Player driver</span>{% endif %}
+      {% if not driver.active %}<span class="pill pill-muted" title="Not available to teams; kept for the record books">Retired</span>{% endif %}</h1>
     <div class="hero-meta">
       <span>{{ latest.team.name if latest and latest.team else 'No team yet' }}</span>
       <span>{{ totals.seasons }} active season{{ 's' if totals.seasons != 1 }}</span>

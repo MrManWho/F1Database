@@ -963,7 +963,8 @@ def register_routes(app):
     @app.route("/career/<token>/drivers")
     @career_page()
     def drivers_page(conn, ctx):
-        return page("drivers.html", ctx, standings=S.driver_standings(conn, ctx["season"]["id"]),
+        standings = S.driver_standings(conn, ctx["season"]["id"])
+        return page("drivers.html", ctx, standings=standings, others=S.drivers_off_grid(conn, ctx["season"]["id"], standings),
                     teams=S.teams(conn), chart=insights.progression_chart(conn, ctx["season"]["id"], top=6))
 
     @app.route("/career/<token>/driver/<int:driver_id>")

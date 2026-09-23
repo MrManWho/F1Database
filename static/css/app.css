@@ -1146,3 +1146,4 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
 .season-info { flex: 1 1 240px; min-width: 0; }
 .season-info .season-facts { flex: none; }
 .move-preview { margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+.pill-muted { opacity: .75; }

@@ -63,3 +63,18 @@ def test_moves_are_refused_when_the_target_already_raced(master_client):
                        data={"from_id": wrong, "to_id": other, "event_id": evs, "confirm_name": name, "csrf_token": "tok"})
     with storage.session(token) as conn:
         assert {r["driver_id"]: r["points"] for r in S.driver_standings(conn, sid)}[wrong] == before[wrong]
+
+
+def test_inactive_and_unseated_drivers_are_listed_with_stats(master_client):
+    token, sid, amr, wrong, right, before, _ = _setup(master_client)
+    with storage.session(token) as conn:
+        new_sid = S.create_next_season(conn, sid, 2027)           # the old season's stats stay in the books
+        S._unseat(conn, new_sid, wrong)                            # dropped for 2027
+        conn.execute("UPDATE drivers SET active = 0 WHERE id = ?", (wrong,))
+        name = S.driver_map(conn)[wrong]["name"]
+    page = master_client.get(f"/career/{token}/drivers").get_data(as_text=True)
+    other = page.split('id="other-drivers"')[1]
+    assert name in other and "Retired" in other and str(before[wrong]) in other
+    assert f"/career/{token}/driver/{wrong}" in other
+    profile = master_client.get(f"/career/{token}/driver/{wrong}").get_data(as_text=True)
+    assert "Retired" in profile and "2026" in profile
