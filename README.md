@@ -125,6 +125,19 @@ that round. The recommender is built to move slowly:
   storylines, and the seasons and calendar editor. Round swaps are now atomic too.
 * Saves from v1.0–v1.2 upgrade to schema v4 automatically when opened.
 
+## Updating
+
+Your careers, logins and the secret key live in the data folder, not the program folder, so
+updating is a drag-and-drop:
+
+1. Close the tracker window.
+2. Extract the new version and drag its files over the old folder, choosing **Replace**. Keep `.venv`.
+3. Start `run_lan.bat` / `run.bat` again. Logged-in players stay logged in.
+
+`run.bat` reinstalls packages automatically if `requirements.txt` changed. When an update bumps
+the save format, each career is copied to `backups/<id>-before-vN-upgrade-<time>.f1career` before
+its first upgrade. See `UPDATING.txt`.
+
 ## Security
 
 This is meant for a home network. v1.3 adds hashed passwords, per-career access checks, CSRF

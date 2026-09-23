@@ -15,7 +15,14 @@ if not exist ".venv\Scripts\python.exe" (
   echo First launch: creating a private Python environment...
   py -3 -m venv .venv || goto :fail
   ".venv\Scripts\python.exe" -m pip install --upgrade pip || goto :fail
+)
+
+rem Install packages on first launch, and again whenever an update changes requirements.txt.
+fc /b requirements.txt ".venv\requirements.installed" >nul 2>nul
+if errorlevel 1 (
+  echo Installing required packages...
   ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :fail
+  copy /y requirements.txt ".venv\requirements.installed" >nul
 )
 
 ".venv\Scripts\python.exe" launcher.py %*

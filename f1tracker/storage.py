@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from .constants import SCHEMA_VERSION
 from .schema import REQUIRED_TABLES, migrate
 
 CAREER_EXT = ".f1career"
@@ -79,9 +80,34 @@ def open_db(token, create=False):
         raise CareerNotFound(token)
     conn = _connect(path)
     conn.execute("PRAGMA journal_mode = WAL")
+    if not create:
+        _backup_before_upgrade(conn, token)
     migrate(conn)
     conn.commit()
     return conn
+
+
+def _schema_version(conn):
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        return int(row[0]) if row else 1
+    except (sqlite3.Error, ValueError, TypeError):
+        return 1
+
+
+def _backup_before_upgrade(conn, token):
+    """Copy a save to the backups folder before a newer version changes its format."""
+    version = _schema_version(conn)
+    if version >= SCHEMA_VERSION:
+        return None
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = backups_dir() / f"{sanitize_token(token)}-before-v{SCHEMA_VERSION}-upgrade-{stamp}{CAREER_EXT}"
+    dst = sqlite3.connect(str(target))
+    try:
+        conn.backup(dst)
+    finally:
+        dst.close()
+    return target
 
 
 @contextmanager

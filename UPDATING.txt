@@ -1,0 +1,19 @@
+HOW TO UPDATE F1 UNIVERSE TRACKER
+=================================
+
+Your careers, logins and passwords are NOT stored in this folder. They live in
+%LOCALAPPDATA%\F1UniverseTracker, so replacing the program files never touches them.
+
+1. Close the black tracker window (this stops the website for a few seconds).
+2. Download the new version ZIP and extract it.
+3. Drag everything from the new folder into this folder and choose
+   "Replace the files in the destination".
+   (Keep the .venv folder that's already here - the ZIP doesn't include one.)
+4. Double-click run_lan.bat (or run.bat) again.
+
+That's it. Anyone who was logged in stays logged in - they may just need to
+refresh the page. If an update changes the save format, a backup of each
+career is made automatically in %LOCALAPPDATA%\F1UniverseTracker\backups
+the first time it's opened, before anything is changed.
+
+Extra safety: before big updates, use Career & Saves > Download backup.

@@ -138,6 +138,14 @@ def test_old_v1_save_migrates_without_losing_sprint_points(career):
         after = next(r for r in S.driver_standings(conn, sid) if r["driver_id"] == winner["driver_id"])
         assert after["points"] == before and after["sprint_points"] == 8
         assert conn.execute("SELECT ai_difficulty FROM events LIMIT 1").fetchone()[0] is None
+    backups = list(storage.backups_dir().glob(f"{career}-before-v{C.SCHEMA_VERSION}-upgrade-*"))
+    assert len(backups) == 1
+    old = sqlite3.connect(str(backups[0]))
+    assert old.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()[0] == "1"
+    old.close()
+    with storage.session(career):
+        pass
+    assert len(list(storage.backups_dir().glob(f"{career}-before-*"))) == 1  # only once
 
 
 # --------------------------------------------------------------------------- AI difficulty
