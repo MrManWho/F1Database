@@ -1,11 +1,11 @@
-/* F1 Universe Tracker service worker: makes the site installable and shows phone/desktop alerts. */
+/* Paddock Legacy service worker: makes the site installable and shows phone/desktop alerts. */
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (event) { event.waitUntil(self.clients.claim()); });
 
 self.addEventListener("push", function (event) {
   var data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
-  event.waitUntil(self.registration.showNotification(data.title || "F1 Universe Tracker", {
+  event.waitUntil(self.registration.showNotification(data.title || "Paddock Legacy", {
     body: data.body || "",
     icon: "/static/icons/icon-192.png",
     badge: "/static/icons/icon-192.png",

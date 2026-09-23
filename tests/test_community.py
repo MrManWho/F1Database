@@ -293,7 +293,7 @@ def test_records_and_awards(master_client):
 
 def test_install_files_and_push_subscriptions(app, master_client):
     anon = app.test_client()
-    assert anon.get("/manifest.webmanifest").get_json()["short_name"] == "F1 Tracker"
+    assert anon.get("/manifest.webmanifest").get_json()["short_name"] == "Paddock Legacy"
     sw = anon.get("/sw.js")
     assert sw.status_code == 200 and sw.headers["Service-Worker-Allowed"] == "/"
     home = master_client.get("/").get_data(as_text=True)

@@ -6,8 +6,8 @@ if not exist ".venv\Scripts\python.exe" (
   ".venv\Scripts\python.exe" -m pip install -r requirements.txt || exit /b 1
 )
 ".venv\Scripts\python.exe" -m pip install pyinstaller || exit /b 1
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --onefile --name "F1 Universe Tracker" ^
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --onefile --name "Paddock Legacy" ^
   --add-data "templates;templates" --add-data "static;static" --add-data "CHANGELOG.md;." launcher.py || exit /b 1
 echo.
-echo Built dist\F1 Universe Tracker.exe - career saves stay in %%LOCALAPPDATA%%\F1UniverseTracker
+echo Built dist\Paddock Legacy.exe - career saves stay in %%LOCALAPPDATA%%\F1UniverseTracker
 pause

@@ -483,7 +483,7 @@ def register_routes(app):
         return render_template("login.html", mode="login", signups=auth.signups_allowed())
 
     def _send_signup_code(email, code, display_name):
-        mailer.send([email], f"Your F1 Universe Tracker code: {code}",
+        mailer.send([email], f"Your Paddock Legacy code: {code}",
                     f"Hi {display_name},\n\nYour sign-up code is: {code}\n\nEnter it on the sign-up page within "
                     f"{auth.SIGNUP_CODE_MINUTES} minutes to finish creating your account. If you didn't sign up, "
                     "ignore this email and nothing happens.")
@@ -559,9 +559,9 @@ def register_routes(app):
                 token = auth.create_reset_token(user["username"])
                 link = url_for("reset_password", token=token, _external=True)
                 text = (f"Hi {user['display_name']},\n\nSomeone asked to reset the password for '{user['username']}' on "
-                        f"F1 Universe Tracker. Open this link within {auth.RESET_MINUTES} minutes to choose a new one:\n\n"
+                        f"Paddock Legacy. Open this link within {auth.RESET_MINUTES} minutes to choose a new one:\n\n"
                         f"{link}\n\nIf that wasn't you, ignore this email and nothing changes.")
-                sent = mailer.send_later([user["email"]], "Reset your F1 Universe Tracker password", text) or sent
+                sent = mailer.send_later([user["email"]], "Reset your Paddock Legacy password", text) or sent
             flash("If that account has an email address, a reset link is on its way. Check your inbox (and spam)."
                   + ("" if mailer.configured() else " (Email isn't set up on this tracker yet, so ask the Race Master.)"),
                   "success")
@@ -618,7 +618,7 @@ def register_routes(app):
     @master_required
     def settings_test_email():
         try:
-            mailer.send([g.user["email"]], "F1 Universe Tracker test email",
+            mailer.send([g.user["email"]], "Paddock Legacy test email",
                         "Email is working. Password resets and race-result emails will be sent from this address.")
             flash(f"Test email sent to {g.user['email']}.", "success")
         except mailer.MailError as exc:
@@ -2134,7 +2134,7 @@ def register_routes(app):
         if not cfg["url"]:
             raise ValidationError("Save a Discord webhook URL first")
         try:
-            discord.post(cfg["url"], f"👋 F1 Universe Tracker is connected to **{ctx['career_name']}**.")
+            discord.post(cfg["url"], f"👋 Paddock Legacy is connected to **{ctx['career_name']}**.")
         except Exception as exc:
             raise ValidationError(f"Discord didn't accept the message ({exc}). Check the webhook URL.")
         flash("Test message sent to Discord.", "success")
@@ -2406,7 +2406,7 @@ def register_routes(app):
 
     @app.route("/push/test", methods=["POST"])
     def push_test():
-        sent = push.send([g.user["username"]], "F1 Universe Tracker", "Alerts are working 🏁", url_for("home"))
+        sent = push.send([g.user["username"]], "Paddock Legacy", "Alerts are working 🏁", url_for("home"))
         return jsonify(ok=bool(sent), sent=sent,
                        error=None if sent else "Nothing was delivered. Turn alerts on for this device first.")
 

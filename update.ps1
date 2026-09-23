@@ -1,9 +1,9 @@
-# F1 Universe Tracker updater. Run through update.bat.
+# Paddock Legacy updater. Run through update.bat.
 $ErrorActionPreference = "Stop"
 $repoZip = "https://github.com/MrManWho/F1Database/archive/HEAD.zip"
 $here = $PSScriptRoot
 
-Write-Host "F1 Universe Tracker updater" -ForegroundColor Red
+Write-Host "Paddock Legacy updater" -ForegroundColor Red
 Write-Host ""
 
 # Refuse to update while the tracker is running.

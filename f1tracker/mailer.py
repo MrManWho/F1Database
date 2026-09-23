@@ -57,7 +57,7 @@ def send(recipients, subject, text, html=None):
             for to in recipients:
                 msg = EmailMessage()
                 msg["Subject"] = subject
-                msg["From"] = formataddr(("F1 Universe Tracker", cfg["smtp_from"]))
+                msg["From"] = formataddr(("Paddock Legacy", cfg["smtp_from"]))
                 msg["To"] = to
                 msg.set_content(text)
                 if html:

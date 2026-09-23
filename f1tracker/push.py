@@ -141,7 +141,7 @@ def dispatch(items, base_url="", exclude=None):
             try:
                 names = recipients(token, driver_id) - {exclude}
                 url = f"{base_url}/career/{token}/{link}" if link else f"{base_url}/career/{token}/dashboard"
-                send(names, "F1 Universe Tracker", text, url)
+                send(names, "Paddock Legacy", text, url)
             except Exception:
                 log.exception("push dispatch failed")
 

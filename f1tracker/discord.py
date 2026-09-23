@@ -37,7 +37,7 @@ def save_settings(conn, url, results, news):
 def post(url, content):
     body = json.dumps({"content": content[:1990], "allowed_mentions": {"parse": []}}).encode()
     req = urllib.request.Request(url, data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "User-Agent": "F1UniverseTracker"})
+                                 headers={"Content-Type": "application/json", "User-Agent": "PaddockLegacy"})
     with urllib.request.urlopen(req, timeout=10) as res:  # noqa: S310 - URL validated against Discord's host
         return 200 <= res.status < 300
 

@@ -1,6 +1,6 @@
 # Changelog
 
-Every version of F1 Universe Tracker, newest first. The same list is in the app under
+Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
 ## 1.19 · Fixes, safer admin and free screenshot import
@@ -10,6 +10,7 @@ Every version of F1 Universe Tracker, newest first. The same list is in the app 
 - **Players & Logins** no longer has its own join switch; it shows the current setting and links to League Settings, the one place to change it.
 
 ### Improved
+- **New name: Paddock Legacy.** The app, installed-app name, emails, push and Discord notifications and share cards now say Paddock Legacy, with a new logo and app icons. Data folders, backup files (.f1career) and existing installs are unchanged, so nothing needs moving.
 - **Drivers page: Everyone else.** Retired drivers, free agents and reserves who aren't in this season's standings are listed with their career stats (seasons, points, wins, podiums, poles, starts, titles, Reputation) and a link to their full profile. Retired drivers get a Retired badge on their profile.
 - **Move results to another driver** (Paddock Admin). If the wrong driver was in a seat, move their results for chosen rounds of the current season onto the right driver, and optionally swap their seats. Shows a preview first, needs the right driver's name typed, makes a backup, and keeps constructors' points unchanged.
 - **Screenshot import is free and private.** It now runs in your browser with a self-hosted OCR engine (Tesseract.js): no API key, no account, no per-screenshot cost, and the image is never uploaded. Crop, straighten, contrast and brightness tools, several screenshots per session (overlaps merged, disagreements flagged), fuzzy name matching against this round's drivers only (ambiguous names are never guessed), DNF/DNS/DSQ detection, session detection that won't put Sprint results into the Race columns, an editable preview with confidence levels, a comparison before replacing anything, and an explicit "Apply imported results" that only fills the table. The paid Anthropic importer and its API key setting are removed (a saved key is deleted).

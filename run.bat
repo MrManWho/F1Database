@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title F1 Universe Tracker
+title Paddock Legacy
 
 where py >nul 2>nul
 if errorlevel 1 (

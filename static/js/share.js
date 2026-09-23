@@ -72,7 +72,7 @@
       if (m.gained !== null && m.gained !== undefined && m.gained !== 0) line += " · " + (m.gained > 0 ? "▲" + m.gained : "▼" + (-m.gained));
       text(line, W - 110, 955, 28, "#c5ccd8", "600", "right");
     }
-    text("F1 UNIVERSE TRACKER", W - 70, H - 30, 22, "rgba(255,255,255,0.35)", "800", "right");
+    text("PADDOCK LEGACY", W - 70, H - 30, 22, "rgba(255,255,255,0.35)", "800", "right");
   }
 
   function blob() {

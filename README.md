@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.19
+# Paddock Legacy v1.19
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a

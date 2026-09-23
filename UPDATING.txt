@@ -1,4 +1,4 @@
-HOW TO UPDATE F1 UNIVERSE TRACKER
+HOW TO UPDATE PADDOCK LEGACY
 =================================
 
 Your leagues, logins and passwords are NOT stored in this folder. They live in

@@ -48,5 +48,5 @@
       <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}{{ e.race_at|race_time }}{% else %}<span class="muted">{{ e.status }}</span>{% endif %}</td></tr>
   {% endfor %}</tbody></table>
 </section>
-<p class="muted small">Powered by F1 Universe Tracker v{{ APP_VERSION }}.</p>
+<p class="muted small">Powered by Paddock Legacy v{{ APP_VERSION }}.</p>
 {% endblock %}

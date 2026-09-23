@@ -1,6 +1,6 @@
-"""Static universe data and rule tables for F1 Universe Tracker."""
+"""Static universe data and rule tables for Paddock Legacy."""
 
-APP_NAME = "F1 Universe Tracker"
+APP_NAME = "Paddock Legacy"
 APP_VERSION = "1.19"
 SCHEMA_VERSION = 16
 

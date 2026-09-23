@@ -1,6 +1,6 @@
 {
-  "name": "F1 Universe Tracker",
-  "short_name": "F1 Tracker",
+  "name": "Paddock Legacy",
+  "short_name": "Paddock Legacy",
   "description": "Your F1 league: results, standings, contracts and rivalries.",
   "start_url": "/",
   "scope": "/",
