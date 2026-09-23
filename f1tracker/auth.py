@@ -107,7 +107,7 @@ def list_users():
 
 ROLES = {
     "master": "Race Master",     # full admin: logins, saves, every garage and negotiation
-    "steward": "Scorekeeper",    # enters race results (until submitted) and nothing else
+    "steward": "Scorekeeper",    # legacy (pre-v1.16): migrated into each league's member role, then cleared
     "driver": "Member",          # league access (driver / Scorekeeper / spectator) is set per league
 }
 
@@ -121,6 +121,8 @@ def role_of(user):
 
 
 def set_role(username, role):
+    if role == "steward":
+        raise AuthError("Scorekeeper access is set per league now: open the league's Players & Logins page")
     if role not in ROLES:
         raise AuthError("Unknown role")
     with accounts() as conn:

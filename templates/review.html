@@ -1,23 +1,28 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot with context %}
-{% block title %}{{ review.season.year }} Review{% endblock %}
+{% from "_macros.html" import team_dot, pattrs, driver_link with context %}
+{% block title %}{{ review.season.year }} {{ 'Season review' if review.season.status == 'Complete' else 'Season overview' }}{% endblock %}
 {% block content %}
 {% set s = review.season %}
 <div class="page-head">
-  <div><div class="kicker">Season in review{{ ' · still running' if s.status != 'Complete' }}</div><h1>The {{ s.year }} season</h1></div>
+  {% set final = s.status == 'Complete' %}
+  <div><div class="kicker">{{ 'Season review' if final else 'Season overview · in progress' }}</div><h1>The {{ s.year }} season</h1></div>
   <div class="button-row">{% for other in ctx.seasons %}<a class="btn btn-sm {{ 'btn-primary' if other.id == s.id else 'btn-ghost' }}" href="{{ url_for('season_review', token=ctx.token, season_id=other.id) }}">{{ other.year }}</a>{% endfor %}</div>
 </div>
 
+{% if not final %}
+<div class="section-head"><h2>Current projections</h2><span class="pill pill-provisional">Provisional</span>
+  <span class="muted small">If the season ended today. Awards are only final once the season is complete.</span></div>
+{% endif %}
 <div class="award-grid">
   {% for a in review.awards %}
-  <article class="award card" style="--team: {{ a.team.color if a.team else 'var(--red)' }}">
-    <small>{{ a.title }}</small>
+  <article class="award card {{ 'provisional' if not final }}" style="--team: {{ a.team.color if a.team else 'var(--red)' }}">
+    <small>{{ a.title }}{% if not final %} <span class="pill pill-provisional">Provisional</span>{% endif %}</small>
     <h3><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=a.driver.id) }}" class="{{ 'is-player' if a.driver.is_player }}">{{ a.driver.name }}</a></h3>
     <div class="award-value">{{ a.value }}</div>
     <div class="muted small">{% if a.team %}{{ team_dot(a.team) }}{{ a.team.name }}{% endif %}{{ ' · ' ~ a.note if a.note }}</div>
   </article>
   {% else %}
-  <p class="muted">No results yet this season.</p>
+  <p class="muted">No completed rounds yet. Projections appear after the first race.</p>
   {% endfor %}
   {% if review.champion_team %}
   <article class="award card" style="--team: {{ review.champion_team.team.color }}">
@@ -47,9 +52,9 @@
 
 <div class="grid-2">
   <section class="card table-card">
-    <h2>Final top 10</h2>
+    <h2>{{ 'Final top 10' if final else 'Current top 10' }}</h2>
     <table class="data-table compact"><tbody>{% for d in review.table %}
-      <tr class="{{ 'player-row' if d.driver.is_player }}"><td class="num">{{ d.position }}</td><td>{{ d.driver.name }}</td><td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% endif %}</td><td class="num"><b>{{ d.points }}</b></td></tr>
+      <tr {{ pattrs(d.driver, '', '', url_for('driver_profile', token=ctx.token, driver_id=d.driver.id)) }}><td class="num">{{ d.position }}</td><td>{{ driver_link(ctx, d.driver, badge=True) }}</td><td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% endif %}</td><td class="num"><b>{{ d.points }}</b></td></tr>
     {% endfor %}</tbody></table>
   </section>
   <section class="card table-card">

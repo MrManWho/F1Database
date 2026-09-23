@@ -244,7 +244,8 @@ def auto_backups_dir(token):
 def list_auto_backups(token):
     files = sorted(auto_backups_dir(token).glob(f"*{CAREER_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True)
     return [{"name": p.name, "size_kb": round(p.stat().st_size / 1024, 1),
-             "when": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")} for p in files]
+             "when": datetime.fromtimestamp(p.stat().st_mtime).replace(microsecond=0).isoformat(sep=" ")}
+            for p in files]
 
 
 def auto_backup_path(token, name):

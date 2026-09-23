@@ -34,9 +34,8 @@
       <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
       <label>Role
         <select name="role">
-          <option value="driver">Driver: own garage and offers only</option>
-          <option value="steward">Scorekeeper: enters race results, nothing else</option>
-          <option value="master">Race Master: full admin, sees everything</option>
+          <option value="driver">Member: access is set in each league</option>
+          <option value="master">Race Master: site admin, runs every league</option>
         </select></label>
       <button class="btn btn-primary">Create login</button>
     </form>
@@ -81,10 +80,8 @@
   <div class="role-help small muted">
     <p><b>Race Master</b>: full admin of every league. Manages logins, saves and backups, and can see every garage, offer and negotiation.
       A Race Master only drives if you link them to a player driver in a league.</p>
-    <p><b>Scorekeeper</b>: enters qualifying, Sprint and race results (and the AI difficulty used) in every league they belong to.
-      Once a weekend is submitted only the Race Master can change it. To make someone Scorekeeper in just one league, use that league's
-      Players &amp; Logins page instead.</p>
-    <p><b>Member</b>: a normal login. What they can do in each league (drive, keep score or just watch) is set in that league's Players &amp; Logins.</p>
+    <p><b>Member</b>: a normal login. What they can do in each league (Race Master, Scorekeeper, Member or Spectator, and which driver they
+      control) is set in one place: that league's <b>Players &amp; Logins</b> page. There's no separate Scorekeeper switch here any more.</p>
   </div>
   <div class="table-wrap">
   <table class="data-table">
@@ -106,7 +103,7 @@
           <form method="post" action="{{ url_for('account_role', username=u.username) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <select name="role" onchange="this.form.submit()">
-              {% for key, label in [('master', 'Race Master'), ('steward', 'Scorekeeper'), ('driver', 'Driver')] %}
+              {% for key, label in [('master', 'Race Master (site admin)'), ('driver', 'Member')] %}
               <option value="{{ key }}" {{ 'selected' if u.role == key }}>{{ label }}</option>
               {% endfor %}
             </select>

@@ -69,9 +69,11 @@ def test_race_night_time_checkins_and_countdown(app, master_client):
     token = _league(master_client, feature_checkin="1")
     ev = _first_event(token)
     ana = _member(app, master_client, token, "ana", "Ana Silva")
-    # 20:00 local in UTC-5 (browser offset +300) is 01:00 UTC the next day.
+    # The league runs on New York time: 20:00 there (UTC-5 in March) is 01:00 UTC the next day.
+    with storage.session(token) as conn:
+        storage.set_meta(conn, "timezone", "America/New_York")
     master_client.post(f"/career/{token}/weekend/{ev['id']}/time",
-                       data={"race_at": "2030-03-01T20:00", "tz": "300", "csrf_token": "tok"})
+                       data={"race_at": "2030-03-01T20:00", "csrf_token": "tok"})
     assert ana.post(f"/career/{token}/weekend/{ev['id']}/time",
                     data={"race_at": "2030-03-01T20:00", "csrf_token": "tok"}).status_code == 403
     with storage.session(token) as conn:
@@ -84,9 +86,9 @@ def test_race_night_time_checkins_and_countdown(app, master_client):
     assert rows[0]["username"] == "ana" and rows[0]["driver"]["name"] == "Ana Silva"
     page = ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert "Who&#39;s racing?" in page or "Who's racing?" in page
-    assert 'data-countdown="2030-03-02T01:00+00:00"' in page
+    assert 'data-countdown="2030-03-02T01:00+00:00"' in page and "Lights out Fri, Mar 1 at 8:00 PM" in page
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Lights out in" in dash and "Who" in dash
+    assert "Lights out Fri, Mar 1 at 8:00 PM" in dash and "Starts in" in dash and "Who" in dash
     # Once the race is done, check-ins close.
     with storage.session(token) as conn:
         run_event(conn, S.get_event(conn, ev["id"]))
@@ -249,7 +251,7 @@ def test_activity_log_records_changes_for_the_race_master_only(app, master_clien
     ev = _first_event(token)
     auth.create_user("kim", "Kim", "password1")
     with storage.session(token) as conn:
-        conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper) VALUES('kim', NULL, 1)")
+        conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper, role) VALUES('kim', NULL, 1, 'scorekeeper')")
         ids = [r["driver_id"] for r in S.weekend_rows(conn, ev["id"])]
     kim = app.test_client()
     login(kim, "kim")

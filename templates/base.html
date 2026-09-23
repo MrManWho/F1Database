@@ -22,7 +22,8 @@
   </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}">
+<body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
+      {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
 <script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
@@ -106,6 +107,7 @@
         </label>
         <span class="status-badge status-{{ ctx.season.status|lower }}">{{ ctx.season.status }}</span>
       </form>
+      {% if ctx.is_spectator %}<span class="view-only-badge" title="You can follow everything in this league but not change it">Spectator · view only</span>{% endif %}
       <div class="topbar-actions">
         {% if ctx.is_master %}
         <form method="post" action="{{ url_for('save_now', token=t) }}">
@@ -127,7 +129,7 @@
     <div class="dialog-head"><h2>Notifications</h2><button class="icon-btn" data-close>✕</button></div>
     <ul class="notif-list" id="notif-list">
       {% for n in ctx.notifications %}
-      <li class="{{ 'unread' if n.unread }}">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}<small>{{ n.created_at }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small>
+      <li class="{{ 'unread' if n.unread }}">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}<small title="{{ n.created_at|stamp }}">{{ n.created_at|ago }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small>
         {% if ctx.is_master %}<form method="post" action="{{ url_for('notification_delete', token=t, notification_id=n.id) }}" class="notif-del">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>{% endif %}</li>
       {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
@@ -158,9 +160,9 @@
       <p class="muted small">Made once a day and after every completed race weekend. The newest {{ C.AUTO_BACKUPS_KEPT }} are kept.
         <b>Restore</b> rolls this league back to that moment (the current state is backed up first, so it can be undone).</p>
       <ul class="plain-list small">
-        {% for b in ctx.auto_backups %}<li class="backup-row"><a href="{{ url_for('auto_backup_download', token=t, name=b.name) }}">{{ b.when }}</a> · {{ b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' }} · {{ b.size_kb }} KB
+        {% for b in ctx.auto_backups %}<li class="backup-row"><a href="{{ url_for('auto_backup_download', token=t, name=b.name) }}">{{ b.when|stamp }}</a> · {{ b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' }} · {{ b.size_kb }} KB
           <form method="post" action="{{ url_for('auto_backup_restore', token=t, name=b.name) }}"
-                onsubmit="return confirm('Roll the whole league back to {{ b.when }}? Everything since then is replaced. The current state is saved as a backup first, so you can undo this.');">
+                onsubmit="return confirm('Roll the whole league back to {{ b.when|stamp }}? Everything since then is replaced. The current state is saved as a backup first, so you can undo this.');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Restore</button></form></li>
         {% else %}<li class="muted">None yet.</li>{% endfor %}
       </ul>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot with context %}
+{% from "_macros.html" import team_dot, pattrs with context %}
 {% block title %}Paddock Admin{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">{{ ctx.role }} · {{ season.year }}</div><h1>Paddock admin</h1></div></div>
@@ -92,7 +92,7 @@
     <thead><tr><th>Name</th><th>Seat</th><th>Baseline Rep</th><th>Rep now</th><th>Active</th><th></th><th></th></tr></thead>
     <tbody>{% for d in all_drivers %}
       {% set f = 'driver-' ~ d.id %}
-      <tr class="{{ 'player-row' if d.is_player }}">
+      <tr {{ pattrs(d) }}>
         <td><input form="{{ f }}" name="name" value="{{ d.name }}" maxlength="60" required></td>
         <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% else %}<span class="muted">—</span>{% endif %}</td>
         <td><input form="{{ f }}" name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="{{ d.baseline_reputation }}" class="narrow"></td>

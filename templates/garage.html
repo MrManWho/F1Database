@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, tier with context %}
+{% from "_macros.html" import team_dot, tier, trend_chart, delta, stat_change with context %}
 {% block title %}{{ driver.name }} · Garage{% endblock %}
 {% block content %}
-<div class="profile-head" style="--team: {{ team.color if team else '#e10600' }}">
+<div class="profile-head player-head" style="--team: {{ team.color if team else '#e10600' }}; --player: {{ driver.player_color or 'var(--blue)' }};">
   <div>
     <div class="kicker">{{ 'My Garage' if own else 'Garage' }} · {{ ctx.season.year }}</div>
     <h1>{{ driver.name }}</h1>
@@ -21,12 +21,15 @@
 </div>
 
 <div class="stat-grid">
-  <div class="stat card feature"><small>Driver value <a class="info-link" href="{{ url_for('help_page') }}#driver-value" title="How Driver Value works">ⓘ</a></small><strong>{{ me.value }}</strong><span class="muted small">What teams judge you on</span></div>
-  <div class="stat card"><small>Reputation <a class="info-link" href="{{ url_for('help_page') }}#reputation" title="Your long-term name">ⓘ</a></small><strong>{{ me.reputation }}</strong></div>
-  <div class="stat card"><small>Form <a class="info-link" href="{{ url_for('help_page') }}#form" title="This season's level">ⓘ</a></small><strong>{{ me.form }}</strong></div>
-  <div class="stat card"><small>Car-adjusted <a class="info-link" href="{{ url_for('help_page') }}#car" title="How much you beat the car">ⓘ</a></small><strong>{{ me.car }}</strong><span class="muted small">50 = matching the car</span></div>
-  <div class="stat card"><small>Market tier</small><strong>{{ tier(row.market) if row else '—' }}</strong></div>
-  <div class="stat card"><small>Points</small><strong>{{ row.points if row else 0 }}</strong><span class="muted small">{{ 'P' ~ row.position ~ ' in WDC' if row else '' }}</span></div>
+  {% set h = url_for('help_page') %}
+  {{ stat_change('Driver value', changes.value, changes.since, feature=True, href=h ~ '#driver-value') }}
+  {{ stat_change('Reputation', changes.reputation, changes.since, href=h ~ '#reputation') }}
+  {{ stat_change('Form', changes.form, changes.since, href=h ~ '#form') }}
+  {{ stat_change('Car-adjusted', changes.car, changes.since, href=h ~ '#car') }}
+  <div class="stat card" title="{{ changes.tier.help }}"><small>Market tier</small><strong>{{ tier(row.market) if row else '—' }}</strong>
+    <span class="stat-change">{% if changes.since and changes.tier.change %}{{ delta(changes.tier.change, 0, suffix=' tier') }}<span class="muted small">was {{ changes.tier.prev }}</span>{% elif changes.since %}<span class="muted small">Unchanged since {{ changes.since }}</span>{% endif %}</span></div>
+  {{ stat_change('Points', changes.points, changes.since) }}
+  {{ stat_change('WDC', changes.position, changes.since, prefix='P') }}
 </div>
 
 <section class="card value-card">
@@ -201,7 +204,7 @@ Form {{ '%.0f'|format(t.form_target) }}+ · Reputation {{ '%.1f'|format(t.rep_ta
 
 <section class="card">
   <div class="card-head"><h2>Your trend</h2><span class="muted small">Reputation is what teams remember; Form is this season</span></div>
-  <div class="chart" data-height="220" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
+  {{ trend_chart(trend) }}
 </section>
 
 {% set past = offers|rejectattr('status', 'equalto', 'Pending')|list %}

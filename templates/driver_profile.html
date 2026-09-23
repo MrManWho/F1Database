@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, avatar with context %}
+{% from "_macros.html" import team_dot, avatar, trend_chart, delta, stat_change with context %}
 {% block title %}{{ driver.name }}{% endblock %}
 {% block content %}
 {% set latest = timeline[-1] if timeline else none %}
-<div class="profile-head" style="--team: {{ latest.team.color if latest and latest.team else '#e10600' }}">
+<div class="profile-head {{ 'player-head' if driver.is_player }}" style="--team: {{ latest.team.color if latest and latest.team else '#e10600' }};{% if driver.is_player %} --player: {{ driver.player_color or 'var(--blue)' }};{% endif %}">
   {{ avatar(ctx.token, driver, profile, 'xl') }}
   <div class="grow">
     <div class="kicker">Driver career profile{% if owner %} · {{ owner.display_name }}{% endif %}</div>
@@ -29,18 +29,47 @@
   <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
   {% endfor %}
 </div>
-{% if trophies %}
+{% if changes %}
 <section class="card">
-  <h2>Trophy cabinet</h2>
-  <div class="trophies">
-    {% for t in trophies %}<div class="trophy {{ 'live' if t.live }}" title="{{ 'Season still running' if t.live }}">
-      <span class="trophy-ico">{{ '👑' if 'Champion' in t.title else '🏆' }}</span><b>{{ t.title }}</b><small>{{ t.year }} · {{ t.value }}{{ ' · so far' if t.live }}</small></div>{% endfor %}
+  <div class="card-head"><h2>{{ ctx.season.year }} so far</h2><span class="muted small">{{ 'Change since ' ~ changes.since if changes.since else 'Changes appear after Round 2' }}</span></div>
+  <div class="stat-grid tight">
+    {{ stat_change('Form', changes.form, changes.since) }}
+    {{ stat_change('Reputation', changes.reputation, changes.since) }}
+    {{ stat_change('Driver value', changes.value, changes.since) }}
+    {{ stat_change('Car-adjusted', changes.car, changes.since) }}
+    {{ stat_change('Points', changes.points, changes.since) }}
+    {{ stat_change('WDC', changes.position, changes.since, prefix='P') }}
   </div>
 </section>
 {% endif %}
+{% set final_trophies = trophies|rejectattr('live')|list %}
+{% set projections = trophies|selectattr('live')|list %}
+{% if final_trophies or projections %}
+<div class="grid-2">
+  <section class="card">
+    <h2>Trophy cabinet</h2>
+    {% if final_trophies %}
+    <div class="trophies">
+      {% for t in final_trophies %}<div class="trophy">
+        <span class="trophy-ico">{{ '👑' if 'Champion' in t.title else '🏆' }}</span><b>{{ t.title }}</b><small>{{ t.year }} · {{ t.value }}</small></div>{% endfor %}
+    </div>
+    {% else %}<p class="muted small">No completed seasons yet. Awards are added here once a season is finished.</p>{% endif %}
+  </section>
+  {% if projections %}
+  <section class="card">
+    <div class="card-head"><h2>Current projections</h2><span class="pill pill-provisional">Provisional</span></div>
+    <p class="muted small">Awards {{ driver.name.split()[0] }} would win if the {{ projections[0].year }} season ended today.</p>
+    <div class="trophies">
+      {% for t in projections %}<div class="trophy live">
+        <span class="trophy-ico">{{ '👑' if 'Champion' in t.title or 'leader' in t.title else '🏆' }}</span><b>{{ t.title }}</b><small>{{ t.year }} · {{ t.value }}</small></div>{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
 <section class="card">
   <div class="card-head"><h2>Form &amp; Reputation</h2><span class="muted small">After every round of the career</span></div>
-  <div class="chart" data-height="240" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
+  {{ trend_chart(trend) }}
 </section>
 <section class="card table-card">
   <h2>Year by year</h2>

@@ -13,7 +13,7 @@
     <thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td class="small"><time data-local="{{ r.created_at }}">{{ r.created_at[:16]|replace('T', ' ') }}</time></td>
+      <tr><td class="small"><span title="{{ r.created_at|stamp }}">{{ r.created_at|stamp }}</span></td>
         <td><strong>{{ names.get(r.username, r.username) }}</strong></td><td>{{ r.action }}</td><td class="small muted">{{ r.detail }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">Nothing logged yet.</td></tr>{% endfor %}
     </tbody>

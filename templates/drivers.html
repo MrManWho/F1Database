@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, driver_link, tier with context %}
+{% from "_macros.html" import team_dot, driver_link, tier, pattrs with context %}
 {% block title %}Drivers{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -17,16 +17,22 @@
   <div class="table-wrap">
   <table class="data-table sortable" id="driver-table">
     <thead><tr>
-      <th data-sort>Pos</th><th data-sort>Driver</th><th data-sort>Team</th><th data-sort>Pts</th><th data-sort>Wins</th>
-      <th data-sort>Pod</th><th data-sort>Poles</th><th data-sort title="Fastest Laps">FL</th><th data-sort title="Driver of the Day">DOTD</th>
-      <th data-sort>DNF</th><th data-sort>Starts</th><th data-sort>Best</th><th data-sort>Avg fin</th><th data-sort>Avg quali</th><th data-sort title="Places gained from grid to flag in finished races">Gained</th>
-      <th data-sort>Form</th><th data-sort>Rep</th><th data-sort>Market</th>
+      <th data-sort class="num"><abbr title="Championship position">Pos</abbr></th><th data-sort class="sticky-col">Driver</th><th data-sort>Team</th>
+      <th data-sort class="num"><abbr title="Championship points">Pts</abbr></th><th data-sort class="num">Wins</th>
+      <th data-sort class="num"><abbr title="Podiums">Pod</abbr></th><th data-sort class="num">Poles</th><th data-sort class="num"><abbr title="Fastest Laps">FL</abbr></th>
+      <th data-sort class="num"><abbr title="Driver of the Day awards">DOTD</abbr></th>
+      <th data-sort class="num"><abbr title="Did not finish (includes DSQ)">DNF</abbr></th><th data-sort class="num">Starts</th><th data-sort class="num"><abbr title="Best finish">Best</abbr></th>
+      <th data-sort class="num"><abbr title="Average finishing position">Avg fin</abbr></th><th data-sort class="num"><abbr title="Average qualifying position">Avg quali</abbr></th>
+      <th data-sort class="num"><abbr title="Places gained from grid to flag in finished races">Gained</abbr></th>
+      <th data-sort class="num"><abbr title="Form: this season's level (50 = average)">Form</abbr></th><th data-sort class="num"><abbr title="Reputation: long-term standing, carried between seasons">Rep</abbr></th>
+      <th data-sort><abbr title="Market tier from Reputation and Form">Market</abbr></th>
     </tr></thead>
     <tbody>
     {% for d in standings %}
-      <tr class="{{ 'player-row' if d.driver.is_player }}" data-name="{{ d.driver.name|lower }}" data-team="{{ d.team.id if d.team }}" style="--team: {{ d.team.color if d.team else '#555' }}">
+      <tr {{ pattrs(d.driver, '', '--team: ' ~ (d.team.color if d.team else '#555') ~ ';', url_for('driver_profile', token=ctx.token, driver_id=d.driver.id)) }}
+          data-name="{{ d.driver.name|lower }}" data-team="{{ d.team.id if d.team }}">
         <td class="num">{{ d.position }}</td>
-        <td>{{ driver_link(ctx, d.driver) }}{% if not d.seated %} <span class="pill">No seat</span>{% endif %}</td>
+        <td class="sticky-col">{{ driver_link(ctx, d.driver, badge=True) }}{% if not d.seated %} <span class="pill">No seat</span>{% endif %}</td>
         <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% endif %}</td>
         <td class="num"><strong>{{ d.points }}</strong></td>
         <td class="num">{{ d.wins }}</td><td class="num">{{ d.podiums }}</td><td class="num">{{ d.poles }}</td>

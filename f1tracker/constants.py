@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.15"
-SCHEMA_VERSION = 12
+APP_VERSION = "1.16"
+SCHEMA_VERSION = 13
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -201,3 +201,25 @@ INCIDENT_RULINGS = {
     "warning": "Warning",
     "penalty": "Penalty (results adjusted)",
 }
+
+# League access roles: ONE per member, stored on career_members.role. The player driver a member controls is
+# stored separately (career_members.driver_id), so any role can be combined with a driver except Spectator.
+ACCESS_ROLES = {
+    "race_master": "Race Master",
+    "scorekeeper": "Scorekeeper",
+    "member": "Member",
+    "spectator": "Spectator",
+}
+ACCESS_HELP = {
+    "race_master": "Runs this league: results, grid, calendar, seasons, market, members and settings.",
+    "scorekeeper": "Enters and edits qualifying, Sprint and race results, statuses, fastest lap, Driver of the Day, "
+                   "notes and AI difficulty. Can't change a race after submitting it, or any league settings.",
+    "member": "Views the whole league. With an assigned driver: their own garage, contracts and team standing.",
+    "spectator": "View only. Can't be assigned a driver.",
+}
+RESULT_ROLES = {"race_master", "scorekeeper"}
+
+# Persistent player accent colours (separate from team colours), assigned in order to human-controlled drivers.
+# Chosen to stay distinguishable from each other on the dark and light themes, not just by red vs green.
+PLAYER_COLORS = ["#4aa3ff", "#ffb020", "#c07cff", "#2ec4b6", "#ff6fae", "#9bd14b", "#ff8a3d", "#6d8bff",
+                 "#e8d44d", "#48d1f0", "#f2789a", "#b8b8ff"]

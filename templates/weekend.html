@@ -22,8 +22,6 @@
 
 {% if locked %}
 <div class="banner">These results have been submitted. Only the Race Master can change them now.</div>
-{% elif ro %}
-<div class="banner">View only. The Race Master or a Scorekeeper enters results for this weekend.</div>
 {% endif %}
 
 {% set full = True %}{% include "_race_night.html" with context %}
@@ -31,11 +29,13 @@
 <section class="card diff-strip">
   {{ difficulty(rec, compact=True) }}
   <div class="diff-input">
+    {% if ro %}
+    <div class="ro-value"><small>AI difficulty used</small><strong>{{ event.ai_difficulty if event.ai_difficulty is not none else 'Not tracked' }}</strong></div>
+    {% else %}
     <label>AI difficulty used
       <input type="number" id="ai-difficulty" min="{{ C.MIN_DIFFICULTY }}" max="{{ C.MAX_DIFFICULTY }}" step="1"
-             value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked" {{ 'disabled' if ro }}>
+             value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked">
     </label>
-    {% if not ro %}
     <div class="button-row tight">
       {% if rec.recommended is not none %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
       <button type="button" class="btn btn-sm btn-ghost" id="no-track">Don't track this round</button>
@@ -44,19 +44,40 @@
   </div>
 </section>
 
+{% macro pos(v) %}{{ 'P' ~ v if v else '—' }}{% endmacro %}
+{% macro status_text(st) %}{% if st in ('DNF', 'DNS', 'DSQ') %}<span class="status-pill st-{{ st|lower }}">{{ st }}</span>{% elif st == 'Finished' %}<span class="muted">Finished</span>{% else %}<span class="muted">—</span>{% endif %}{% endmacro %}
+
 <section class="card table-card">
   <div class="card-head">
     <h2>Results</h2>
-    <div class="save-state" id="save-state" data-state="saved">{{ 'Read only' if ro else 'All changes saved' }}</div>
+    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else 'View only' }}</span>
+    {% else %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>{% endif %}
   </div>
-  {% if not ro %}
   <div class="entry-tools">
+    <div class="filter-chips" role="group" aria-label="Show">
+      <button type="button" class="chip is-on" data-filter="all">All</button>
+      <button type="button" class="chip" data-filter="player">Player drivers</button>
+      {% if not ro %}<button type="button" class="chip" data-filter="incomplete">Incomplete</button>{% endif %}
+      <button type="button" class="chip" data-filter="points">Points scorers</button>
+      <button type="button" class="chip" data-filter="out">DNF / DNS / DSQ</button>
+    </div>
+    {% if not ro %}
+    <span class="tools-sep"></span>
     <span class="muted small">Quick order:</span>
     <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position">Qualifying</button>
     {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position">Sprint</button>{% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position">Race</button>
     <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import from screenshot</button>
+    <select id="clear-session" class="btn-sm" aria-label="Clear a session">
+      <option value="">Clear a session…</option>
+      <option value="qualifying_position">Clear qualifying</option>
+      {% if event.is_sprint %}<option value="sprint_position">Clear Sprint</option>{% endif %}
+      <option value="race_position">Clear Grand Prix</option>
+    </select>
+    <button type="button" class="btn btn-sm btn-ghost" data-dialog="keys-dialog" title="Keyboard shortcuts">⌨ Shortcuts</button>
+    {% endif %}
   </div>
+  {% if not ro %}
   <div class="tap-banner" id="tap-banner" hidden>
     <span>Tap drivers in <b id="tap-field"></b> order. Next: <b id="tap-next">P1</b></span>
     <span class="button-row tight">
@@ -67,51 +88,84 @@
   </div>
   {% endif %}
   <div class="table-wrap">
-  <table class="data-table entry-table" id="entry-table"
+  <table class="data-table entry-table {{ 'is-readonly' if ro }}" id="entry-table"
          data-url="{{ url_for('api_weekend', token=ctx.token, event_id=event.id) }}"
          data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}" data-master="{{ 1 if ctx.is_master else 0 }}"
          data-max="{{ [rows|length, C.MAX_POSITION]|max }}"
          data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'>
     <thead>
+      <tr class="group-row">
+        <th rowspan="2" class="sticky-col">Driver</th>
+        <th class="grp grp-q">Qualifying</th>
+        {% if event.is_sprint %}<th colspan="3" class="grp grp-s">Sprint</th>{% endif %}
+        <th colspan="3" class="grp grp-r">Grand Prix</th>
+        <th colspan="{{ 4 if ro else 5 }}" class="grp grp-b">Bonuses &amp; notes</th>
+      </tr>
       <tr>
-        <th>Driver</th>
-        <th>Quali</th>
-        {% if event.is_sprint %}<th>Sprint</th><th>Sprint status</th><th>Sprint pts</th>{% endif %}
-        <th>Race</th><th>GP status</th><th>Race pts</th><th>Total</th>
-        <th title="Fastest Lap">FL</th><th title="Driver of the Day">DOTD</th><th>Notes</th>
+        <th class="grp-q"><abbr title="Qualifying position">Pos</abbr></th>
+        {% if event.is_sprint %}<th class="grp-s"><abbr title="Sprint finishing position">Pos</abbr></th><th class="grp-s">Status</th><th class="grp-s num"><abbr title="Sprint points">Pts</abbr></th>{% endif %}
+        <th class="grp-r"><abbr title="Grand Prix finishing position">Pos</abbr></th><th class="grp-r">Status</th><th class="grp-r num"><abbr title="Grand Prix points">Pts</abbr></th>
+        <th class="grp-b center"><abbr title="Fastest Lap">FL</abbr></th><th class="grp-b center"><abbr title="Driver of the Day">DOTD</abbr></th>
+        <th class="grp-b num"><abbr title="Weekend points (Sprint + Grand Prix)">Total</abbr></th><th class="grp-b">Notes</th>
+        {% if not ro %}<th class="grp-b"><span class="sr-only">Clear</span></th>{% endif %}
       </tr>
     </thead>
     <tbody>
     {% for r in rows %}
-      <tr data-driver-id="{{ r.driver_id }}" class="{{ 'player-row' if r.driver.is_player }}" style="--team: {{ r.team.color }}">
-        <td class="driver-cell">{{ team_dot(r.team) }}<span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small></span></td>
-        <td data-label="Quali"><input class="pos-input" data-field="qualifying_position" inputmode="numeric" value="{{ r.qualifying_position or '' }}" {{ 'disabled' if ro }}></td>
+      {% set total = r.gp_points + r.sprint_pts %}
+      {% set out = r.result_status in ('DNF', 'DNS', 'DSQ') %}
+      <tr data-driver-id="{{ r.driver_id }}" data-player="{{ 1 if r.driver.is_player else 0 }}" data-points="{{ total }}"
+          data-out="{{ 1 if out else 0 }}" data-complete="{{ 1 if r.result_status != 'Not Run' else 0 }}"
+          class="{{ 'player-row' if r.driver.is_player }} {{ 'row-out' if out }}"
+          style="--team: {{ r.team.color }};{% if r.driver.player_color %} --player: {{ r.driver.player_color }};{% endif %}">
+        <td class="driver-cell sticky-col">{{ team_dot(r.team) }}<span><strong>{{ r.driver.name }}</strong>{% if r.driver.is_player %}<span class="player-badge">Player</span>{% endif %}<small>{{ r.team.name }}</small></span></td>
+        {% if ro %}
+        <td class="grp-q num" data-label="Quali">{{ pos(r.qualifying_position) }}</td>
         {% if event.is_sprint %}
-        <td data-label="Sprint"><input class="pos-input" data-field="sprint_position" inputmode="numeric" value="{{ r.sprint_position or '' }}" {{ 'disabled' if ro }}></td>
-        <td data-label="Sprint status"><select data-field="sprint_status_override" {{ 'disabled' if ro }}>
+        <td class="grp-s num" data-label="Sprint">{{ pos(r.sprint_position) if r.sprint_status == 'Finished' else '—' }}</td>
+        <td class="grp-s" data-label="Sprint status">{{ status_text(r.sprint_status) }}</td>
+        <td class="grp-s num" data-label="Sprint pts">{{ r.sprint_pts }}</td>
+        {% endif %}
+        <td class="grp-r num" data-label="Race">{{ pos(r.race_position) if r.result_status == 'Finished' else '—' }}</td>
+        <td class="grp-r" data-label="GP status">{{ status_text(r.result_status) }}</td>
+        <td class="grp-r num" data-label="Race pts">{{ r.gp_points }}</td>
+        <td class="grp-b center" data-label="Fastest lap">{% if r.fastest_lap %}<span class="award-icon" title="Fastest Lap">⏱<span class="sr-only">Fastest Lap</span></span>{% endif %}</td>
+        <td class="grp-b center" data-label="Driver of the Day">{% if r.driver_of_day %}<span class="award-icon" title="Driver of the Day">★<span class="sr-only">Driver of the Day</span></span>{% endif %}</td>
+        <td class="grp-b num" data-label="Total"><strong>{{ total }}</strong></td>
+        <td class="grp-b note-text" data-label="Notes">{{ r.notes }}</td>
+        {% else %}
+        <td class="grp-q" data-label="Quali"><input class="pos-input" data-field="qualifying_position" inputmode="numeric" value="{{ r.qualifying_position or '' }}" aria-label="{{ r.driver.name }} qualifying"></td>
+        {% if event.is_sprint %}
+        <td class="grp-s" data-label="Sprint"><input class="pos-input" data-field="sprint_position" inputmode="numeric" value="{{ r.sprint_position or '' }}" aria-label="{{ r.driver.name }} Sprint"></td>
+        <td class="grp-s" data-label="Sprint status"><select data-field="sprint_status_override" aria-label="{{ r.driver.name }} Sprint status">
           {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.sprint_status) or (s == 'Auto' and r.sprint_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
         </select></td>
-        <td class="num sp-pts" data-label="Sprint pts">{{ r.sprint_pts }}</td>
+        <td class="grp-s num sp-pts" data-label="Sprint pts">{{ r.sprint_pts }}</td>
         {% endif %}
-        <td data-label="Race"><input class="pos-input" data-field="race_position" inputmode="numeric" value="{{ r.race_position or '' }}" {{ 'disabled' if ro }}></td>
-        <td data-label="GP status"><select data-field="status_override" {{ 'disabled' if ro }}>
+        <td class="grp-r" data-label="Race"><input class="pos-input" data-field="race_position" inputmode="numeric" value="{{ r.race_position or '' }}" aria-label="{{ r.driver.name }} race"></td>
+        <td class="grp-r" data-label="GP status"><select data-field="status_override" aria-label="{{ r.driver.name }} race status">
           {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.result_status) or (s == 'Auto' and r.result_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
         </select></td>
-        <td class="num gp-pts" data-label="Race pts">{{ r.gp_points }}</td>
-        <td class="num tot-pts" data-label="Total"><strong>{{ r.gp_points + r.sprint_pts }}</strong></td>
-        <td class="center" data-label="Fastest lap"><input type="radio" name="fastest_lap" data-field="fastest_lap" {{ 'checked' if r.fastest_lap }} {{ 'disabled' if ro }}></td>
-        <td class="center" data-label="Driver of the Day"><input type="radio" name="driver_of_day" data-field="driver_of_day" {{ 'checked' if r.driver_of_day }} {{ 'disabled' if ro }}></td>
-        <td data-label="Notes"><input class="note-input" data-field="notes" maxlength="1000" value="{{ r.notes }}" {{ 'disabled' if ro }} placeholder="—"></td>
+        <td class="grp-r num gp-pts" data-label="Race pts">{{ r.gp_points }}</td>
+        <td class="grp-b center" data-label="Fastest lap"><input type="radio" name="fastest_lap" data-field="fastest_lap" {{ 'checked' if r.fastest_lap }} aria-label="{{ r.driver.name }} fastest lap"></td>
+        <td class="grp-b center" data-label="Driver of the Day"><input type="radio" name="driver_of_day" data-field="driver_of_day" {{ 'checked' if r.driver_of_day }} aria-label="{{ r.driver.name }} Driver of the Day"></td>
+        <td class="grp-b num tot-pts" data-label="Total"><strong>{{ total }}</strong></td>
+        <td class="grp-b" data-label="Notes"><input class="note-input" data-field="notes" maxlength="1000" value="{{ r.notes }}" placeholder="—" aria-label="{{ r.driver.name }} notes"></td>
+        <td class="grp-b" data-label="Clear"><button type="button" class="icon-btn clear-row" title="Clear {{ r.driver.name }}'s results" aria-label="Clear {{ r.driver.name }}'s results">✕</button></td>
+        {% endif %}
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  <p class="muted small filter-empty" hidden>No drivers match this filter.</p>
   <div class="entry-foot">
+    {% if ro %}
+    <div class="grow"><small class="muted">Weekend notes</small><p class="note-text">{{ event.notes or 'No notes for this weekend.' }}</p></div>
+    {% else %}
     <label class="grow">Weekend notes
-      <textarea id="event-notes" maxlength="4000" rows="3" {{ 'disabled' if ro }}>{{ event.notes }}</textarea>
+      <textarea id="event-notes" maxlength="4000" rows="3">{{ event.notes }}</textarea>
     </label>
-    {% if not ro %}
     <div class="button-row">
       <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
       <button type="button" class="btn btn-primary" id="mark-complete">{{ 'Mark weekend complete' if ctx.is_master else 'Submit results' }}</button>
@@ -163,6 +217,17 @@
 </section>
 {% endif %}
 {% if not ro %}
+<dialog id="keys-dialog" class="dialog">
+  <div class="dialog-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close>✕</button></div>
+  <dl class="keys">
+    <dt><kbd>↓</kbd> / <kbd>Enter</kbd></dt><dd>Next driver, same column</dd>
+    <dt><kbd>↑</kbd></dt><dd>Previous driver, same column</dd>
+    <dt><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></dt><dd>Next / previous box on the same driver</dd>
+    <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt><dd>Save now (changes also save by themselves)</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Leave quick order</dd>
+    <dt><kbd>?</kbd></dt><dd>Show this list</dd>
+  </dl>
+</dialog>
 <dialog id="import-dialog" class="dialog">
   <div class="dialog-head"><h2>Import from screenshot</h2><button class="icon-btn" data-close>✕</button></div>
   {% if importer_ready %}

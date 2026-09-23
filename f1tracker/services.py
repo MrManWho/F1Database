@@ -75,6 +75,7 @@ def seed_career(conn, token, name, year, player_names=None):
         raise ValidationError("Every driver needs a different name (and can't share a name with an F1 driver)")
     for pname, rep in players:
         conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player) VALUES(?,?,1)", (pname, rep))
+    assign_player_colors(conn)
 
     cur = conn.execute("INSERT INTO seasons(year, label, status, created_at) VALUES(?,?,?,?)",
                        (year, f"{year} World Championship", C.SEASON_ACTIVE, stamp))
@@ -222,12 +223,13 @@ def _result_has_data(r):
         r["sprint_status"] != C.STATUS_NOT_RUN
 
 
-def season_stats(conn, season_id):
-    """Raw per-driver statistics for one season, keyed by driver id."""
+def season_stats(conn, season_id, upto_round=None):
+    """Raw per-driver statistics for one season, keyed by driver id (optionally only up to a round)."""
     out = {}
     rows = _rows(conn, """
         SELECT r.*, e.is_sprint, e.round_number FROM results r JOIN events e ON e.id = r.event_id
-        WHERE e.season_id = ? ORDER BY e.round_number""", (season_id,))
+        WHERE e.season_id = ? AND e.round_number <= ? ORDER BY e.round_number""",
+                 (season_id, upto_round if upto_round is not None else 10 ** 6))
     for r in rows:
         if not _result_has_data(r):
             continue
@@ -413,8 +415,8 @@ def place_players(conn, season_id, targets):
 
 # --------------------------------------------------------------------------- standings
 
-def driver_standings(conn, season_id):
-    stats = season_stats(conn, season_id)
+def driver_standings(conn, season_id, upto_round=None):
+    stats = season_stats(conn, season_id, upto_round)
     tmap = team_map(conn)
     dmap = driver_map(conn)
     seats = driver_seats(conn, season_id)
@@ -1072,7 +1074,22 @@ def add_driver(conn, name, baseline_reputation, season_id, is_player=False):
     did = conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player, active) VALUES(?,?,?,1)",
                        (name, rep, int(bool(is_player)))).lastrowid
     conn.execute("INSERT OR IGNORE INTO season_driver_state VALUES(?,?,?,NULL)", (season_id, did, rep))
+    if is_player:
+        assign_player_colors(conn)
     return did
+
+
+def assign_player_colors(conn):
+    """Every human-controlled driver keeps one accent colour for the life of the league."""
+    from .schema import _assign_player_colors
+    _assign_player_colors(conn)
+
+
+def human_driver_ids(conn):
+    """Drivers controlled by a real person: marked as player drivers, or assigned to a league member."""
+    ids = {r[0] for r in conn.execute("SELECT id FROM drivers WHERE is_player = 1")}
+    ids |= {r[0] for r in conn.execute("SELECT driver_id FROM career_members WHERE driver_id IS NOT NULL")}
+    return ids
 
 
 def update_driver(conn, driver_id, season_id, name, baseline_reputation, active):
@@ -1233,7 +1250,9 @@ def delete_driver(conn, driver_id, season_id, force=False):
     conn.execute("DELETE FROM offers WHERE driver_id = ?", (driver_id,))
     conn.execute("DELETE FROM contracts WHERE driver_id = ?", (driver_id,))
     conn.execute("DELETE FROM season_driver_state WHERE driver_id = ?", (driver_id,))
-    conn.execute("DELETE FROM career_members WHERE driver_id = ?", (driver_id,))
+    # The person stays in the league; they just no longer have this driver.
+    conn.execute("UPDATE career_members SET driver_id = NULL, role = CASE WHEN role = 'member' THEN 'spectator' "
+                 "ELSE role END WHERE driver_id = ?", (driver_id,))
     conn.execute("DELETE FROM notifications WHERE driver_id = ?", (driver_id,))
     conn.execute("UPDATE news SET driver_id = NULL WHERE driver_id = ?", (driver_id,))
     conn.execute("DELETE FROM drivers WHERE id = ?", (driver_id,))

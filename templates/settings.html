@@ -14,6 +14,12 @@
     <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span>
   </label>
   {% endfor %}
+  <h2>Time zone</h2>
+  <label>Race times, notifications and dates are shown in
+    <select name="timezone">
+      {% if ctx.timezone not in zones %}<option value="{{ ctx.timezone }}" selected>{{ ctx.timezone.replace('_', ' ') }}</option>{% endif %}
+      {% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == ctx.timezone }}>{{ z.replace('_', ' ') }}</option>{% endfor %}
+    </select></label>
   <h2>Joining</h2>
   <label class="toggle-row">
     <input type="checkbox" name="join_open" value="1" {{ 'checked' if join_open }}>

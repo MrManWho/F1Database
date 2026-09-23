@@ -11,7 +11,7 @@
   <article class="card contract-card" style="--team: {{ c.team.color if c.team else '#666' }}">
     <div class="contract-head">
       <span class="stage stage-{{ c.negotiation_stage|lower|replace(' ', '-') }}">{{ c.negotiation_stage }}</span>
-      <span class="muted small">{{ c.updated_at }}</span>
+      <span class="muted small">{{ c.updated_at|stamp }}</span>
     </div>
     <h3>{{ c.driver.name }} → {{ c.team.name if c.team else 'Open market' }}</h3>
     <div class="contract-facts"><span>Role <b>{{ c.requested_role }}</b></span><span>Form <b>{{ c.form }}</b></span><span>Rep <b>{{ c.reputation }}</b></span></div>

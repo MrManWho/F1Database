@@ -40,6 +40,80 @@
 </section>
 {% endif %}
 
+<section class="card">
+  <div class="card-head"><h2>League members</h2><span class="muted small">{{ rows|length }} member{{ 's' if rows|length != 1 }}</span></div>
+  <p class="muted small">Each person has <b>one access role</b> and, separately, <b>the player driver they control</b> (if any).
+    Changes apply immediately. Site Race Masters are managed in <a href="{{ url_for('accounts_page') }}">Accounts</a>.</p>
+  <div class="table-wrap">
+  <table class="data-table member-grid">
+    <thead><tr><th>Member</th><th>Player driver</th><th>Access</th><th>Joined</th><th>Last active</th><th></th></tr></thead>
+    <tbody>
+    {% for m in rows %}
+      <tr class="{{ 'player-row' if m.driver }}" {% if m.driver and m.driver.player_color %}style="--player: {{ m.driver.player_color }}"{% endif %}>
+        <td><strong>{{ m.display_name }}</strong><br><small class="muted">{{ m.username }}</small></td>
+        <td>
+          <form id="m-{{ loop.index }}" method="post" action="{{ url_for('member_update', token=ctx.token, username=m.username) }}"
+                class="member-form" data-name="{{ m.display_name }}" data-role="{{ m.role }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="driver_id" aria-label="Driver for {{ m.display_name }}">
+              <option value="">— No driver —</option>
+              {% if m.driver %}<option value="{{ m.driver.id }}" selected>{{ m.driver.name }}</option>{% endif %}
+              {% for p in free_drivers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select>
+          </form>
+        </td>
+        <td>
+          {% if m.site_master %}<span class="role-chip master">Race Master</span><br><small class="muted">Site admin</small>
+            <input form="m-{{ loop.index }}" type="hidden" name="role" value="race_master">
+          {% else %}
+          <select form="m-{{ loop.index }}" name="role" aria-label="Access for {{ m.display_name }}">
+            {% for key, label in C.ACCESS_ROLES.items() %}<option value="{{ key }}" {{ 'selected' if m.role == key }}>{{ label }}</option>{% endfor %}
+          </select>
+          {% endif %}
+        </td>
+        <td class="small">{{ m.joined_at|day if m.joined_at else 'Before v1.16' }}</td>
+        <td class="small">{{ m.last_active|ago if m.last_active else 'Not yet' }}</td>
+        <td>
+          <div class="button-row tight">
+            <button form="m-{{ loop.index }}" class="btn btn-sm btn-primary">Save</button>
+            {% if not m.site_master %}
+            <form method="post" action="{{ url_for('member_remove', token=ctx.token, username=m.username) }}"
+                  onsubmit="return confirm('Remove {{ m.display_name }} from this league? Their login and driver stay; they just lose access.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Remove</button></form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="muted">Nobody has joined yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Add someone</h3>
+  {% if outsiders %}
+  <form method="post" action="{{ url_for('member_add', token=ctx.token) }}" class="inline-form member-add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Login<select name="username" required>{% for u in outsiders %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}</select></label>
+    <label>Access<select name="role">{% for key, label in C.ACCESS_ROLES.items() %}<option value="{{ key }}" {{ 'selected' if key == 'member' }}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Player driver<select name="driver_id"><option value="">— No driver —</option>{% for p in free_drivers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+    <button class="btn btn-sm">Add to league</button>
+  </form>
+  {% else %}<p class="muted small">Every login is already in this league.</p>{% endif %}
+
+  <details class="role-explain" open>
+    <summary>What each role can do</summary>
+    <dl>{% for key, label in C.ACCESS_ROLES.items() %}<dt>{{ label }}</dt><dd>{{ C.ACCESS_HELP[key] }}</dd>{% endfor %}</dl>
+  </details>
+</section>
+
+{% if free_drivers %}
+<section class="card">
+  <h2>Player drivers without a login</h2>
+  <ul class="plain-list">{% for p in free_drivers %}<li class="player-row" style="--player: {{ p.player_color or 'var(--blue)' }}">{{ p.name }}{% if not p.active %} <span class="pill">retired</span>{% endif %}
+    <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
 <div class="grid-2">
   <section class="card">
     <h2>Add a player driver</h2>
@@ -49,7 +123,7 @@
       <label>Driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
       <label>Login
         <select name="username"><option value="">— link later —</option>
-          {% for u in users if u.username not in links or links[u.username] is none %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
+          {% for u in users if not (rows|selectattr('username', 'equalto', u.username)|selectattr('driver')|list) %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
         </select></label>
       <label class="check"><input type="checkbox" name="send_offers" value="1" checked> Send rookie offers straight away</label>
       <button class="btn btn-primary">Add player</button>
@@ -66,55 +140,22 @@
     </form>
   </section>
 </div>
-
-<section class="card">
-  <h2>Who's in this league</h2>
-  <form method="post" class="stack">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <h3>Player drivers</h3>
-    <p class="muted small">Link each player driver to the login that drives it. That person sees their own garage and team standing.
-      Tick <em>Can enter results</em> to also make them this league's Scorekeeper.</p>
-    <div class="member-table">
-    {% for p in players %}
-    {% set linked = (links.items()|selectattr(1, 'equalto', p.id)|map('first')|list) %}
-    <div class="member-row">
-      <div class="member-name"><strong>{{ p.name }}</strong>{% if not p.active %} <span class="pill">retired</span>{% endif %}</div>
-      <label class="sr-label">Login
-        <select name="user_{{ p.id }}" aria-label="Login for {{ p.name }}">
-          <option value="">— Nobody yet —</option>
-          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
-        </select></label>
-      <label class="check small"><input type="checkbox" name="keeper_{{ p.id }}" value="1" {{ 'checked' if linked and linked[0] in scorekeepers }}> Can enter results</label>
-      <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button>
-    </div>
-    {% else %}
-    <p class="muted">No player drivers yet. Add one above, or open the league to join requests.</p>
-    {% endfor %}
-    </div>
-
-    <h3>Everyone else</h3>
-    <p class="muted small"><b>Spectators</b> can follow the league (standings, results, news). <b>Scorekeepers</b> can also enter race results,
-      but can't change a race once it's submitted. Race Masters always have full access and don't need to be listed.</p>
-    <div class="member-table">
-    {% for u in users if not u.is_master and (u.username not in links or links[u.username] is none) %}
-    {% set access = 'scorekeeper' if u.username in scorekeepers else ('spectator' if u.username in links else '') %}
-    <div class="member-row">
-      <div class="member-name"><strong>{{ u.display_name }}</strong> <small class="muted">{{ u.username }}</small></div>
-      <label class="sr-label">Access
-        <select name="member_{{ u.username }}" aria-label="Access for {{ u.display_name }}">
-          <option value="" {{ 'selected' if not access }}>Not in this league</option>
-          <option value="spectator" {{ 'selected' if access == 'spectator' }}>Spectator (view only)</option>
-          <option value="scorekeeper" {{ 'selected' if access == 'scorekeeper' }}>Scorekeeper (enters results)</option>
-        </select></label>
-    </div>
-    {% else %}<p class="muted small">No other logins yet.</p>{% endfor %}
-    </div>
-    <div><button class="btn btn-primary">Save</button></div>
-  </form>
-  {% for p in players %}
-  <form id="offers-{{ p.id }}" method="post" action="{{ url_for('offers_send', token=ctx.token, driver_id=p.id) }}"
-        onsubmit="return confirm('Have teams send {{ p.name }} offers now?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
-  {% endfor %}
-</section>
+{% for p in players %}
+<form id="offers-{{ p.id }}" method="post" action="{{ url_for('offers_send', token=ctx.token, driver_id=p.id) }}"
+      onsubmit="return confirm('Have teams send {{ p.name }} offers now?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script>
+/* Confirm role changes before applying them. */
+document.querySelectorAll(".member-form").forEach(function (form) {
+  form.addEventListener("submit", function (e) {
+    var select = document.querySelector('select[form="' + form.id + '"][name="role"]');
+    if (!select || select.value === form.dataset.role) return;
+    var label = select.options[select.selectedIndex].text;
+    if (!confirm("Change " + form.dataset.name + " to " + label + "? It takes effect immediately.")) e.preventDefault();
+  });
+});
+</script>
 {% endblock %}

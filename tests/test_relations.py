@@ -131,8 +131,8 @@ def test_members_page_is_clear_about_access(app, master_client):
                                                    "player_login": [""], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     page = master_client.get(f"/career/{token}/members").get_data(as_text=True)
-    assert "Not in this league" in page and "Scorekeeper (enters results)" in page and "Can enter results" in page
-    master_client.post(f"/career/{token}/members", data={"member_kim": "scorekeeper", "csrf_token": "tok"})
+    assert "League members" in page and "What each role can do" in page and "Add someone" in page
+    master_client.post(f"/career/{token}/members/add", data={"username": "kim", "role": "scorekeeper", "csrf_token": "tok"})
     with storage.session(token) as conn:
         row = conn.execute("SELECT * FROM career_members WHERE username = 'kim'").fetchone()
     assert row["driver_id"] is None and row["scorekeeper"] == 1

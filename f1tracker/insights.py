@@ -54,8 +54,10 @@ def progression_chart(conn, season_id, top=4, max_series=8):
 def driver_round_timeline(conn, driver_id):
     """Form and Reputation after every round the driver took part in, across the whole career."""
     labels, form, rep = [], [], []
+    start_rep = None
     for season in S.list_seasons(conn):
         start = S.starting_reputation(conn, season["id"], driver_id)
+        start_rep = start if start_rep is None or season["id"] == S.current_season_id(conn) else start_rep
         stats = S._blank_stats()
         state = conn.execute("SELECT locked_reputation FROM season_driver_state WHERE season_id = ? AND driver_id = ?",
                              (season["id"], driver_id)).fetchone()
@@ -70,7 +72,7 @@ def driver_round_timeline(conn, driver_id):
             labels.append(f"{str(season['year'])[2:]} R{r['round_number']}")
             form.append(f)
             rep.append(value)
-    return {"labels": labels, "form": form, "reputation": rep}
+    return {"labels": labels, "form": form, "reputation": rep, "start_rep": start_rep, "start_form": 50.0}
 
 
 def _accumulate(s, r):
@@ -201,7 +203,8 @@ def season_review(conn, season_id):
     consistent = [(sum(1 for f in r["finishes"] if f <= 10) / max(1, r["starts"]), r) for r in table if r["starts"] >= 3]
     if consistent:
         pct, r = max(consistent, key=lambda x: (x[0], x[1]["points"]))
-        award("Mr Consistent", r, f"{pct * 100:.0f}%", "of races in the points")
+        if pct > 0:
+            award("Mr Consistent", r, f"{pct * 100:.0f}%", "of races in the points")
     improved = [(r["reputation"] - r["starting_reputation"], r) for r in table]
     if improved:
         delta, r = max(improved, key=lambda x: x[0])
@@ -235,7 +238,7 @@ def season_review(conn, season_id):
         award("Fans' choice", row, f"{fans['n']} vote{'s' if fans['n'] != 1 else ''}", "fan Driver of the Day votes")
     rookies = [r for r in table if _first_season_year(conn, r["driver_id"]) == season["year"]
                and (r["driver"]["is_player"] or season["year"] != first_year)]
-    if rookies:
+    if rookies and rookies[0]["points"] > 0:
         award("Rookie of the year", rookies[0], f"P{rookies[0]['position']}", f"{rookies[0]['points']} pts")
 
     players = [r for r in table if r["driver"]["is_player"]]
@@ -340,3 +343,64 @@ def all_time_records(conn):
             champions.append({"season": season, "driver": dmap.get(data["drivers"][0]["driver_id"]),
                               "points": data["drivers"][0]["points"]})
     return {"records": records, "champions": sorted(champions, key=lambda c: -c["season"]["year"])}
+
+
+# --------------------------------------------------------------------------- round-on-round changes
+
+STAT_HELP = {
+    "form": "Form: how well the driver is driving right now, from finishes, qualifying and racecraft this season (1-100).",
+    "reputation": "Reputation: long-term standing in the paddock. Carries between seasons (1-100).",
+    "value": "Driver Value: what teams look at when making offers. Market score, Form and car-adjusted results combined.",
+    "car": "Car-Adjusted: results compared with what the car would normally achieve. 50 = exactly what the car is worth.",
+    "points": "Championship points this season.",
+    "position": "Position in the Drivers' Championship (WDC).",
+    "tier": "Market tier: how teams see the driver, from Reputation and Form.",
+}
+
+
+def stat_changes(conn, season_id, driver_id):
+    """Each headline number now, after the previous completed round, and round by round for sparklines.
+
+    Uses the normal calculations, just stopped at an earlier round, so nothing here changes a formula.
+    """
+    from . import market  # market imports this module's siblings; keep the import local
+    rounds = [r["round_number"] for r in conn.execute(
+        "SELECT round_number FROM events WHERE season_id = ? AND status = ? ORDER BY round_number",
+        (season_id, C.EVENT_COMPLETE))]
+    ranks = S.team_strength_ranks(conn, season_id)
+
+    def snapshot(upto):
+        table = S.driver_standings(conn, season_id, upto)
+        by_id = {r["driver_id"]: r for r in table}
+        row = by_id.get(driver_id)
+        v = market.driver_value(conn, season_id, driver_id, standings=by_id, ranks=ranks, upto_round=upto)
+        return {"form": v["form"], "reputation": v["reputation"], "value": v["value"], "car": v["car"],
+                "points": row["points"] if row else 0, "position": row["position"] if row else None,
+                "tier": row["market"]["name"] if row else None,
+                "tier_rank": next((i for i, t in enumerate(C.MARKET_TIERS) if row and t[1] == row["market"]["name"]), None)}
+
+    now = snapshot(None)
+    prev = snapshot(rounds[-2]) if len(rounds) >= 2 else None
+    series = {k: [] for k in ("form", "reputation", "value", "points", "position")}
+    if len(rounds) >= 3:
+        for rn in rounds[-12:]:
+            snap = now if rn == rounds[-1] else snapshot(rn)
+            for k in series:
+                series[k].append(snap[k])
+    out = {}
+    for key in ("form", "reputation", "value", "car", "points", "position", "tier"):
+        cur = now[key]
+        before = prev[key] if prev else None
+        if key == "position":
+            change = (before - cur) if before and cur else None  # climbing the table is positive
+        elif key == "tier":
+            change = None
+            if prev and prev["tier_rank"] is not None and now["tier_rank"] is not None:
+                change = prev["tier_rank"] - now["tier_rank"]
+        else:
+            change = round(cur - before, 1) if before is not None and cur is not None else None
+        out[key] = {"now": cur, "prev": before, "change": change, "series": series.get(key, []),
+                    "help": STAT_HELP[key]}
+    out["since"] = f"R{rounds[-2]}" if prev else None
+    out["latest"] = f"R{rounds[-1]}" if rounds else None
+    return out

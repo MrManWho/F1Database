@@ -107,7 +107,7 @@
   <section class="card">
     <h2>What the team has said</h2>
     {% if notes %}
-    <ul class="team-notes">{% for n in notes %}<li class="note-{{ n.tone }}"><span>{{ n.text }}</span><small class="muted"><time data-local="{{ n.created_at }}">{{ n.created_at[:10] }}</time></small></li>{% endfor %}</ul>
+    <ul class="team-notes">{% for n in notes %}<li class="note-{{ n.tone }}"><span>{{ n.text }}</span><small class="muted" title="{{ n.created_at|stamp }}">{{ n.created_at|ago }}</small></li>{% endfor %}</ul>
     {% else %}<p class="muted small">Nothing yet. Teams speak up when you're well ahead of, or behind, your targets.</p>{% endif %}
   </section>
   <section class="card">

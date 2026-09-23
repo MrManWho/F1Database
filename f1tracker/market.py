@@ -39,17 +39,18 @@ def interest_label(interest):
     return "Cold"
 
 
-def _season_results(conn, season_id, driver_id):
+def _season_results(conn, season_id, driver_id, upto_round=None):
     return conn.execute("""SELECT r.*, e.round_number, e.name AS event_name FROM results r
                            JOIN events e ON e.id = r.event_id
-                           WHERE e.season_id = ? AND r.driver_id = ? ORDER BY e.round_number""",
-                        (season_id, driver_id)).fetchall()
+                           WHERE e.season_id = ? AND r.driver_id = ? AND e.round_number <= ?
+                           ORDER BY e.round_number""",
+                        (season_id, driver_id, upto_round if upto_round is not None else 10 ** 6)).fetchall()
 
 
-def head_to_head(conn, season_id, driver_id):
+def head_to_head(conn, season_id, driver_id, upto_round=None):
     """Race and qualifying head-to-heads against whoever shared the car in each event."""
     h2h = {"race_won": 0, "race_total": 0, "quali_won": 0, "quali_total": 0}
-    for r in _season_results(conn, season_id, driver_id):
+    for r in _season_results(conn, season_id, driver_id, upto_round):
         mates = conn.execute("SELECT * FROM results WHERE event_id = ? AND team_id = ? AND driver_id != ?",
                              (r["event_id"], r["team_id"], driver_id)).fetchall()
         for m in mates:
@@ -66,9 +67,9 @@ def head_to_head(conn, season_id, driver_id):
     return h2h
 
 
-def car_adjusted_rating(conn, season_id, driver_id, ranks):
+def car_adjusted_rating(conn, season_id, driver_id, ranks, upto_round=None):
     deltas = []
-    for r in _season_results(conn, season_id, driver_id):
+    for r in _season_results(conn, season_id, driver_id, upto_round):
         if r["result_status"] == C.STATUS_FINISHED and r["race_position"] and r["team_id"] in ranks:
             deltas.append((2 * ranks[r["team_id"]] - 0.5) - r["race_position"])
     if not deltas:
@@ -76,8 +77,9 @@ def car_adjusted_rating(conn, season_id, driver_id, ranks):
     return round(S.clamp(50 + 5 * sum(deltas) / len(deltas), 1, 100), 1)
 
 
-def driver_value(conn, season_id, driver_id, standings=None, ranks=None):
-    standings = standings if standings is not None else {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
+def driver_value(conn, season_id, driver_id, standings=None, ranks=None, upto_round=None):
+    standings = standings if standings is not None else \
+        {r["driver_id"]: r for r in S.driver_standings(conn, season_id, upto_round)}
     ranks = ranks or S.team_strength_ranks(conn, season_id)
     row = standings.get(driver_id)
     if row:
@@ -85,8 +87,8 @@ def driver_value(conn, season_id, driver_id, standings=None, ranks=None):
     else:
         rep, form, stats = S.starting_reputation(conn, season_id, driver_id), 50.0, None
     market = S.market_score(rep, form)
-    car = car_adjusted_rating(conn, season_id, driver_id, ranks)
-    h2h = head_to_head(conn, season_id, driver_id)
+    car = car_adjusted_rating(conn, season_id, driver_id, ranks, upto_round)
+    h2h = head_to_head(conn, season_id, driver_id, upto_round)
     bonus = 0.0
     if h2h["race_total"] >= 2:
         bonus = S.clamp((h2h["race_won"] / h2h["race_total"] - 0.5) * 8, -4, 4)

@@ -13,14 +13,18 @@
 {% set an = a.name.split(' ')[-1] %}{% set bn = b.name.split(' ')[-1] %}
 <div class="page-head"><div><div class="kicker">All-time head to head</div><h1>{{ a.name }} <span class="vs">vs</span> {{ b.name }}</h1></div></div>
 
-<div class="rival-board card">
+<div class="rival-board card" style="--a: {{ a.player_color if a.is_player and a.player_color else 'var(--series-1)' }}; --b: {{ b.player_color if b.is_player and b.player_color and b.player_color != a.player_color else 'var(--series-2)' }};">
   {% for label, pair in [('Races', r.race), ('Qualifying', r.quali), ('Points', r.points), ('Wins', r.wins), ('Podiums', r.podiums), ('Poles', r.poles)] %}
   {% set total = pair[0] + pair[1] %}
   <div class="rival-row">
     <b class="left {{ 'lead' if pair[0] > pair[1] }}">{{ pair[0] }}</b>
-    <div class="rival-bar"><span class="a" style="width: {{ (pair[0] / total * 100) if total else 50 }}%"></span><span class="b"></span></div>
+    {% if total %}
+    <div class="rival-bar"><span class="a" style="width: {{ pair[0] / total * 100 }}%"></span><span class="b"></span></div>
+    {% else %}
+    <div class="rival-bar empty" aria-label="Tied at zero"><em>Tied</em></div>
+    {% endif %}
     <b class="right {{ 'lead' if pair[1] > pair[0] }}">{{ pair[1] }}</b>
-    <small>{{ label }}</small>
+    <small>{{ label }}{% if total and pair[0] == pair[1] %} · <span class="tied-tag">Tied</span>{% endif %}</small>
   </div>
   {% endfor %}
   <div class="rival-legend"><span><i class="a"></i>{{ a.name }}</span><span><i class="b"></i>{{ b.name }}</span></div>
@@ -30,9 +34,9 @@
   <div class="stat card"><small>Longest streak · {{ an }}</small><strong>{{ r.streak[0] }}</strong><span class="muted small">races in a row ahead</span></div>
   <div class="stat card"><small>Longest streak · {{ bn }}</small><strong>{{ r.streak[1] }}</strong><span class="muted small">races in a row ahead</span></div>
   <div class="stat card feature"><small>Current run</small>
-    {% if r.current %}<strong>{{ [an, bn][r.current[0]] }} ×{{ r.current[1] }}</strong>{% else %}<strong>—</strong>{% endif %}</div>
+    {% if r.current %}<strong>{{ [an, bn][r.current[0]] }} ×{{ r.current[1] }}</strong>{% else %}<strong class="muted">Still tied</strong>{% endif %}</div>
   {% for i in [0, 1] %}{% set m = r.best_margin[i] %}
-  <div class="stat card"><small>Biggest beating · {{ [an, bn][i] }}</small>{% if m %}<strong>{{ m.margin }} places</strong><span class="muted small">{{ m.event }}</span>{% else %}<strong>—</strong>{% endif %}</div>
+  <div class="stat card"><small>Biggest beating · {{ [an, bn][i] }}</small>{% if m %}<strong>{{ m.margin }} places</strong><span class="muted small">{{ m.event }}</span>{% else %}<strong class="muted">—</strong><span class="muted small">No win over the other yet</span>{% endif %}</div>
   {% endfor %}
 </div>
 

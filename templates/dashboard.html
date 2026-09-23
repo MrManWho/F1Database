@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, driver_link, difficulty with context %}
+{% from "_macros.html" import team_dot, driver_link, difficulty, race_clock, pattrs with context %}
 {% block title %}Control Room{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -35,22 +35,27 @@
 </section>
 
 <div class="dash-grid">
-  <section class="card hero">
+  <section class="card hero {{ 'next-race' if next_event }}">
     {% if next_event %}
-    <div class="kicker">Next up · Round {{ next_event.round_number }}</div>
-    <h2 class="hero-title">{{ next_event.name }}</h2>
+    <svg class="hero-circuit" viewBox="0 0 100 60" aria-hidden="true"><path d="{{ circuit.path }}"/></svg>
+    <div class="hero-top">
+      <span class="round-badge">R{{ next_event.round_number }}</span>
+      <span class="kicker">Next up · Round {{ next_event.round_number }} of {{ events|length }}</span>
+    </div>
+    <h2 class="hero-title">{% if circuit.flag %}<span class="flag" role="img" aria-label="{{ circuit.code }}">{{ circuit.flag }}</span> {% endif %}{{ next_event.name }}</h2>
     <div class="hero-meta">
-      <span>{{ next_event.location }}</span>
-      {% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
+      <span>{{ circuit.circuit or next_event.location }}{% if circuit.circuit and next_event.location and next_event.location not in circuit.circuit %} · {{ next_event.location }}{% endif %}</span>
+      <span class="pill {{ 'pill-sprint' if next_event.is_sprint }}">{{ 'Sprint weekend' if next_event.is_sprint else 'Standard weekend' }}</span>
       <span class="status-badge status-{{ next_event.status|lower|replace(' ', '-') }}">{{ next_event.status }}</span>
     </div>
-    {% if next_event.race_at %}<p class="hero-countdown">Lights out in <span class="countdown" data-countdown="{{ next_event.race_at }}"><time data-local="{{ next_event.race_at }}">{{ next_event.race_at }}</time></span></p>{% endif %}
+    {% if next_event.race_at %}{{ race_clock(next_event, big=True) }}
+    {% else %}<p class="muted small hero-notime">{% if ctx.is_master %}No race time yet. <a href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}#race-night">Set one on the race page</a>.{% else %}Race time not set yet.{% endif %}</p>{% endif %}
     {% else %}
     <div class="kicker">Season complete</div>
     <h2 class="hero-title">All {{ events|length }} rounds are in the books</h2>
     <p><a href="{{ url_for('season_review', token=ctx.token, season_id=ctx.season.id) }}">See the season review →</a></p>
     {% endif %}
-    {{ difficulty(rec) }}
+    {{ difficulty(rec, compact=True) }}
   </section>
 
   {% if card and card.row %}
@@ -120,7 +125,7 @@
     <div class="card-head"><h2>Drivers</h2><a href="{{ url_for('drivers_page', token=ctx.token) }}">Full table →</a></div>
     <ol class="leader-list">
       {% for d in drivers %}
-      <li style="--team: {{ d.team.color if d.team else '#555' }}" class="{{ 'is-me' if ctx.my_driver and d.driver_id == ctx.my_driver.id }}">
+      <li {{ pattrs(d.driver, 'is-me' if ctx.my_driver and d.driver_id == ctx.my_driver.id else '', '--team: ' ~ (d.team.color if d.team else '#555') ~ ';') }}>
         <span class="pos">{{ d.position }}</span>
         <span class="who">{{ driver_link(ctx, d.driver) }}<small>{{ d.team.name if d.team else 'No seat' }}</small></span>
         <span class="change {{ 'up' if d.change > 0 else ('down' if d.change < 0 else 'same') }}" title="Since last round">
@@ -129,6 +134,7 @@
       </li>
       {% else %}<li class="muted">No drivers yet.</li>{% endfor %}
     </ol>
+    {% if not completed %}<p class="muted small empty-note">Everyone starts on zero. The table takes shape after Round 1.</p>{% endif %}
   </section>
   <section class="card">
     <div class="card-head"><h2>Constructors</h2><a href="{{ url_for('teams_page', token=ctx.token) }}">All teams →</a></div>

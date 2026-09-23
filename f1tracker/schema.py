@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS drivers (
     baseline_reputation REAL NOT NULL DEFAULT 50,
     is_player INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
-    notes TEXT NOT NULL DEFAULT ''
+    notes TEXT NOT NULL DEFAULT '',
+    player_color TEXT
 );
 
 CREATE TABLE IF NOT EXISTS seasons (
@@ -149,7 +150,10 @@ CREATE TABLE IF NOT EXISTS offer_messages (
 CREATE TABLE IF NOT EXISTS career_members (
     username TEXT PRIMARY KEY,
     driver_id INTEGER REFERENCES drivers(id),
-    scorekeeper INTEGER NOT NULL DEFAULT 0
+    scorekeeper INTEGER NOT NULL DEFAULT 0,
+    role TEXT NOT NULL DEFAULT 'member',
+    joined_at TEXT,
+    last_active TEXT
 );
 
 CREATE TABLE IF NOT EXISTS team_seasons (
@@ -184,7 +188,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE TABLE IF NOT EXISTS notification_reads (
     username TEXT PRIMARY KEY,
-    last_seen_id INTEGER NOT NULL DEFAULT 0
+    last_seen_id INTEGER NOT NULL DEFAULT 0,
+    cleared_id INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS join_requests (
@@ -360,6 +365,17 @@ def _columns(conn, table):
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _assign_player_colors(conn):
+    """Give every human-controlled driver without one a persistent accent colour, in the order they joined."""
+    from .constants import PLAYER_COLORS
+    used = [r[0] for r in conn.execute("SELECT player_color FROM drivers WHERE player_color IS NOT NULL")]
+    for (driver_id,) in conn.execute("SELECT id FROM drivers WHERE is_player = 1 AND player_color IS NULL ORDER BY id").fetchall():
+        free = [c for c in PLAYER_COLORS if c not in used]
+        color = free[0] if free else PLAYER_COLORS[len(used) % len(PLAYER_COLORS)]
+        conn.execute("UPDATE drivers SET player_color = ? WHERE id = ?", (color, driver_id))
+        used.append(color)
+
+
 def migrate(conn):
     """Bring any older save forward to SCHEMA_VERSION without discarding data.
 
@@ -381,11 +397,15 @@ def migrate(conn):
     v11 -> v12: pledges must be chosen (team_relations.pledged), targets re-based after three rounds, press
                answers and team orders (team_relations.bonus), season goals, incidents. Relationships whose
                contract has no growth pledge are marked unpledged so the driver chooses one.
+    v12 -> v13: one league access role per member (career_members.role: race_master / scorekeeper / member /
+               spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
+               role and members without a driver become Spectators, so nobody loses access. Human drivers get a
+               persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "incidents" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "player_color" in _columns(conn, "drivers"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -396,6 +416,18 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    member_cols = _columns(conn, "career_members")
+    if "role" not in member_cols:
+        conn.execute("ALTER TABLE career_members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
+        conn.execute("ALTER TABLE career_members ADD COLUMN joined_at TEXT")
+        conn.execute("ALTER TABLE career_members ADD COLUMN last_active TEXT")
+        conn.execute("UPDATE career_members SET role = CASE WHEN scorekeeper = 1 THEN 'scorekeeper' "
+                     "WHEN driver_id IS NULL THEN 'spectator' ELSE 'member' END")
+    if "player_color" not in _columns(conn, "drivers"):
+        conn.execute("ALTER TABLE drivers ADD COLUMN player_color TEXT")
+    if "cleared_id" not in _columns(conn, "notification_reads"):
+        conn.execute("ALTER TABLE notification_reads ADD COLUMN cleared_id INTEGER NOT NULL DEFAULT 0")
+    _assign_player_colors(conn)
     rel_cols = _columns(conn, "team_relations")
     if "pledged" not in rel_cols:
         conn.execute("ALTER TABLE team_relations ADD COLUMN pledged INTEGER NOT NULL DEFAULT 0")

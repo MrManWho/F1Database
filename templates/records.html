@@ -1,12 +1,16 @@
 {% extends "base.html" %}
+{% from "_macros.html" import pattrs, driver_link with context %}
 {% block title %}Hall of Records{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">All seasons</div><h1>Hall of Records</h1></div></div>
 <div class="stat-grid">
-  {% for key, label in [('points', 'Career points'), ('wins', 'Most wins'), ('poles', 'Most poles'), ('titles', 'Most titles')] %}
+  {% for key, label, empty in [('points', 'Career points', 'No points scored yet'), ('wins', 'Most wins', 'No victory recorded'),
+                               ('poles', 'Most poles', 'No pole recorded'), ('titles', 'Most titles', 'No champion yet')] %}
   {% set l = leaders[key] %}
   <div class="stat card feature"><small>{{ label }}</small>
-    {% if l %}<strong>{{ l[key] }}</strong><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=l.driver.id) }}">{{ l.driver.name }}</a>{% else %}<strong>—</strong>{% endif %}
+    {% if l %}<strong>{{ l[key] }}</strong><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=l.driver.id) }}" class="{{ 'is-player' if l.driver.is_player }}">{{ l.driver.name }}</a>
+      {% if l.tied %}<span class="muted small">+{{ l.tied }} tied</span>{% endif %}
+    {% else %}<strong class="muted">—</strong><span class="muted small">{{ empty }}</span>{% endif %}
   </div>
   {% endfor %}
 </div>
@@ -35,12 +39,15 @@
 <section class="card table-card">
   <div class="table-wrap">
   <table class="data-table sortable">
-    <thead><tr><th data-sort>#</th><th data-sort>Driver</th><th data-sort>Pts</th><th data-sort>Wins</th><th data-sort>Pod</th><th data-sort>Poles</th><th data-sort>FL</th><th data-sort>Starts</th><th data-sort>Titles</th><th data-sort>Best WDC</th><th data-sort>Seasons</th><th data-sort>Avg fin</th></tr></thead>
+    <thead><tr><th data-sort class="num">#</th><th data-sort class="sticky-col">Driver</th><th data-sort class="num"><abbr title="Career points">Pts</abbr></th><th data-sort class="num">Wins</th>
+      <th data-sort class="num"><abbr title="Podiums">Pod</abbr></th><th data-sort class="num">Poles</th><th data-sort class="num"><abbr title="Fastest Laps">FL</abbr></th>
+      <th data-sort class="num">Starts</th><th data-sort class="num">Titles</th><th data-sort class="num"><abbr title="Best position in the World Drivers' Championship">Best WDC</abbr></th>
+      <th data-sort class="num">Seasons</th><th data-sort class="num"><abbr title="Average finishing position">Avg fin</abbr></th></tr></thead>
     <tbody>
     {% for r in rows %}
-    <tr class="{{ 'player-row' if r.driver.is_player }}">
+    <tr {{ pattrs(r.driver, '', '', url_for('driver_profile', token=ctx.token, driver_id=r.driver.id)) }}>
       <td class="num">{{ r.rank }}</td>
-      <td><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=r.driver.id) }}" class="{{ 'is-player' if r.driver.is_player }}">{{ r.driver.name }}</a></td>
+      <td class="sticky-col">{{ driver_link(ctx, r.driver, badge=True) }}</td>
       <td class="num"><strong>{{ r.points }}</strong></td><td class="num">{{ r.wins }}</td><td class="num">{{ r.podiums }}</td>
       <td class="num">{{ r.poles }}</td><td class="num">{{ r.fastest_laps }}</td><td class="num">{{ r.starts }}</td>
       <td class="num">{{ r.titles }}</td><td class="num">{{ 'P' ~ r.best_championship if r.best_championship else '—' }}</td>

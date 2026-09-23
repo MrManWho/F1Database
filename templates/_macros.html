@@ -2,8 +2,18 @@
 <span class="team-dot" style="--team: {{ team.color if team else '#555' }}"></span>
 {%- endmacro %}
 
-{% macro driver_link(ctx, driver) -%}
-<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=driver.id) }}" class="driver-link {{ 'is-player' if driver.is_player }}">{{ driver.name }}</a>
+{% macro driver_link(ctx, driver, badge=False) -%}
+{%- if driver.is_player -%}<span class="p-chip" style="--player: {{ driver.player_color or '#4aa3ff' }}" aria-hidden="true">{{ driver.name.split()|map('first')|join('')|upper|truncate(2, True, '') }}</span>{%- endif -%}
+<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=driver.id) }}" class="driver-link {{ 'is-player' if driver.is_player }}"
+   {% if driver.is_player %}style="--player: {{ driver.player_color or '#4aa3ff' }}"{% endif %}>{{ driver.name }}</a>
+{%- if badge and driver.is_player %} <span class="player-badge" style="--player: {{ driver.player_color or '#4aa3ff' }}">Player</span>{% endif -%}
+{%- endmacro %}
+
+{# Row attributes that highlight a human-controlled driver with their persistent accent colour. #}
+{% macro pattrs(driver, cls='', style='', href=None) -%}
+class="{{ cls }}{{ ' player-row' if driver and driver.is_player }}{{ ' row-link' if href }}"
+style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player_color or '#4aa3ff' }};{% endif %}"
+{%- if href %} data-href="{{ href }}"{% endif %}
 {%- endmacro %}
 
 {% macro tier(m) -%}
@@ -13,11 +23,10 @@
 {% macro difficulty(rec, compact=False) -%}
 <div class="diff-rec diff-{{ rec.direction or 'none' }}">
   <div class="diff-number">
-    {% if rec.recommended is not none %}
-      <span class="diff-arrow">{% if rec.direction == 'up' %}▲{% elif rec.direction == 'down' %}▼{% else %}●{% endif %}</span>
-      <strong>{{ rec.recommended }}</strong>
-    {% else %}<strong>—</strong>{% endif %}
+    <svg class="diff-gauge" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5 16 9"/><circle cx="12" cy="13.5" r="1.2" fill="currentColor"/></svg>
+    <strong>{{ rec.recommended if rec.recommended is not none else '—' }}</strong>
     <small>Recommended AI</small>
+    {% if rec.recommended is not none and rec.direction in ('up', 'down') %}<span class="diff-move">{{ '▲ Raise' if rec.direction == 'up' else '▼ Lower' }}</span>{% endif %}
   </div>
   <div class="diff-copy">
     <p>{{ rec.reason }}</p>
@@ -45,8 +54,9 @@
 
 {% macro reaction_bar(ctx, target, reacts, count=None, link=None) -%}
 <div class="react-bar" data-target="{{ target }}" data-url="{{ url_for('react', token=ctx.token) }}">
-  {% for r in reacts %}<button type="button" class="react {{ 'mine' if r.mine }}" data-emoji="{{ r.emoji }}"
-     title="{{ r.who|join(', ') if r.who else 'React' }}">{{ r.emoji }}<span>{{ r.count if r.count }}</span></button>{% endfor %}
+  {% for r in reacts %}{% if ctx.is_spectator %}{% if r.count %}<span class="react static" title="{{ r.who|join(', ') }}">{{ r.emoji }}<span>{{ r.count }}</span></span>{% endif %}
+  {% else %}<button type="button" class="react {{ 'mine' if r.mine }}" data-emoji="{{ r.emoji }}"
+     title="{{ r.who|join(', ') if r.who else 'React' }}">{{ r.emoji }}<span>{{ r.count if r.count }}</span></button>{% endif %}{% endfor %}
   {% if link %}<a class="small react-comments" href="{{ link }}">💬 {{ count or 0 }}</a>{% endif %}
 </div>
 {%- endmacro %}
@@ -55,18 +65,69 @@
 <div class="comments">
   {% for c in comments %}
   <div class="comment">
-    <div class="comment-head"><strong>{{ c.name }}</strong><small class="muted">{{ c.created_at[:16]|replace('T', ' ') }}</small>
-      {% if c.username == user.username or ctx.is_master %}
+    <div class="comment-head"><strong>{{ c.name }}</strong><small class="muted" title="{{ c.created_at|stamp }}">{{ c.created_at|ago }}</small>
+      {% if (c.username == user.username and not ctx.is_spectator) or ctx.is_master %}
       <form method="post" action="{{ url_for('comment_delete', token=ctx.token, comment_id=c.id) }}" class="comment-del">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>
       {% endif %}</div>
     <p>{{ c.body }}</p>
   </div>
-  {% else %}<p class="muted small">No comments yet. Say something.</p>{% endfor %}
+  {% else %}<p class="muted small">No comments yet.{{ ' Say something.' if not ctx.is_spectator }}</p>{% endfor %}
+  {% if not ctx.is_spectator %}
   <form method="post" action="{{ url_for('comment_add', token=ctx.token) }}" class="comment-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="target" value="{{ target }}">
     <input name="body" maxlength="1000" placeholder="Add a comment…" required autocomplete="off">
     <button class="btn btn-sm btn-primary">Post</button>
   </form>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro race_clock(ev, big=False) -%}
+<div class="race-clock {{ 'big' if big }}">
+  <span class="lights-out">Lights out {{ ev.race_at|race_at }}</span>
+  {% set cd = ev.race_at|countdown %}
+  <span class="countdown {{ 'live' if not cd }}" data-countdown="{{ ev.race_at }}">{{ cd or 'Race time' }}</span>
+</div>
+{%- endmacro %}
+
+{% macro trend_chart(trend, height=240) -%}
+{% set n = trend.labels|length %}
+{% if n >= 2 %}
+<div class="chart" data-height="{{ 180 if n < 5 else height }}" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "markers": n < 12, "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
+{% if n < 4 %}<p class="muted small chart-note">More meaningful trends will appear as the season develops.</p>{% endif %}
+{% else %}
+{% set f = trend.form[-1] if n else trend.start_form %}
+{% set r = trend.reputation[-1] if n else trend.start_rep %}
+<div class="trend-empty">
+  <div><small>Current Form</small><strong>{{ f }}</strong>{{ delta(f - trend.start_form) }}</div>
+  <div><small>Current Reputation</small><strong>{{ r if r is not none else '—' }}</strong>{% if r is not none and trend.start_rep is not none %}{{ delta(r - trend.start_rep) }}{% endif %}</div>
+  <p class="muted small">{{ 'No completed rounds yet. ' if not n }}More trend data available after Round 2. Changes are from the season's starting value.</p>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro delta(v, digits=1, invert=False, suffix='') -%}
+{%- if v is none -%}<span class="delta none" title="No earlier value">—</span>
+{%- elif v|round(digits) == 0 -%}<span class="delta same" title="No change">—</span>
+{%- else -%}{% set good = (v > 0) != invert %}<span class="delta {{ 'up' if good else 'down' }}" title="{{ 'Up' if v > 0 else 'Down' }} {{ ('%.' ~ digits ~ 'f')|format(v|abs) }}{{ suffix }}">{{ '▲' if v > 0 else '▼' }} {{ ('%.' ~ digits ~ 'f')|format(v|abs) }}{{ suffix }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro sparkline(values, invert=False) -%}
+{%- set vals = values|reject('none')|list -%}
+{%- if vals|length >= 3 -%}
+{%- set lo = vals|min -%}{%- set hi = vals|max -%}{%- set span = (hi - lo) or 1 -%}{%- set step = 60 / (vals|length - 1) -%}
+<svg class="sparkline" viewBox="0 0 60 18" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" points="{% for v in vals %}{{ '%.1f'|format(loop.index0 * step) }},{{ '%.1f'|format((((v - lo) / span) if invert else (1 - (v - lo) / span)) * 16 + 1) }} {% endfor %}"/></svg>
+{%- endif -%}
+{%- endmacro %}
+
+{# One headline number with its change since the previous completed round. #}
+{% macro stat_change(label, st, since, prefix='', feature=False, note='', href='') -%}
+<div class="stat card{{ ' feature' if feature }}" title="{{ st.help }}">
+  <small>{{ label }}{% if href %} <a class="info-link" href="{{ href }}" title="{{ st.help }}">ⓘ</a>{% endif %}</small>
+  <strong>{{ prefix }}{{ st.now if st.now is not none else '—' }}</strong>
+  <span class="stat-change">{% if since %}{{ delta(st.change, 0 if prefix == 'P' or label == 'Market tier' else 1) }}<span class="muted small">since {{ since }}</span>{% else %}<span class="muted small">{{ note or 'Change shown after Round 2' }}</span>{% endif %}</span>
+  {{ sparkline(st.series, invert=(prefix == 'P')) }}
 </div>
 {%- endmacro %}

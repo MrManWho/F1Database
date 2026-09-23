@@ -232,12 +232,8 @@
   var F1 = window.F1 || {};
   var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
 
-  // Race times are stored in UTC; show them in the viewer's own time zone.
+  // Race times are formatted by the server in the league's time zone; only the countdown ticks here.
   function parse(iso) { var d = new Date(iso); return isNaN(d) ? null : d; }
-  document.querySelectorAll("time[data-local]").forEach(function (el) {
-    var d = parse(el.dataset.local);
-    if (d) el.textContent = d.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-  });
   var counters = document.querySelectorAll("[data-countdown]");
   function tick() {
     var now = Date.now();
@@ -245,27 +241,26 @@
       var d = parse(el.dataset.countdown);
       if (!d) return;
       var left = Math.floor((d - now) / 1000);
-      var out = el.querySelector(".cd") || el.appendChild(Object.assign(document.createElement("b"), { className: "cd" }));
-      if (left <= 0) { out.textContent = "🏁 Race time!"; el.classList.add("live"); return; }
-      var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
-      out.textContent = (days ? days + "d " : "") + h + "h " + String(m).padStart(2, "0") + "m " + (days ? "" : String(s).padStart(2, "0") + "s");
+      if (left <= 0) { el.textContent = "Race time"; el.classList.add("live"); return; }
+      var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.max(1, Math.floor(left % 3600 / 60));
+      el.textContent = "Starts in " + (days ? days + "d " + h + "h" : h ? h + "h " + Math.floor(left % 3600 / 60) + "m" : m + "m");
     });
   }
-  if (counters.length) { tick(); setInterval(tick, 1000); }
+  if (counters.length) { tick(); setInterval(tick, 30000); }
 
-  // Race-time form: prefill in local time and tell the server our offset.
-  document.querySelectorAll(".race-time-form").forEach(function (form) {
-    var input = form.querySelector('input[type="datetime-local"]');
-    var d = input.dataset.utc && parse(input.dataset.utc);
-    if (d) {
-      var local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-      input.value = local.toISOString().slice(0, 16);
-    }
-    form.addEventListener("submit", function () {
-      var when = input.value ? new Date(input.value) : new Date();
-      form.querySelector('input[name="tz"]').value = when.getTimezoneOffset();
-    });
-  });
+  // First visit by the Race Master: remember the league's time zone from their browser.
+  var tzUrl = document.body.dataset.tzDetect;
+  if (tzUrl && window.Intl) {
+    try {
+      var zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (zoneName) {
+        fetch(tzUrl, { method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf }, body: JSON.stringify({ timezone: zoneName }) })
+          .then(function (r) { return r.json(); })
+          .then(function (res) { if (res.ok) location.reload(); }).catch(function () {});
+      }
+    } catch (e) { /* no Intl time zone support */ }
+  }
 
   // Reactions toggle in place.
   document.addEventListener("click", function (e) {
@@ -387,4 +382,19 @@
       });
     }
   }
+})();
+
+/* v1.16: whole table rows open their driver/race page; clicks on links and controls inside still work. */
+(function () {
+  document.addEventListener("click", function (e) {
+    var tr = e.target.closest("tr[data-href]");
+    if (!tr || e.target.closest("a, button, input, select, textarea, label, summary")) return;
+    if (window.getSelection && String(window.getSelection())) return;  // let people select text
+    window.location.href = tr.dataset.href;
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var tr = e.target.closest && e.target.closest("tr[data-href]");
+    if (tr && e.target === tr) window.location.href = tr.dataset.href;
+  });
 })();

@@ -821,8 +821,8 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
 def test_roles_can_be_changed_but_one_race_master_remains(app):
     auth.create_user("boss", "Boss", "password1", is_master=True)
     auth.create_user("davidd", "David", "password1")
-    auth.set_role("davidd", "steward")
-    assert auth.role_of(auth.get_user("davidd")) == "steward"
+    with pytest.raises(auth.AuthError, match="per league"):  # Scorekeeper is a league role now (v1.16)
+        auth.set_role("davidd", "steward")
     auth.set_role("davidd", "master")
     auth.set_role("boss", "driver")
     with pytest.raises(auth.AuthError):

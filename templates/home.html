@@ -21,7 +21,7 @@
       <span>{{ c.completed }}/{{ c.total }} rounds</span>
       <span>{{ c.size_kb }} KB</span>
     </div>
-    <div class="muted small">Last opened {{ c.last_opened }}</div>
+    <div class="muted small">Last opened {{ c.last_opened|stamp if c.last_opened else '—' }}</div>
     <div class="small muted">{{ c.players }} player driver{{ 's' if c.players != 1 }}{% if c.join_open %} · open to join{% endif %}
       {% if user.is_master and c.pending_requests %} · <span class="pill pill-hot">{{ c.pending_requests|length }} join request{{ 's' if c.pending_requests|length != 1 }}</span>{% endif %}</div>
   </a>

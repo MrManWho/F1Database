@@ -1,19 +1,19 @@
 {# Race-night hub. Needs: ctx, hub; full=True on the weekend page, False for the dashboard summary. #}
-{% from "_macros.html" import team_dot with context %}
+{% from "_macros.html" import team_dot, race_clock with context %}
 {% set ev = hub.event %}
 {% set wk = url_for('weekend', token=ctx.token, event_id=ev.id) %}
 <section class="card race-night" id="race-night">
   <div class="card-head">
     <h2>{{ 'Race story' if hub.complete else 'Race night' }}</h2>
     {% if ev.race_at and not hub.complete %}
-    <span class="countdown" data-countdown="{{ ev.race_at }}"><time data-local="{{ ev.race_at }}">{{ ev.race_at }}</time></span>
+    {{ race_clock(ev) }}
     {% elif not hub.complete %}<span class="muted small">No race time set{{ ' yet' if not ctx.is_master }}</span>{% endif %}
   </div>
 
   {% if full and ctx.is_master and not hub.complete %}
   <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=ev.id) }}" class="inline-form race-time-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="tz" value="0">
-    <label>Race time (your local time)<input type="datetime-local" name="race_at" data-utc="{{ ev.race_at or '' }}"></label>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ ev.race_at|time_input }}"></label>
     <button class="btn btn-sm">Save time</button>
     {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="race_at" value="">Clear</button>{% endif %}
   </form>
@@ -39,6 +39,7 @@
   {% if hub.fans is defined %}
   <div class="hub-block">
     <div class="hub-title">Fans' Driver of the Day <span class="muted small">{{ hub.fans.total }} vote{{ 's' if hub.fans.total != 1 }}</span></div>
+    {% if not ctx.is_spectator %}
     <form method="post" action="{{ url_for('fan_vote_route', token=ctx.token, event_id=ev.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <select name="driver_id" required><option value="">Pick a driver…</option>
@@ -46,6 +47,7 @@
       </select>
       <button class="btn btn-sm">{{ 'Change vote' if hub.fans.mine else 'Vote' }}</button>
     </form>
+    {% endif %}
     {% if hub.fans.tally %}
     <ul class="bar-list fan-bars">
       {% for t in hub.fans.tally[:5] %}<li><span class="who">{{ t.driver.name }}</span>
@@ -69,12 +71,14 @@
   <div class="hub-block">
     <div class="hub-title">Who's racing?
       <span class="muted small">{{ hub.checkin_counts['in'] }} in · {{ hub.checkin_counts['maybe'] }} maybe · {{ hub.checkin_counts['out'] }} out</span></div>
+    {% if not ctx.is_spectator %}
     <form method="post" action="{{ url_for('checkin', token=ctx.token, event_id=ev.id) }}" class="button-row tight checkin-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% for key, label in C.CHECKIN_CHOICES.items() %}
       <button class="btn btn-sm {{ 'btn-primary' if hub.my_checkin == key else 'btn-ghost' }} checkin-{{ key }}" name="status" value="{{ key }}">{{ label }}</button>
       {% endfor %}
     </form>
+    {% endif %}
     {% if full %}
     <ul class="checkin-list">
       {% for r in hub.checkins %}<li class="ci-{{ r.status or 'none' }}"><span>{{ r.name }}</span>{% if r.driver %}<small class="muted">{{ r.driver.name }}</small>{% endif %}
@@ -89,7 +93,9 @@
     <div class="hub-title">Predictions
       <span class="muted small">{{ hub.pick_count }} pick{{ 's' if hub.pick_count != 1 }} in{{ ' · locked' if hub.picks_locked }}</span></div>
     {% if not hub.picks_locked %}
-      {% if full %}
+      {% if ctx.is_spectator %}
+      <p class="muted small">Players make their picks before the race. They're revealed once it starts.</p>
+      {% elif full %}
       <form method="post" action="{{ url_for('prediction_save', token=ctx.token, event_id=ev.id) }}" class="pick-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% for key, label, pool in [('pole', 'Pole', hub.entrants), ('winner', 'Winner', hub.entrants), ('fastest_lap', 'Fastest lap', hub.entrants), ('top_player', 'Top player driver', hub.players)] if pool %}

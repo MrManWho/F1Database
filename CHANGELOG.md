@@ -3,6 +3,9 @@
 Every version of F1 Universe Tracker, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.16 · Polish, clearer roles and easier reading
+- **One place for roles.** Each league member has one role: Race Master, Scorekeeper, Member or Spectator, set on the league's Players & Logins page. The old account-wide Scorekeeper switch is gone; anyone who had it keeps Scorekeeper in every league they belong to.
+
 ## 1.15 · Life inside the team
 - **Everyone has a pledge.** Every seated driver must have a growth pledge. If yours is missing (a contract from before pledges, or a seat given by hand), the app asks you to choose one before anything else. Pledges are locked for the season.
 - **Race Master: ask for a new pledge.** On Team Standings there's a button to ask one driver, or everyone, to choose again. They'll be asked next time they open the league.

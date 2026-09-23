@@ -52,8 +52,13 @@
       }
       tr.querySelector(".gp-pts").textContent = gp;
       tr.querySelector(".tot-pts").innerHTML = "<strong>" + (gp + sp) + "</strong>";
-      tr.classList.toggle("row-out", ["DNF", "DNS", "DSQ"].indexOf(status) >= 0);
+      const out = ["DNF", "DNS", "DSQ"].indexOf(status) >= 0;
+      tr.classList.toggle("row-out", out);
+      tr.dataset.points = gp + sp;
+      tr.dataset.out = out ? "1" : "0";
+      tr.dataset.complete = status !== "Not Run" ? "1" : "0";
     });
+    applyFilter();
     return problems;
   }
 
@@ -79,10 +84,37 @@
     };
   }
 
+  const ICONS = { saved: "✓ ", saving: "", dirty: "● ", error: "⚠ " };
   function setState(state, text) {
+    if (!stateEl) return;
     stateEl.dataset.state = state;
-    stateEl.textContent = text;
+    stateEl.textContent = (ICONS[state] || "") + text;
   }
+
+  // ---- Filters (everyone): all, player drivers, incomplete, points scorers, DNF/DNS/DSQ.
+  let filter = "all";
+  const emptyNote = document.querySelector(".filter-empty");
+  function applyFilter() {
+    let shown = 0;
+    rows.forEach(function (tr) {
+      const d = tr.dataset;
+      const keep = filter === "all" || (filter === "player" && d.player === "1") ||
+        (filter === "incomplete" && d.complete === "0") || (filter === "points" && parseInt(d.points || "0", 10) > 0) ||
+        (filter === "out" && d.out === "1");
+      tr.hidden = !keep;
+      if (keep) shown++;
+    });
+    if (emptyNote) emptyNote.hidden = shown > 0;
+  }
+  document.querySelectorAll("[data-filter]").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      filter = chip.dataset.filter;
+      document.querySelectorAll("[data-filter]").forEach(function (c) {
+        c.classList.toggle("is-on", c === chip); c.setAttribute("aria-pressed", c === chip ? "true" : "false");
+      });
+      applyFilter();
+    });
+  });
 
   let timer = null, saving = false, queued = false, dirty = false;
 
@@ -104,7 +136,7 @@
     if (saving) { queued = true; return Promise.resolve(false); }
     saving = true;
     dirty = false;
-    setState("saving", "Saving changes…");
+    setState("saving", "Saving…");
     return window.F1.postJSON(table.dataset.url, payload(markComplete)).then(function (res) {
       saving = false;
       if (!res.ok) {
@@ -115,7 +147,7 @@
       }
       statusEl.textContent = res.status;
       statusEl.className = "status-badge status-" + res.status.toLowerCase().replace(/ /g, "-");
-      setState("saved", "All changes saved");
+      setState("saved", "Saved");
       if (res.market_opened) window.F1.toast("Silly season! The transfer market just opened for next year.", "success");
       if (queued) { queued = false; return save(false); }
       return true;
@@ -127,14 +159,57 @@
     });
   }
 
+  applyFilter();
+  if (readOnly) return;  // read-only views are plain text: nothing to edit or save
   recalc();
-  if (readOnly) return;
 
+  function markEdited(el) {
+    const tr = el.closest("tbody tr");
+    if (!tr) return;
+    rows.forEach(function (r) { r.classList.remove("last-edited"); });
+    tr.classList.add("last-edited");
+  }
   table.addEventListener("input", function (e) {
-    if (e.target.matches("input")) { recalc(); schedule(); }
+    if (e.target.matches("input")) { markEdited(e.target); recalc(); schedule(); }
   });
   table.addEventListener("change", function (e) {
-    if (e.target.matches("select, input[type=radio]")) { recalc(); schedule(); }
+    if (e.target.matches("select, input[type=radio]")) { markEdited(e.target); recalc(); schedule(); }
+  });
+
+  // ---- Clear one driver, or a whole session, after confirming.
+  table.addEventListener("click", function (e) {
+    const btn = e.target.closest(".clear-row");
+    if (!btn) return;
+    const tr = btn.closest("tr");
+    const name = tr.querySelector(".driver-cell strong").textContent;
+    if (!confirm("Clear every result for " + name + " this weekend?")) return;
+    tr.querySelectorAll(".pos-input, .note-input").forEach(function (i) { i.value = ""; });
+    tr.querySelectorAll("select").forEach(function (sel) { sel.value = "Auto"; });
+    tr.querySelectorAll("input[type=radio]").forEach(function (r) { r.checked = false; });
+    markEdited(tr); recalc(); schedule();
+  });
+  const clearSession = document.getElementById("clear-session");
+  if (clearSession) clearSession.addEventListener("change", function () {
+    const field = clearSession.value;
+    clearSession.value = "";
+    if (!field) return;
+    const label = { qualifying_position: "qualifying", sprint_position: "Sprint", race_position: "Grand Prix" }[field];
+    if (!confirm("Clear every " + label + " position and status this weekend?")) return;
+    table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) { i.value = ""; });
+    const statusField = { sprint_position: "sprint_status_override", race_position: "status_override" }[field];
+    if (statusField) table.querySelectorAll('select[data-field="' + statusField + '"]').forEach(function (s) { s.value = "Auto"; });
+    recalc(); schedule();
+  });
+
+  // ---- Keyboard: Ctrl/Cmd+S saves now, Esc leaves quick order, ? shows the shortcuts.
+  document.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(false); return; }
+    if (e.key === "Escape" && typeof stopTap === "function") { stopTap(); return; }
+    const typing = e.target.matches && e.target.matches("input, textarea, select");
+    if (e.key === "?" && !typing) {
+      const dlg = document.getElementById("keys-dialog");
+      if (dlg && dlg.showModal) dlg.showModal();
+    }
   });
   [diffInput, notesEl].forEach(function (el) { el.addEventListener("input", schedule); });
 

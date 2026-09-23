@@ -14,8 +14,9 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import random
 
-from . import (auth, community, discord, feed, importer, insights, mailer, market, push, relations, services as S,
-               storage, teamlife)
+from . import (auth, community, discord, feed, importer, insights, mailer, market, push, relations, roles,
+               services as S, storage, teamlife, timefmt)
+from . import circuits
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -42,7 +43,8 @@ AUDIT_LABELS = {
     "market_approach": "Approached a team", "paddock_driver": "Edited a driver", "paddock_driver_delete": "Deleted a driver",
     "paddock_team": "Edited a team", "paddock_cars": "Changed car ratings", "paddock_recalculate": "Recalculated reputation",
     "calendar_add": "Added a race", "calendar_delete": "Removed a race", "members": "Changed league members",
-    "members_add_player": "Added a player driver", "members_request": "Answered a join request",
+    "members_add_player": "Added a player driver", "member_add": "Added a league member",
+    "member_update": "Changed a member's role or driver", "member_remove": "Removed a league member", "members_request": "Answered a join request",
     "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
     "public_rotate": "Made a new public link", "discord_test": "Sent a Discord test message",
     "incident_report": "Reported an incident", "incident_rule": "Ruled on an incident",
@@ -50,7 +52,7 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
 }
-QUIET_ENDPOINTS = {"notifications_read", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -70,6 +72,10 @@ def create_app(config=None):
 
     register_hooks(app)
     register_routes(app)
+    try:
+        roles.unify_legacy_scorekeepers()
+    except Exception:  # never block start-up; it is retried whenever a legacy Scorekeeper signs in
+        app.logger.exception("role migration failed")
     return app
 
 
@@ -96,6 +102,9 @@ def register_hooks(app):
             g.user = auth.get_user(session["user"])
             if not g.user:
                 session.clear()
+            elif g.user["is_steward"]:  # an old account-wide Scorekeeper: move it into their leagues first
+                roles.unify_legacy_scorekeepers()
+                g.user = auth.get_user(session["user"])
         if not g.user and endpoint not in PUBLIC_ENDPOINTS:
             if request.path.startswith("/api/"):
                 return jsonify(ok=False, error="Please log in again"), 401
@@ -121,6 +130,17 @@ def register_hooks(app):
             except Exception:
                 app.logger.exception("push alerts failed")
         return response
+
+    def _tz():
+        return g.get("tz") or timefmt.DEFAULT_TZ
+
+    app.add_template_filter(lambda v: timefmt.race(v, _tz()), "race_time")
+    app.add_template_filter(lambda v: timefmt.race_at(v, _tz()), "race_at")
+    app.add_template_filter(lambda v: timefmt.stamp(v, _tz()), "stamp")
+    app.add_template_filter(lambda v: timefmt.day(v, _tz()), "day")
+    app.add_template_filter(lambda v: timefmt.ago(v, _tz()), "ago")
+    app.add_template_filter(lambda v: timefmt.countdown(v), "countdown")
+    app.add_template_filter(lambda v: timefmt.input_value(v, _tz()), "time_input")
 
     @app.context_processor
     def inject():
@@ -161,23 +181,35 @@ def _discord_news(items):
 
 
 def is_master():
-    return bool(g.user and g.user["is_master"])
+    """Race Master here: a site Race Master, or this league's Race Master (inside a league request)."""
+    return bool(g.user and (g.user["is_master"] or g.get("league_role") == "race_master"))
 
 
 def can_run(membership=None):
-    """Race Master or Scorekeeper (site-wide, or for this league): may enter race results."""
+    """May enter race results in this league (Race Master or Scorekeeper role)."""
+    return roles.can_enter_results(g.get("league_role"))
+
+
+def _load_league_role(token):
+    """Work out the user's role in this league for routes that don't open it through career_page."""
+    g.league_role = None
     if not g.user:
-        return False
-    if g.user["is_master"] or g.user.get("is_steward"):
-        return True
-    return bool(membership and membership["scorekeeper"])
+        return None
+    try:
+        with storage.session(token) as conn:
+            g.league_role = roles.effective_role(conn, g.user)
+    except CareerNotFound:
+        abort(404)
+    return g.league_role
 
 
 def master_required(fn):
+    """Site Race Master only; for a league's own pages (token in the URL), that league's Race Master too."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not is_master():
-            abort(403)
+        if not (g.user and g.user["is_master"]):
+            if "token" not in kwargs or _load_league_role(kwargs["token"]) != "race_master":
+                abort(403)
         return fn(*args, **kwargs)
     return wrapper
 
@@ -211,35 +243,40 @@ def career_page(master_only=False, ops_only=False):
                 app.logger.exception("automatic backup failed")
             try:
                 with storage.session(token) as conn:
-                    linked = conn.execute("SELECT * FROM career_members WHERE username = ?",
-                                          (g.user["username"],)).fetchone()
-                    if not is_master() and not linked:
+                    g.league_role = roles.effective_role(conn, g.user)
+                    if not g.league_role:
                         abort(403)
                     if master_only and not is_master():
                         abort(403)
-                    if ops_only and not can_run(linked):
+                    if ops_only and not can_run():
                         abort(403)
+                    if g.league_role == "spectator" and request.method == "POST" \
+                            and request.endpoint not in SPECTATOR_POST_OK:
+                        abort(403)  # spectators are strictly read-only, whatever endpoint is called
+                    roles.touch(conn, g.user["username"])
                     season_id = _selected_season(conn, token)
+                    g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
                     g.ctx = {
+                        "timezone": g.tz,
+                        "timezone_set": bool(storage.get_meta(conn, "timezone")),
                         "token": token,
                         "career_name": storage.get_meta(conn, "career_name", "Career"),
                         "season": S.get_season(conn, season_id),
                         "current_season_id": S.current_season_id(conn),
                         "seasons": S.list_seasons(conn),
                         "is_master": is_master(),
-                        "can_run": can_run(linked),
+                        "can_run": can_run(),
+                        "access": g.league_role,
+                        "is_spectator": g.league_role == "spectator",
                         "my_driver": _member_driver(conn),
                         "features": community.features(conn),
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
                                                      (C.WINDOW_OPEN,)).fetchone()[0],
                     }
                     mine = g.ctx["my_driver"]
-                    if is_master():
-                        g.ctx["role"] = "Race Master" + (" · Driver" if mine else "")
-                    elif mine:
-                        g.ctx["role"] = "Driver" + (" · Scorekeeper" if g.ctx["can_run"] else "")
-                    else:
-                        g.ctx["role"] = "Scorekeeper" if g.ctx["can_run"] else "Spectator"
+                    g.ctx["role"] = C.ACCESS_ROLES[g.league_role] + (" · Driver" if mine else "")
+                    if g.league_role == "member" and mine:
+                        g.ctx["role"] = "Driver"
                     g.ctx["pending_offers"] = conn.execute(
                         "SELECT COUNT(*) FROM offers WHERE status = ?" + (" AND driver_id = ?" if mine and not is_master() else ""),
                         (C.OFFER_PENDING, mine["id"]) if mine and not is_master() else (C.OFFER_PENDING,)).fetchone()[0]
@@ -267,6 +304,9 @@ def career_page(master_only=False, ops_only=False):
         return wrapper
     return deco
 
+
+# The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
+SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect"}
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "help_page"}
 
@@ -527,7 +567,7 @@ def register_routes(app):
         try:
             role = request.form.get("role", "driver")
             auth.create_user(request.form.get("username"), request.form.get("display_name"),
-                             request.form.get("password"), is_master=role == "master", is_steward=role == "steward",
+                             request.form.get("password"), is_master=role == "master",
                              email=request.form.get("email"))
             flash("Account created.", "success")
         except AuthError as exc:
@@ -644,9 +684,9 @@ def register_routes(app):
                 players = S.player_drivers(conn)
                 for (_, login), driver in zip(rows, players):
                     username = auth.normalise(login)
-                    if username and auth.get_user(username):
-                        conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id) VALUES(?,?)",
-                                     (username, driver["id"]))
+                    user = auth.get_user(username) if username else None
+                    if user:
+                        roles.set_member(conn, username, "race_master" if user["is_master"] else "member", driver["id"])
                 if request.form.get("rookie_market") and players:
                     market.open_window(conn, S.current_season_id(conn), kind="Rookie Draft")
         except (ValidationError, ValueError) as exc:
@@ -703,6 +743,7 @@ def register_routes(app):
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
                     news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
                     hub=_hub(conn, ctx, nxt) if nxt else None,
+                    circuit=circuits.lookup(nxt["name"], nxt["location"]) if nxt else None,
                     press=teamlife.press_pen(conn, ctx["current_season_id"], ctx["my_driver"]["id"])
                     if ctx["my_driver"] and sid == ctx["current_season_id"] else None)
 
@@ -780,7 +821,9 @@ def register_routes(app):
                     trend=insights.driver_round_timeline(conn, driver_id), profile=community.profile(conn, driver_id),
                     contracts=community.contract_history(conn, driver_id), trophies=trophies,
                     can_edit=_may_edit_profile(ctx, driver_id), nationalities=community.NATIONALITIES,
-                    owner=auth.get_user(owner) if owner else None)
+                    owner=auth.get_user(owner) if owner else None,
+                    changes=insights.stat_changes(conn, ctx["season"]["id"], driver_id)
+                    if any(t["season"]["id"] == ctx["season"]["id"] for t in timeline) else None)
 
     @app.route("/career/<token>/teams")
     @career_page()
@@ -862,7 +905,13 @@ def register_routes(app):
         rows = S.hall_of_records(conn)
 
         def leader(key):
-            return max(rows, key=lambda r: (r[key], r["points"]), default=None)
+            """The record holder, or None while nobody has recorded any (no name for a 0-0-0 tie)."""
+            best = max(rows, key=lambda r: (r[key], r["points"]), default=None)
+            if not best or not best[key]:
+                return None
+            best = dict(best)
+            best["tied"] = sum(1 for r in rows if r[key] == best[key]) - 1
+            return best
         return page("records.html", ctx, rows=rows, all_time=insights.all_time_records(conn), leaders={
             "points": leader("points"), "wins": leader("wins"), "poles": leader("poles"), "titles": leader("titles")})
 
@@ -959,7 +1008,8 @@ def register_routes(app):
                     value_parts=_value_parts(me, interest),
                     locked=market.locked_in(conn, ctx["current_season_id"], driver["id"],
                                             window["target_year"] if window else ctx["season"]["year"] + 1),
-                    trend=insights.driver_round_timeline(conn, driver["id"]))
+                    trend=insights.driver_round_timeline(conn, driver["id"]),
+                    changes=insights.stat_changes(conn, sid, driver["id"]))
 
     def _value_parts(me, interest):
         """Driver Value split into what it's made of, plus how far the next team up is."""
@@ -1396,36 +1446,74 @@ def register_routes(app):
     def members(conn, ctx):
         players = S.player_drivers(conn)
         if request.method == "POST":
-            conn.execute("DELETE FROM career_members")
-            chosen = set()
+            # The pre-v1.16 all-in-one form (driver links + Scorekeeper ticks + spectators), mapped onto roles.
+            wanted = {}
             for p in players:
                 username = auth.normalise(request.form.get(f"user_{p['id']}"))
                 if not username:
                     continue
                 if not auth.get_user(username):
                     raise ValidationError("Unknown account")
-                if username in chosen:
+                if username in wanted:
                     raise ValidationError("One login cannot drive two player drivers")
-                chosen.add(username)
-                conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper) VALUES(?,?,?)",
-                             (username, p["id"], int(bool(request.form.get(f"keeper_{p['id']}")))))
+                wanted[username] = ("scorekeeper" if request.form.get(f"keeper_{p['id']}") else "member", p["id"])
             for u in auth.list_users():
                 access = request.form.get(f"member_{u['username']}")
-                if u["username"] in chosen or access not in ("spectator", "scorekeeper"):
-                    continue
-                conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper) VALUES(?, NULL, ?)",
-                             (u["username"], int(access == "scorekeeper")))
+                if u["username"] not in wanted and access in ("spectator", "scorekeeper"):
+                    wanted[u["username"]] = (access, None)
+            current = {m["username"]: m for m in roles.members(conn)}
+            for username, (role, did) in wanted.items():
+                user = auth.get_user(username)
+                if user["is_master"] or (current.get(username) and current[username]["role"] == "race_master"):
+                    role = "race_master"
+                conn.execute("UPDATE career_members SET driver_id = NULL WHERE driver_id = ? AND username != ?",
+                             (did, username)) if did else None
+                roles.set_member(conn, username, role, did)
+            for username, m in current.items():
+                if username not in wanted and m["role"] != "race_master":
+                    roles.remove_member(conn, username)
             flash("League members saved.", "success")
             return redirect(url_for("members", token=ctx["token"]))
-        rows = conn.execute("SELECT * FROM career_members").fetchall()
-        links = {r["username"]: r["driver_id"] for r in rows}
-        scorekeepers = {r["username"] for r in rows if r["scorekeeper"]}
         requests = [dict(r) for r in conn.execute("SELECT * FROM join_requests WHERE status = 'Pending' ORDER BY id")]
         users = {u["username"]: u for u in auth.list_users()}
         for r in requests:
             r["user"] = users.get(r["username"])
-        return page("members.html", ctx, players=players, users=list(users.values()), links=links, requests=requests,
-                    scorekeepers=scorekeepers, join_open=storage.get_meta(conn, "join_open") == "1")
+        rows = roles.members(conn)
+        assigned = {r["driver_id"] for r in rows if r["driver_id"]}
+        in_league = {r["username"] for r in rows}
+        return page("members.html", ctx, players=players, rows=rows, requests=requests,
+                    free_drivers=[p for p in players if p["id"] not in assigned],
+                    outsiders=[u for u in users.values() if u["username"] not in in_league],
+                    users=list(users.values()), join_open=storage.get_meta(conn, "join_open") == "1")
+
+    def _driver_from_form():
+        raw = request.form.get("driver_id")
+        return int(raw) if raw and raw.isdigit() else None
+
+    @app.route("/career/<token>/members/add", methods=["POST"])
+    @career_page(master_only=True)
+    def member_add(conn, ctx):
+        username = auth.normalise(request.form.get("username"))
+        if conn.execute("SELECT 1 FROM career_members WHERE username = ?", (username,)).fetchone():
+            raise ValidationError("That login is already in this league")
+        user = roles.set_member(conn, username, request.form.get("role"), _driver_from_form())
+        flash(f"{user['display_name']} added as {C.ACCESS_ROLES[request.form.get('role')]}.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/members/<username>/update", methods=["POST"])
+    @career_page(master_only=True)
+    def member_update(conn, ctx, username):
+        role = request.form.get("role")
+        user = roles.set_member(conn, username, role, _driver_from_form())
+        flash(f"{user['display_name']} is now {C.ACCESS_ROLES[role]}.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/members/<username>/remove", methods=["POST"])
+    @career_page(master_only=True)
+    def member_remove(conn, ctx, username):
+        roles.remove_member(conn, auth.normalise(username))
+        flash("Removed from the league. Their login and driver are unchanged.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
 
     def _add_player(conn, ctx, username, driver_name, send_offers, scorekeeper=False):
         user = auth.get_user(username) if username else None
@@ -1436,8 +1524,10 @@ def register_routes(app):
             raise ValidationError(f"{user['username']} already drives in this league")
         did = S.add_player_driver(conn, driver_name, ctx["current_season_id"])
         if user:
-            conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id, scorekeeper) VALUES(?,?,?)",
-                         (user["username"], did, int(scorekeeper)))
+            current = roles.effective_role(conn, user)
+            role = "race_master" if current == "race_master" else ("scorekeeper" if scorekeeper or current == "scorekeeper"
+                                                                  else "member")
+            roles.set_member(conn, user["username"], role, did)
         name = S.driver_map(conn)[did]["name"]
         feed.post(conn, ctx["current_season_id"], "paddock", f"{name} joins the grid as a rookie",
                   "A new player driver has entered the league.", "drivers", driver_id=did)
@@ -1472,8 +1562,7 @@ def register_routes(app):
                                    bool(request.form.get("send_offers")), scorekeeper=keeper)
                 what = f"as {name}" + (" (and Scorekeeper)" if keeper else "")
             else:
-                conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id, scorekeeper) VALUES(?, NULL, ?)",
-                             (req["username"], int(keeper)))
+                roles.set_member(conn, req["username"], "scorekeeper" if keeper else "spectator", None)
                 what = f"as {C.LEAGUE_ROLES[role]}"
             changed = role != (req["role"] or "driver")
             flash(f"{req['username']} joined {what}." + (" (Role changed from their request.)" if changed else ""),
@@ -1518,17 +1607,10 @@ def register_routes(app):
         mailer.send_later(recipients, subject, text, html)
 
     def _may_enter_results(token):
-        if is_master():
-            return True
         if not g.user:
             return False
-        try:
-            with storage.session(token) as conn:
-                member = conn.execute("SELECT * FROM career_members WHERE username = ?",
-                                      (g.user["username"],)).fetchone()
-                return bool(member and can_run(member))
-        except CareerNotFound:
-            return False
+        _load_league_role(token)
+        return can_run()
 
     @app.route("/api/career/<token>/weekend/<int:event_id>", methods=["POST"])
     def api_weekend(token, event_id):
@@ -1609,7 +1691,8 @@ def register_routes(app):
     @app.route("/api/career/<token>/notifications")
     @career_page()
     def api_notifications(conn, ctx):
-        items = [{"id": n["id"], "text": n["text"], "unread": n["unread"], "created_at": n["created_at"],
+        items = [{"id": n["id"], "text": n["text"], "unread": n["unread"], "created_at": timefmt.ago(n["created_at"], g.tz),
+                  "when": timefmt.stamp(n["created_at"], g.tz),
                   "link": f"/career/{ctx['token']}/{n['link']}" if n["link"] else None}
                  for n in ctx["notifications"]]
         return jsonify(ok=True, unread=ctx["unread"], items=items)
@@ -1678,13 +1761,29 @@ def register_routes(app):
             storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
             discord.save_settings(conn, request.form.get("discord_webhook"), request.form.get("discord_results"),
                                   request.form.get("discord_news"))
+            zone = (request.form.get("timezone") or "").strip()
+            if zone:
+                if not timefmt.valid_zone(zone):
+                    raise ValidationError("Unknown time zone")
+                storage.set_meta(conn, "timezone", zone)
             flash("League settings saved.", "success")
             return redirect(url_for("league_settings", token=ctx["token"]))
         feats = community.features(conn)
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
+                    zones=timefmt.COMMON_ZONES,
                     join_open=storage.get_meta(conn, "join_open") == "1")
+
+    @app.route("/career/<token>/settings/timezone", methods=["POST"])
+    @career_page(master_only=True)
+    def timezone_detect(conn, ctx):
+        """The Race Master's browser reports its time zone the first time, if none is set yet."""
+        zone = (request.get_json(silent=True) or {}).get("timezone", "")
+        if not ctx["timezone_set"] and timefmt.valid_zone(zone):
+            storage.set_meta(conn, "timezone", zone)
+            return jsonify(ok=True, timezone=zone)
+        return jsonify(ok=False)
 
     @app.route("/career/<token>/settings/discord-test", methods=["POST"])
     @career_page(master_only=True)
@@ -1720,7 +1819,10 @@ def register_routes(app):
     def race_time(conn, ctx, event_id):
         if not S.get_event(conn, event_id):
             abort(404)
-        when = community.parse_race_at(request.form.get("race_at"), request.form.get("tz"))
+        try:
+            when = timefmt.from_input(request.form.get("race_at"), ctx["timezone"])
+        except ValueError:
+            raise ValidationError("That race time isn't a valid date and time")
         community.set_race_at(conn, event_id, when)
         if when:
             event = S.get_event(conn, event_id)
@@ -1888,6 +1990,7 @@ def register_routes(app):
             with storage.session(token) as conn:
                 if not community.features(conn)["public"] or not hmac.compare_digest(key, community.public_key(conn)):
                     abort(404)
+                g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
                 sid = S.current_season_id(conn)
                 evs = S.events(conn, sid)
                 done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]

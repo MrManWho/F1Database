@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, avatar with context %}
+{% from "_macros.html" import team_dot, avatar, race_clock, pattrs with context %}
 {% block title %}{{ name }}{% endblock %}
 {% block plain %}
 <div class="page-head"><div><div class="kicker">{{ season.year }} season · public results</div><h1>{{ name }}</h1></div>
@@ -10,7 +10,7 @@
   <div class="kicker">Next up · Round {{ next_event.round_number }}</div>
   <h2 class="hero-title">{{ next_event.name }}</h2>
   <div class="hero-meta"><span>{{ next_event.location }}</span>{% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
-  {% if next_event.race_at %}<p class="hero-countdown">Lights out in <span class="countdown" data-countdown="{{ next_event.race_at }}"><time data-local="{{ next_event.race_at }}">{{ next_event.race_at }}</time></span></p>{% endif %}
+  {% if next_event.race_at %}{{ race_clock(next_event, big=True) }}{% endif %}
 </section>
 {% endif %}
 
@@ -28,7 +28,7 @@
     <h2>Drivers</h2>
     <table class="data-table compact"><tbody>
     {% for d in drivers if d.has_results or d.seat %}
-      <tr class="{{ 'player-row' if d.driver.is_player }}"><td class="num">{{ d.position }}</td>
+      <tr {{ pattrs(d.driver) }}><td class="num">{{ d.position }}</td>
         <td class="driver-cell">{{ avatar(token, d.driver, profiles.get(d.driver_id), 'sm', key) }}<span><strong>{{ d.driver.name }}</strong><small>{{ d.team.name if d.team else '' }}</small></span></td>
         <td class="num">{{ d.wins }} W</td><td class="num"><b>{{ d.points }}</b></td></tr>
     {% endfor %}</tbody></table>
@@ -45,7 +45,7 @@
   <h2>Calendar</h2>
   <table class="data-table compact"><tbody>{% for e in events %}
     <tr><td class="num">R{{ e.round_number }}</td><td><strong>{{ e.name }}</strong>{% if e.is_sprint %} <span class="pill pill-sprint">Sprint</span>{% endif %}<br><small class="muted">{{ e.location }}</small></td>
-      <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}<time data-local="{{ e.race_at }}">{{ e.race_at }}</time>{% else %}<span class="muted">{{ e.status }}</span>{% endif %}</td></tr>
+      <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}{{ e.race_at|race_time }}{% else %}<span class="muted">{{ e.status }}</span>{% endif %}</td></tr>
   {% endfor %}</tbody></table>
 </section>
 <p class="muted small">Powered by F1 Universe Tracker v{{ APP_VERSION }}.</p>
