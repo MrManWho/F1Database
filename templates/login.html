@@ -18,8 +18,11 @@
   </form>
   {% elif mode == 'register' %}
   <h1>Create your login</h1>
-  {% if signups %}
-  <p class="muted">After signing up you can ask to join any open league from the League Library. A Race Master approves your driver.</p>
+  {% if signups and not email_ready %}
+  <p class="muted">Sign-ups need email to be set up on this tracker first (so we can send you a confirmation code).
+    Ask the Race Master to set up email, or to create your login for you.</p>
+  {% elif signups %}
+  <p class="muted">We'll email you a 6-digit code to confirm your address. After signing up you can ask to join any open league from the League Library. A Race Master approves your driver.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>
@@ -27,12 +30,25 @@
     <label>Email<input name="email" type="email" autocomplete="email" required></label>
     <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
     <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
-    <button class="btn btn-primary">Create account</button>
+    <button class="btn btn-primary">Email me a code</button>
   </form>
   {% else %}
   <p class="muted">Sign-ups are turned off. Ask the Race Master to create your login.</p>
   {% endif %}
   <p class="muted small">Already have a login? <a href="{{ url_for('login') }}">Log in</a></p>
+  {% elif mode == 'verify' %}
+  <h1>Check your email</h1>
+  <p class="muted">We sent a 6-digit code to <b>{{ masked_email }}</b>. It works for 15 minutes. Check spam if it isn't there.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required autofocus class="code-input" placeholder="123456"></label>
+    <button class="btn btn-primary">Confirm and create account</button>
+  </form>
+  <form method="post" action="{{ url_for('register_resend') }}" class="inline-form tight" style="margin-top:.8rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-sm">Send a new code</button>
+    <a class="small" href="{{ url_for('register') }}">Use a different email</a>
+  </form>
   {% elif mode == 'forgot' %}
   <h1>Forgot your password?</h1>
   <p class="muted">Enter your username or email. If the account has an email address, we'll send a link to choose a new password.</p>

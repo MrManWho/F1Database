@@ -538,15 +538,36 @@ def test_login_locks_after_repeated_wrong_passwords(app):
     assert auth.login("david", "password1", "10.0.0.9")["username"] == "david"
 
 
-def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client):
-    token = _career_token(master_client)
-    client = app.test_client()
+@pytest.fixture
+def codes(monkeypatch):
+    """Capture sign-up code emails instead of sending them."""
+    from f1tracker import mailer
+    sent = []
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    monkeypatch.setattr(mailer, "send", lambda to, subject, text, html=None: sent.append((to, subject, text)) or len(to))
+    return sent
+
+
+def _sign_up(client, codes, username="carson", email="carson@example.com"):
     client.get("/register")
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
-    res = client.post("/register", data={"username": "carson", "display_name": "Carson", "password": "password1",
-                                         "confirm": "password1", "csrf_token": "tok", "email": "carson@example.com"})
-    assert res.status_code == 302 and auth.get_user("carson")["is_master"] == 0
+    res = client.post("/register", data={"username": username, "display_name": username.title(), "password": "password1",
+                                         "confirm": "password1", "csrf_token": "tok", "email": email})
+    with client.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    return res
+
+
+def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client, codes):
+    token = _career_token(master_client)
+    client = app.test_client()
+    res = _sign_up(client, codes)
+    assert res.headers["Location"].endswith("/register/verify") and auth.get_user("carson") is None
+    code = codes[-1][1].rsplit(" ", 1)[-1]
+    assert codes[-1][0] == ["carson@example.com"] and len(code) == 6
+    client.post("/register/verify", data={"code": code, "csrf_token": "tok"})
+    assert auth.get_user("carson")["is_master"] == 0
     assert token not in client.get("/").get_data(as_text=True)
     assert client.get(f"/career/{token}/dashboard").status_code == 403
     assert "Waiting to be assigned" in master_client.get("/accounts").get_data(as_text=True)
@@ -1031,3 +1052,39 @@ def test_drivers_can_be_deleted_completely(db):
     assert perez not in S.driver_seats(db, sid)
     assert db.execute("SELECT COUNT(*) FROM results WHERE driver_id = ?", (perez,)).fetchone()[0] == 0
     assert S.grid_map(db, sid)[seat] is None or S.grid_map(db, sid)[seat] != perez
+
+
+
+def test_sign_up_needs_the_emailed_code(app, codes):
+    auth.create_user("admin", "Admin", "password1", is_master=True)
+    client = app.test_client()
+    _sign_up(client, codes, "nia", "nia@example.com")
+    assert "Check your email" in client.get("/register/verify").get_data(as_text=True)
+    real = codes[-1][1].rsplit(" ", 1)[-1]
+    wrong = "000000" if real != "000000" else "111111"
+    res = client.post("/register/verify", data={"code": wrong, "csrf_token": "tok"}, follow_redirects=True)
+    assert "4 tries left" in res.get_data(as_text=True) and auth.get_user("nia") is None
+    for _ in range(4):
+        client.post("/register/verify", data={"code": wrong, "csrf_token": "tok"})
+    res = client.post("/register/verify", data={"code": real, "csrf_token": "tok"}, follow_redirects=True)
+    assert "Too many wrong codes" in res.get_data(as_text=True) and auth.get_user("nia") is None
+    # A fresh code resets the tries (after the one-minute wait).
+    with auth.accounts() as conn:
+        conn.execute("UPDATE pending_signups SET sent_at = 0")
+    client.post("/register/resend", data={"csrf_token": "tok"})
+    fresh = codes[-1][1].rsplit(" ", 1)[-1]
+    client.post("/register/verify", data={"code": fresh, "csrf_token": "tok"})
+    assert auth.get_user("nia")["email"] == "nia@example.com"
+    assert auth.verify("nia", "password1")
+
+
+def test_sign_up_is_closed_until_email_is_set_up(app):
+    auth.create_user("admin", "Admin", "password1", is_master=True)
+    client = app.test_client()
+    page = client.get("/register").get_data(as_text=True)
+    assert "need email to be set up" in page
+    with client.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    client.post("/register", data={"username": "x1", "password": "password1", "confirm": "password1",
+                                   "email": "x@example.com", "csrf_token": "tok"})
+    assert auth.get_user("x1") is None

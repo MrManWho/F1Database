@@ -521,3 +521,4 @@ body.rail .role-chip { font-size: .5rem; padding: 2px 4px; }
 .change.down { color: #ff6b6b; }
 .change.same { color: #4a5364; }
 @media (max-width: 1250px) { .dash-grid { grid-template-columns: 1fr; } }
+.code-input { font-size: 1.6rem; letter-spacing: .4em; text-align: center; font-weight: 800; }

@@ -27,7 +27,8 @@ def _base_dir():
     return Path(__file__).resolve().parent.parent
 
 
-PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "forgot", "reset_password"}
+PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
+                    "reset_password"}
 
 
 def create_app(config=None):
@@ -248,23 +249,71 @@ def register_routes(app):
             return redirect(target)
         return render_template("login.html", mode="login", signups=auth.signups_allowed())
 
+    def _send_signup_code(email, code, display_name):
+        mailer.send([email], f"Your F1 Universe Tracker code: {code}",
+                    f"Hi {display_name},\n\nYour sign-up code is: {code}\n\nEnter it on the sign-up page within "
+                    f"{auth.SIGNUP_CODE_MINUTES} minutes to finish creating your account. If you didn't sign up, "
+                    "ignore this email and nothing happens.")
+
     @app.route("/register", methods=["GET", "POST"])
     def register():
+        email_ready = mailer.configured()
         if request.method == "POST":
+            if not email_ready:
+                flash("Sign-ups need email to be set up first. Ask the Race Master to create your login.", "error")
+                return redirect(url_for("register"))
             if request.form.get("password") != request.form.get("confirm"):
                 flash("The two passwords don't match.", "error")
                 return redirect(url_for("register"))
             try:
-                username = auth.register(request.form.get("username"), request.form.get("display_name"),
-                                         request.form.get("password"), request.remote_addr, request.form.get("email"))
+                pending_id, code = auth.register(request.form.get("username"), request.form.get("display_name"),
+                                                 request.form.get("password"), request.remote_addr,
+                                                 request.form.get("email"))
+                pending = auth.pending_signup(pending_id)
+                _send_signup_code(pending["email"], code, pending["display_name"])
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("register"))
+            except mailer.MailError:
+                app.logger.exception("sign-up email failed")
+                flash("We couldn't send the code email. Check the address, or ask the Race Master.", "error")
+                return redirect(url_for("register"))
+            session.clear()
+            session["signup_id"] = pending_id
+            return redirect(url_for("register_verify"))
+        return render_template("login.html", mode="register", signups=auth.signups_allowed(), email_ready=email_ready)
+
+    @app.route("/register/verify", methods=["GET", "POST"])
+    def register_verify():
+        pending = auth.pending_signup(session.get("signup_id"))
+        if not pending:
+            flash("That sign-up has expired. Please fill in the form again.", "error")
+            return redirect(url_for("register"))
+        if request.method == "POST":
+            try:
+                username = auth.finish_signup(pending["id"], request.form.get("code"))
+            except AuthError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("register_verify"))
             session.clear()
             session["user"] = username
-            flash("Account created. Pick an open league below and ask to join, or wait for a Race Master to add you.", "success")
+            flash("Email confirmed and account created. Pick an open league below and ask to join.", "success")
             return redirect(url_for("home"))
-        return render_template("login.html", mode="register", signups=auth.signups_allowed())
+        email = pending["email"]
+        masked = email[0] + "•••" + email[email.index("@") - 1:] if email.index("@") > 1 else email
+        return render_template("login.html", mode="verify", masked_email=masked, signups=True)
+
+    @app.route("/register/resend", methods=["POST"])
+    def register_resend():
+        try:
+            email, code = auth.resend_signup_code(session.get("signup_id"))
+            _send_signup_code(email, code, auth.pending_signup(session.get("signup_id"))["display_name"])
+            flash("A new code is on its way.", "success")
+        except AuthError as exc:
+            flash(str(exc), "error")
+        except mailer.MailError:
+            flash("We couldn't send the code email. Try again in a minute.", "error")
+        return redirect(url_for("register_verify"))
 
     @app.route("/forgot", methods=["GET", "POST"])
     def forgot():

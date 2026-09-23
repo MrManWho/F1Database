@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.10
+# F1 Universe Tracker v1.11
 
 A companion website for F1 game career **leagues**. Any number of people can drive: each player
 has their own login, garage and contract negotiations, and a Race Master or Race Steward enters the
@@ -24,6 +24,17 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.11: email confirmation at sign-up
+
+Signing up now takes two steps. Fill in the form, then enter the **6-digit code** emailed to you.
+The account is only created once the code is right.
+
+* Codes work for 15 minutes. **Send a new code** is available once a minute. After 5 wrong tries
+  you need a new code.
+* Only a hash of the code is stored, and the password is hashed before the account exists.
+* Self sign-up needs email set up (**Accounts → Settings → Email**). Until then the sign-up page
+  says so, and the Race Master can still create logins by hand in Accounts. Those don't need a code.
 
 ## v1.10: Scorekeeper role, cleaner navigation, deleting drivers
 

@@ -54,6 +54,16 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_results" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    conn.execute("""CREATE TABLE IF NOT EXISTS pending_signups (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        email TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        expires_at REAL NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        sent_at REAL NOT NULL)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS password_resets (
         token_hash TEXT PRIMARY KEY,
         username TEXT NOT NULL,
@@ -266,25 +276,89 @@ def login(username, password, ip):
     return user
 
 
+SIGNUP_CODE_MINUTES = 15
+SIGNUP_CODE_TRIES = 5
+SIGNUP_RESEND_SECONDS = 60
+
+
 def register(username, display_name, password, ip, email=None):
-    """Self sign-up. New accounts are Drivers and see nothing until a Race Master links them."""
+    """Step 1 of self sign-up: check the details and hold them until the emailed code comes back.
+
+    Returns (pending_id, code). Nothing is created until finish_signup() gets the right code.
+    New accounts are Drivers and see nothing until a Race Master links them.
+    """
     if not signups_allowed():
         raise AuthError("Sign-ups are turned off. Ask the Race Master to create your login.")
-    key = f"signup:{ip or '?'}"
-    now = time.time()
+    username = normalise(username)
+    if not USERNAME_RE.match(username):
+        raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
+    if len(password or "") < 6:
+        raise AuthError("Passwords need at least 6 characters")
+    email = clean_email(email, required=True)
+    display_name = (display_name or "").strip()[:60] or username
+    key, now = f"signup:{ip or '?'}", time.time()
     with accounts() as conn:
         row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
         count = row["count"] if row and now - row["first_at"] < 3600 else 0
         if count >= SIGNUPS_PER_IP_PER_HOUR:
             raise AuthError("Too many sign-ups from this connection. Try again later.")
-    name = create_user(username, display_name, password, is_master=False, email=clean_email(email, required=True))
-    with accounts() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+            raise AuthError("That username is taken")
+        conn.execute("DELETE FROM pending_signups WHERE expires_at < ? OR username = ?", (now, username))
+        code = f"{secrets.randbelow(10 ** 6):06d}"
+        pending_id = conn.execute(
+            """INSERT INTO pending_signups(username, display_name, password_hash, email, code_hash, expires_at,
+               attempts, sent_at) VALUES(?,?,?,?,?,?,0,?)""",
+            (username, display_name, generate_password_hash(password), email, _hash(code),
+             now + SIGNUP_CODE_MINUTES * 60, now)).lastrowid
         first = row["first_at"] if row and count else now
         conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
-    return name
+    return pending_id, code
 
+
+def pending_signup(pending_id):
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM pending_signups WHERE id = ?", (pending_id or 0,)).fetchone()
+    return dict(row) if row and row["expires_at"] > time.time() else None
+
+
+def resend_signup_code(pending_id):
+    """A fresh code for the same sign-up (at most once a minute). Returns (email, code)."""
+    pending = pending_signup(pending_id)
+    if not pending:
+        raise AuthError("That sign-up has expired. Please fill in the form again.")
+    if time.time() - pending["sent_at"] < SIGNUP_RESEND_SECONDS:
+        raise AuthError("A code was sent less than a minute ago. Check your inbox and spam folder.")
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    with accounts() as conn:
+        conn.execute("UPDATE pending_signups SET code_hash = ?, attempts = 0, sent_at = ?, expires_at = ? WHERE id = ?",
+                     (_hash(code), time.time(), time.time() + SIGNUP_CODE_MINUTES * 60, pending_id))
+    return pending["email"], code
+
+
+def finish_signup(pending_id, code):
+    """Step 2: the right code creates the account. Wrong codes are limited."""
+    pending = pending_signup(pending_id)
+    if not pending:
+        raise AuthError("That sign-up has expired. Please fill in the form again.")
+    if pending["attempts"] >= SIGNUP_CODE_TRIES:
+        raise AuthError("Too many wrong codes. Ask for a new code.")
+    if not secrets.compare_digest(_hash((code or "").strip().replace(" ", "")), pending["code_hash"]):
+        with accounts() as conn:
+            conn.execute("UPDATE pending_signups SET attempts = attempts + 1 WHERE id = ?", (pending_id,))
+        left = SIGNUP_CODE_TRIES - pending["attempts"] - 1
+        raise AuthError(f"That code isn't right. {left} tr{'y' if left == 1 else 'ies'} left."
+                        if left else "Too many wrong codes. Ask for a new code.")
+    with accounts() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE username = ?", (pending["username"],)).fetchone():
+            raise AuthError("That username was taken in the meantime. Please sign up again.")
+        conn.execute("""INSERT INTO users(username, display_name, password_hash, is_master, is_steward, email, created_at)
+                        VALUES(?,?,?,0,0,?,?)""", (pending["username"], pending["display_name"],
+                                                   pending["password_hash"], pending["email"], now_iso()))
+        conn.execute("DELETE FROM pending_signups WHERE id = ?", (pending_id,))
+    return pending["username"]
 
 
 # --------------------------------------------------------------------------- email & password resets
