@@ -414,6 +414,7 @@ def migrate(conn):
                spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
                role and members without a driver become Spectators, so nobody loses access. Human drivers get a
                persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
+    v15 -> v16: events.ai_untracked (the round was deliberately marked "Don't track this round").
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -424,7 +425,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "revision" in _columns(conn, "events"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "ai_untracked" in _columns(conn, "events"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -481,6 +482,9 @@ def migrate(conn):
         conn.execute("ALTER TABLE events ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE events ADD COLUMN submitted_at TEXT")
         conn.execute("UPDATE events SET submitted_at = 'before-v1.18' WHERE status = 'Complete'")
+    if "ai_untracked" not in _columns(conn, "events"):
+        # v1.19: "Don't track this round" is remembered explicitly, so a blank difficulty is never ambiguous.
+        conn.execute("ALTER TABLE events ADD COLUMN ai_untracked INTEGER NOT NULL DEFAULT 0")
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

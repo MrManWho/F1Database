@@ -54,6 +54,8 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_results" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    # v1.19: screenshot import no longer uses a paid AI service, so a previously saved API key is removed.
+    conn.execute("DELETE FROM settings WHERE key = 'anthropic_api_key'")
     # v1.18: race-result emails need an address; switch the option off where there's none to send to.
     conn.execute("UPDATE users SET email_results = 0 WHERE email_results = 1 AND (email IS NULL OR trim(email) = '')")
     conn.execute("""CREATE TABLE IF NOT EXISTS pending_signups (

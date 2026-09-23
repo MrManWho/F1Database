@@ -25,8 +25,8 @@
 <div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Submitted and locked.</b> This round's results are final.
   Only the Race Master can reopen or correct it{% if ctx.can_run %}, so contact them if something needs fixing{% endif %}.</div>
 {% elif event.status == 'Complete' and ctx.is_master %}
-<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Submitted.</b> Scorekeepers can't edit this round.
-  You can correct it here directly, or reopen it so a Scorekeeper can.
+<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Weekend complete.</b> Scorekeepers can't edit this round.
+  You can correct it here: edits are held until you press <b>Save corrections</b>. Or reopen it so a Scorekeeper can.
   <form method="post" action="{{ url_for('weekend_reopen', token=ctx.token, event_id=event.id) }}" class="inline"
         onsubmit="return confirm('Reopen this round? Scorekeepers will be able to edit it until it is submitted again.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
@@ -38,15 +38,16 @@
   {{ difficulty(rec, compact=True) }}
   <div class="diff-input">
     {% if ro %}
-    <div class="ro-value"><small>AI difficulty used</small><strong>{{ event.ai_difficulty if event.ai_difficulty is not none else 'Not tracked' }}</strong></div>
+    <div class="ro-value"><small>AI difficulty used</small><strong>{{ event.ai_difficulty if event.ai_difficulty is not none else ("Not tracked" if event.ai_untracked else "Not entered yet") }}</strong></div>
     {% else %}
     <label>AI difficulty used
       <input type="number" id="ai-difficulty" min="{{ C.MIN_DIFFICULTY }}" max="{{ C.MAX_DIFFICULTY }}" step="1"
              value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked">
     </label>
     <div class="button-row tight">
-      {% if rec.recommended is not none %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
-      <button type="button" class="btn btn-sm btn-ghost" id="no-track">Don't track this round</button>
+      {% if rec.recommended is not none and not rec.for_next %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
+      <button type="button" class="btn btn-sm btn-ghost" id="no-track" aria-pressed="{{ 'true' if event.ai_untracked and event.ai_difficulty is none else 'false' }}">Don't track this round</button>
+      <span class="small muted" id="untracked-note" {{ 'hidden' if not (event.ai_untracked and event.ai_difficulty is none) }}>✓ Marked "Don't track"</span>
     </div>
     {% endif %}
   </div>
@@ -99,7 +100,7 @@
   <table class="data-table entry-table {{ 'is-readonly' if ro }}" id="entry-table"
          data-url="{{ url_for('api_weekend', token=ctx.token, event_id=event.id) }}"
          data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}" data-master="{{ 1 if ctx.is_master else 0 }}"
-         data-revision="{{ event.revision }}" data-complete="{{ 1 if event.status == 'Complete' else 0 }}"
+         data-revision="{{ event.revision }}" data-untracked="{{ 1 if event.ai_untracked and event.ai_difficulty is none else 0 }}" data-complete="{{ 1 if event.status == 'Complete' else 0 }}"
          data-state-url="{{ url_for('api_weekend_state', token=ctx.token, event_id=event.id) }}"
          data-checklist-url="{{ url_for('api_weekend_checklist', token=ctx.token, event_id=event.id) }}"
          data-summary-url="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}"
@@ -181,7 +182,9 @@
     </label>
     <div class="button-row">
       <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
-      {% if event.status != 'Complete' %}<button type="button" class="btn btn-primary" id="mark-complete">{{ 'Review and complete' if ctx.is_master else 'Review and submit' }}</button>{% endif %}
+      {% if event.status != 'Complete' %}<button type="button" class="btn btn-primary" id="mark-complete">Review &amp; complete weekend</button>
+      {% else %}<button type="button" class="btn btn-primary" id="save-corrections" disabled aria-describedby="corrections-hint">✓ Weekend complete</button>
+      <span class="muted small" id="corrections-hint">Edit any value to correct this round.</span>{% endif %}
     </div>
     {% endif %}
   </div>
@@ -244,6 +247,17 @@
     </div>
   </div>
 </dialog>
+<dialog id="corrections-dialog" class="dialog" aria-labelledby="corrections-title">
+  <div class="dialog-head"><h2 id="corrections-title">Save corrections to a completed round?</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+  <p>These changes are saved straight away and the round stays complete and locked for Scorekeepers.</p>
+  <p class="small"><b>Recalculated from the corrected results:</b> drivers' and constructors' standings, Form, Reputation (this season),
+    Driver Value and team interest, team relationships and goals, records, the AI-difficulty history and recommendation,
+    predictions scoring and the post-race summary.</p>
+  <p class="small muted"><b>Not changed:</b> headlines, notifications and emails already sent for this round. Edit or delete a headline in Paddock News if it's now wrong.
+    An automatic backup is kept before each completed round, so a correction can be undone by restoring it (League &amp; Saves).</p>
+  <div class="button-row"><button type="button" class="btn btn-ghost" data-close autofocus>Cancel</button>
+    <button type="button" class="btn btn-primary" id="corrections-go">Save corrections</button></div>
+</dialog>
 <dialog id="conflict-dialog" class="dialog conflict-dialog" aria-labelledby="conflict-title">
   <div class="dialog-head"><h2 id="conflict-title">Someone else changed these results</h2></div>
   <p class="muted small">While your edits were waiting to save, the same values were changed on the server. Choose which to keep for each one.
@@ -267,29 +281,85 @@
     <dt><kbd>?</kbd></dt><dd>Show this list</dd>
   </dl>
 </dialog>
-<dialog id="import-dialog" class="dialog">
-  <div class="dialog-head"><h2>Import from screenshot</h2><button class="icon-btn" data-close>✕</button></div>
-  {% if importer_ready %}
-  <form id="import-form" class="stack" data-url="{{ url_for('api_weekend_import', token=ctx.token, event_id=event.id) }}">
+<dialog id="import-dialog" class="dialog import-dialog" aria-labelledby="imp-title"
+        data-entrants='{{ entrants|tojson }}' data-sprint="{{ 1 if event.is_sprint else 0 }}"
+        data-vendor="{{ url_for('static', filename='vendor/tesseract/') }}">
+  <div class="dialog-head"><h2 id="imp-title">Import from screenshot</h2><button class="icon-btn" data-imp-cancel aria-label="Close">✕</button></div>
+  <p class="imp-privacy small"><span aria-hidden="true">🔒</span> Your screenshot is processed locally in this browser and is not uploaded or sent to an AI provider.
+    It's free, needs no account, and nothing is kept after you close this window.</p>
+
+  <section id="imp-step-files">
     <label>Which session?
-      <select name="kind">
+      <select id="imp-session">
+        <option value="auto">Detect from the screenshot</option>
         <option value="qualifying">Qualifying</option>
         {% if event.is_sprint %}<option value="sprint">Sprint</option>{% endif %}
-        <option value="race" selected>Race</option>
-      </select>
-    </label>
-    <label>Screenshots of the classification (up to 4, e.g. P1–11 and P12–22)
-      <input type="file" name="screenshots" accept="image/png,image/jpeg,image/webp" multiple required></label>
-    <p class="muted small">The positions are filled into the table for you to check. They save automatically like normal once filled,
-      so fix anything that looks wrong. Takes about 10–30 seconds.</p>
-    <button class="btn btn-primary" id="import-go">Read screenshots</button>
-  </form>
-  {% else %}
-  <p class="muted">Screenshot import needs an Anthropic API key. Add one in <a href="{{ url_for('accounts_page') }}">Accounts → Settings</a>.
-    Each import costs a few cents.</p>
-  {% endif %}
+        <option value="race">Race</option>
+      </select></label>
+    <div class="imp-drop" id="imp-drop">
+      <label class="btn">📷 Choose screenshots<input type="file" id="imp-file" accept="image/*" multiple hidden></label>
+      <span class="muted small">or drag them here, or paste. Add several if the field doesn't fit in one (e.g. P1–11 and P12–22).</span>
+    </div>
+    <p class="muted small" id="imp-empty">Tip: crop to the results table by dragging on the preview. Straighten, contrast and brightness can help with photos of a screen.</p>
+    <div id="imp-shots" class="imp-shots"></div>
+    <div class="button-row"><button type="button" class="btn btn-ghost" data-imp-cancel>Cancel</button>
+      <button type="button" class="btn btn-primary" id="imp-read" disabled>Read screenshots</button></div>
+  </section>
+
+  <section id="imp-step-progress" hidden aria-live="polite">
+    <p id="imp-progress-text">Starting…</p>
+    <progress id="imp-progress-bar" max="1" value="0">0%</progress>
+    <p class="muted small">Runs in the background; the rest of the page keeps working. The first read downloads the OCR engine from this site (about 7 MB, then cached).</p>
+    <button type="button" class="btn btn-ghost" id="imp-cancel-read">Cancel reading</button>
+  </section>
+
+  <section id="imp-step-failed" hidden role="alert">
+    <p class="form-error" id="imp-fail-msg"></p>
+    <div class="button-row"><button type="button" class="btn btn-ghost" data-imp-cancel>Close</button><button type="button" class="btn" id="imp-retry">Try again</button></div>
+  </section>
+
+  <section id="imp-step-review" hidden>
+    <p><b id="imp-detected"></b></p>
+    <div class="imp-session-row">
+      <label>Apply to
+        <select id="imp-session2">
+          <option value="">— choose a session —</option>
+          <option value="qualifying">Qualifying</option>
+          {% if event.is_sprint %}<option value="sprint">Sprint</option>{% endif %}
+          <option value="race">Race</option>
+        </select></label>
+      <label class="check small"><input type="checkbox" id="imp-ignore-detect"> The detected session is wrong; use my choice</label>
+    </div>
+    <p class="banner banner-warn small" id="imp-lowconf" hidden>Very little could be matched. Screenshot layout and image quality affect recognition:
+      try cropping to the results table, or assign rows yourself below. Your current results haven't been touched.</p>
+    <div class="table-wrap">
+      <table class="data-table compact imp-table">
+        <thead><tr><th><abbr title="Include">Use</abbr></th><th>Shot</th><th>Recognised text</th><th>Driver</th><th>Pos</th><th>Status</th><th>Confidence</th><th>Notes</th></tr></thead>
+        <tbody id="imp-rows"></tbody>
+      </table>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="imp-add">+ Add a missing driver</button>
+    <details class="imp-rawtext"><summary class="small">Show recognised text</summary><pre id="imp-raw"></pre></details>
+    <div class="imp-findings imp-block" hidden><h3 class="mini-head">⛔ Must fix before applying</h3><ul id="imp-blocking"></ul></div>
+    <div class="imp-findings imp-warn" hidden><h3 class="mini-head">⚠️ Warnings</h3><ul id="imp-warnings"></ul></div>
+    <div class="imp-findings imp-info" hidden><h3 class="mini-head">ℹ️ Notes</h3><ul id="imp-info"></ul></div>
+    <div class="imp-compare-wrap" hidden>
+      <h3 class="mini-head">Compared with what's already entered</h3>
+      <div class="table-wrap"><table class="data-table compact"><thead><tr><th>Driver</th><th>Now</th><th>Imported</th><th>Result</th></tr></thead><tbody id="imp-compare"></tbody></table></div>
+      <p class="muted small">Drivers missing from the screenshot keep their current values.</p>
+    </div>
+    <label class="check" id="imp-confirm-row" hidden><input type="checkbox" id="imp-confirm"> Replace the existing values marked above</label>
+    <div class="button-row">
+      <button type="button" class="btn btn-ghost" data-imp-cancel>Cancel import</button>
+      <button type="button" class="btn btn-ghost" id="imp-back">← Screenshots</button>
+      <button type="button" class="btn btn-primary" id="imp-apply" disabled>Apply imported results</button>
+    </div>
+    <p class="muted small">Applying fills the results table only. It doesn't submit or complete the weekend.</p>
+  </section>
 </dialog>
 {% endif %}
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
+{% if not ro %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
+<script src="{{ url_for('static', filename='js/importer.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/share.js') }}"></script>{% endblock %}

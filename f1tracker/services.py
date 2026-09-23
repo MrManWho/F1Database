@@ -664,6 +664,7 @@ def save_weekend(conn, event_id, payload):
     if len(event_notes) > 4000:
         raise ValidationError("Weekend notes are limited to 4,000 characters")
     difficulty = parse_difficulty(payload.get("ai_difficulty", event["ai_difficulty"]))
+    untracked = bool(payload.get("ai_untracked", event["ai_untracked"])) and difficulty is None
 
     gp_left = sum(1 for r in final.values() if r["result_status"] == C.STATUS_NOT_RUN)
     sprint_left = sum(1 for r in final.values() if r["sprint_status"] == C.STATUS_NOT_RUN) if is_sprint else 0
@@ -691,8 +692,8 @@ def save_weekend(conn, event_id, payload):
         status = C.EVENT_IN_PROGRESS
     else:
         status = C.EVENT_NOT_RUN
-    conn.execute("UPDATE events SET status=?, notes=?, ai_difficulty=?, revision = revision + 1 WHERE id=?",
-                 (status, event_notes, difficulty, event_id))
+    conn.execute("UPDATE events SET status=?, notes=?, ai_difficulty=?, ai_untracked=?, revision = revision + 1 WHERE id=?",
+                 (status, event_notes, difficulty, int(untracked), event_id))
     revision = conn.execute("SELECT revision FROM events WHERE id = ?", (event_id,)).fetchone()[0]
     return {"status": status, "complete": status == C.EVENT_COMPLETE, "ai_difficulty": difficulty,
             "gp_left": gp_left, "sprint_left": sprint_left, "revision": revision}
@@ -714,6 +715,7 @@ def weekend_snapshot(conn, event_id):
             "sprint_status_override": r["sprint_status"] if r["sprint_status"] in C.OVERRIDE_STATUSES else "Auto",
             "fastest_lap": bool(r["fastest_lap"]), "driver_of_day": bool(r["driver_of_day"]), "notes": r["notes"] or ""}
     return {"revision": event["revision"], "status": event["status"], "ai_difficulty": event["ai_difficulty"],
+            "ai_untracked": bool(event["ai_untracked"]),
             "event_notes": event["notes"] or "", "results": rows}
 
 
@@ -762,18 +764,39 @@ def submission_check(conn, event_id):
         blocking.append("More than one driver has Driver of the Day")
     elif not dotd:
         warnings.append("No Driver of the Day selected")
-    if event["ai_difficulty"] is None:
-        warnings.append("AI difficulty not tracked for this round (the recommender will skip it)")
-    finished = sorted(r["race_position"] for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"])
-    if finished and finished != list(range(1, len(finished) + 1)):
-        missing = [p for p in range(1, finished[-1] + 1) if p not in finished]
-        if missing:
-            warnings.append("Gaps in the finishing order: " + ", ".join(f"P{p}" for p in missing[:6]))
+    if event["ai_difficulty"] is None and not event["ai_untracked"]:
+        blocking.append("Enter the AI difficulty used, or press \"Don't track this round\"")
+    elif event["ai_difficulty"] is None:
+        warnings.append("AI difficulty deliberately not tracked for this round (the recommender will skip it)")
+    # Positions within a session must run 1, 2, 3… with no holes (a classified gap can't happen).
+    for field, label in (("qualifying_position", "Qualifying"), ("race_position", "Grand Prix"), ("sprint_position", "Sprint")):
+        if field == "sprint_position" and not sprint:
+            continue
+        taken = sorted(set(r[field] for r in rows if r[field]))
+        if taken:
+            missing = [p for p in range(1, taken[-1] + 1) if p not in taken]
+            if missing:
+                blocking.append(f"{label} positions skip " + ", ".join(f"P{p}" for p in missing[:6])
+                                + ("…" if len(missing) > 6 else "") + " (positions must run 1, 2, 3… without gaps)")
     for r in rows:
         if r["result_status"] in ("DNF", "DSQ") and r["race_position"]:
             warnings.append(f"{name(r)} is {r['result_status']} with a position (P{r['race_position']}); they score no points")
     if not (event["notes"] or "").strip():
         warnings.append("No weekend notes")
+    # Player drivers' rows are called out on their own so they're never missed.
+    player_issues = []
+    for r in rows:
+        if not r["driver"]["is_player"]:
+            continue
+        gaps = []
+        if r["result_status"] == C.STATUS_NOT_RUN:
+            gaps.append("Grand Prix result")
+        if sprint and r["sprint_status"] == C.STATUS_NOT_RUN:
+            gaps.append("Sprint result")
+        if any_quali and not r["qualifying_position"] and r["result_status"] in C.START_STATUSES:
+            gaps.append("qualifying position")
+        if gaps:
+            player_issues.append({"name": name(r), "color": r["driver"]["player_color"], "missing": gaps})
 
     def finisher(field, status_field, pos):
         return next((r for r in rows if r[field] == pos and r[status_field] == C.STATUS_FINISHED), None)
@@ -797,7 +820,8 @@ def submission_check(conn, event_id):
         "ai_difficulty": event["ai_difficulty"],
     }
     return {"blocking": blocking, "warnings": warnings, "summary": summary, "revision": event["revision"],
-            "status": event["status"]}
+            "status": event["status"], "player_issues": player_issues,
+            "lock_notice": "Completing this round locks it for Scorekeepers. Only a Race Master can correct or reopen it afterwards."}
 
 
 # --------------------------------------------------------------------------- AI difficulty
@@ -889,15 +913,18 @@ def difficulty_recommendation(conn, before=None):
         return rec
     current = history[-1]["ai_difficulty"]
     rec["current"] = current
-    sample = []
+    sample, unusable = [], 0
     for h in reversed(history):
         if h["ai_difficulty"] != current:
             break
         if h["score"] is not None:
             sample.append(h)
+        else:
+            unusable += 1  # tracked, but no player finished (DNFs don't count)
         if len(sample) >= C.DIFF_MAX_ROUNDS:
             break
     rec["sample"] = list(reversed(sample))
+    rec["unusable"] = unusable
 
     last = next((h for h in reversed(history) if h["score"] is not None), None)
     if last and last["score"] <= -C.DIFF_THRESHOLD:
@@ -908,8 +935,10 @@ def difficulty_recommendation(conn, before=None):
     rec["recommended"] = current
     rec["direction"] = "hold"
     if len(sample) < C.DIFF_MIN_ROUNDS:
-        rec["reason"] = (f"{len(sample)} of {C.DIFF_MIN_ROUNDS} usable rounds at {current} so far. "
-                         "Holding until there is a pattern.")
+        rec["reason"] = (f"{len(sample)} of {C.DIFF_MIN_ROUNDS} usable rounds at AI {current}. "
+                         f"Waiting for a consistent pattern ({C.DIFF_MIN_ROUNDS - len(sample)} more needed)."
+                         + (f" {unusable} tracked round{'s' if unusable != 1 else ''} at AI {current} didn't count "
+                            "because no player driver finished." if unusable else ""))
         return rec
     avg = sum(h["score"] for h in sample) / len(sample)
     rec["average"] = round(avg, 3)

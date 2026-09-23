@@ -14,7 +14,7 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import random
 
-from . import (auth, community, discord, feed, importer, insights, mailer, market, push, relations, roles,
+from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
 from . import circuits
 from . import constants as C
@@ -118,6 +118,17 @@ def register_hooks(app):
                 flash("Your session expired. Please try again.", "error")
                 return redirect(request.referrer or url_for("home"))
         return None
+
+    @app.after_request
+    def vendor_files(response):
+        """The self-hosted OCR engine: cache it for a month, and hand the language data over still gzipped
+        (Tesseract unpacks it itself)."""
+        if request.path.startswith("/static/vendor/"):
+            response.headers["Cache-Control"] = "public, max-age=2592000"
+            if request.path.endswith(".gz"):
+                response.headers.pop("Content-Encoding", None)
+                response.headers["Content-Type"] = "application/gzip"
+        return response
 
     @app.after_request
     def send_alerts(response):
@@ -547,11 +558,6 @@ def register_routes(app):
                 auth.set_setting(field, (request.form.get(field) or "").strip() or None)
         if (request.form.get("smtp_password") or "").strip():
             auth.set_setting("smtp_password", request.form.get("smtp_password").strip())
-        key = (request.form.get("anthropic_api_key") or "").strip()
-        if request.form.get("clear_key"):
-            auth.set_setting("anthropic_api_key", None)
-        elif key:
-            auth.set_setting("anthropic_api_key", key)
         flash("Settings saved.", "success")
         return redirect(url_for("accounts_page"))
 
@@ -570,7 +576,7 @@ def register_routes(app):
                     memberships.setdefault(username, []).append(c["name"])
         return render_template("accounts.html", users=auth.list_users() if is_master() else [],
                                memberships=memberships, signups=auth.signups_allowed(),
-                               key_set=importer.configured(), mail=mailer.config(), mail_ready=mailer.configured(),
+                               mail=mailer.config(), mail_ready=mailer.configured(),
                                pw_min=auth.PASSWORD_MIN)
 
     @app.route("/accounts/new", methods=["POST"])
@@ -781,11 +787,35 @@ def register_routes(app):
         return page("weekend.html", ctx, event=event, rows=S.weekend_rows(conn, event_id),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
-                    rec=S.difficulty_recommendation(conn, (season["year"], event["round_number"])),
-                    importer_ready=importer.configured(),
+                    rec=_weekend_recommendation(conn, season, event),
+                    entrants=_entrants(conn, event_id),
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None)
+
+    def _entrants(conn, event_id):
+        """The drivers in this round, for the screenshot importer to match against (never anyone else)."""
+        return [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"],
+                 "is_player": bool(r["driver"]["is_player"]), "color": r["driver"]["player_color"]}
+                for r in S.weekend_rows(conn, event_id)]
+
+    def _weekend_recommendation(conn, season, event):
+        """On a completed round the recommendation includes that round (it's the advice for the next one);
+        before completion it's the advice for this round, from the rounds before it."""
+        if event["status"] == C.EVENT_COMPLETE:
+            rec = S.difficulty_recommendation(conn, (season["year"], event["round_number"] + 1))
+            rec["for_next"] = True
+            if event["ai_difficulty"] is None:
+                rec["this_round"] = "This round was marked \"Don't track\", so it isn't part of the history."
+            return rec
+        rec = S.difficulty_recommendation(conn, (season["year"], event["round_number"]))
+        rec["for_next"] = False
+        if event["ai_difficulty"] is not None:
+            rec["this_round"] = (f"AI {event['ai_difficulty']} is recorded for this round. It counts toward the "
+                                 "recommendation once the round is completed.")
+            if not rec["history_rounds"]:
+                rec["reason"] = rec["this_round"]
+        return rec
 
     @app.route("/career/<token>/weekend/<int:event_id>/reopen", methods=["POST"])
     @career_page(master_only=True)
@@ -1816,32 +1846,6 @@ def register_routes(app):
             except Exception:
                 app.logger.exception("Discord results post failed")
         return jsonify(ok=True, **result)
-
-    @app.route("/api/career/<token>/weekend/<int:event_id>/import", methods=["POST"])
-    def api_weekend_import(token, event_id):
-        if not _may_enter_results(token):
-            return jsonify(ok=False, error="Only the Race Master or a Scorekeeper can enter results"), 403
-        kind = request.form.get("kind", "race")
-        images = []
-        for f in request.files.getlist("screenshots"):
-            if f and f.filename:
-                images.append((f.read(), f.mimetype))
-        try:
-            with storage.session(token) as conn:
-                ev = S.get_event(conn, event_id)
-                if not ev:
-                    return jsonify(ok=False, error="Event not found"), 404
-                if ev["status"] == C.EVENT_COMPLETE and not is_master():
-                    return jsonify(ok=False, error="This weekend has been submitted. Only the Race Master can change it now."), 403
-                entrants = [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"]}
-                            for r in S.weekend_rows(conn, event_id)]
-        except CareerNotFound:
-            return jsonify(ok=False, error="League not found"), 404
-        try:
-            result = importer.read_screenshots(images, kind, entrants)
-        except importer.ScreenshotError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
-        return jsonify(ok=True, kind=kind, **result)
 
     @app.route("/api/career/<token>/weekend/<int:event_id>/state")
     def api_weekend_state(token, event_id):

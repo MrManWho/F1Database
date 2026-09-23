@@ -49,7 +49,7 @@ def _payload(token, event_id, complete=False):
     return {"results": [{"driver_id": r["driver_id"], "qualifying_position": i + 1, "race_position": i + 1,
                          "status_override": "Auto", "sprint_position": None, "sprint_status_override": "Auto",
                          "fastest_lap": False, "driver_of_day": False, "notes": ""} for i, r in enumerate(rows)],
-            "mark_complete": complete, "ai_difficulty": None}
+            "mark_complete": complete, "ai_difficulty": None, "ai_untracked": True}
 
 
 def _api_save(client, token, event_id, complete=False):

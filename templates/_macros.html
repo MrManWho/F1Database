@@ -25,12 +25,13 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
   <div class="diff-number">
     <svg class="diff-gauge" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5 16 9"/><circle cx="12" cy="13.5" r="1.2" fill="currentColor"/></svg>
     <strong>{{ rec.recommended if rec.recommended is not none else '—' }}</strong>
-    <small>Recommended AI</small>
+    <small>{{ 'Recommended for next round' if rec.for_next else 'Recommended AI' }}</small>
     {% if rec.recommended is not none and rec.direction in ('up', 'down') %}<span class="diff-move">{{ '▲ Raise' if rec.direction == 'up' else '▼ Lower' }}</span>{% endif %}
   </div>
   <div class="diff-copy">
     <p>{{ rec.reason }}</p>
     {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
+    {% if rec.this_round and rec.this_round != rec.reason %}<p class="diff-note">{{ rec.this_round }}</p>{% endif %}
     {% if not compact %}
     <div class="diff-facts">
       {% if rec.current is not none %}<span>Last used <b>{{ rec.current }}</b></span>{% endif %}

@@ -12,6 +12,7 @@
   const notesEl = document.getElementById("event-notes");
   const rows = Array.from(table.querySelectorAll("tbody tr"));
   const MAX = parseInt(table.dataset.max || "22", 10);
+  let untracked = table.dataset.untracked === "1";  // "Don't track this round" pressed
 
   function parsePos(v) {
     v = (v || "").trim();
@@ -66,6 +67,7 @@
     return {
       mark_complete: !!markComplete,
       ai_difficulty: diffInput.value === "" ? null : diffInput.value,
+      ai_untracked: diffInput.value === "" && untracked,
       event_notes: notesEl.value,
       results: rows.map(function (tr) {
         const get = function (f) { const el = tr.querySelector('[data-field="' + f + '"]'); return el ? el : null; };
@@ -85,10 +87,17 @@
   }
 
   const ICONS = { saved: "✓ ", saving: "", dirty: "● ", error: "⚠ ", offline: "⟳ " };
-  function setState(state, text) {
+  function setState(state, text, retry) {
     if (!stateEl) return;
     stateEl.dataset.state = state;
     stateEl.textContent = (ICONS[state] || "") + text;
+    if (retry) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn btn-sm btn-ghost save-retry"; b.textContent = "Retry";
+      b.addEventListener("click", function () { save(false); });
+      stateEl.appendChild(document.createTextNode(" "));
+      stateEl.appendChild(b);
+    }
   }
 
   // ---- Filters (everyone): all, player drivers, incomplete, points scorers, DNF/DNS/DSQ.
@@ -126,10 +135,18 @@
   function store(key, value) { try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ } }
   function load(key) { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }
 
+  // A completed round (Race Master only reaches this) isn't autosaved: corrections wait for "Save corrections".
+  const correcting = table.dataset.complete === "1" && table.dataset.master === "1";
   function schedule() {
     if (readOnly || locked) return;
     dirty = true;
     remember();
+    if (correcting) {
+      setState("dirty", "Unsaved corrections");
+      const b = document.getElementById("save-corrections");
+      if (b) { b.disabled = false; b.textContent = "Save corrections"; }
+      return;
+    }
     setState("dirty", "Unsaved changes");
     clearTimeout(timer);
     timer = setTimeout(function () { save(false); }, 850);
@@ -144,11 +161,11 @@
   function forget() { store(RKEY, null); }
 
   function waitForConnection() {
-    setState("offline", "Offline — changes waiting to save");
+    setState("offline", "Offline — changes stored on this device");
     clearTimeout(retryTimer);
-    retryTimer = setTimeout(function () { if (dirty) save(false); }, 15000);
+    retryTimer = setTimeout(function () { if (dirty && !correcting) save(false); }, 15000);
   }
-  window.addEventListener("online", function () { if (dirty && !locked) save(false); });
+  window.addEventListener("online", function () { if (dirty && !locked && !correcting) save(false); });
   window.addEventListener("offline", function () { if (dirty) waitForConnection(); });
 
   function send(body) {
@@ -194,7 +211,7 @@
       if (!res.ok) {
         dirty = true;
         lastError = res.error || "Save failed";
-        setState("error", "Save failed: " + lastError);
+        setState("error", "Couldn't save — " + lastError, true);
         window.F1.toast(lastError, "error");
         return false;
       }
@@ -285,7 +302,7 @@
       dirty = true; remember(); save(false);
       return;
     }
-    setState("error", "Conflict: choose which values to keep");
+    setState("error", "Conflict detected — choose which values to keep");
     const list = document.getElementById("conflict-list");
     list.innerHTML = "";
     conflicts.forEach(function (c, i) {
@@ -366,15 +383,15 @@
       baseline = rec.base || baseline;
       revision = typeof rec.revision === "number" ? rec.revision : revision;
       const when = rec.savedAt ? new Date(rec.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "earlier";
-      showBanner("↺ Restored edits you made " + when + " that hadn't reached the server yet. Saving them now.", false);
+      showBanner("↺ Restored unsaved changes from " + when + "." + (correcting ? " Review them, then press Save corrections." : " Saving them now."), false);
       dirty = true;
-      save(false);
+      if (correcting) schedule(); else save(false);
     }).catch(function () {
       writeValues(flat(rec.payload)); recalc();
       baseline = rec.base || baseline;
       revision = typeof rec.revision === "number" ? rec.revision : revision;
       dirty = true;
-      showBanner("↺ Restored unsent edits. You're offline; they'll save when the connection returns.", false);
+      showBanner("↺ Restored unsaved changes. You're offline; they're stored on this device and will save when the connection returns.", false);
       waitForConnection();
     });
   }
@@ -419,7 +436,11 @@
 
   // ---- Keyboard: Ctrl/Cmd+S saves now, Esc leaves quick order, ? shows the shortcuts.
   document.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(false); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      if (correcting) { if (dirty && corrDlg && corrDlg.showModal) corrDlg.showModal(); } else save(false);
+      return;
+    }
     if (e.key === "Escape" && typeof stopTap === "function") { stopTap(); return; }
     const typing = e.target.matches && e.target.matches("input, textarea, select");
     if (e.key === "?" && !typing) {
@@ -445,7 +466,13 @@
 
   const useRec = document.getElementById("use-rec");
   if (useRec) useRec.addEventListener("click", function () { diffInput.value = useRec.dataset.value; schedule(); });
-  document.getElementById("no-track").addEventListener("click", function () { diffInput.value = ""; schedule(); });
+  function showUntracked() {
+    const note = document.getElementById("untracked-note");
+    if (note) note.hidden = !untracked;
+    document.getElementById("no-track").setAttribute("aria-pressed", untracked ? "true" : "false");
+  }
+  document.getElementById("no-track").addEventListener("click", function () { diffInput.value = ""; untracked = true; showUntracked(); schedule(); });
+  diffInput.addEventListener("input", function () { if (diffInput.value !== "") { untracked = false; showUntracked(); } });
   document.getElementById("clear-awards").addEventListener("click", function () {
     table.querySelectorAll('input[type=radio]').forEach(function (r) { r.checked = false; });
     schedule();
@@ -483,10 +510,17 @@
           " · Race " + esc(p.race) + " · " + esc(p.points) + " pts</li>";
       }).join("") + "</ul>";
     }
+    if (check.player_issues && check.player_issues.length) {
+      html += '<div class="check-players" role="alert"><h3 class="mini-head">👤 Player drivers with missing results</h3><ul>' +
+        check.player_issues.map(function (p) {
+          return '<li><span class="p-dot" style="background:' + esc(p.color || "#4aa3ff") + '"></span><b>' + esc(p.name) + "</b>: " + p.missing.map(esc).join(", ") + "</li>";
+        }).join("") + "</ul></div>";
+    }
     html += '<div class="check-block" role="alert"><h3 class="mini-head">⛔ Blocking errors (' + blocking.length + ")</h3>" +
       (blocking.length ? "<ul>" + blocking.map(function (b) { return "<li>" + esc(b) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
     html += '<div class="check-warn"><h3 class="mini-head">⚠️ Warnings (' + warnings.length + ")</h3>" +
       (warnings.length ? "<ul>" + warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
+    if (check.lock_notice) html += '<p class="lock-notice small"><span aria-hidden="true">🔒</span> ' + esc(check.lock_notice) + "</p>";
     submitBody.innerHTML = html;
     acceptRow.hidden = !warnings.length;
     acceptBox.checked = false; confirmBox.checked = false;
@@ -519,6 +553,20 @@
         });
     }).catch(function () {
       submitBody.innerHTML = '<p class="form-error" role="alert">You appear to be offline. Results can be submitted once your edits have reached the server.</p>';
+    });
+  });
+  const corrBtn = document.getElementById("save-corrections");
+  const corrDlg = document.getElementById("corrections-dialog");
+  if (corrBtn) corrBtn.addEventListener("click", function () { if (corrDlg.showModal) corrDlg.showModal(); });
+  const corrGo = document.getElementById("corrections-go");
+  if (corrGo) corrGo.addEventListener("click", function () {
+    corrGo.disabled = true;
+    save(false).then(function (res) {
+      corrGo.disabled = false;
+      corrDlg.close();
+      if (!res) return;
+      corrBtn.disabled = true; corrBtn.textContent = "✓ Weekend complete";
+      window.F1.toast("Corrections saved. Standings and ratings have been recalculated.", "success");
     });
   });
   if (submitGo) submitGo.addEventListener("click", function () {
@@ -597,54 +645,43 @@
     document.getElementById("tap-done").addEventListener("click", stopTap);
   }
 
-  // ---- Screenshot import: fill a column from the game's classification screen.
-  const importForm = document.getElementById("import-form");
-  if (importForm) {
-    importForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-      const go = document.getElementById("import-go");
-      go.disabled = true;
-      go.textContent = "Reading screenshots…";
-      const csrf = document.querySelector('meta[name="csrf-token"]').content;
-      fetch(importForm.dataset.url, { method: "POST", body: new FormData(importForm), credentials: "same-origin",
-        headers: { "X-CSRF-Token": csrf } })
-        .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Server error (" + r.status + ")" }; }); })
-        .then(function (res) {
-          go.disabled = false;
-          go.textContent = "Read screenshots";
-          if (!res.ok) { window.F1.toast(res.error || "Import failed", "error"); return; }
-          applyImport(res);
-          importForm.closest("dialog").close();
-        })
-        .catch(function () {
-          go.disabled = false; go.textContent = "Read screenshots";
-          window.F1.toast("Couldn't reach the server.", "error");
-        });
-    });
-  }
-  function applyImport(res) {
-    const field = { qualifying: "qualifying_position", sprint: "sprint_position", race: "race_position" }[res.kind];
-    const statusField = { sprint: "sprint_status_override", race: "status_override" }[res.kind];
-    const byDriver = {};
-    rows.forEach(function (tr) { byDriver[tr.dataset.driverId] = tr; });
-    table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) { i.value = ""; i.classList.remove("imported"); });
-    res.rows.forEach(function (r) {
-      const tr = byDriver[r.driver_id];
-      if (!tr) return;
-      const inp = tr.querySelector('[data-field="' + field + '"]');
-      inp.value = r.position;
-      inp.classList.add("imported");
-      if (statusField) tr.querySelector('[data-field="' + statusField + '"]').value = r.status === "Finished" ? "Auto" : r.status;
-    });
-    if (res.kind === "race" && res.fastest_lap_driver_id && byDriver[res.fastest_lap_driver_id]) {
-      byDriver[res.fastest_lap_driver_id].querySelector('[data-field="fastest_lap"]').checked = true;
+  // ---- Screenshot import (static/js/importer.js) hands its reviewed rows to the form here. Nothing is saved
+  //      until the normal save happens, and a completed round still needs "Save corrections".
+  const SESSION_FIELDS = { qualifying: ["qualifying_position", null], sprint: ["sprint_position", "sprint_status_override"],
+                           race: ["race_position", "status_override"] };
+  window.F1Entry = {
+    existing: function (session) {
+      const f = SESSION_FIELDS[session];
+      const out = {};
+      if (!f) return out;
+      rows.forEach(function (tr) {
+        const pos = parsePos(tr.querySelector('[data-field="' + f[0] + '"]').value);
+        const sel = f[1] ? tr.querySelector('[data-field="' + f[1] + '"]') : null;
+        const status = sel ? resolve(sel.value, pos) : (pos ? "Finished" : "Not Run");
+        if (pos || status !== "Not Run") out[tr.dataset.driverId] = { position: pos || null, status: status };
+      });
+      return out;
+    },
+    applyImport: function (session, imported) {
+      const f = SESSION_FIELDS[session];
+      if (!f || readOnly || locked) return 0;
+      const byDriver = {};
+      rows.forEach(function (tr) { byDriver[tr.dataset.driverId] = tr; });
+      let n = 0;
+      imported.forEach(function (r) {
+        const tr = byDriver[r.driver_id];
+        if (!tr) return;
+        const inp = tr.querySelector('[data-field="' + f[0] + '"]');
+        inp.value = r.position ? r.position : "";
+        inp.classList.add("imported");
+        if (f[1]) tr.querySelector('[data-field="' + f[1] + '"]').value = r.status && r.status !== "Finished" ? r.status : "Auto";
+        markEdited(inp);
+        n++;
+      });
+      recalc(); schedule();
+      return n;
     }
-    recalc(); schedule();
-    let msg = "Filled " + res.rows.length + " " + res.kind + " positions. Check the highlighted boxes.";
-    if (rows.length - res.rows.length > 0) msg += " " + (rows.length - res.rows.length) + " driver(s) weren't found.";
-    if (res.notes) msg += " Note: " + res.notes;
-    window.F1.toast(msg, res.rows.length ? "success" : "error");
-  }
+  };
 
   window.addEventListener("beforeunload", function (e) {
     if ((dirty || saving) && !locked) { remember(); e.preventDefault(); e.returnValue = ""; }

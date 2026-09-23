@@ -59,11 +59,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="check"><input type="checkbox" name="allow_signups" value="1" {{ 'checked' if signups }}>
       Let people create their own Driver login from the login page (you still link them to a driver)</label>
-    <label>Anthropic API key for screenshot import {{ '(saved)' if key_set else '(not set)' }}
-      <input name="anthropic_api_key" type="password" autocomplete="off" placeholder="{{ 'Leave blank to keep the saved key' if key_set else 'sk-ant-…' }}"></label>
-    <p class="muted small">Screenshot import sends the pictures you upload to Anthropic's API, which reads the classification.
-      Each import costs a few cents on your Anthropic account. Get a key at console.anthropic.com. The key is stored in this PC's data folder.</p>
-    {% if key_set %}<label class="check"><input type="checkbox" name="clear_key" value="1"> Remove the saved key</label>{% endif %}
+    <p class="muted small">Screenshot import is free and runs in each person's browser: no API key, account or upload needed.</p>
     <h3>Email (password resets &amp; race results) · {{ 'ready' if mail_ready else 'not set up' }}</h3>
     <p class="muted small">Use any SMTP mail service. For Gmail: turn on 2-step verification, create an <em>App password</em>, then use
       host <code>smtp.gmail.com</code>, port <code>587</code>, your Gmail address as username and sender, and the app password.

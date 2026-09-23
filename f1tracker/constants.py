@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.18"
-SCHEMA_VERSION = 15
+APP_VERSION = "1.19"
+SCHEMA_VERSION = 16
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2

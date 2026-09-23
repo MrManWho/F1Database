@@ -166,14 +166,14 @@ def test_checklist_blocking_errors_stop_submission(app, master_client):
 def test_checklist_warnings_can_be_accepted_and_summary_is_complete(app, master_client):
     token, a, b = _league(master_client)
     ev = _event(token)
-    body = _full(token, ev["id"], ai_difficulty=None, event_notes="")
+    body = _full(token, ev["id"], ai_difficulty=None, ai_untracked=True, event_notes="")
     for r in body["results"]:
         r["fastest_lap"] = r["driver_of_day"] = False
     _post(master_client, token, ev["id"], body)
     check = master_client.get(f"/api/career/{token}/weekend/{ev['id']}/checklist").get_json()
     assert check["blocking"] == []
     joined = " ".join(check["warnings"])
-    assert "Fastest Lap" in joined and "Driver of the Day" in joined and "AI difficulty not tracked" in joined and "notes" in joined
+    assert "Fastest Lap" in joined and "Driver of the Day" in joined and "deliberately not tracked" in joined and "notes" in joined
     s = check["summary"]
     assert s["winner"] and len(s["podium"]) == 3 and s["pole"] and s["round"] == ev["round_number"]
     assert {p["name"] for p in s["players"]} == {"Ana Silva", "Ben Okafor"}

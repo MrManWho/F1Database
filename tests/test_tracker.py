@@ -112,7 +112,7 @@ def test_duplicates_multiple_awards_and_completion_blocked(db):
         S.save_weekend(db, event["id"], {"results": [{"driver_id": ids[0], "race_position": 23}]})
     with pytest.raises(S.ValidationError, match="21 GP results"):
         S.save_weekend(db, event["id"], {"results": [{"driver_id": ids[0], "race_position": 1}],
-                                         "mark_complete": True})
+                                         "mark_complete": True, "ai_untracked": True})
     res = S.save_weekend(db, event["id"], {"results": [{"driver_id": ids[0], "race_position": 1}]})
     assert res["status"] == C.EVENT_IN_PROGRESS
 
@@ -535,7 +535,7 @@ def test_garage_negotiation_routes(app, master_client):
 
 # --------------------------------------------------------------------------- v1.5
 
-from f1tracker import feed, importer, insights  # noqa: E402
+from f1tracker import feed, insights  # noqa: E402
 
 
 def _career_token(master_client, rookies=False):
@@ -615,7 +615,7 @@ def test_weekend_completion_posts_news_notifications_and_backup(master_client):
     with storage.session(token) as conn:
         event = S.events(conn, S.current_season_id(conn))[0]
         rows = S.weekend_rows(conn, event["id"])
-    payload = {"mark_complete": True, "results": [
+    payload = {"mark_complete": True, "ai_untracked": True, "results": [
         {"driver_id": r["driver_id"], "race_position": i + 1, "qualifying_position": i + 1} for i, r in enumerate(rows)]}
     for _ in range(2):  # saving a completed weekend again must not repeat the headlines
         assert master_client.post(f"/api/career/{token}/weekend/{event['id']}", json=payload,
@@ -710,38 +710,16 @@ def test_paddock_admin_teams_drivers_and_calendar(db):
         S.delete_event(db, event["id"])
 
 
-def test_screenshot_import_matching_and_setup_message(master_client, monkeypatch):
-    entrants = [{"id": 1, "name": "Lando Norris", "team": "McLaren"},
-                {"id": 2, "name": "Oscar Piastri", "team": "McLaren"},
-                {"id": 3, "name": "George Russell", "team": "Mercedes"}]
-    matched = importer.match({"rows": [
-        {"driver": "Oscar Piastri", "position": 1, "status": "Finished"},
-        {"driver": "Lando Norris", "position": 2, "status": "Finished"},
-        {"driver": "Lando Norris", "position": 3, "status": "DNF"},       # duplicate driver
-        {"driver": "Somebody", "position": 3, "status": "Finished"},       # unknown
-        {"driver": "George Russell", "position": 40, "status": "DNF"}],    # out of range
-        "fastest_lap_driver": "George Russell", "notes": ""}, entrants)
-    assert [(r["driver_id"], r["position"]) for r in matched["rows"]] == [(2, 1), (1, 2)]
-    assert matched["skipped"] == 3 and matched["fastest_lap_driver_id"] == 3
-
+def test_screenshots_are_never_uploaded(master_client):
+    """v1.19: screenshots are read in the browser; the old upload endpoint no longer exists."""
     token = _career_token(master_client)
     with storage.session(token) as conn:
         event = S.events(conn, S.current_season_id(conn))[0]
-    url = f"/api/career/{token}/weekend/{event['id']}/import"
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     import io
-    res = master_client.post(url, data={"kind": "race", "screenshots": (io.BytesIO(b"png"), "r.png", "image/png")},
+    res = master_client.post(f"/api/career/{token}/weekend/{event['id']}/import",
+                             data={"kind": "race", "screenshots": (io.BytesIO(b"png"), "r.png", "image/png")},
                              headers={"X-CSRF-Token": "tok"}, content_type="multipart/form-data")
-    assert res.status_code == 400 and "API key" in res.get_json()["error"]
-
-    def fake_read(images, kind, entrants_):
-        assert kind == "race" and images[0][1] == "image/png"
-        return {"rows": [{"driver_id": entrants_[0]["id"], "position": 1, "status": "Finished"}],
-                "fastest_lap_driver_id": None, "skipped": 0, "notes": ""}
-    monkeypatch.setattr(importer, "read_screenshots", fake_read)
-    res = master_client.post(url, data={"kind": "race", "screenshots": (io.BytesIO(b"png"), "r.png", "image/png")},
-                             headers={"X-CSRF-Token": "tok"}, content_type="multipart/form-data")
-    assert res.get_json()["ok"] and res.get_json()["rows"][0]["position"] == 1
+    assert res.status_code in (404, 405)
 
 
 def test_new_v15_pages_render(master_client):
@@ -790,7 +768,7 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
     assert steward.post(f"/career/{token}/grid/save", data={"csrf_token": "tok"}).status_code == 403
     assert steward.post(f"/career/{token}/seasons/new", data={"year": "2027", "csrf_token": "tok"}).status_code == 403
     # Once submitted, the weekend is locked for them (but not for the Race Master).
-    full = {"mark_complete": True, "results": [{"driver_id": d, "race_position": i + 1} for i, d in enumerate(ids)]}
+    full = {"mark_complete": True, "ai_untracked": True, "results": [{"driver_id": d, "race_position": i + 1} for i, d in enumerate(ids)]}
     assert steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full).get_json()["ok"]
     again = steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full)
     assert again.status_code == 403 and "Race Master" in again.get_json()["error"]
@@ -931,7 +909,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
         conn.execute("INSERT INTO career_members(username, driver_id) VALUES('quiet', NULL)")
         event = S.events(conn, S.current_season_id(conn))[0]
         rows = S.weekend_rows(conn, event["id"])
-    payload = {"mark_complete": True, "results": [
+    payload = {"mark_complete": True, "ai_untracked": True, "results": [
         {"driver_id": r["driver_id"], "race_position": i + 1, "qualifying_position": i + 1} for i, r in enumerate(rows)]}
     master_client.post(f"/api/career/{token}/weekend/{event['id']}", json=payload, headers={"X-CSRF-Token": "tok"})
     assert len(outbox) == 1
