@@ -7,7 +7,7 @@
   <a class="team-card card" href="{{ url_for('team_profile', token=ctx.token, team_id=t.team.id) }}" style="--team: {{ t.team.color }}">
     <div class="team-card-head"><span class="pos">P{{ t.position }}</span><span class="code">{{ t.team.abbreviation }}</span></div>
     <h2>{{ t.team.name }}</h2>
-    <div class="small muted">{% for d in t.drivers %}{{ d.name if d else 'Vacant' }}{{ ' · ' if not loop.last }}{% endfor %}</div>
+    <div class="small muted">{% for d in t.drivers %}{% if d and d.is_player %}<span class="is-player" style="--player: {{ d.player_color or 'var(--blue)' }}">★ {{ d.name }}</span>{% else %}{{ d.name if d else 'Vacant' }}{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</div>
     <div class="bar"><span style="width: {{ t.points / leader * 100 }}%"></span></div>
     {% set cr = ratings.get(t.team.id) %}
     {% if cr %}<div class="car-rating small">Car rating <b>{{ '%.1f'|format(cr.rating) }}</b>{% if cr.change %} <span class="{{ 'up' if cr.change > 0 else 'down' }}">{{ '%+.1f'|format(cr.change) }} over winter</span>{% endif %}</div>{% endif %}

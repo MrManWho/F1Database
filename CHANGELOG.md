@@ -3,6 +3,32 @@
 Every version of F1 Universe Tracker, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.19 · Fixes, safer admin and free screenshot import
+### Fixed
+- **AI difficulty on a completed round.** A completed round with a tracked difficulty now counts toward the recommendation on its own page (it used to say "Track the AI difficulty on a completed round to establish a baseline"). The message now reads like "1 of 3 usable rounds at AI 80. Waiting for a consistent pattern (2 more needed)", and says when a tracked round didn't count because no player driver finished. "Don't track this round" is remembered explicitly. The recommendation formula is unchanged and never moves more than one step.
+- **Completed-round button.** A completed round no longer shows "Mark weekend complete". Race Masters see "Weekend complete", which becomes "Save corrections" after an edit (with a confirmation explaining what's recalculated); Scorekeepers see the locked state.
+- **Players & Logins** no longer has its own join switch; it shows the current setting and links to League Settings, the one place to change it.
+
+### Improved
+- **Screenshot import is free and private.** It now runs in your browser with a self-hosted OCR engine (Tesseract.js): no API key, no account, no per-screenshot cost, and the image is never uploaded. Crop, straighten, contrast and brightness tools, several screenshots per session (overlaps merged, disagreements flagged), fuzzy name matching against this round's drivers only (ambiguous names are never guessed), DNF/DNS/DSQ detection, session detection that won't put Sprint results into the Race columns, an editable preview with confidence levels, a comparison before replacing anything, and an explicit "Apply imported results" that only fills the table. The paid Anthropic importer and its API key setting are removed (a saved key is deleted).
+- **Final review before completing a weekend** now also blocks gaps in positions and a missing AI difficulty (enter it or choose "Don't track this round"), highlights player drivers with missing results, and says the round will lock for Scorekeepers.
+- **Race-time states:** Not scheduled, Scheduled, Starts in…, Starting soon, In progress, Results pending, Completed, and Postponed (Race Master). Times show the league's time-zone abbreviation.
+- **Season card:** completed and remaining rounds, current round, Sprint weekends done and left, next event and projected finish date.
+- **Activity Log** entries read as sentences ("David scheduled Round 2 — Chinese GP (2026) for Wed, Sep 23 at 11:30 AM EDT", "changed joining from Join requests enabled to Invite only", "changed Chat's league role from Member to Scorekeeper") with links, and never show private values such as webhook URLs. Older entries show names instead of ids.
+- **Password forms** (change, create a login, reset, sign-up, first-time setup): confirm field, show/hide, Caps Lock warning, clear rules, matching checked in the browser and on the server, and no double submission.
+- **Race Master sidebar tools** are a separate, collapsible, scrollable section that remembers whether you left it open.
+- **Confirmations** for high-impact actions explain what changes, whether history is affected, whether a backup is made and whether it can be undone. Deleting a driver's race results needs their name typed. Paddock Admin uses one delete dialog instead of one per driver.
+- **Autosave states:** Saving…, Saved, Offline — changes stored on this device, Couldn't save — retry, Restored unsaved changes, Conflict detected.
+
+### Preserved
+- Scoring, Sprint scoring, DNF/DNS/DSQ rules, Form, Reputation, Driver Value, market tiers, car-adjusted ratings, contracts, pledges, relationships, the transfer market and the difficulty formula are unchanged.
+- Completed rounds stay locked for Scorekeepers; only a Race Master can correct or reopen them.
+- Every human driver keeps their own colour and Player badge, however many there are. Provisional awards, empty states and early-season trends work as before.
+
+### Tested
+- 165 automated tests, including real in-browser OCR on generated screenshots, OCR failing to load, and a check that no screenshot or request leaves the page.
+- A three-season league built with v1.18 was upgraded on a copy: standings, Form, Reputation, market tiers, constructors, all 1,584 results, records, roles and the difficulty recommendation came out identical.
+
 ## 1.18 · Usability and data safety
 - **Submitted rounds stay locked.** Scorekeepers edit only the open round; once it's submitted only the Race Master can correct it, or **reopen** it for a Scorekeeper. A reopened round doesn't repeat its headlines, team reactions or emails when it's submitted again.
 - **Review before submitting.** Submitting now opens a review: pole, winners, podium, DNFs/DNSs/DSQs, Fastest Lap, Driver of the Day, player results and AI difficulty. **Blocking errors** (missing results, half-entered qualifying, DNS with a position, unsaved edits) must be fixed; **warnings** (no Fastest Lap, AI difficulty not tracked) can be accepted. The server enforces the blocking checks too. After submitting you land on the race summary.

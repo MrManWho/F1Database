@@ -153,8 +153,10 @@ def register_hooks(app):
     app.add_template_filter(lambda v: timefmt.ago(v, _tz()), "ago")
     app.add_template_filter(lambda v: timefmt.countdown(v), "countdown")
     app.add_template_filter(lambda ev: timefmt.race_status(ev["race_at"], ev["status"],
-                                                           g.get("race_window") or timefmt.DEFAULT_RACE_WINDOW),
+                                                           g.get("race_window") or timefmt.DEFAULT_RACE_WINDOW,
+                                                           postponed=bool(ev["postponed"]) if "postponed" in ev.keys() else False),
                             "race_status")
+    app.add_template_filter(lambda v: timefmt.zone_label(v, _tz()), "zone_label")
     app.add_template_filter(lambda v: timefmt.input_value(v, _tz()), "time_input")
 
     @app.context_processor
@@ -303,11 +305,14 @@ def career_page(master_only=False, ops_only=False):
                     gate = _pledge_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
+                    described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
                     result = fn(conn, g.ctx, *args, **kwargs)
                     if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS:
-                        detail = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in kwargs.items())
-                        community.audit(conn, g.user["username"], AUDIT_LABELS.get(request.endpoint, request.endpoint),
-                                        detail)
+                        label = AUDIT_LABELS.get(request.endpoint, request.endpoint.replace("_", " ").capitalize())
+                        what, link = described
+                        summary = g.get("audit_summary") or (label[:1].lower() + label[1:] + (": " + what if what else ""))
+                        community.audit(conn, g.user["username"], label, what, summary=summary,
+                                        link=g.get("audit_link") or link)
                     return result
             except CareerNotFound:
                 abort(404)
@@ -345,6 +350,76 @@ def _pledge_gate(conn, ctx, master_only):
     return redirect(url_for("pledge_page", token=ctx["token"]))
 
 
+def _settings_changes(conn, before):
+    """League Settings changes as a sentence, e.g. "changed join requests from Off to On". No private values."""
+    changes = []
+    after = community.features(conn)
+    for key, (label, _desc, _default) in C.FEATURES.items():
+        if before["features"].get(key) != after.get(key):
+            changes.append(f"turned {label} {'on' if after.get(key) else 'off'}")
+    join = storage.join_mode(conn)
+    if join != before["join"]:
+        changes.append(f"changed joining from {storage.JOIN_MODES[before['join']]} to {storage.JOIN_MODES[join]}")
+    d = discord.settings(conn)
+    if bool(d["url"]) != bool(before["discord"]["url"]):
+        changes.append("connected a Discord channel" if d["url"] else "disconnected Discord")
+    elif d["url"] != before["discord"]["url"]:
+        changes.append("changed the Discord channel")   # the webhook URL itself is private
+    window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
+    if window != before["window"]:
+        changes.append(f"changed how long a race shows In progress from {before['window'] // 60} h to {window // 60} h")
+    tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
+    if tz != before["tz"]:
+        changes.append(f"changed the league time zone from {before['tz']} to {tz}")
+    return "; ".join(changes)
+
+
+def event_label(event, year=None):
+    return f"Round {event['round_number']} — {event['name']}" + (f" ({year})" if year else "")
+
+
+def _describe_targets(conn, kwargs):
+    """Readable names (and a safe in-league link) for what a request acts on, looked up before it changes."""
+    parts, link = [], None
+    if "event_id" in kwargs:
+        ev = conn.execute("SELECT e.*, s.year FROM events e JOIN seasons s ON s.id = e.season_id WHERE e.id = ?",
+                          (kwargs["event_id"],)).fetchone()
+        if ev:
+            parts.append(event_label(ev, ev["year"])); link = f"weekend/{ev['id']}"
+    if "driver_id" in kwargs:
+        d = S.driver_map(conn).get(kwargs["driver_id"])
+        if d:
+            parts.append(d["name"]); link = link or f"driver/{d['id']}"
+    if "team_id" in kwargs:
+        t = S.team_map(conn).get(kwargs["team_id"])
+        if t:
+            parts.append(t["name"]); link = link or f"team/{t['id']}"
+    if "window_id" in kwargs:
+        w = conn.execute("SELECT * FROM market_windows WHERE id = ?", (kwargs["window_id"],)).fetchone()
+        if w:
+            parts.append(f"the {w['kind']} window for {w['target_year']}"); link = link or "market"
+    if "offer_id" in kwargs:
+        o = conn.execute("SELECT * FROM offers WHERE id = ?", (kwargs["offer_id"],)).fetchone()
+        if o:
+            parts.append(f"{S.team_map(conn)[o['team_id']]['name']}'s offer to {S.driver_map(conn)[o['driver_id']]['name']}")
+    if "username" in kwargs:
+        u = auth.get_user(kwargs["username"])
+        parts.append(u["display_name"] if u else kwargs["username"]); link = link or "members"
+    if "season_id" in kwargs:
+        s = S.get_season(conn, kwargs["season_id"])
+        if s:
+            parts.append(f"the {s['year']} season")
+    if "request_id" in kwargs:
+        r = conn.execute("SELECT username FROM join_requests WHERE id = ?", (kwargs["request_id"],)).fetchone()
+        if r:
+            parts.append(f"the join request from {r['username']}"); link = link or "members"
+    for key, noun in (("incident_id", "an incident report"), ("news_id", "a headline"), ("comment_id", "a comment"),
+                      ("notification_id", "a notification"), ("contract_id", "a negotiation storyline")):
+        if key in kwargs:
+            parts.append(noun)
+    return ", ".join(parts), link
+
+
 def page(template, ctx, **kwargs):
     if ctx.get("is_master"):
         ctx["auto_backups"] = storage.list_auto_backups(ctx["token"])[:8]
@@ -374,6 +449,9 @@ def register_routes(app):
             code = os.environ.get("F1_TRACKER_SETUP_CODE", "")
             if code and not hmac.compare_digest(request.form.get("setup_code", "").strip(), code):
                 flash("That setup code is wrong. It's in your host's environment settings (F1_TRACKER_SETUP_CODE).", "error")
+                return redirect(url_for("setup"))
+            if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
+                flash("The two passwords don't match.", "error")
                 return redirect(url_for("setup"))
             try:
                 username = auth.create_user(request.form.get("username"), request.form.get("display_name"),
@@ -583,6 +661,8 @@ def register_routes(app):
     @master_required
     def account_new():
         try:
+            if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
+                raise AuthError("The two passwords don't match")
             role = request.form.get("role", "driver")
             auth.create_user(request.form.get("username"), request.form.get("display_name"),
                              request.form.get("password"), is_master=role == "master",
@@ -596,6 +676,8 @@ def register_routes(app):
     @master_required
     def account_reset(username):
         try:
+            if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
+                raise AuthError("The two passwords don't match")
             auth.set_password(username, request.form.get("password"))
             flash("Password updated.", "success")
         except AuthError as exc:
@@ -829,6 +911,8 @@ def register_routes(app):
         else:
             conn.execute("UPDATE events SET status = ?, revision = revision + 1 WHERE id = ?",
                          (C.EVENT_IN_PROGRESS, event_id))
+            g.audit_summary = (f"reopened {event_label(event, S.get_season(conn, event['season_id'])['year'])} "
+                               "so a Scorekeeper can correct it")
             flash(f"R{event['round_number']} {event['name']} reopened. Standings keep counting its results; submit it "
                   "again when the corrections are done.", "success")
         return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
@@ -1126,6 +1210,8 @@ def register_routes(app):
             abort(403)
         effect = teamlife.answer(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
                                  request.form.get("answer"))
+        ev = S.get_event(conn, event_id)
+        g.audit_summary = f"answered the Round {ev['round_number']} post-race press questions"
         flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
                                   if effect < 0 else "Nobody reads much into it."), "success")
         return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
@@ -1223,6 +1309,8 @@ def register_routes(app):
         if not relations.needs_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"]):
             raise ValidationError("Your pledge is locked in for this season. The Race Master can ask you for a new one.")
         t = relations.set_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"], request.form.get("growth"))
+        g.audit_summary = f"selected the {relations.growth_level(request.form.get('growth'))['name']} growth pledge"
+        g.audit_link = "team-standing"
         flash(f"Pledge locked in: average P{t['finish_target']:.1f} or better this season "
               f"(the car's expected finish is P{t['finish_base']:.1f}).", "success")
         return redirect(url_for("team_standing", token=ctx["token"]))
@@ -1465,7 +1553,12 @@ def register_routes(app):
     @app.route("/career/<token>/paddock/driver/<int:driver_id>/delete", methods=["POST"])
     @career_page(master_only=True)
     def paddock_driver_delete(conn, ctx, driver_id):
-        name = S.delete_driver(conn, driver_id, ctx["current_season_id"], force=bool(request.form.get("force")))
+        force = bool(request.form.get("force"))
+        driver = S.driver_map(conn).get(driver_id)
+        if force and driver and "confirm_name" in request.form and \
+                request.form.get("confirm_name", "").strip() != driver["name"]:
+            raise ValidationError(f"Type {driver['name']} exactly to delete their race results")
+        name = S.delete_driver(conn, driver_id, ctx["current_season_id"], force=force)
         flash(f"{name} deleted.", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
@@ -1599,7 +1692,19 @@ def register_routes(app):
     @career_page(master_only=True)
     def member_update(conn, ctx, username):
         role = request.form.get("role")
+        old = conn.execute("SELECT * FROM career_members WHERE username = ?", (auth.normalise(username),)).fetchone()
         user = roles.set_member(conn, username, role, _driver_from_form())
+        dmap = S.driver_map(conn)
+        changes = []
+        if old and old["role"] != role:
+            changes.append(f"changed {user['display_name']}'s league role from {C.ACCESS_ROLES.get(old['role'], old['role'])} "
+                           f"to {C.ACCESS_ROLES[role]}")
+        new_driver = _driver_from_form()
+        if old and old["driver_id"] != new_driver:
+            name = lambda d: dmap[d]["name"] if d in dmap else "no driver"
+            changes.append(f"changed {user['display_name']}'s driver from {name(old['driver_id'])} to {name(new_driver)}")
+        g.audit_summary = "; ".join(changes) or f"saved {user['display_name']}'s membership without changes"
+        g.audit_link = "members"
         flash(f"{user['display_name']} is now {C.ACCESS_ROLES[role]}.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
@@ -1696,7 +1801,8 @@ def register_routes(app):
                         ON CONFLICT(username) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by,
                         status = 'Pending', created_at = excluded.created_at, decided_at = NULL""",
                      (user["username"], role, g.user["username"], storage.now_iso()))
-        community.audit(conn, g.user["username"], "Invited", f"{user['username']} as {C.ACCESS_ROLES[role]}")
+        community.audit(conn, g.user["username"], "Invited", f"{user['username']} as {C.ACCESS_ROLES[role]}",
+                        summary=f"invited {user['display_name']} to join as {C.ACCESS_ROLES[role]}", link="members")
         if user["email"]:
             mailer.send_later([user["email"]], f"You're invited to {ctx['career_name']}",
                               f"{g.user['display_name']} invited you to join {ctx['career_name']} as "
@@ -1750,7 +1856,10 @@ def register_routes(app):
             mode = "requests" if request.form.get("join_open") else "invite"
         if mode not in storage.JOIN_MODES:
             raise ValidationError("Choose how people can join")
+        before = storage.join_mode(conn)
         storage.set_join_mode(conn, mode)
+        g.audit_summary = (f"changed joining from {storage.JOIN_MODES[before]} to {storage.JOIN_MODES[mode]}"
+                           if before != mode else f"kept joining as {storage.JOIN_MODES[mode]}")
         flash(f"Joining: {storage.JOIN_MODES[mode]}. Existing members aren't affected.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
@@ -1807,9 +1916,13 @@ def register_routes(app):
                                        checklist=check, revision=check["revision"]), 422
                 result = S.save_weekend(conn, event_id, payload)
                 newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
+                label = event_label(before, S.get_season(conn, before["season_id"])["year"])
+                verb = ("submitted the results for" if newly_complete else
+                        "saved corrections to" if before["status"] == C.EVENT_COMPLETE else "edited the results for")
                 community.audit(conn, g.user["username"],
                                 "Submitted results" if newly_complete else "Edited results",
-                                f"R{before['round_number']} {before['name']}")
+                                f"R{before['round_number']} {before['name']}", summary=f"{verb} {label}",
+                                link=f"weekend/{event_id}")
                 opened = None
                 first_submission = newly_complete and not before["submitted_at"]
                 if newly_complete:
@@ -1951,6 +2064,8 @@ def register_routes(app):
     @career_page(master_only=True)
     def league_settings(conn, ctx):
         if request.method == "POST":
+            before = {"features": community.features(conn), "join": storage.join_mode(conn),
+                      "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"]}
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
             if request.form.get("join_mode") in storage.JOIN_MODES:
                 storage.set_join_mode(conn, request.form.get("join_mode"))
@@ -1964,6 +2079,7 @@ def register_routes(app):
                 if not timefmt.valid_zone(zone):
                     raise ValidationError("Unknown time zone")
                 storage.set_meta(conn, "timezone", zone)
+            g.audit_summary = _settings_changes(conn, before) or "saved League Settings without changes"
             flash("League settings saved.", "success")
             return redirect(url_for("league_settings", token=ctx["token"]))
         feats = community.features(conn)
@@ -2008,6 +2124,15 @@ def register_routes(app):
     def activity_log(conn, ctx):
         who = auth.normalise(request.args.get("who")) or None
         rows = community.audit_entries(conn, 400, who)
+        import re as _re
+        for r in rows:   # entries from before v1.19 said e.g. "event id 2": show names instead where possible
+            if not r.get("summary") and r["detail"]:
+                pairs = dict((k.replace(" ", "_"), int(v)) for k, v in _re.findall(r"(\w+ id) (\d+)", r["detail"]))
+                if pairs:
+                    what, link = _describe_targets(conn, pairs)
+                    if what:
+                        r["summary"] = r["action"][:1].lower() + r["action"][1:] + ": " + what
+                        r["link"] = r.get("link") or link
         names = {u["username"]: u["display_name"] for u in auth.list_users()}
         people = sorted({r["username"] for r in community.audit_entries(conn, 2000)})
         return page("activity.html", ctx, rows=rows, names=names, people=people, who=who)
@@ -2022,6 +2147,20 @@ def register_routes(app):
         except ValueError:
             raise ValidationError("That race time isn't a valid date and time")
         community.set_race_at(conn, event_id, when)
+        conn.execute("UPDATE events SET postponed = ? WHERE id = ?", (int(bool(request.form.get("postponed"))), event_id))
+        ev = S.get_event(conn, event_id)
+        year = S.get_season(conn, ev["season_id"])["year"]
+        g.audit_link = f"weekend/{event_id}"
+        g.audit_summary = (f"marked {event_label(ev, year)} as postponed" if request.form.get("postponed") else
+                           f"scheduled {event_label(ev, year)} for {timefmt.race_at(when, ctx['timezone'])} "
+                           f"{timefmt.zone_label(when, ctx['timezone'])}" if when else
+                           f"cleared the race time for {event_label(ev, year)}")
+        if request.form.get("postponed"):
+            event = S.get_event(conn, event_id)
+            feed.notify(conn, None, f"R{event['round_number']} {event['name']} has been postponed", f"weekend/{event_id}",
+                        ref=f"racetime:{event_id}")
+            flash("Round marked as postponed.", "success")
+            return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
         if when:
             event = S.get_event(conn, event_id)
             feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']}", f"weekend/{event_id}",

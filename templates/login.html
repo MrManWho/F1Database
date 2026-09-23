@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import pw_field, pw_help %}
 {% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up', 'forgot': 'Forgot password', 'reset': 'New password'}.get(mode, 'Log in') }}{% endblock %}
 {% block plain %}
 <section class="auth-card card">
@@ -7,13 +8,15 @@
   <h1>Create the Race Master</h1>
   <p class="muted">The Race Master enters qualifying, Sprint and race results, runs the calendar and opens the transfer market.
     After this you can add a login for the other driver so each of you can check your own garage and offers.</p>
-  <form method="post" class="stack">
+  <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if needs_code %}<label>Setup code (from your host's environment settings)<input name="setup_code" required autocomplete="off"></label>{% endif %}
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="Your name"></label>
     <label>Email (optional; for password resets and race results)<input name="email" type="email" autocomplete="email"></label>
-    <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+    {{ pw_field('password', 'Password', 'new') }}
+    {{ pw_field('confirm_password', 'Confirm password', 'confirm') }}
+    {{ pw_help() }}
     <button class="btn btn-primary">Create account</button>
   </form>
   {% elif mode == 'register' %}
@@ -23,13 +26,14 @@
     Ask the Race Master to set up email, or to create your login for you.</p>
   {% elif signups %}
   <p class="muted">We'll email you a 6-digit code to confirm your address. After signing up you can ask to join any open league from the League Library. A Race Master approves your driver.</p>
-  <form method="post" class="stack">
+  <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="Your name"></label>
     <label>Email<input name="email" type="email" autocomplete="email" required></label>
-    <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
-    <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
+    {{ pw_field('password', 'Password', 'new') }}
+    {{ pw_field('confirm', 'Confirm password', 'confirm') }}
+    {{ pw_help() }}
     <button class="btn btn-primary">Email me a code</button>
   </form>
   {% else %}
@@ -52,7 +56,7 @@
   {% elif mode == 'forgot' %}
   <h1>Forgot your password?</h1>
   <p class="muted">Enter your username or email. If the account has an email address, we'll send a link to choose a new password.</p>
-  <form method="post" class="stack">
+  <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username or email<input name="login" required autofocus></label>
     <button class="btn btn-primary">Send reset link</button>
@@ -62,15 +66,16 @@
   {% elif mode == 'reset' %}
   <h1>Choose a new password</h1>
   <p class="muted">For <b>{{ reset_user }}</b>.</p>
-  <form method="post" class="stack">
+  <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>New password<input name="password" type="password" minlength="6" autocomplete="new-password" required autofocus></label>
-    <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
+    {{ pw_field('password', 'New password', 'new', autofocus=True) }}
+    {{ pw_field('confirm', 'Confirm new password', 'confirm') }}
+    {{ pw_help() }}
     <button class="btn btn-primary">Save new password</button>
   </form>
   {% else %}
   <h1>Log in</h1>
-  <form method="post" class="stack">
+  <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required autofocus></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>

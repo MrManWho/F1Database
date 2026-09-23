@@ -20,12 +20,12 @@
       {% if ctx.timezone not in zones %}<option value="{{ ctx.timezone }}" selected>{{ ctx.timezone.replace('_', ' ') }}</option>{% endif %}
       {% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == ctx.timezone }}>{{ z.replace('_', ' ') }}</option>{% endfor %}
     </select></label>
-  <label>How long a race stays "Race window open" after its scheduled time
+  <label>How long a race shows "In progress" after its scheduled start
     <select name="race_window">
       {% for w in windows %}<option value="{{ w }}" {{ 'selected' if w == ctx.race_window }}>{{ (w // 60) }} hour{{ 's' if w != 60 }}</option>{% endfor %}
     </select></label>
-  <p class="muted small">After that, an unfinished round shows "Scheduled time passed · awaiting results". Rounds are never completed automatically.</p>
-  <h2>Joining</h2>
+  <p class="muted small">After that, an unfinished round shows "Results pending" until it's submitted. Rounds are never completed automatically.</p>
+  <h2 id="joining">Joining</h2>
   <label>How people join
     <select name="join_mode">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == join_mode }}>{{ label }}</option>{% endfor %}</select></label>
   <ul class="muted small">

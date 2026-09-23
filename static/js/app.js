@@ -251,18 +251,21 @@
   function parse(iso) { var d = new Date(iso); return isNaN(d) ? null : d; }
   var counters = document.querySelectorAll("[data-countdown]");
   // Same states as timefmt.race_status: countdown, race window open, awaiting results, completed.
-  var ICONS = { upcoming: "⏱", window: "🟢", overdue: "⏳", complete: "🏁" };
+  var ICONS = { unscheduled: "📅", postponed: "⏸", scheduled: "📅", upcoming: "⏱", soon: "🔔", live: "🟢", pending: "⏳", complete: "🏁" };
   function state(el, now) {
     if (el.dataset.eventStatus === "Complete") return ["complete", "Completed"];
+    if (el.dataset.postponed === "1") return ["postponed", "Postponed"];
     var d = parse(el.dataset.countdown);
-    if (!d) return null;
-    var left = Math.floor((d - now) / 1000);
-    if (left > 0) {
+    if (!d || !el.dataset.countdown) return ["unscheduled", "Not scheduled"];
+    var left = Math.floor((d - now) / 1000), mins = left / 60;
+    if (mins > 7 * 24 * 60) return ["scheduled", "Scheduled"];
+    if (mins > 30) {
       var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60);
       return ["upcoming", "Starts in " + (days ? days + "d " + h + "h" : h ? h + "h " + m + "m" : Math.max(1, m) + "m")];
     }
-    if (-left <= (parseInt(el.dataset.window, 10) || 180) * 60) return ["window", "Race window open"];
-    return ["overdue", "Scheduled time passed · awaiting results"];
+    if (mins > 0) return ["soon", "Starting soon"];
+    if (-mins <= (parseInt(el.dataset.window, 10) || 180)) return ["live", "In progress"];
+    return ["pending", "Results pending"];
   }
   function tick() {
     var now = Date.now();
@@ -453,40 +456,49 @@
   window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(fit, 120); });
 })();
 
-/* v1.18 account forms: show/hide passwords, Caps Lock warning, matching check, email-dependent checkbox. */
+/* Password forms: show/hide, Caps Lock warning, matching and length checks, and no double submission. */
 (function () {
-  document.querySelectorAll("[data-pw-toggle]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var input = document.getElementById(btn.dataset.pwToggle);
-      if (!input) return;
-      var show = input.type === "password";
-      input.type = show ? "text" : "password";
-      btn.textContent = show ? "Hide" : "Show";
-      btn.setAttribute("aria-pressed", show ? "true" : "false");
-      btn.setAttribute("aria-label", btn.getAttribute("aria-label").replace(show ? "Show" : "Hide", show ? "Hide" : "Show"));
-    });
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-pw-toggle]");
+    if (!btn) return;
+    var input = document.getElementById(btn.dataset.pwToggle);
+    if (!input) return;
+    var show = input.type === "password";
+    input.type = show ? "text" : "password";
+    btn.textContent = show ? "Hide" : "Show";
+    btn.setAttribute("aria-pressed", show ? "true" : "false");
+    btn.setAttribute("aria-label", btn.getAttribute("aria-label").replace(show ? "Show" : "Hide", show ? "Hide" : "Show"));
   });
-  var form = document.querySelector("[data-password-form]");
-  if (form) {
-    var caps = document.getElementById("pw-caps"), err = document.getElementById("pw-error");
-    form.querySelectorAll("input[type=password], input[name$=password]").forEach(function (input) {
+  document.querySelectorAll("form[data-password-form]").forEach(function (form) {
+    var caps = form.querySelector(".pw-caps"), err = form.querySelector(".pw-error");
+    var cur = form.querySelector('[data-pw="current"]'), pw = form.querySelector('[data-pw="new"]'), again = form.querySelector('[data-pw="confirm"]');
+    form.querySelectorAll("[data-pw]").forEach(function (input) {
       ["keydown", "keyup"].forEach(function (ev) {
-        input.addEventListener(ev, function (e) {
-          if (e.getModifierState) caps.hidden = !e.getModifierState("CapsLock");
-        });
+        input.addEventListener(ev, function (e) { if (caps && e.getModifierState) caps.hidden = !e.getModifierState("CapsLock"); });
       });
-      input.addEventListener("blur", function () { caps.hidden = true; });
+      input.addEventListener("blur", function () { if (caps) caps.hidden = true; });
     });
     form.addEventListener("submit", function (e) {
-      var cur = form.elements.current_password.value, pw = form.elements.password.value, again = form.elements.confirm_password.value;
-      var min = parseInt(form.elements.password.getAttribute("minlength") || "6", 10);
-      var msg = !cur ? "Enter your current password." : pw.length < min ? "Your new password needs at least " + min + " characters."
-        : pw !== again ? "The new passwords don't match." : pw === cur ? "Choose a password that's different from the current one." : "";
-      err.textContent = msg;
-      err.hidden = !msg;
-      if (msg) { e.preventDefault(); (pw.length < min ? form.elements.password : pw !== again ? form.elements.confirm_password : form.elements.current_password).focus(); }
+      if (form.dataset.sending === "1") { e.preventDefault(); return; }   // already on its way
+      var min = pw ? parseInt(pw.getAttribute("minlength") || "6", 10) : 0;
+      var msg = cur && !cur.value ? "Enter your current password."
+        : pw && pw.value.length < min ? "The new password needs at least " + min + " characters."
+        : again && pw && pw.value !== again.value ? "The two passwords don't match."
+        : cur && pw && pw.value === cur.value ? "Choose a password that's different from the current one." : "";
+      if (err) { err.textContent = msg; err.hidden = !msg; }
+      if (msg) {
+        e.preventDefault();
+        (cur && !cur.value ? cur : pw && pw.value.length < min ? pw : again || pw).focus();
+        return;
+      }
+      form.dataset.sending = "1";
+      form.querySelectorAll("button:not([type=button])").forEach(function (b) { b.disabled = true; b.textContent = "Saving…"; });
     });
-  }
+  });
+})();
+
+/* Email form: race-result emails need a valid address. */
+(function () {
   var ef = document.querySelector("[data-email-form]");
   if (ef) {
     var email = ef.elements.email, box = ef.elements.email_results, hint = document.getElementById("email-results-hint");
@@ -558,4 +570,109 @@
       if (first) { e.preventDefault(); location.hash = first.id; }
     });
   }
+})();
+
+/* Race Master tools in the sidebar: collapsible, remembered per browser. */
+(function () {
+  var btn = document.getElementById("nav-admin-toggle");
+  if (!btn) return;
+  var root = document.documentElement;
+  function set(open) {
+    root.classList.toggle("admin-nav-closed", !open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    try { localStorage.setItem("f1-admin-nav", open ? "1" : "0"); } catch (e) { /* private mode */ }
+  }
+  set(!root.classList.contains("admin-nav-closed"));
+  btn.addEventListener("click", function () { set(root.classList.contains("admin-nav-closed")); });
+})();
+
+/* Confirmations for high-impact actions. A form opts in with data-confirm='{"title", "what", "history", "backup",
+   "undo", "target", "strong", "ok"}'. "strong" asks the person to type a word (e.g. the driver's name) first.
+   Cancel is the default button. window.F1.confirmAction(opts) returns a Promise<boolean> for scripts. */
+(function () {
+  var dlg = document.getElementById("confirm-dialog");
+  if (!dlg) return;
+  var body = document.getElementById("confirm-body"), ok = document.getElementById("confirm-ok");
+  var typeRow = document.getElementById("confirm-type-row"), typeIn = document.getElementById("confirm-type");
+  function esc(t) { var d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
+  function ask(o) {
+    return new Promise(function (resolve) {
+      document.getElementById("confirm-title").textContent = o.title || "Are you sure?";
+      var rows = [["Affects", o.target], ["What changes", o.what], ["Historical results", o.history],
+                  ["Backup", o.backup], ["Undo", o.undo]].filter(function (r) { return r[1]; });
+      body.innerHTML = '<dl class="confirm-facts">' + rows.map(function (r) {
+        return "<div><dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd></div>"; }).join("") + "</dl>";
+      ok.textContent = o.ok || "Confirm";
+      ok.className = "btn " + (o.safe ? "btn-primary" : "btn-danger");
+      typeRow.hidden = !o.strong;
+      typeIn.value = "";
+      if (o.strong) document.getElementById("confirm-type-label").textContent = "Type " + o.strong + " to confirm";
+      ok.disabled = !!o.strong;
+      typeIn.oninput = function () { ok.disabled = typeIn.value.trim() !== o.strong; };
+      var done = false;
+      function finish(v) { if (done) return; done = true; if (dlg.open) dlg.close(); resolve(v); }
+      ok.onclick = function () { finish(true); };
+      document.getElementById("confirm-cancel").onclick = function () { finish(false); };
+      dlg.addEventListener("close", function onClose() { dlg.removeEventListener("close", onClose); finish(false); });
+      if (dlg.showModal) dlg.showModal(); else finish(window.confirm((o.title || "") + "\n" + (o.what || "")));
+      (o.strong ? typeIn : document.getElementById("confirm-cancel")).focus();
+    });
+  }
+  window.F1 = window.F1 || {};
+  window.F1.confirmAction = ask;
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form.dataset || !form.dataset.confirm || form.dataset.confirmed === "1") return;
+    e.preventDefault();
+    var opts; try { opts = JSON.parse(form.dataset.confirm); } catch (err) { opts = { what: form.dataset.confirm }; }
+    var submitter = e.submitter;
+    ask(opts).then(function (yes) {
+      if (!yes) return;
+      form.dataset.confirmed = "1";
+      if (opts.strong) {
+        var h = form.querySelector('input[name="confirm_text"]') || form.appendChild(Object.assign(document.createElement("input"), { type: "hidden", name: "confirm_text" }));
+        h.value = opts.strong;
+      }
+      if (form.requestSubmit) form.requestSubmit(submitter || undefined); else form.submit();
+    });
+  }, true);
+})();
+
+/* Grid editor: replacing a driver or vacating a seat asks first, listing exactly which seats change. */
+(function () {
+  ["grid-form", "player-form"].forEach(function (id) {
+    var form = document.getElementById(id);
+    if (!form || !(window.F1 && window.F1.confirmAction)) return;
+    form.addEventListener("submit", function (e) {
+      if (form.dataset.confirmed === "1") return;
+      var changes = [];
+      form.querySelectorAll("select").forEach(function (sel) {
+        var before = Array.prototype.find.call(sel.options, function (o) { return o.defaultSelected; });
+        var after = sel.selectedOptions[0];
+        if (!before || before === after) return;
+        var where = sel.closest(".grid-team") ? sel.closest(".grid-team").querySelector("strong").textContent + " seat " + sel.name.split("_").pop()
+          : (sel.closest("label").querySelector("strong") || {}).textContent;
+        if (id === "grid-form") {
+          if (before.value && !after.value) changes.push(where + ": " + before.textContent.trim() + " → vacant");
+          else if (before.value) changes.push(where + ": " + before.textContent.trim() + " → " + after.textContent.trim());
+        } else if (after.dataset.occupant) {
+          changes.push(where + " takes " + after.textContent.trim() + ", replacing " + after.dataset.occupant);
+        }
+      });
+      if (!changes.length) return;
+      e.preventDefault();
+      window.F1.confirmAction({
+        title: changes.length === 1 ? "Change this seat?" : "Change " + changes.length + " seats?",
+        target: changes.join("; "),
+        what: "The drivers move for rounds that haven't been run yet. Anyone left without a seat becomes a free agent (AI drivers can fill empty seats).",
+        history: "Not affected: completed and in-progress rounds keep their original lineups, and every driver keeps their results and career history.",
+        backup: "An automatic backup already runs daily and after each round.",
+        undo: "Yes: put the drivers back the same way.", ok: "Save grid", safe: true
+      }).then(function (yes) {
+        if (!yes) return;
+        form.dataset.confirmed = "1";
+        if (form.requestSubmit) form.requestSubmit(); else form.submit();
+      });
+    }, true);
+  });
 })();

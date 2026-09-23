@@ -42,11 +42,16 @@ def public_key(conn, rotate=False):
 
 # --------------------------------------------------------------------------- activity log
 
-def audit(conn, username, action, detail=""):
-    """Record what someone did. Repeats of the same thing within 10 minutes (autosaves) are merged."""
+def audit(conn, username, action, detail="", summary=None, link=None):
+    """Record what someone did. Repeats of the same thing within 10 minutes (autosaves) are merged.
+
+    summary is a readable sentence without the person's name ("scheduled R2 Chinese GP for ..."); link is a path
+    inside the league. Never pass passwords, webhook URLs or other private values here.
+    """
     last = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
     now = now_iso()
-    if last and last["username"] == username and last["action"] == action and last["detail"] == detail:
+    if last and last["username"] == username and last["action"] == action and last["detail"] == detail \
+            and (last["summary"] if "summary" in last.keys() else None) == summary:
         try:
             recent = datetime.fromisoformat(now) - datetime.fromisoformat(last["created_at"]) < timedelta(minutes=10)
         except ValueError:
@@ -54,8 +59,8 @@ def audit(conn, username, action, detail=""):
         if recent:
             conn.execute("UPDATE audit_log SET created_at = ? WHERE id = ?", (now, last["id"]))
             return
-    conn.execute("INSERT INTO audit_log(username, action, detail, created_at) VALUES(?,?,?,?)",
-                 (username, action, detail[:300], now))
+    conn.execute("INSERT INTO audit_log(username, action, detail, created_at, summary, link) VALUES(?,?,?,?,?,?)",
+                 (username, action, detail[:300], now, (summary or "")[:400] or None, link))
 
 
 def audit_entries(conn, limit=300, username=None):

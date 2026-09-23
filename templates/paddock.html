@@ -29,7 +29,10 @@
     Reputation from finished seasons is locked when a new season starts. Press this after an update that changes the maths
     (for example v1.7's qualifying-vs-finish racecraft) to replay every season with the current formula. A backup is made first.</p>
   <form method="post" action="{{ url_for('paddock_recalculate', token=ctx.token) }}"
-        onsubmit="return confirm('Replay every season with the current Reputation formula? A backup is made first.');">
+        data-confirm='{{ {"title": "Recalculate Reputation history?", "target": "Every driver, every finished season",
+          "what": "Replays every season with the current Reputation formula and replaces each season's locked Reputation.",
+          "history": "Race results don't change, but Reputation, Driver Value, market tiers and team interest can.",
+          "backup": "Yes: a backup is made first.", "undo": "Yes: restore that backup from League & Saves.", "ok": "Recalculate"}|tojson }}'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn">Recalculate Reputation history</button>
   </form>
@@ -99,27 +102,34 @@
         <td class="num">{{ d.rep_now }}</td>
         <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if d.active }}></td>
         <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
-        <td><button type="button" class="btn btn-sm btn-danger" data-dialog="del-driver-{{ d.id }}">Delete</button></td>
+        <td><button type="button" class="btn btn-sm btn-danger" data-delete-driver="{{ d.id }}" data-name="{{ d.name }}"
+              data-seat="{{ (d.team.name ~ ' (' ~ ctx.season.year ~ ')') if d.team else '' }}" data-races="{{ d.history.races }}"
+              data-player="{{ 1 if d.is_player else 0 }}" data-url="{{ url_for('paddock_driver_delete', token=ctx.token, driver_id=d.id) }}">Delete</button></td>
       </tr>
     {% endfor %}</tbody>
   </table>
   </div>
-  {% for d in all_drivers %}
-  <dialog id="del-driver-{{ d.id }}" class="dialog">
-    <div class="dialog-head"><h2>Delete {{ d.name }}?</h2><button class="icon-btn" data-close>✕</button></div>
-    <form method="post" action="{{ url_for('paddock_driver_delete', token=ctx.token, driver_id=d.id) }}" class="stack">
+  <dialog id="del-driver" class="dialog" aria-labelledby="del-driver-title">
+    <div class="dialog-head"><h2 id="del-driver-title">Delete driver?</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+    <form method="post" action="" class="stack" id="del-driver-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <p class="muted">This removes {{ d.name }} from the league for good{{ ', including their login link, garage and offers' if d.is_player }}.
-        If you might use them in a future season, close this and untick <b>Active</b> instead.</p>
-      {% if d.history.races %}
-      <div class="banner banner-warn">{{ d.name }} has <b>{{ d.history.races }}</b> race result(s). Deleting them removes those results too,
-        which changes the standings and constructor points for those races.</div>
-      <label class="check"><input type="checkbox" name="force" value="1" required> Also delete their race results</label>
-      {% endif %}
-      <button class="btn btn-danger">Delete permanently</button>
+      <dl class="confirm-facts">
+        <div><dt>Driver</dt><dd id="del-driver-name"></dd></div>
+        <div><dt>Seat</dt><dd id="del-driver-seat"></dd></div>
+        <div><dt>Historical results</dt><dd id="del-driver-races"></dd></div>
+        <div><dt>Undo</dt><dd>No. Download a backup first (League &amp; Saves) if you might want this driver back.</dd></div>
+      </dl>
+      <p class="muted small" id="del-driver-note"></p>
+      <div id="del-driver-history" hidden>
+        <label class="check"><input type="checkbox" name="force" value="1" id="del-driver-force"> Also permanently delete their race results</label>
+        <div class="banner banner-warn small" id="del-driver-warn" hidden>This changes the standings and constructor points for every race they were in, in every season.
+          It can't be undone. Type the driver's name to confirm.
+          <label class="stack tight"><span class="sr-only">Driver name</span><input name="confirm_name" id="del-driver-confirm" autocomplete="off"></label></div>
+      </div>
+      <div class="button-row"><button type="button" class="btn btn-ghost" data-close autofocus>Cancel</button>
+        <button class="btn btn-danger" id="del-driver-go">Delete permanently</button></div>
     </form>
   </dialog>
-  {% endfor %}
   {% for d in all_drivers %}
   <form id="driver-{{ d.id }}" method="post" action="{{ url_for('paddock_driver', token=ctx.token) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="driver_id" value="{{ d.id }}"></form>
@@ -127,4 +137,40 @@
   <p class="muted small">Untick Active to retire a driver. If they have a seat, the best free AI driver takes it. Their history stays.
     Baseline Reputation only matters for seasons that haven't started yet; earned Reputation carries on as before.</p>
 </section>
+<script>
+/* One delete dialog for every driver: filled in from the button that opened it. Cancel is the default. */
+(function () {
+  var dlg = document.getElementById("del-driver");
+  if (!dlg) return;
+  var form = document.getElementById("del-driver-form"), force = document.getElementById("del-driver-force");
+  var warn = document.getElementById("del-driver-warn"), typed = document.getElementById("del-driver-confirm"), go = document.getElementById("del-driver-go");
+  var current = null;
+  function update() {
+    var races = parseInt(current.dataset.races, 10) || 0;
+    warn.hidden = !force.checked;
+    go.disabled = races > 0 && (!force.checked || typed.value.trim() !== current.dataset.name);
+    go.textContent = force.checked ? "Delete driver and results" : "Delete permanently";
+  }
+  document.querySelectorAll("[data-delete-driver]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      current = btn;
+      var races = parseInt(btn.dataset.races, 10) || 0;
+      form.action = btn.dataset.url;
+      document.getElementById("del-driver-title").textContent = "Delete " + btn.dataset.name + "?";
+      document.getElementById("del-driver-name").textContent = btn.dataset.name + (btn.dataset.player === "1" ? " (player driver)" : "");
+      document.getElementById("del-driver-seat").textContent = btn.dataset.seat ? "Seated at " + btn.dataset.seat + ". An AI driver takes the seat." : "Not seated";
+      document.getElementById("del-driver-races").textContent = races ? races + " race result(s). They can only be deleted together with the driver." : "None";
+      document.getElementById("del-driver-note").textContent = "This removes " + btn.dataset.name + " from the league for good" +
+        (btn.dataset.player === "1" ? ", including their garage and offers (their member keeps their login)" : "") +
+        ". To keep them for a future season, cancel and untick Active instead.";
+      document.getElementById("del-driver-history").hidden = !races;
+      force.checked = false; typed.value = "";
+      update();
+      dlg.showModal();
+    });
+  });
+  force.addEventListener("change", update);
+  typed.addEventListener("input", update);
+})();
+</script>
 {% endblock %}

@@ -97,14 +97,17 @@
       </svg>
       <div class="ring-label"><strong>{{ p.pct }}%</strong><span>{{ p.completed }} / {{ p.total }} rounds</span></div>
     </div>
-    <dl class="season-facts">
-      <div><dt>Rounds completed</dt><dd>{{ p.completed }} of {{ p.total }}</dd></div>
-      {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} of {{ p.sprints_total }}</dd></div>{% endif %}
-      <div><dt><abbr title="Drivers' Championship">WDC</abbr> leader</dt><dd>{% if p.wdc %}{{ driver_link(ctx, p.wdc.driver) }} <span class="muted small">{{ p.wdc.points }} pts</span>{% else %}<span class="muted">No points yet</span>{% endif %}</dd></div>
-      <div><dt><abbr title="Constructors' Championship">WCC</abbr> leader</dt><dd>{% if p.wcc %}{{ team_dot(p.wcc.team) }}{{ p.wcc.team.name }} <span class="muted small">{{ p.wcc.points }} pts</span>{% else %}<span class="muted">No points yet</span>{% endif %}</dd></div>
-      <div><dt>Average AI difficulty</dt><dd>{% if p.avg_ai is not none %}{{ p.avg_ai }} <span class="muted small">over {{ p.ai_rounds }} round{{ 's' if p.ai_rounds != 1 }}</span>{% else %}<span class="muted">Not recorded yet</span>{% endif %}</dd></div>
-      <div><dt>Next milestone</dt><dd>{% if p.milestone %}{{ p.milestone.label }} <span class="muted small">after round {{ p.milestone.round }} · {{ p.milestone.to_go }} to go</span>{% elif p.total %}Season complete{% else %}—{% endif %}</dd></div>
+    <div class="season-info">
+    <dl class="season-facts compact-facts">
+      <div><dt>Completed</dt><dd>{{ p.completed }} round{{ 's' if p.completed != 1 }}</dd></div>
+      <div><dt>Remaining</dt><dd>{{ p.remaining }} round{{ 's' if p.remaining != 1 }}</dd></div>
+      <div><dt>Current round</dt><dd>{% if p.current %}R{{ p.current.round_number }} · {{ p.current.name }}{% else %}Season finished{% endif %}</dd></div>
+      {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} done · {{ p.sprints_left }} left</dd></div>{% endif %}
+      <div><dt>Next event</dt><dd>{% if p.next_event %}{{ p.next_event.name }}{% if p.next_event.race_at %} · {{ p.next_event.race_at|race_time }}{% else %} · <span class="muted">not scheduled</span>{% endif %}{% else %}—{% endif %}</dd></div>
+      <div><dt>Projected finish</dt><dd>{% if p.finish_at %}{{ p.finish_at|day }}{% elif p.remaining == 0 %}Done{% elif p.last_scheduled %}<span class="muted">{{ p.unscheduled_left }} round{{ 's' if p.unscheduled_left != 1 }} not scheduled yet</span>{% else %}<span class="muted">Not scheduled yet</span>{% endif %}</dd></div>
     </dl>
+    <p class="season-leaders small muted">{% if p.wdc %}<abbr title="Drivers' Championship">WDC</abbr> leader {{ driver_link(ctx, p.wdc.driver) }} ({{ p.wdc.points }}){% endif %}{% if p.wcc %} · <abbr title="Constructors' Championship">WCC</abbr> {{ p.wcc.team.name }} ({{ p.wcc.points }}){% endif %}{% if p.avg_ai is not none %} · avg AI {{ p.avg_ai }}{% endif %}{% if p.milestone %} · next milestone: {{ p.milestone.label|lower }} after R{{ p.milestone.round }}{% endif %}</p>
+    </div>
   </section>
   {% endif %}
 </div>

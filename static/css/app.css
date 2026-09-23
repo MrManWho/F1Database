@@ -1110,3 +1110,38 @@ form.inline { display: inline; }
 .imp-rawtext pre { white-space: pre-wrap; max-height: 240px; overflow: auto; font-size: .78rem; background: var(--panel-2); padding: .6rem; border-radius: 6px; }
 tr.cmp-replace td { color: var(--amber); font-weight: 600; }
 .import-dialog .data-table th, dialog .data-table th { top: 0; }
+.race-state.state-live { color: var(--green); }
+.race-state.state-soon { color: var(--amber); }
+.race-state.state-pending { color: var(--amber); }
+.race-state.state-postponed { color: var(--muted); }
+.compact-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.2rem; }
+.compact-facts > div { flex-direction: column; align-items: flex-start; gap: 0; }
+.compact-facts dd { text-align: left; font-size: .92rem; }
+.season-leaders { flex-basis: 100%; margin: .2rem 0 0; }
+@media (max-width: 500px) { .compact-facts { grid-template-columns: 1fr; } }
+
+/* v1.19 Race Master section in the sidebar */
+.nav-admin { margin-top: .5rem; padding-top: .3rem; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--red) 4%, transparent); border-radius: 8px; }
+.nav-toggle { display: flex !important; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; cursor: pointer; font: inherit; text-align: left; }
+.sidebar nav .nav-toggle { padding: .45rem .75rem .25rem; color: #9aa4b6; font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; }
+.nav-toggle:hover { color: var(--text); }
+.nav-toggle .chev { transition: transform .15s; font-size: .8rem; }
+.admin-nav-closed .nav-toggle .chev { transform: rotate(-90deg); }
+.admin-nav-closed .nav-admin-items { display: none; }
+.nav-admin-items { max-height: 42vh; overflow-y: auto; display: flex; flex-direction: column; gap: 0; }
+body.rail .nav-toggle { display: none !important; }
+body.rail .nav-admin-items { display: flex !important; max-height: none; }
+[data-theme="light"] .sidebar nav .nav-toggle { color: #6b7485; }
+
+/* v1.19 confirmations */
+.confirm-dialog { width: min(560px, 96vw); }
+.confirm-facts { margin: 0 0 .8rem; display: grid; gap: .35rem; }
+.confirm-facts > div { display: grid; grid-template-columns: 9rem 1fr; gap: .6rem; padding: .3rem 0; border-bottom: 1px solid var(--line); }
+.confirm-facts dt { color: var(--muted); font-size: .82rem; }
+.confirm-facts dd { margin: 0; }
+.confirm-type { display: grid; gap: .3rem; margin-bottom: .6rem; font-weight: 600; }
+@media (max-width: 500px) { .confirm-facts > div { grid-template-columns: 1fr; gap: 0; } }
+.season-leaders { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.chart-table { display: block; max-width: 100%; overflow-x: auto; }
+.season-info { flex: 1 1 240px; min-width: 0; }
+.season-info .season-facts { flex: none; }

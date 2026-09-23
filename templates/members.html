@@ -78,7 +78,10 @@
             <button form="m-{{ loop.index }}" class="btn btn-sm btn-primary">Save</button>
             {% if not m.site_master %}
             <form method="post" action="{{ url_for('member_remove', token=ctx.token, username=m.username) }}"
-                  onsubmit="return confirm('Remove {{ m.display_name }} from this league? Their login and driver stay; they just lose access.');">
+                  data-confirm='{{ {"title": "Remove " ~ m.display_name ~ " from this league?", "target": m.display_name ~ " (" ~ m.username ~ ")",
+                    "what": "They lose access to this league straight away. Their login stays, and so does their driver" ~ (" (" ~ m.driver.name ~ ")" if m.driver else "") ~ ".",
+                    "history": "Not affected: every result, contract and career stat stays.", "backup": "No backup is needed: nothing is deleted.",
+                    "undo": "Yes: add them back from this page (and reassign their driver).", "ok": "Remove from league"}|tojson }}'>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Remove</button></form>
             {% endif %}
           </div>
@@ -131,19 +134,11 @@
   </section>
   <section class="card">
     <h2>Joining</h2>
-    <form method="post" action="{{ url_for('members_settings', token=ctx.token) }}" class="stack">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <fieldset class="join-modes"><legend>How people join</legend>
-        {% for key, label in join_modes.items() %}
-        <label class="check"><input type="radio" name="join_mode" value="{{ key }}" {{ 'checked' if key == join_mode }}>
-          <span><b>{{ label }}</b> <small class="muted">{{ {'requests': 'Anyone with a login can ask from their League Library. You approve each request.',
-            'invite': 'No requests. Invite people below and they accept from their League Library.',
-            'closed': 'No requests, and invitations can\'t be accepted.'}[key] }}</small></span></label>
-        {% endfor %}
-      </fieldset>
-      <p class="muted small">Existing members are never affected. You can still add people directly above.</p>
-      <button class="btn">Save</button>
-    </form>
+    <p class="join-current"><span class="join-status join-{{ join_mode }}">{{ join_modes[join_mode] }}</span></p>
+    <p class="small">{{ {'requests': 'Join requests are currently enabled: people can ask from their League Library and you approve each one below.',
+      'invite': 'The league is invite only: people join when they accept an invitation.',
+      'closed': 'The league is closed to new members: no requests, and invitations can\'t be accepted.'}[join_mode] }}
+      <a href="{{ url_for('league_settings', token=ctx.token) }}#joining">Manage this in League Settings →</a></p>
     <h3>Invite someone</h3>
     <form method="post" action="{{ url_for('member_invite', token=ctx.token) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

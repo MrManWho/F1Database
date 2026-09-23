@@ -212,13 +212,17 @@ def test_race_time_status_transitions():
     start = datetime(2026, 9, 23, 18, 0, tzinfo=timezone.utc)
     iso = start.isoformat()
     at = lambda **d: start + timedelta(**d)
+    assert timefmt.race_status(iso, "Not Run", 180, at(days=-9)) == ("scheduled", "Scheduled")
     assert timefmt.race_status(iso, "Not Run", 180, at(hours=-2, minutes=-15)) == ("upcoming", "Starts in 2h 15m")
-    assert timefmt.race_status(iso, "Not Run", 180, at(minutes=5))[1] == "Race window open"
-    assert timefmt.race_status(iso, "In Progress", 180, at(hours=2, minutes=59))[1] == "Race window open"
-    assert timefmt.race_status(iso, "In Progress", 180, at(hours=3, minutes=1))[1] == "Scheduled time passed · awaiting results"
-    assert timefmt.race_status(iso, "Not Run", 60, at(minutes=61))[0] == "overdue"
+    assert timefmt.race_status(iso, "Not Run", 180, at(minutes=-10)) == ("soon", "Starting soon")
+    assert timefmt.race_status(iso, "Not Run", 180, at(minutes=5)) == ("live", "In progress")
+    assert timefmt.race_status(iso, "In Progress", 180, at(hours=2, minutes=59))[1] == "In progress"
+    assert timefmt.race_status(iso, "In Progress", 180, at(hours=3, minutes=1)) == ("pending", "Results pending")
+    assert timefmt.race_status(iso, "Not Run", 60, at(minutes=61))[0] == "pending"
+    assert timefmt.race_status(iso, "Not Run", 180, at(minutes=5), postponed=True) == ("postponed", "Postponed")
     assert timefmt.race_status(iso, "Complete", 180, at(hours=-5)) == ("complete", "Completed")
-    assert timefmt.race_status(None, "Not Run")[0] == "unscheduled"
+    assert timefmt.race_status(None, "Not Run") == ("unscheduled", "Not scheduled")
+    assert timefmt.zone_label(iso, "America/New_York") == "EDT"
 
 
 def test_race_window_setting_and_status_on_pages(app, master_client):
@@ -228,10 +232,10 @@ def test_race_window_setting_and_status_on_pages(app, master_client):
     with storage.session(token) as conn:
         conn.execute("UPDATE events SET race_at = ? WHERE id = ?", (past + ":00+00:00", ev["id"]))
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Race window open" in page
+    assert "In progress" in page
     master_client.post(f"/career/{token}/settings", data={"race_window": "60", "csrf_token": "tok"})
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Scheduled time passed · awaiting results" in page
+    assert "Results pending" in page
     with storage.session(token) as conn:
         assert S.get_event(conn, ev["id"])["status"] == C.EVENT_NOT_RUN  # never completed by time
 
@@ -252,7 +256,7 @@ def test_dashboard_completion_statistics(app, master_client):
     assert p["milestone"]["label"] == "Five rounds completed" and p["milestone"]["to_go"] == 2
     _add(token, "sam", "spectator")
     page = _client(app, "sam").get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "season-facts" in page and "WDC</abbr> leader" in page and "Next milestone" in page
+    assert "season-facts" in page and "WDC</abbr> leader" in page and "Projected finish" in page and "Current round" in page
 
 
 def test_profile_stat_grid_is_balanced(master_client):

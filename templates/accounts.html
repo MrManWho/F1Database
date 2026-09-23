@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import pw_field, pw_help %}
 {% block title %}Accounts{% endblock %}
 {% block plain %}
 <div class="page-head"><div><div class="kicker">Logins</div><h1>Accounts</h1></div></div>
@@ -7,17 +8,10 @@
     <h2>Change my password</h2>
     <form method="post" action="{{ url_for('account_self_password') }}" class="stack" data-password-form novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% for name, label, auto in [('current_password', 'Current password', 'current-password'), ('password', 'New password', 'new-password'), ('confirm_password', 'Confirm new password', 'new-password')] %}
-      <label for="pw-{{ name }}">{{ label }}</label>
-      <div class="pw-field">
-        <input type="password" id="pw-{{ name }}" name="{{ name }}" required autocomplete="{{ auto }}" {{ 'minlength=%d'|format(pw_min) if name != 'current_password' }}
-               aria-describedby="pw-caps{% if name == 'password' %} pw-rules{% endif %}">
-        <button type="button" class="btn btn-sm btn-ghost pw-toggle" data-pw-toggle="pw-{{ name }}" aria-pressed="false" aria-label="Show {{ label|lower }}">Show</button>
-      </div>
-      {% endfor %}
-      <p class="muted small" id="pw-rules">At least {{ pw_min }} characters, different from your current password.</p>
-      <p class="pw-caps small" id="pw-caps" role="status" aria-live="polite" hidden>⚠️ Caps Lock is on</p>
-      <p class="form-error small" id="pw-error" role="alert" hidden></p>
+      {{ pw_field('current_password', 'Current password', 'current', 'current-password', fid='pw-current_password') }}
+      {{ pw_field('password', 'New password', 'new', 'new-password', pw_min, fid='pw-password') }}
+      {{ pw_field('confirm_password', 'Confirm new password', 'confirm', 'new-password', pw_min, fid='pw-confirm_password') }}
+      {{ pw_help(pw_min) }}
       <button class="btn">Update password</button>
     </form>
   </section>
@@ -36,12 +30,14 @@
   <section class="card">
     <h2>Add a login</h2>
     <p class="muted small">People can also sign up themselves from the login page. Link a login to a driver in each league's <em>Players &amp; Logins</em> page.</p>
-    <form method="post" action="{{ url_for('account_new') }}" class="stack">
+    <form method="post" action="{{ url_for('account_new') }}" class="stack" data-password-form novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="username"></label>
       <label>Display name<input name="display_name" maxlength="60" placeholder="Display name"></label>
       <label>Email (optional)<input name="email" type="email"></label>
-      <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
+      {{ pw_field('password', 'Password', 'new', 'new-password', pw_min) }}
+      {{ pw_field('confirm_password', 'Confirm password', 'confirm', 'new-password', pw_min) }}
+      {{ pw_help(pw_min) }}
       <label>Role
         <select name="role">
           <option value="driver">Member: access is set in each league</option>
@@ -116,10 +112,12 @@
           </form>
         </td>
         <td>
-          <form method="post" action="{{ url_for('account_reset', username=u.username) }}" class="inline-form tight">
+          <form method="post" action="{{ url_for('account_reset', username=u.username) }}" class="stack tight pw-reset" data-password-form novalidate>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="password" name="password" minlength="6" placeholder="New password" required>
-            <button class="btn btn-sm btn-ghost">Set</button>
+            {{ pw_field('password', 'New password for ' ~ u.username, 'new', 'new-password', pw_min, placeholder='New password') }}
+            {{ pw_field('confirm_password', 'Confirm', 'confirm', 'new-password', pw_min, placeholder='Again') }}
+            {{ pw_help(pw_min) }}
+            <button class="btn btn-sm btn-ghost">Set password</button>
           </form>
         </td>
         <td>

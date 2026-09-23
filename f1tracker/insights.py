@@ -504,7 +504,16 @@ def season_progress(conn, season_id):
         if upcoming:
             n, label = upcoming[0]
             milestone = {"label": label, "round": n, "to_go": n - len(done)}
+    left = [e for e in evs if e["status"] != C.EVENT_COMPLETE]
+    nxt = left[0] if left else None
+    scheduled = [e["race_at"] for e in evs if e["race_at"]]
+    unscheduled_left = sum(1 for e in left if not e["race_at"])
     return {"total": total, "completed": len(done), "pct": round(len(done) / total * 100) if total else 0,
+            "remaining": len(left), "sprints_left": sum(1 for e in left if e["is_sprint"]),
+            "current": nxt, "next_event": nxt,
+            # Projected finish: the latest scheduled race, if every remaining round has a date; otherwise say so.
+            "finish_at": max(scheduled) if scheduled and not unscheduled_left and left else None,
+            "last_scheduled": max(scheduled) if scheduled else None, "unscheduled_left": unscheduled_left,
             "sprints_done": sum(1 for e in done if e["is_sprint"]), "sprints_total": len(sprints),
             "wdc": wdc, "wcc": wcc, "avg_ai": round(sum(diffs) / len(diffs), 1) if diffs else None,
             "ai_rounds": len(diffs), "milestone": milestone}

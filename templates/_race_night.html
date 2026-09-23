@@ -5,16 +5,15 @@
 <section class="card race-night" id="race-night">
   <div class="card-head">
     <h2>{{ 'Race story' if hub.complete else 'Race night' }}</h2>
-    {% if ev.race_at and not hub.complete %}
-    {{ race_clock(ev) }}
-    {% elif not hub.complete %}<span class="muted small">No race time set{{ ' yet' if not ctx.is_master }}</span>{% endif %}
+    {% if not hub.complete %}{{ race_clock(ev) }}{% endif %}
   </div>
 
   {% if full and ctx.is_master and not hub.complete %}
   <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=ev.id) }}" class="inline-form race-time-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ ev.race_at|time_input }}"></label>
-    <button class="btn btn-sm">Save time</button>
+    <label class="check small"><input type="checkbox" name="postponed" value="1" {{ 'checked' if ev.postponed }}> Postponed</label>
+    <button class="btn btn-sm">Save</button>
     {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="race_at" value="">Clear</button>{% endif %}
   </form>
   {% endif %}

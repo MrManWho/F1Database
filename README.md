@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.18
+# F1 Universe Tracker v1.19
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a
@@ -40,10 +40,9 @@ like `http://192.168.1.20:8765`. Only do this on a network you trust.
 3. Open **Environment** on the service and copy **F1_TRACKER_SETUP_CODE**. You need it to create the
    first Race Master, so nobody else can grab the admin account.
 4. Optional environment variables:
-   - `ANTHROPIC_API_KEY` for screenshot import;
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM` for email.
 
-   You can also enter both in **Accounts → Settings**. For Gmail, use an App password with
+   You can also enter these in **Accounts → Settings**. For Gmail, use an App password with
    `smtp.gmail.com`, port 587.
 
 Other hosts work too. Use the `Dockerfile` or `Procfile`, and set `F1_TRACKER_DATA_DIR` to a
@@ -102,7 +101,9 @@ Enter qualifying, Sprint and race positions, statuses, Fastest Lap and Driver of
 autosaves, and there are three ways to enter results:
 - type positions in the table;
 - tap drivers in finishing order;
-- import screenshots of the game's classification.
+- import screenshots of the game's classification. This is free and runs in your browser (Tesseract.js,
+  bundled in `static/vendor/tesseract`): nothing is uploaded, no API key or account is needed, and you review
+  and correct every row before it's put into the table. Typing results in by hand always works too.
 
 Edits are kept in the browser until the server confirms them, so a dropped connection doesn't lose
 anything: saving resumes when you're back online, and unsent edits come back if you reopen the page. If

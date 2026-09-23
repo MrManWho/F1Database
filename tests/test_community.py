@@ -86,9 +86,9 @@ def test_race_night_time_checkins_and_countdown(app, master_client):
     assert rows[0]["username"] == "ana" and rows[0]["driver"]["name"] == "Ana Silva"
     page = ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert "Who&#39;s racing?" in page or "Who's racing?" in page
-    assert 'data-countdown="2030-03-02T01:00+00:00"' in page and "Lights out Fri, Mar 1 at 8:00 PM" in page
+    assert 'data-countdown="2030-03-02T01:00+00:00"' in page and "Fri, Mar 1 at 8:00 PM EST</time>" in page and "Lights out" in page
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Lights out Fri, Mar 1 at 8:00 PM" in dash and "Starts in" in dash and "Who" in dash
+    assert "Fri, Mar 1 at 8:00 PM EST" in dash and "Scheduled" in dash and "Who" in dash   # more than a week away
     # Once the race is done, check-ins close.
     with storage.session(token) as conn:
         run_event(conn, S.get_event(conn, ev["id"]))
@@ -265,7 +265,7 @@ def test_activity_log_records_changes_for_the_race_master_only(app, master_clien
     assert sum(1 for r in log if r["action"] == "Edited results") == 1
     assert kim.get(f"/career/{token}/activity").status_code == 403
     page = master_client.get(f"/career/{token}/activity").get_data(as_text=True)
-    assert "Edited results" in page and "Kim" in page
+    assert "edited the results for Round 1 — " in page and "Kim" in page and "event id" not in page
 
 
 def test_records_and_awards(master_client):

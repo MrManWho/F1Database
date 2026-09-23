@@ -10,12 +10,14 @@
   <p class="muted small">Who changed what, newest first. Autosaves while someone is typing results are merged into one line.</p>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead>
+    <thead><tr><th>When</th><th>What happened</th><th></th></tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td class="small"><span title="{{ r.created_at|stamp }}">{{ r.created_at|stamp }}</span></td>
-        <td><strong>{{ names.get(r.username, r.username) }}</strong></td><td>{{ r.action }}</td><td class="small muted">{{ r.detail }}</td></tr>
-    {% else %}<tr><td colspan="4" class="muted">Nothing logged yet.</td></tr>{% endfor %}
+      <tr><td class="small nowrap"><span title="{{ r.created_at|stamp }}">{{ r.created_at|stamp }}</span></td>
+        <td><strong>{{ names.get(r.username, r.username) }}</strong>
+          {% if r.summary %}{{ r.summary }}.{% else %}{{ r.action|lower }}{% if r.detail %} <span class="muted small">({{ r.detail|replace('event id', 'round id')|replace('driver id', 'driver')|replace('_', ' ') }})</span>{% endif %}{% endif %}</td>
+        <td class="small">{% if r.link %}<a href="/career/{{ ctx.token }}/{{ r.link }}">Open →</a>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">Nothing logged yet.</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

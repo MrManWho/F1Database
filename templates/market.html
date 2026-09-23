@@ -4,7 +4,12 @@
 {% block content %}
 <div class="page-head">
   <div><div class="kicker">{{ ctx.role }} · Transfer Market</div><h1>Offers &amp; windows</h1></div>
-  <form method="post" action="{{ url_for('market_open', token=ctx.token) }}">
+  <form method="post" action="{{ url_for('market_open', token=ctx.token) }}"
+        data-confirm='{{ {"title": "Open a transfer window for " ~ target ~ "?", "target": "Every player driver not under contract for " ~ target,
+          "what": "Teams judge each player driver now and send offers, which appear in their garages and notifications.",
+          "history": "Not affected.", "backup": "An automatic backup already runs daily and after each round.",
+          "undo": "Partly: deleting the window removes its offers, talks, headlines and notifications, but not seats already changed by signings.",
+          "ok": "Open window", "safe": true}|tojson }}'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-primary">Open window for {{ target }}</button>
   </form>
@@ -19,7 +24,11 @@
     <div class="button-row tight">
       <span class="status-badge status-{{ 'active' if w.status == 'Open' else 'complete' }}">{{ w.status }}</span>
       <form method="post" action="{{ url_for('market_delete', token=ctx.token, window_id=w.id) }}"
-            onsubmit="return confirm('Delete this window and every offer, conversation, headline and notification it created? Seats already changed by signings stay as they are.');">
+            data-confirm='{{ {"title": "Delete the " ~ w.kind ~ " window for " ~ w.target_year ~ "?", "target": w.kind ~ " · for " ~ w.target_year,
+              "what": "Deletes the window with every offer, conversation, headline and notification it created.",
+              "history": "Race results aren't affected. Seats already changed by signings stay as they are; fix them in Grid & Transfers if needed.",
+              "backup": "No new backup is made; use League & Saves → automatic backups to roll back.", "undo": "No, except by restoring a backup.",
+              "ok": "Delete window"}|tojson }}'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Delete</button>
       </form>
       {% if w.status == 'Open' %}

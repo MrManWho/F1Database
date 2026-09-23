@@ -12,6 +12,9 @@
   const notesEl = document.getElementById("event-notes");
   const rows = Array.from(table.querySelectorAll("tbody tr"));
   const MAX = parseInt(table.dataset.max || "22", 10);
+  const ask = function (o) {
+    return window.F1 && window.F1.confirmAction ? window.F1.confirmAction(o) : Promise.resolve(window.confirm(o.title));
+  };
   let untracked = table.dataset.untracked === "1";  // "Don't track this round" pressed
 
   function parsePos(v) {
@@ -415,11 +418,16 @@
     if (!btn) return;
     const tr = btn.closest("tr");
     const name = tr.querySelector(".driver-cell strong").textContent;
-    if (!confirm("Clear every result for " + name + " this weekend?")) return;
-    tr.querySelectorAll(".pos-input, .note-input").forEach(function (i) { i.value = ""; });
-    tr.querySelectorAll("select").forEach(function (sel) { sel.value = "Auto"; });
-    tr.querySelectorAll("input[type=radio]").forEach(function (r) { r.checked = false; });
-    markEdited(tr); recalc(); schedule();
+    ask({ title: "Clear " + name + "'s results?", target: name + " · this weekend only",
+      what: "Qualifying, Sprint and race positions, statuses, Fastest Lap, Driver of the Day and notes for this driver are emptied.",
+      history: "Only this round, and only once it saves.", undo: "Type the values back in before leaving the page.", ok: "Clear driver" })
+      .then(function (yes) {
+        if (!yes) return;
+        tr.querySelectorAll(".pos-input, .note-input").forEach(function (i) { i.value = ""; });
+        tr.querySelectorAll("select").forEach(function (sel) { sel.value = "Auto"; });
+        tr.querySelectorAll("input[type=radio]").forEach(function (r) { r.checked = false; });
+        markEdited(tr); recalc(); schedule();
+      });
   });
   const clearSession = document.getElementById("clear-session");
   if (clearSession) clearSession.addEventListener("change", function () {
@@ -427,11 +435,18 @@
     clearSession.value = "";
     if (!field) return;
     const label = { qualifying_position: "qualifying", sprint_position: "Sprint", race_position: "Grand Prix" }[field];
-    if (!confirm("Clear every " + label + " position and status this weekend?")) return;
-    table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) { i.value = ""; });
-    const statusField = { sprint_position: "sprint_status_override", race_position: "status_override" }[field];
-    if (statusField) table.querySelectorAll('select[data-field="' + statusField + '"]').forEach(function (s) { s.value = "Auto"; });
-    recalc(); schedule();
+    ask({ title: "Clear the whole " + label + " session?", target: "Every driver · " + label + " · this weekend",
+      what: "Every " + label + " position" + (field === "qualifying_position" ? "" : " and status") + " for this round is emptied. Other sessions aren't touched.",
+      history: "Only this round. Standings update when it saves.",
+      backup: "An automatic backup is kept after every completed round.",
+      undo: "Only by entering the results again (or restoring a backup if the round was completed).", ok: "Clear " + label })
+      .then(function (yes) {
+        if (!yes) return;
+        table.querySelectorAll('input[data-field="' + field + '"]').forEach(function (i) { i.value = ""; });
+        const statusField = { sprint_position: "sprint_status_override", race_position: "status_override" }[field];
+        if (statusField) table.querySelectorAll('select[data-field="' + statusField + '"]').forEach(function (s) { s.value = "Auto"; });
+        recalc(); schedule();
+      });
   });
 
   // ---- Keyboard: Ctrl/Cmd+S saves now, Esc leaves quick order, ? shows the shortcuts.

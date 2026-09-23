@@ -360,6 +360,6 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
-{% if not ro %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
+{% if ctx.can_run and (ctx.is_master or event.status != 'Complete') %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
 <script src="{{ url_for('static', filename='js/importer.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/share.js') }}"></script>{% endblock %}

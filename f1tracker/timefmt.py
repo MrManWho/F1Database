@@ -128,26 +128,49 @@ DEFAULT_RACE_WINDOW = 180  # minutes after the scheduled start that count as "ra
 RACE_WINDOW_CHOICES = [60, 120, 180, 240, 360]
 
 
-def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None):
-    """(code, label) for a round: upcoming -> window -> overdue -> complete. Never marks anything complete itself.
+STARTING_SOON = 30        # minutes before the start that count as "Starting soon"
+SCHEDULED_AHEAD = 7 * 24 * 60   # further away than this is just "Scheduled"
 
-    upcoming  "Starts in 2h 15m"
-    window    "Race window open"            from the scheduled time until `window` minutes later
-    overdue   "Scheduled time passed · awaiting results"
-    complete  "Completed"                   only once the round has been submitted
+
+def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None, postponed=False):
+    """(code, label) for a round, from its scheduled time and real status. Never completes anything by itself.
+
+    unscheduled "Not scheduled"      no race time yet
+    postponed   "Postponed"          the Race Master marked it postponed
+    scheduled   "Scheduled"          more than a week away
+    upcoming    "Starts in 2h 15m"   within a week
+    soon        "Starting soon"      within 30 minutes
+    live        "In progress"        from the start until `window` minutes later
+    pending     "Results pending"    after that, until the round is submitted
+    complete    "Completed"          only once the round has been submitted
     """
     if event_status == "Complete":
         return "complete", "Completed"
+    if postponed:
+        return "postponed", "Postponed"
     dt = parse(value)
     if not dt:
-        return "unscheduled", "Race time not set"
+        return "unscheduled", "Not scheduled"
     now = now or datetime.now(timezone.utc)
-    left = countdown(value, now)
-    if left:
-        return "upcoming", left
-    if (now - dt).total_seconds() <= (window or DEFAULT_RACE_WINDOW) * 60:
-        return "window", "Race window open"
-    return "overdue", "Scheduled time passed · awaiting results"
+    minutes = (dt - now).total_seconds() / 60
+    if minutes > SCHEDULED_AHEAD:
+        return "scheduled", "Scheduled"
+    if minutes > STARTING_SOON:
+        return "upcoming", countdown(value, now)
+    if minutes > 0:
+        return "soon", "Starting soon"
+    if -minutes <= (window or DEFAULT_RACE_WINDOW):
+        return "live", "In progress"
+    return "pending", "Results pending"
+
+
+def zone_label(value, tz):
+    """Short time-zone name at that moment, e.g. EDT (falls back to the zone's name)."""
+    dt = local(value, tz)
+    if not dt:
+        return ""
+    abbr = dt.strftime("%Z")
+    return abbr if abbr and not abbr.startswith(("+", "-")) else str(tz).replace("_", " ")
 
 
 def input_value(value, tz):

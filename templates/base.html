@@ -24,7 +24,7 @@
 </head>
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
-<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
+<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
@@ -69,8 +69,10 @@
         {{ item(url_for('contracts_page', token=t), 'Driver Market', 'contracts', ep == 'contracts_page') }}
       </div>
       {% if ctx.is_master %}
-      <div class="nav-group">
-        <div class="nav-title">Race Master</div>
+      <div class="nav-group nav-admin" id="nav-admin">
+        <button type="button" class="nav-title nav-toggle" id="nav-admin-toggle" aria-expanded="true" aria-controls="nav-admin-items">
+          <span>Race Master tools</span><span class="chev" aria-hidden="true">▾</span></button>
+        <div class="nav-admin-items" id="nav-admin-items">
         {% if not ctx.my_driver %}
         {{ item(url_for('garage', token=t), 'Player Garages', 'garage', ep == 'garage', badge) }}
         {{ item(url_for('team_standing', token=t), 'Team Standings', 'teams', ep == 'team_standing') }}
@@ -81,6 +83,7 @@
         {{ item(url_for('league_settings', token=t), 'League Settings', 'toggles', ep == 'league_settings') }}
         {{ item(url_for('activity_log', token=t), 'Activity Log', 'log', ep == 'activity_log') }}
         <button type="button" data-dialog="career-dialog" title="League & Saves">{{ icon('saves') }}<span class="label">League &amp; Saves</span></button>
+        </div>
       </div>
       {% endif %}
       <div class="nav-group">
@@ -126,6 +129,13 @@
     </main>
   </div>
 
+  <dialog id="confirm-dialog" class="dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <div class="dialog-head"><h2 id="confirm-title">Are you sure?</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+    <div id="confirm-body"></div>
+    <label class="confirm-type" id="confirm-type-row" hidden><span id="confirm-type-label"></span><input id="confirm-type" autocomplete="off"></label>
+    <div class="button-row"><button type="button" class="btn btn-ghost" id="confirm-cancel" autofocus>Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok">Confirm</button></div>
+  </dialog>
   <dialog id="notif-dialog" class="dialog notif-dialog">
     <div class="dialog-head"><h2>Notifications</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
     <div class="notif-actions">
@@ -168,13 +178,19 @@
       <ul class="plain-list small">
         {% for b in ctx.auto_backups %}<li class="backup-row"><a href="{{ url_for('auto_backup_download', token=t, name=b.name) }}">{{ b.when|stamp }}</a> · {{ b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' }} · {{ b.size_kb }} KB
           <form method="post" action="{{ url_for('auto_backup_restore', token=t, name=b.name) }}"
-                onsubmit="return confirm('Roll the whole league back to {{ b.when|stamp }}? Everything since then is replaced. The current state is saved as a backup first, so you can undo this.');">
+                data-confirm='{{ {"title": "Restore the backup from " ~ (b.when|stamp) ~ "?", "target": "The whole league",
+                  "what": "Rolls everything back to that moment: results, seasons, contracts, members' access and settings.",
+                  "history": "Anything entered after " ~ (b.when|stamp) ~ " is replaced.",
+                  "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore the backup made just before this.",
+                  "ok": "Restore backup"}|tojson }}'>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Restore</button></form></li>
         {% else %}<li class="muted">None yet.</li>{% endfor %}
       </ul>
     </details>
     <form method="post" action="{{ url_for('restore_upload', token=t) }}" enctype="multipart/form-data" class="inline-form"
-          onsubmit="return confirm('Replace this league with the uploaded backup? The current state is backed up first.');">
+          data-confirm='{{ {"title": "Replace this league with the uploaded backup?", "target": "The whole league",
+            "what": "Everything in the league is replaced by the file you chose.", "history": "Results entered since that backup are replaced.",
+            "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore that automatic backup.", "ok": "Replace league"}|tojson }}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Restore from a downloaded backup<input type="file" name="file" accept=".f1career" required></label>
       <button class="btn btn-sm">Restore</button>

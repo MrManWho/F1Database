@@ -267,7 +267,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
     username TEXT NOT NULL,
     action TEXT NOT NULL,
     detail TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    summary TEXT,
+    link TEXT
 );
 
 CREATE TABLE IF NOT EXISTS team_relations (
@@ -414,7 +416,9 @@ def migrate(conn):
                spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
                role and members without a driver become Spectators, so nobody loses access. Human drivers get a
                persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
-    v15 -> v16: events.ai_untracked (the round was deliberately marked "Don't track this round").
+    v15 -> v16: events.ai_untracked (the round was deliberately marked "Don't track this round") and
+               events.postponed (the Race Master marked the round postponed); audit_log.summary and link
+               (a readable sentence and a link for each Activity Log entry; older entries keep their text).
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -425,7 +429,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "ai_untracked" in _columns(conn, "events"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "summary" in _columns(conn, "audit_log"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -485,6 +489,11 @@ def migrate(conn):
     if "ai_untracked" not in _columns(conn, "events"):
         # v1.19: "Don't track this round" is remembered explicitly, so a blank difficulty is never ambiguous.
         conn.execute("ALTER TABLE events ADD COLUMN ai_untracked INTEGER NOT NULL DEFAULT 0")
+    if "summary" not in _columns(conn, "audit_log"):
+        conn.execute("ALTER TABLE audit_log ADD COLUMN summary TEXT")   # v1.19: a readable sentence per entry
+        conn.execute("ALTER TABLE audit_log ADD COLUMN link TEXT")
+    if "postponed" not in _columns(conn, "events"):
+        conn.execute("ALTER TABLE events ADD COLUMN postponed INTEGER NOT NULL DEFAULT 0")
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

@@ -61,7 +61,7 @@
       <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}"><strong>{{ e.name }}</strong></a></td>
       <td>{{ e.location or '—' }}</td>
       <td>{% if e.is_sprint %}<span class="pill pill-sprint">Sprint</span>{% else %}<span class="muted small">Standard</span>{% endif %}</td>
-      <td class="small">{{ e.race_at|race_time if e.race_at else '—' }}</td>
+      <td class="small">{% if e.race_at %}{{ e.race_at|race_time }} {{ e.race_at|zone_label }}{% endif %}{% set st = e|race_status %}<span class="race-state state-{{ st[0] }}">{{ ' · ' if e.race_at }}{{ st[1] }}</span></td>
       <td class="num">{{ e.ai_difficulty if e.ai_difficulty is not none else '—' }}</td>
       <td><span class="status-badge status-{{ e.status|lower|replace(' ', '-') }}">{{ e.status }}</span></td>
     </tr>
