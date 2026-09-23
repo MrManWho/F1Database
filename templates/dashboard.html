@@ -68,7 +68,7 @@
     <div class="meter-row"><small>Form</small><span class="meter"><span style="width: {{ r.form }}%"></span></span><b>{{ r.form }}</b></div>
     <div class="meter-row"><small>Reputation</small><span class="meter"><span style="width: {{ r.reputation }}%"></span></span><b>{{ r.reputation }}</b></div>
     <div class="last-five">
-      <small>Last races</small>
+      <small>{% if card.form|length == 1 %}Last race{% elif card.form %}Last {{ card.form|length }} races{% else %}Last race{% endif %}</small>
       {% for f in card.form %}<span class="res res-{{ f.kind }}" title="R{{ f.round }} {{ f.event }}">{{ f.label }}</span>
       {% else %}<span class="muted small">No completed races yet</span>{% endfor %}
     </div>

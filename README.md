@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.11
+# F1 Universe Tracker v1.12
 
 A companion website for F1 game career **leagues**. Any number of people can drive: each player
 has their own login, garage and contract negotiations, and a Race Master or Race Steward enters the
@@ -24,6 +24,19 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.12: pick a role when you ask to join
+
+- **Ask to join as…** When you ask to join an open league you pick a role: *Driver*, *Driver + Scorekeeper*,
+  *Scorekeeper only* or *Spectator (view only)*. Only the driving roles need a driver name.
+- **Accept, accept with a different role, or decline.** Under **Players & logins** the Race Master sees what
+  each person asked for, with an *Approve as* dropdown pre-set to their request. Change it before pressing
+  *Accept* to give them a different role. If they have an email address they get a message saying they're in
+  (and whether their role was changed).
+- **Scorekeepers per league.** Scorekeeper is now a per-league tick box on **Players & logins**. It works for
+  drivers and for members without a driver. A Scorekeeper can only enter results, and can't change a race after
+  submitting it. The older site-wide Scorekeeper account role still works in every league.
+- The dashboard's form strip says "Last race" or "Last 3 races" to match what's there.
 
 ## v1.11: email confirmation at sign-up
 

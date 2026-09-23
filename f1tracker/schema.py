@@ -144,7 +144,8 @@ CREATE TABLE IF NOT EXISTS offer_messages (
 
 CREATE TABLE IF NOT EXISTS career_members (
     username TEXT PRIMARY KEY,
-    driver_id INTEGER REFERENCES drivers(id)
+    driver_id INTEGER REFERENCES drivers(id),
+    scorekeeper INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS team_seasons (
@@ -186,6 +187,7 @@ CREATE TABLE IF NOT EXISTS join_requests (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL,
     driver_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'driver',
     message TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'Pending',
     created_at TEXT NOT NULL,
@@ -232,11 +234,12 @@ def migrate(conn):
     v6 -> v7: news and notifications remember what created them (e.g. "window:3"), so deleting a
               transfer window can remove its trail.
     v7 -> v8: join requests, so anyone with a login can ask to join a league.
+    v8 -> v9: per-league Scorekeepers (career_members.scorekeeper) and the role asked for in a join request.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "scorekeeper" in _columns(conn, "career_members"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -247,6 +250,10 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    if "scorekeeper" not in _columns(conn, "career_members"):
+        conn.execute("ALTER TABLE career_members ADD COLUMN scorekeeper INTEGER NOT NULL DEFAULT 0")
+    if "role" not in _columns(conn, "join_requests"):
+        conn.execute("ALTER TABLE join_requests ADD COLUMN role TEXT NOT NULL DEFAULT 'driver'")
     for table in ("news", "notifications"):
         if "ref" not in _columns(conn, table):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN ref TEXT")

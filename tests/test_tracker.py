@@ -905,7 +905,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
     res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
-        conn.execute("INSERT INTO career_members VALUES('quiet', NULL)")
+        conn.execute("INSERT INTO career_members(username, driver_id) VALUES('quiet', NULL)")
         event = S.events(conn, S.current_season_id(conn))[0]
         rows = S.weekend_rows(conn, event["id"])
     payload = {"mark_complete": True, "results": [
@@ -1088,3 +1088,57 @@ def test_sign_up_is_closed_until_email_is_set_up(app):
     client.post("/register", data={"username": "x1", "password": "password1", "confirm": "password1",
                                    "email": "x@example.com", "csrf_token": "tok"})
     assert auth.get_user("x1") is None
+
+
+# --------------------------------------------------------------------------- v1.12: join roles
+
+def test_join_requests_carry_a_role_the_race_master_can_change(app, master_client):
+    token = _new_league(master_client, ["Ana Silva"], join_open="1")
+    with storage.session(token) as conn:
+        event = S.events(conn, S.current_season_id(conn))[0]
+    clients = {}
+    for name in ("kim", "sam", "lee"):
+        auth.create_user(name, name.title(), "password1")
+        clients[name] = app.test_client()
+        login(clients[name], name)
+    assert "Scorekeeper only" in clients["kim"].get("/").get_data(as_text=True)
+    clients["kim"].post(f"/career/{token}/join", data={"role": "scorekeeper", "csrf_token": "tok"})
+    clients["sam"].post(f"/career/{token}/join", data={"role": "driver_scorekeeper", "driver_name": "Sam Driver",
+                                                       "csrf_token": "tok"})
+    clients["lee"].post(f"/career/{token}/join", data={"role": "driver_scorekeeper", "driver_name": "Lee Racer",
+                                                       "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        reqs = {r["username"]: r for r in conn.execute("SELECT * FROM join_requests")}
+    assert reqs["kim"]["role"] == "scorekeeper" and reqs["kim"]["driver_name"] == ""
+    assert "Driver + Scorekeeper" in master_client.get(f"/career/{token}/members").get_data(as_text=True)
+    # Accept as asked, accept with a different role, and accept as a spectator.
+    for user, role in (("kim", "scorekeeper"), ("sam", "driver_scorekeeper"), ("lee", "driver")):
+        master_client.post(f"/career/{token}/members/request/{reqs[user]['id']}/approve",
+                           data={"role": role, "driver_name": reqs[user]["driver_name"], "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        members = {r["username"]: r for r in conn.execute("SELECT * FROM career_members")}
+        assert members["kim"]["driver_id"] is None and members["kim"]["scorekeeper"] == 1
+        assert members["sam"]["driver_id"] == driver_id(conn, "Sam Driver") and members["sam"]["scorekeeper"] == 1
+        assert members["lee"]["driver_id"] == driver_id(conn, "Lee Racer") and members["lee"]["scorekeeper"] == 0
+        ids = [r["driver_id"] for r in S.weekend_rows(conn, event["id"])]
+    body = {"results": [{"driver_id": ids[0], "race_position": 1}]}
+    post = lambda c: c.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=body)
+    assert post(clients["kim"]).get_json()["ok"] and post(clients["sam"]).get_json()["ok"]
+    assert post(clients["lee"]).status_code == 403
+    assert clients["kim"].get(f"/career/{token}/paddock").status_code == 403
+    # Scorekeeper flags survive the links form.
+    master_client.post(f"/career/{token}/members", data={
+        f"user_{members['sam']['driver_id']}": "sam", f"user_{members['lee']['driver_id']}": "lee",
+        "viewers": ["kim"], "scorekeepers": ["lee"], "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        flags = {r["username"]: r["scorekeeper"] for r in conn.execute("SELECT * FROM career_members")}
+    assert flags == {"sam": 0, "lee": 1, "kim": 0}
+    # A spectator role needs no driver name; declining still works.
+    auth.create_user("viv", "Viv", "password1")
+    viv = app.test_client()
+    login(viv, "viv")
+    viv.post(f"/career/{token}/join", data={"role": "spectator", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        rid = conn.execute("SELECT id FROM join_requests WHERE username = 'viv'").fetchone()[0]
+    master_client.post(f"/career/{token}/members/request/{rid}/decline", data={"csrf_token": "tok"})
+    assert viv.get(f"/career/{token}/dashboard").status_code == 403

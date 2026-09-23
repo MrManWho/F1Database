@@ -54,7 +54,11 @@
     {% else %}
     <form method="post" action="{{ url_for('career_join', token=c.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
+      <label>I'd like to join as
+        <select name="role" data-join-role>
+          {% for key, label in C.LEAGUE_ROLES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select></label>
+      <label data-driver-field>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
       <label>Message (optional)<input name="message" maxlength="300" placeholder="Say hi to the Race Master"></label>
       <button class="btn btn-primary btn-sm">Ask to join</button>
     </form>

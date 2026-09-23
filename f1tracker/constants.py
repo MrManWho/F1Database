@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.11"
-SCHEMA_VERSION = 8
+APP_VERSION = "1.12"
+SCHEMA_VERSION = 9
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -149,3 +149,11 @@ CAR_RATING_MIN, CAR_RATING_MAX = 50.0, 99.0
 
 # Screenshot import
 IMPORT_MODEL = "claude-opus-5"
+
+# What someone can ask to be in a league (join requests) and what the Race Master can grant.
+LEAGUE_ROLES = {
+    "driver": "Driver",
+    "driver_scorekeeper": "Driver + Scorekeeper",
+    "scorekeeper": "Scorekeeper only",
+    "spectator": "Spectator (view only)",
+}

@@ -9,16 +9,21 @@
   <h2>Join requests</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Login</th><th>Driver name</th><th>Message</th><th></th></tr></thead>
+    <thead><tr><th>Login</th><th>Asked for</th><th>Approve as</th><th>Driver name</th><th>Message</th><th></th></tr></thead>
     <tbody>{% for r in requests %}
       <tr>
         <td><strong>{{ r.username }}</strong>{% if r.user %}<br><small class="muted">{{ r.user.display_name }}</small>{% endif %}</td>
-        <td><input form="approve-{{ r.id }}" name="driver_name" value="{{ r.driver_name }}" maxlength="60" required></td>
+        <td><span class="pill">{{ C.LEAGUE_ROLES.get(r.role, 'Driver') }}</span></td>
+        <td><select form="approve-{{ r.id }}" name="role" data-join-role>
+          {% for key, label in C.LEAGUE_ROLES.items() %}<option value="{{ key }}" {{ 'selected' if key == r.role }}>{{ label }}</option>{% endfor %}
+        </select></td>
+        <td data-driver-field><input form="approve-{{ r.id }}" name="driver_name" value="{{ r.driver_name }}" maxlength="60"
+               placeholder="Needed for driving roles" {{ 'required' if r.role in ('driver', 'driver_scorekeeper') }}></td>
         <td class="small">{{ r.message or '—' }}</td>
         <td>
           <div class="button-row tight">
             <label class="check small"><input form="approve-{{ r.id }}" type="checkbox" name="send_offers" value="1" checked> Send rookie offers</label>
-            <button form="approve-{{ r.id }}" class="btn btn-sm btn-primary">Approve</button>
+            <button form="approve-{{ r.id }}" class="btn btn-sm btn-primary">Accept</button>
             <button form="decline-{{ r.id }}" class="btn btn-sm btn-ghost">Decline</button>
           </div>
         </td>
@@ -65,6 +70,7 @@
 <section class="card">
   <h2>Player drivers &amp; logins</h2>
   <p class="muted">Each player driver can be linked to one login. That person sees their own garage and can negotiate their own offers.
+    Tick <em>Scorekeeper</em> to let someone enter race results in this league (they can't change a race once it's submitted).
     Race Masters can see every league anyway.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -76,15 +82,21 @@
           {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
         </select>
       </label>
+      {% set linked = (links.items()|selectattr(1, 'equalto', p.id)|map('first')|list) %}
+      {% if linked %}<label class="check small"><input type="checkbox" name="scorekeepers" value="{{ linked[0] }}" {{ 'checked' if linked[0] in scorekeepers }}> Scorekeeper</label>{% endif %}
       <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button>
     </div>
     {% else %}
     <p class="muted">No player drivers yet. Add one above, or open the league to join requests.</p>
     {% endfor %}
     <fieldset>
-      <legend>Spectators (view-only, no driver)</legend>
-      {% for u in users if not u.is_master %}
-      <label class="check"><input type="checkbox" name="viewers" value="{{ u.username }}" {{ 'checked' if u.username in links and links[u.username] is none }}> {{ u.display_name }} ({{ u.username }})</label>
+      <legend>Members without a driver</legend>
+      <p class="muted small">Spectators can view the league. Scorekeepers can also enter race results.</p>
+      {% for u in users if not u.is_master and (u.username not in links or links[u.username] is none) %}
+      <div class="button-row tight">
+        <label class="check"><input type="checkbox" name="viewers" value="{{ u.username }}" {{ 'checked' if u.username in links }}> {{ u.display_name }} ({{ u.username }})</label>
+        <label class="check small"><input type="checkbox" name="scorekeepers" value="{{ u.username }}" {{ 'checked' if u.username in scorekeepers }}> Scorekeeper</label>
+      </div>
       {% else %}<p class="muted small">No other logins.</p>{% endfor %}
     </fieldset>
     <button class="btn btn-primary">Save links</button>

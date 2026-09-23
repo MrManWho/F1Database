@@ -106,9 +106,13 @@ def is_master():
     return bool(g.user and g.user["is_master"])
 
 
-def can_run():
-    """Race Master or Scorekeeper: may enter race results."""
-    return bool(g.user and (g.user["is_master"] or g.user.get("is_steward")))
+def can_run(membership=None):
+    """Race Master or Scorekeeper (site-wide, or for this league): may enter race results."""
+    if not g.user:
+        return False
+    if g.user["is_master"] or g.user.get("is_steward"):
+        return True
+    return bool(membership and membership["scorekeeper"])
 
 
 def master_required(fn):
@@ -149,13 +153,13 @@ def career_page(master_only=False, ops_only=False):
                 app.logger.exception("automatic backup failed")
             try:
                 with storage.session(token) as conn:
-                    linked = conn.execute("SELECT 1 FROM career_members WHERE username = ?",
+                    linked = conn.execute("SELECT * FROM career_members WHERE username = ?",
                                           (g.user["username"],)).fetchone()
                     if not is_master() and not linked:
                         abort(403)
                     if master_only and not is_master():
                         abort(403)
-                    if ops_only and not can_run():
+                    if ops_only and not can_run(linked):
                         abort(403)
                     season_id = _selected_season(conn, token)
                     g.ctx = {
@@ -165,7 +169,7 @@ def career_page(master_only=False, ops_only=False):
                         "current_season_id": S.current_season_id(conn),
                         "seasons": S.list_seasons(conn),
                         "is_master": is_master(),
-                        "can_run": can_run(),
+                        "can_run": can_run(linked),
                         "role": auth.ROLES[auth.role_of(g.user)],
                         "my_driver": _member_driver(conn),
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
@@ -494,6 +498,12 @@ def register_routes(app):
     @app.route("/career/<token>/join", methods=["POST"])
     def career_join(token):
         driver_name = " ".join((request.form.get("driver_name") or "").split())[:60]
+        role = request.form.get("role") or "driver"
+        if role not in C.LEAGUE_ROLES:
+            role = "driver"
+        drives = role in ("driver", "driver_scorekeeper")
+        if not drives:
+            driver_name = ""
         try:
             with storage.session(token) as conn:
                 if storage.get_meta(conn, "join_open") != "1":
@@ -503,13 +513,17 @@ def register_routes(app):
                     raise ValidationError("You're already in this league")
                 if conn.execute("SELECT 1 FROM join_requests WHERE username = ? AND status = 'Pending'", (me,)).fetchone():
                     raise ValidationError("Your request is already waiting for the Race Master")
-                if len(driver_name) < 2:
-                    raise ValidationError("Choose a driver name")
-                if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
-                    raise ValidationError("There's already a driver with that name in this league")
-                conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at) VALUES(?,?,?,?)",
-                             (me, driver_name, (request.form.get("message") or "").strip()[:300], storage.now_iso()))
-                feed.notify(conn, None, f"{g.user['display_name']} asked to join as {driver_name}", "members")
+                if drives:
+                    if len(driver_name) < 2:
+                        raise ValidationError("Choose a driver name")
+                    if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
+                        raise ValidationError("There's already a driver with that name in this league")
+                conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at, role) VALUES(?,?,?,?,?)",
+                             (me, driver_name, (request.form.get("message") or "").strip()[:300], storage.now_iso(), role))
+                what = f"as {driver_name}" if drives else f"as {C.LEAGUE_ROLES[role]}"
+                if role == "driver_scorekeeper":
+                    what += " (and Scorekeeper)"
+                feed.notify(conn, None, f"{g.user['display_name']} asked to join {what}", "members")
         except CareerNotFound:
             abort(404)
         except ValidationError as exc:
@@ -1073,6 +1087,7 @@ def register_routes(app):
     def members(conn, ctx):
         players = S.player_drivers(conn)
         if request.method == "POST":
+            scorekeepers = {auth.normalise(u) for u in request.form.getlist("scorekeepers")}
             conn.execute("DELETE FROM career_members")
             chosen = set()
             for p in players:
@@ -1084,22 +1099,26 @@ def register_routes(app):
                 if username in chosen:
                     raise ValidationError("One login cannot drive two player drivers")
                 chosen.add(username)
-                conn.execute("INSERT INTO career_members(username, driver_id) VALUES(?,?)", (username, p["id"]))
-            for username in request.form.getlist("viewers"):
-                username = auth.normalise(username)
+                conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper) VALUES(?,?,?)",
+                             (username, p["id"], int(username in scorekeepers)))
+            viewers = {auth.normalise(u) for u in request.form.getlist("viewers")} | scorekeepers
+            for username in sorted(viewers):
                 if username and username not in chosen and auth.get_user(username):
-                    conn.execute("INSERT INTO career_members(username, driver_id) VALUES(?, NULL)", (username,))
+                    conn.execute("INSERT INTO career_members(username, driver_id, scorekeeper) VALUES(?, NULL, ?)",
+                                 (username, int(username in scorekeepers)))
             flash("Player logins saved.", "success")
             return redirect(url_for("members", token=ctx["token"]))
-        links = {r["username"]: r["driver_id"] for r in conn.execute("SELECT * FROM career_members")}
+        rows = conn.execute("SELECT * FROM career_members").fetchall()
+        links = {r["username"]: r["driver_id"] for r in rows}
+        scorekeepers = {r["username"] for r in rows if r["scorekeeper"]}
         requests = [dict(r) for r in conn.execute("SELECT * FROM join_requests WHERE status = 'Pending' ORDER BY id")]
         users = {u["username"]: u for u in auth.list_users()}
         for r in requests:
             r["user"] = users.get(r["username"])
         return page("members.html", ctx, players=players, users=list(users.values()), links=links, requests=requests,
-                    join_open=storage.get_meta(conn, "join_open") == "1")
+                    scorekeepers=scorekeepers, join_open=storage.get_meta(conn, "join_open") == "1")
 
-    def _add_player(conn, ctx, username, driver_name, send_offers):
+    def _add_player(conn, ctx, username, driver_name, send_offers, scorekeeper=False):
         user = auth.get_user(username) if username else None
         if username and not user:
             raise ValidationError("Unknown login")
@@ -1108,7 +1127,8 @@ def register_routes(app):
             raise ValidationError(f"{user['username']} already drives in this league")
         did = S.add_player_driver(conn, driver_name, ctx["current_season_id"])
         if user:
-            conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id) VALUES(?,?)", (user["username"], did))
+            conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id, scorekeeper) VALUES(?,?,?)",
+                         (user["username"], did, int(scorekeeper)))
         name = S.driver_map(conn)[did]["name"]
         feed.post(conn, ctx["current_season_id"], "paddock", f"{name} joins the grid as a rookie",
                   "A new player driver has entered the league.", "drivers", driver_id=did)
@@ -1131,10 +1151,31 @@ def register_routes(app):
         req = conn.execute("SELECT * FROM join_requests WHERE id = ? AND status = 'Pending'", (request_id,)).fetchone()
         if not req or decision not in ("approve", "decline"):
             abort(404)
+        role = request.form.get("role") or req["role"] or "driver"
+        if role not in C.LEAGUE_ROLES:
+            raise ValidationError("Choose a role")
         if decision == "approve":
-            name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
-                               bool(request.form.get("send_offers")))
-            flash(f"{req['username']} joined as {name}.", "success")
+            if not auth.get_user(req["username"]):
+                raise ValidationError("That login no longer exists")
+            keeper = role in ("driver_scorekeeper", "scorekeeper")
+            if role in ("driver", "driver_scorekeeper"):
+                name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
+                                   bool(request.form.get("send_offers")), scorekeeper=keeper)
+                what = f"as {name}" + (" (and Scorekeeper)" if keeper else "")
+            else:
+                conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id, scorekeeper) VALUES(?, NULL, ?)",
+                             (req["username"], int(keeper)))
+                what = f"as {C.LEAGUE_ROLES[role]}"
+            changed = role != (req["role"] or "driver")
+            flash(f"{req['username']} joined {what}." + (" (Role changed from their request.)" if changed else ""),
+                  "success")
+            user = auth.get_user(req["username"])
+            if user["email"]:
+                mailer.send_later([user["email"]], f"You're in: {ctx['career_name']}",
+                                  f"Your request to join {ctx['career_name']} was approved. You joined {what}."
+                                  + (f" The Race Master changed your role from what you asked for "
+                                     f"({C.LEAGUE_ROLES.get(req['role'], 'Driver')})." if changed else "")
+                                  + f"\n\n{url_for('dashboard', token=ctx['token'], _external=True)}")
         else:
             flash(f"Request from {req['username']} declined.", "success")
         conn.execute("UPDATE join_requests SET status = ?, decided_at = ? WHERE id = ?",
@@ -1170,12 +1211,13 @@ def register_routes(app):
     def _may_enter_results(token):
         if is_master():
             return True
-        if not can_run():
+        if not g.user:
             return False
         try:
             with storage.session(token) as conn:
-                return bool(conn.execute("SELECT 1 FROM career_members WHERE username = ?",
-                                         (g.user["username"],)).fetchone())
+                member = conn.execute("SELECT * FROM career_members WHERE username = ?",
+                                      (g.user["username"],)).fetchone()
+                return bool(member and can_run(member))
         except CareerNotFound:
             return False
 

@@ -208,3 +208,20 @@
     });
   }
 })();
+
+/* Join-role pickers: the driver name only matters for roles that drive. */
+(function () {
+  document.querySelectorAll("select[data-join-role]").forEach(function (sel) {
+    var scope = sel.closest("form") || sel.closest("tr");
+    var field = scope && scope.querySelector("[data-driver-field]");
+    if (!field) return;
+    var input = field.querySelector("input");
+    function sync() {
+      var drives = sel.value === "driver" || sel.value === "driver_scorekeeper";
+      field.style.opacity = drives ? "" : "0.4";
+      if (input) { input.required = drives; input.disabled = !drives; }
+    }
+    sel.addEventListener("change", sync);
+    sync();
+  });
+})();
