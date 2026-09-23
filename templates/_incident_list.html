@@ -22,5 +22,19 @@
     </div>
     {% endif %}
   </li>
-  {% else %}<li class="muted small">No incidents reported.</li>{% endfor %}
+  {% else %}
+  <li class="incident-empty" role="status">
+    <span class="incident-empty-ico" aria-hidden="true">⚖️</span>
+    <div>
+      <b>No incidents reported</b>
+      <p class="muted small">Drivers can report a collision or unfair move from the race-weekend page where it happened. The Race Master reviews each report and publishes a ruling, which appears here, in the news and in the drivers' rivalry.</p>
+      <p class="small incident-role-hint">
+        {%- if ctx.is_master -%}Submitted reports will appear here for you to review and rule on.{% if ctx.my_driver %} You can also report one yourself from a race-weekend page.{% endif %}
+        {%- elif ctx.my_driver -%}Report an incident from the relevant race-weekend page.
+        {%- elif ctx.can_run -%}Only assigned drivers can submit incident reports.
+        {%- else -%}Incident reports and rulings will appear here.{%- endif -%}
+      </p>
+      <a class="small" href="{{ url_for('help_page') }}#incidents">How incidents work →</a>
+    </div>
+  </li>{% endfor %}
 </ul>

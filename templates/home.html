@@ -22,7 +22,8 @@
       <span>{{ c.size_kb }} KB</span>
     </div>
     <div class="muted small">Last opened {{ c.last_opened|stamp if c.last_opened else '—' }}</div>
-    <div class="small muted">{{ c.players }} player driver{{ 's' if c.players != 1 }}{% if c.join_open %} · open to join{% endif %}
+    <div class="small muted">{{ c.players }} player driver{{ 's' if c.players != 1 }}</div>
+    <div class="small"><span class="join-status join-{{ c.join_mode }}"><span aria-hidden="true">{{ {'requests': '✉️', 'invite': '🔑', 'closed': '🔒'}[c.join_mode] }}</span> {{ c.join_label }}</span>
       {% if user.is_master and c.pending_requests %} · <span class="pill pill-hot">{{ c.pending_requests|length }} join request{{ 's' if c.pending_requests|length != 1 }}</span>{% endif %}</div>
   </a>
   {% endfor %}
@@ -36,19 +37,43 @@
     and the Race Master or a Scorekeeper enters the results after every race.</p>
   <button class="btn btn-primary" data-dialog="new-dialog">Create a league</button>
   {% else %}
-  <p class="muted">You're not in a league yet. When a league is open to new drivers it appears here, and you can ask to join.</p>
+  <p class="muted">You're not in a league yet. Leagues that take join requests appear here, and invitations from a Race Master show up here too.</p>
   {% endif %}
 </section>
 {% endif %}
 
+{% if invited %}
+<div class="page-head" style="margin-top:1.5rem"><div><div class="kicker">Invitations</div><h2>You've been invited</h2></div></div>
+<div class="career-grid">
+  {% for c in invited %}
+  <article class="career-card card">
+    <div class="career-year">{{ c.year or '—' }}</div>
+    <h2>{{ c.name }}</h2>
+    <div class="small"><span class="join-status join-{{ c.join_mode }}">{{ c.join_label }}</span></div>
+    {% if c.join_mode == 'closed' %}
+    <p class="muted small">This league is closed to new members right now, so the invitation can't be accepted yet.</p>
+    {% else %}
+    <div class="button-row tight">
+      <form method="post" action="{{ url_for('invitation_answer', token=c.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary btn-sm" name="decision" value="accept">Accept and join</button></form>
+      <form method="post" action="{{ url_for('invitation_answer', token=c.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-ghost btn-sm" name="decision" value="decline">Decline</button></form>
+    </div>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if joinable %}
-<div class="page-head" style="margin-top:1.5rem"><div><div class="kicker">Open leagues</div><h2>Join a league</h2></div></div>
+<div class="page-head" style="margin-top:1.5rem"><div><div class="kicker">Join requests enabled</div><h2>Ask to join a league</h2></div></div>
+<p class="muted small">These leagues take join requests. The Race Master approves each one; until then you won't see anything inside the league.</p>
 <div class="career-grid">
   {% for c in joinable %}
   <article class="career-card card">
     <div class="career-year">{{ c.year or '—' }}</div>
     <h2>{{ c.name }}</h2>
-    <div class="career-meta"><span>{{ c.players }} player driver{{ 's' if c.players != 1 }}</span><span>{{ c.completed }}/{{ c.total }} rounds</span></div>
+    <div class="small"><span class="join-status join-requests"><span aria-hidden="true">✉️</span> Join requests enabled</span></div>
     {% if user.username in c.pending_requests %}
     <p class="pill">Request sent · waiting for the Race Master</p>
     {% else %}
@@ -89,7 +114,8 @@
       <button type="button" class="btn btn-sm btn-ghost" id="add-player-row">+ Add another player</button>
     </fieldset>
     <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Start everyone as rookies: open the Rookie Draft so teams send seat offers</label>
-    <label class="check"><input type="checkbox" name="join_open" value="1" checked> Let people with a login ask to join this league</label>
+    <label>How people join
+      <select name="join_mode">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == 'requests' }}>{{ label }}</option>{% endfor %}</select></label>
     <fieldset>
       <legend>Extras (change any time in League Settings)</legend>
       {% for key, (label, desc, default) in C.FEATURES.items() %}

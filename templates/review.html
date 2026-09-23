@@ -17,7 +17,7 @@
   {% for a in review.awards %}
   <article class="award card {{ 'provisional' if not final }}" style="--team: {{ a.team.color if a.team else 'var(--red)' }}">
     <small>{{ a.title }}{% if not final %} <span class="pill pill-provisional">Provisional</span>{% endif %}</small>
-    <h3><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=a.driver.id) }}" class="{{ 'is-player' if a.driver.is_player }}">{{ a.driver.name }}</a></h3>
+    <h3><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=a.driver.id) }}" class="driver-link {{ 'is-player' if a.driver.is_player }}">{{ a.driver.name }}</a></h3>
     <div class="award-value">{{ a.value }}</div>
     <div class="muted small">{% if a.team %}{{ team_dot(a.team) }}{{ a.team.name }}{% endif %}{{ ' · ' ~ a.note if a.note }}</div>
   </article>

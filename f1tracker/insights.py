@@ -481,3 +481,30 @@ def race_summary(conn, event_id):
     return {"event": event, "season": season, "podium": podium, "pole": pole, "sprint_winner": sprint_winner,
             "fastest": fastest, "dotd": dotd, "humans": humans, "rivalry": rivalry, "wdc": wdc_top, "wcc": wcc_top,
             "milestones": milestones, "headlines": headlines, "rec": nxt, "first_round": prev_rn is None}
+
+
+# --------------------------------------------------------------------------- season progress card
+
+def season_progress(conn, season_id):
+    """Figures for the Control Room's completion card (all read from stored results)."""
+    evs = S.events(conn, season_id)
+    total = len(evs)
+    done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]
+    sprints = [e for e in evs if e["is_sprint"]]
+    diffs = [e["ai_difficulty"] for e in done if e["ai_difficulty"] is not None]
+    table = S.driver_standings(conn, season_id)
+    teams = S.constructor_standings(conn, season_id)
+    wdc = table[0] if table and table[0]["points"] > 0 else None
+    wcc = teams[0] if teams and teams[0]["points"] > 0 else None
+    milestone = None
+    if total and len(done) < total:
+        marks = [(1, "First round"), (5, "Five rounds completed"), (-(-total // 4), "A quarter of the season"),
+                 (-(-total // 2), "Halfway"), (-(-total * 3 // 4), "Three-quarters done"), (total, "Final round")]
+        upcoming = sorted({(n, label) for n, label in marks if len(done) < n <= total}, key=lambda m: m[0])
+        if upcoming:
+            n, label = upcoming[0]
+            milestone = {"label": label, "round": n, "to_go": n - len(done)}
+    return {"total": total, "completed": len(done), "pct": round(len(done) / total * 100) if total else 0,
+            "sprints_done": sum(1 for e in done if e["is_sprint"]), "sprints_total": len(sprints),
+            "wdc": wdc, "wcc": wcc, "avg_ai": round(sum(diffs) / len(diffs), 1) if diffs else None,
+            "ai_rounds": len(diffs), "milestone": milestone}

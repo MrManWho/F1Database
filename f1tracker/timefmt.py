@@ -124,6 +124,32 @@ def countdown(value, now=None):
     return f"Starts in {max(minutes, 1)}m"
 
 
+DEFAULT_RACE_WINDOW = 180  # minutes after the scheduled start that count as "race window open"
+RACE_WINDOW_CHOICES = [60, 120, 180, 240, 360]
+
+
+def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None):
+    """(code, label) for a round: upcoming -> window -> overdue -> complete. Never marks anything complete itself.
+
+    upcoming  "Starts in 2h 15m"
+    window    "Race window open"            from the scheduled time until `window` minutes later
+    overdue   "Scheduled time passed · awaiting results"
+    complete  "Completed"                   only once the round has been submitted
+    """
+    if event_status == "Complete":
+        return "complete", "Completed"
+    dt = parse(value)
+    if not dt:
+        return "unscheduled", "Race time not set"
+    now = now or datetime.now(timezone.utc)
+    left = countdown(value, now)
+    if left:
+        return "upcoming", left
+    if (now - dt).total_seconds() <= (window or DEFAULT_RACE_WINDOW) * 60:
+        return "window", "Race window open"
+    return "overdue", "Scheduled time passed · awaiting results"
+
+
 def input_value(value, tz):
     """The value for a datetime-local input, in the league's time zone."""
     dt = local(value, tz)

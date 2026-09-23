@@ -92,6 +92,7 @@ def seed_career(conn, token, name, year, player_names=None):
                      (season_id, rnd, ename, loc, int(sprint)))
     set_meta(conn, "current_season_id", season_id)
     set_meta(conn, "join_open", "1")
+    set_meta(conn, "join_mode", "requests")
     sync_not_run_results(conn, season_id)
     return season_id
 

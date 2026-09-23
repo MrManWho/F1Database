@@ -21,7 +21,7 @@
     {% if driver.is_player and (ctx.is_master or (ctx.my_driver and ctx.my_driver.id == driver.id)) %}<a class="btn btn-ghost" href="{{ url_for('garage', token=ctx.token, driver=driver.id) }}">Garage →</a>{% endif %}
   </div>
 </div>
-<div class="stat-grid">
+<div class="stat-grid profile-stats">
   {% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Poles', totals.poles),
      ('Fastest Laps', totals.fastest_laps), ('Starts', totals.starts), ('Championships', totals.titles),
      ('Best WDC', ('P' ~ totals.best_championship) if totals.best_championship else '—'),

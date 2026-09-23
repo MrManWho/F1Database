@@ -133,11 +133,30 @@
     <h2>Joining</h2>
     <form method="post" action="{{ url_for('members_settings', token=ctx.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="check"><input type="checkbox" name="join_open" value="1" {{ 'checked' if join_open }}> Let anyone with a login ask to join this league</label>
-      <p class="muted small">Open leagues appear in everyone's League Library with an <em>Ask to join</em> form. You approve or decline each request here.
-        People sign up for a login from the login page.</p>
+      <fieldset class="join-modes"><legend>How people join</legend>
+        {% for key, label in join_modes.items() %}
+        <label class="check"><input type="radio" name="join_mode" value="{{ key }}" {{ 'checked' if key == join_mode }}>
+          <span><b>{{ label }}</b> <small class="muted">{{ {'requests': 'Anyone with a login can ask from their League Library. You approve each request.',
+            'invite': 'No requests. Invite people below and they accept from their League Library.',
+            'closed': 'No requests, and invitations can\'t be accepted.'}[key] }}</small></span></label>
+        {% endfor %}
+      </fieldset>
+      <p class="muted small">Existing members are never affected. You can still add people directly above.</p>
       <button class="btn">Save</button>
     </form>
+    <h3>Invite someone</h3>
+    <form method="post" action="{{ url_for('member_invite', token=ctx.token) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Login<select name="username" required><option value="">Choose…</option>
+        {% for u in outsiders %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}</select></label>
+      <label>As<select name="role"><option value="member">Member</option><option value="scorekeeper">Scorekeeper</option><option value="spectator">Spectator</option></select></label>
+      <button class="btn" {{ 'disabled' if join_mode == 'closed' }}>Send invitation</button>
+    </form>
+    {% if join_mode == 'closed' %}<p class="muted small">Invitations are off while the league is closed to new members.</p>{% endif %}
+    {% if invitations %}
+    <ul class="plain-list small">{% for i in invitations %}<li>{{ i.username }} · invited as {{ C.ACCESS_ROLES[i.role] }} {{ i.created_at|ago }}
+      <form method="post" action="{{ url_for('member_invite_cancel', token=ctx.token, username=i.username) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Cancel</button></form></li>{% endfor %}</ul>
+    {% endif %}
   </section>
 </div>
 {% for p in players %}

@@ -54,6 +54,8 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_results" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    # v1.18: race-result emails need an address; switch the option off where there's none to send to.
+    conn.execute("UPDATE users SET email_results = 0 WHERE email_results = 1 AND (email IS NULL OR trim(email) = '')")
     conn.execute("""CREATE TABLE IF NOT EXISTS pending_signups (
         id INTEGER PRIMARY KEY,
         username TEXT NOT NULL,
@@ -159,8 +161,8 @@ def create_user(username, display_name, password, is_master=False, is_steward=Fa
     email = clean_email(email)
     if not USERNAME_RE.match(username):
         raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
-    if len(password or "") < 6:
-        raise AuthError("Passwords need at least 6 characters")
+    if len(password or "") < PASSWORD_MIN:
+        raise AuthError(f"Passwords need at least {PASSWORD_MIN} characters")
     display_name = (display_name or "").strip()[:60] or username
     with accounts() as conn:
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
@@ -366,10 +368,26 @@ def finish_signup(pending_id, code):
 # --------------------------------------------------------------------------- email & password resets
 
 def set_email(username, email, email_results):
+    """Save an address (validated) and the race-results preference, which is only possible with an address."""
     email = clean_email(email)
     with accounts() as conn:
         conn.execute("UPDATE users SET email = ?, email_results = ? WHERE username = ?",
-                     (email, int(bool(email_results)), normalise(username)))
+                     (email, int(bool(email_results) and bool(email)), normalise(username)))
+    return email
+
+
+PASSWORD_MIN = 6
+
+
+def change_password(username, current, new, confirm):
+    """Change your own password: the current one is required and the new one must be typed twice."""
+    if not verify(username, current):
+        raise AuthError("Your current password is wrong")
+    if (new or "") != (confirm or ""):
+        raise AuthError("The new passwords don't match")
+    if new == current:
+        raise AuthError("Choose a password that's different from the current one")
+    set_password(username, new)
 
 
 def users_by_login(identifier):

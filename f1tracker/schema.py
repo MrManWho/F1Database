@@ -192,6 +192,15 @@ CREATE TABLE IF NOT EXISTS notification_reads (
     cleared_id INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS invitations (
+    username TEXT PRIMARY KEY,
+    role TEXT NOT NULL DEFAULT 'member',
+    invited_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending',
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS join_requests (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL,
@@ -405,6 +414,8 @@ def migrate(conn):
                spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
                role and members without a driver become Spectators, so nobody loses access. Human drivers get a
                persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
+    v14 -> v15: league join modes (meta join_mode: requests / invite / closed; an old "open to join" league
+               becomes "requests", a closed one "invite") and invitations for invite-only leagues.
     v13 -> v14: growth pledges are judged on average finishing position against the car
                (team_relations.finish_base / finish_target), with the season's outcome and Reputation reward
                (outcome, reward). Existing relationships get their finish targets on first use.
@@ -412,7 +423,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "finish_target" in _columns(conn, "team_relations"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "invitations" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -463,6 +474,11 @@ def migrate(conn):
     for name, ddl in OFFER_V5_COLUMNS:
         if name not in offer_columns:
             conn.execute(f"ALTER TABLE offers ADD COLUMN {name} {ddl}")
+    mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
+    if not mode:
+        opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()
+        conn.execute("INSERT INTO meta(key, value) VALUES('join_mode', ?)",
+                     ("requests" if opened and opened[0] == "1" else "invite",))
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

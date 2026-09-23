@@ -250,15 +250,29 @@
   // Race times are formatted by the server in the league's time zone; only the countdown ticks here.
   function parse(iso) { var d = new Date(iso); return isNaN(d) ? null : d; }
   var counters = document.querySelectorAll("[data-countdown]");
+  // Same states as timefmt.race_status: countdown, race window open, awaiting results, completed.
+  var ICONS = { upcoming: "⏱", window: "🟢", overdue: "⏳", complete: "🏁" };
+  function state(el, now) {
+    if (el.dataset.eventStatus === "Complete") return ["complete", "Completed"];
+    var d = parse(el.dataset.countdown);
+    if (!d) return null;
+    var left = Math.floor((d - now) / 1000);
+    if (left > 0) {
+      var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60);
+      return ["upcoming", "Starts in " + (days ? days + "d " + h + "h" : h ? h + "h " + m + "m" : Math.max(1, m) + "m")];
+    }
+    if (-left <= (parseInt(el.dataset.window, 10) || 180) * 60) return ["window", "Race window open"];
+    return ["overdue", "Scheduled time passed · awaiting results"];
+  }
   function tick() {
     var now = Date.now();
     counters.forEach(function (el) {
-      var d = parse(el.dataset.countdown);
-      if (!d) return;
-      var left = Math.floor((d - now) / 1000);
-      if (left <= 0) { el.textContent = "Race time"; el.classList.add("live"); return; }
-      var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.max(1, Math.floor(left % 3600 / 60));
-      el.textContent = "Starts in " + (days ? days + "d " + h + "h" : h ? h + "h " + Math.floor(left % 3600 / 60) + "m" : m + "m");
+      var s = state(el, now);
+      if (!s) return;
+      el.className = el.className.replace(/\bstate-\w+/g, "").trim() + " state-" + s[0];
+      var text = el.querySelector(".state-text"), ico = el.querySelector(".state-ico");
+      if (text) { if (text.textContent !== s[1]) text.textContent = s[1]; } else el.textContent = s[1];
+      if (ico) ico.textContent = ICONS[s[0]] || "";
     });
   }
   if (counters.length) { tick(); setInterval(tick, 30000); }
@@ -437,4 +451,111 @@
   fit();
   var timer;
   window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(fit, 120); });
+})();
+
+/* v1.18 account forms: show/hide passwords, Caps Lock warning, matching check, email-dependent checkbox. */
+(function () {
+  document.querySelectorAll("[data-pw-toggle]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var input = document.getElementById(btn.dataset.pwToggle);
+      if (!input) return;
+      var show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.textContent = show ? "Hide" : "Show";
+      btn.setAttribute("aria-pressed", show ? "true" : "false");
+      btn.setAttribute("aria-label", btn.getAttribute("aria-label").replace(show ? "Show" : "Hide", show ? "Hide" : "Show"));
+    });
+  });
+  var form = document.querySelector("[data-password-form]");
+  if (form) {
+    var caps = document.getElementById("pw-caps"), err = document.getElementById("pw-error");
+    form.querySelectorAll("input[type=password], input[name$=password]").forEach(function (input) {
+      ["keydown", "keyup"].forEach(function (ev) {
+        input.addEventListener(ev, function (e) {
+          if (e.getModifierState) caps.hidden = !e.getModifierState("CapsLock");
+        });
+      });
+      input.addEventListener("blur", function () { caps.hidden = true; });
+    });
+    form.addEventListener("submit", function (e) {
+      var cur = form.elements.current_password.value, pw = form.elements.password.value, again = form.elements.confirm_password.value;
+      var min = parseInt(form.elements.password.getAttribute("minlength") || "6", 10);
+      var msg = !cur ? "Enter your current password." : pw.length < min ? "Your new password needs at least " + min + " characters."
+        : pw !== again ? "The new passwords don't match." : pw === cur ? "Choose a password that's different from the current one." : "";
+      err.textContent = msg;
+      err.hidden = !msg;
+      if (msg) { e.preventDefault(); (pw.length < min ? form.elements.password : pw !== again ? form.elements.confirm_password : form.elements.current_password).focus(); }
+    });
+  }
+  var ef = document.querySelector("[data-email-form]");
+  if (ef) {
+    var email = ef.elements.email, box = ef.elements.email_results, hint = document.getElementById("email-results-hint");
+    var sync = function () {
+      var ok = email.value.trim() !== "" && email.checkValidity();
+      box.disabled = !ok;
+      if (!ok) box.checked = false;
+      box.closest("label").classList.toggle("is-disabled", !ok);
+      hint.hidden = ok;
+      hint.textContent = email.value.trim() && !ok ? "Enter a valid email address to enable race-result emails." : "Add an email address to enable race-result emails.";
+    };
+    email.addEventListener("input", sync);
+  }
+})();
+
+/* v1.18 Help: search, topic dropdown, and highlighting the section being read. Anchors stay shareable. */
+(function () {
+  var content = document.getElementById("help-content");
+  if (!content) return;
+  var sections = Array.prototype.slice.call(content.querySelectorAll("section.help"));
+  var links = {};
+  document.querySelectorAll(".help-group a[data-topic]").forEach(function (a) { links[a.dataset.topic] = a; });
+  function mark(id) {
+    Object.keys(links).forEach(function (k) {
+      links[k].classList.toggle("current", k === id);
+      if (k === id) links[k].setAttribute("aria-current", "true"); else links[k].removeAttribute("aria-current");
+    });
+  }
+  if ("IntersectionObserver" in window) {
+    var visible = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
+      var best = sections.filter(function (s) { return visible[s.id] > 0 && !s.hidden; })[0];
+      if (best) mark(best.id);
+    }, { rootMargin: "0px 0px -60% 0px", threshold: [0, 0.01, 0.5] });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+  if (location.hash) mark(location.hash.slice(1));
+  var jump = document.getElementById("help-jump");
+  if (jump) jump.addEventListener("change", function () {
+    if (!jump.value) return;
+    location.hash = jump.value;
+    var target = document.getElementById(jump.value);
+    if (target) { target.setAttribute("tabindex", "-1"); target.focus({ preventScroll: true }); }
+  });
+  var search = document.getElementById("help-search"), status = document.getElementById("help-search-status");
+  var empty = document.getElementById("help-empty");
+  var titles = content.querySelectorAll(".help-group-title");
+  if (search) {
+    search.addEventListener("input", function () {
+      var q = search.value.trim().toLowerCase(), shown = 0;
+      sections.forEach(function (s) {
+        var hit = !q || s.textContent.toLowerCase().indexOf(q) !== -1;
+        s.hidden = !hit;
+        if (links[s.id]) links[s.id].hidden = !hit;
+        if (hit) shown++;
+      });
+      titles.forEach(function (t) {
+        var n = t.nextElementSibling, any = false;
+        while (n && n.tagName === "SECTION") { if (!n.hidden) any = true; n = n.nextElementSibling; }
+        t.hidden = !any;
+      });
+      empty.hidden = shown > 0;
+      status.textContent = q ? shown + " topic" + (shown === 1 ? "" : "s") + " match" + (shown === 1 ? "es" : "") : "";
+    });
+    search.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      var first = sections.filter(function (s) { return !s.hidden; })[0];
+      if (first) { e.preventDefault(); location.hash = first.id; }
+    });
+  }
 })();

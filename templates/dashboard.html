@@ -88,13 +88,23 @@
     <p class="muted">No seat yet. Check <a href="{{ url_for('garage', token=ctx.token) }}">My Garage</a> for offers.</p>
   </section>
   {% else %}
-  <section class="card ring-card">
-    {% set pct = (completed / events|length * 100) if events else 0 %}
-    <svg viewBox="0 0 120 120" class="ring">
-      <circle cx="60" cy="60" r="52" class="ring-bg"/>
-      <circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray: {{ 326.7 * pct / 100 }} 326.7"/>
-    </svg>
-    <div class="ring-label"><strong>{{ completed }}</strong><span>/ {{ events|length }} rounds</span></div>
+  {% set p = progress %}
+  <section class="card ring-card season-card-v2" aria-label="Season completion">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 120 120" class="ring" role="img" aria-label="{{ p.pct }}% of the season complete">
+        <circle cx="60" cy="60" r="52" class="ring-bg"/>
+        <circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray: {{ 326.7 * p.pct / 100 }} 326.7"/>
+      </svg>
+      <div class="ring-label"><strong>{{ p.pct }}%</strong><span>{{ p.completed }} / {{ p.total }} rounds</span></div>
+    </div>
+    <dl class="season-facts">
+      <div><dt>Rounds completed</dt><dd>{{ p.completed }} of {{ p.total }}</dd></div>
+      {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} of {{ p.sprints_total }}</dd></div>{% endif %}
+      <div><dt><abbr title="Drivers' Championship">WDC</abbr> leader</dt><dd>{% if p.wdc %}{{ driver_link(ctx, p.wdc.driver) }} <span class="muted small">{{ p.wdc.points }} pts</span>{% else %}<span class="muted">No points yet</span>{% endif %}</dd></div>
+      <div><dt><abbr title="Constructors' Championship">WCC</abbr> leader</dt><dd>{% if p.wcc %}{{ team_dot(p.wcc.team) }}{{ p.wcc.team.name }} <span class="muted small">{{ p.wcc.points }} pts</span>{% else %}<span class="muted">No points yet</span>{% endif %}</dd></div>
+      <div><dt>Average AI difficulty</dt><dd>{% if p.avg_ai is not none %}{{ p.avg_ai }} <span class="muted small">over {{ p.ai_rounds }} round{{ 's' if p.ai_rounds != 1 }}</span>{% else %}<span class="muted">Not recorded yet</span>{% endif %}</dd></div>
+      <div><dt>Next milestone</dt><dd>{% if p.milestone %}{{ p.milestone.label }} <span class="muted small">after round {{ p.milestone.round }} · {{ p.milestone.to_go }} to go</span>{% elif p.total %}Season complete{% else %}—{% endif %}</dd></div>
+    </dl>
   </section>
   {% endif %}
 </div>

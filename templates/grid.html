@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot with context %}
+{% from "_macros.html" import team_dot, driver_link with context %}
 {% block title %}Grid & Transfers{% endblock %}
 {% block content %}
 {% set ro = not ctx.is_master %}
@@ -30,7 +30,7 @@
     <button class="btn btn-primary" type="submit">Place players</button>
   </form>
   {% else %}
-  <ul class="plain-list">{% for p in players %}{% set cur = seats.get(p.id) %}<li class="player-row" style="--player: {{ p.player_color or 'var(--blue)' }}"><strong>{{ p.name }}</strong> <span class="player-badge">Player</span>: {% if cur %}{% for t in grid if t.id == cur[0] %}{{ team_dot(t) }}{{ t.name }}{% endfor %} · Seat {{ cur[1] }}{% else %}<span class="muted">No race seat this season</span>{% endif %}</li>{% else %}<li class="muted">No player drivers in this league.</li>{% endfor %}</ul>
+  <ul class="plain-list">{% for p in players %}{% set cur = seats.get(p.id) %}<li class="player-row" style="--player: {{ p.player_color or 'var(--blue)' }}">{{ driver_link(ctx, p, badge=True) }}: {% if cur %}{% for t in grid if t.id == cur[0] %}{{ team_dot(t) }}{{ t.name }}{% endfor %} · Seat {{ cur[1] }}{% else %}<span class="muted">No race seat this season</span>{% endif %}</li>{% else %}<li class="muted">No player drivers in this league.</li>{% endfor %}</ul>
   {% endif %}
 </section>
 
@@ -45,7 +45,7 @@
         {% for s in t.seats %}
         <div class="seat {{ 'player-seat' if s.driver and s.driver.is_player }}" {% if s.driver and s.driver.player_color %}style="--player: {{ s.driver.player_color }}"{% endif %}>
           <small>Seat {{ s.seat_no }}</small>
-          {% if ro %}<span>{% if s.driver %}<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=s.driver.id) }}">{{ s.driver.name }}</a>{% if s.driver.is_player %} <span class="player-badge">Player</span>{% endif %}{% else %}<span class="muted">Vacant</span>{% endif %}</span>{% else %}
+          {% if ro %}<span class="seat-name">{% if s.driver %}{{ driver_link(ctx, s.driver, badge=True) }}{% else %}<span class="muted">Vacant</span>{% endif %}</span>{% else %}
           <select name="seat_{{ t.id }}_{{ s.seat_no }}">
             <option value="">— Vacant —</option>
             {% for d in all_drivers %}<option value="{{ d.id }}" {{ 'data-player=1' if d.is_player }} {{ 'selected' if s.driver and s.driver.id == d.id }}>{{ d.name }}</option>{% endfor %}

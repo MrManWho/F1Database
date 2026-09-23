@@ -4,13 +4,28 @@
 <div class="page-head"><div><div class="kicker">Help</div><h1>How it works</h1></div>
   <a class="btn btn-ghost" href="{{ request.referrer or url_for('home') }}">← Back</a></div>
 
-<nav class="card help-toc">
-  <a href="#roles">Who can do what</a><a href="#form">Form</a><a href="#reputation">Reputation</a>
-  <a href="#driver-value">Driver Value</a><a href="#car">Car strength</a><a href="#market">Transfer market</a>
-  <a href="#pledges">Growth pledges</a><a href="#relationship">Team relationship</a><a href="#goals">Season goals</a>
-  <a href="#orders">Team orders</a><a href="#press">Press pen</a><a href="#incidents">Incidents</a>
-  <a href="#extras">Extras</a><a href="#difficulty">AI difficulty</a>
-</nav>
+<div class="help-layout" id="top">
+<aside class="help-nav" aria-label="Help topics">
+  <label class="help-search"><span class="sr-only">Search help</span><input type="search" id="help-search" placeholder="Search help…" autocomplete="off" aria-controls="help-content"></label>
+  <p class="muted small" id="help-search-status" role="status" aria-live="polite"></p>
+  <label class="help-jump"><span class="sr-only">Jump to a topic</span><select id="help-jump">
+    <option value="">Jump to a topic…</option>
+    <optgroup label="Roles and league management"><option value="roles">Who can do what</option><option value="scorekeeper">Scorekeeper</option><option value="race-master">Race Master</option><option value="drivers">Assigned drivers</option><option value="joining">Joining a league</option></optgroup>
+    <optgroup label="Driver development"><option value="form">Form</option><option value="reputation">Reputation</option><option value="driver-value">Driver Value</option><option value="car">Car strength</option><option value="racecraft">Racecraft</option></optgroup>
+    <optgroup label="Career and contracts"><option value="market">Transfer market</option><option value="pledges">Growth pledges</option><option value="relationship">Team relationship</option><option value="goals">Season goals</option><option value="orders">Team orders</option></optgroup>
+    <optgroup label="Race weekends"><option value="results">Entering results</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="difficulty">AI difficulty</option><option value="press">Press pen</option><option value="incidents">Incidents</option></optgroup>
+    <optgroup label="Extra features"><option value="extras">League features</option><option value="notifications">Notifications</option><option value="comments">Comments and reactions</option><option value="predictions">Predictions</option><option value="public">Public results</option><option value="discord">Discord</option></optgroup>
+  </select></label>
+  <nav class="help-toc-groups">
+    <div class="help-group"><h3>Roles and league management</h3><a href="#roles" data-topic="roles">Who can do what</a><a href="#scorekeeper" data-topic="scorekeeper">Scorekeeper</a><a href="#race-master" data-topic="race-master">Race Master</a><a href="#drivers" data-topic="drivers">Assigned drivers</a><a href="#joining" data-topic="joining">Joining a league</a></div>
+    <div class="help-group"><h3>Driver development</h3><a href="#form" data-topic="form">Form</a><a href="#reputation" data-topic="reputation">Reputation</a><a href="#driver-value" data-topic="driver-value">Driver Value</a><a href="#car" data-topic="car">Car strength</a><a href="#racecraft" data-topic="racecraft">Racecraft</a></div>
+    <div class="help-group"><h3>Career and contracts</h3><a href="#market" data-topic="market">Transfer market</a><a href="#pledges" data-topic="pledges">Growth pledges</a><a href="#relationship" data-topic="relationship">Team relationship</a><a href="#goals" data-topic="goals">Season goals</a><a href="#orders" data-topic="orders">Team orders</a></div>
+    <div class="help-group"><h3>Race weekends</h3><a href="#results" data-topic="results">Entering results</a><a href="#sprints" data-topic="sprints">Sprint weekends</a><a href="#race-times" data-topic="race-times">Race times</a><a href="#difficulty" data-topic="difficulty">AI difficulty</a><a href="#press" data-topic="press">Press pen</a><a href="#incidents" data-topic="incidents">Incidents</a></div>
+    <div class="help-group"><h3>Extra features</h3><a href="#extras" data-topic="extras">League features</a><a href="#notifications" data-topic="notifications">Notifications</a><a href="#comments" data-topic="comments">Comments and reactions</a><a href="#predictions" data-topic="predictions">Predictions</a><a href="#public" data-topic="public">Public results</a><a href="#discord" data-topic="discord">Discord</a></div>
+  </nav>
+</aside>
+<div class="help-content" id="help-content">
+<h2 class="help-group-title" id="group-roles-and-league-management">Roles and league management</h2>
 
 <section class="card help" id="roles">
   <h2>Who can do what</h2>
@@ -21,19 +36,56 @@
     <li><b>Spectator</b>: view only. Can't have a driver.</li>
   </ul>
   <p class="muted small">Each person has one role per league, set on the league's Players &amp; Logins page. A driver is assigned separately, so a Race Master or Scorekeeper can also drive.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
+
+<section class="card help" id="scorekeeper">
+  <h2>Scorekeeper</h2>
+  <p>A Scorekeeper enters the results for the round that's currently open: positions, statuses, Fastest Lap, Driver of the Day, notes and AI difficulty. Edits save automatically.</p>
+  <p>When the round is done they press <b>Submit results</b>, check the review screen and confirm. From then on the round is <b>locked</b>: Scorekeepers can't change it, and only the Race Master can reopen or correct it. A Scorekeeper can also have a driver.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="race-master">
+  <h2>Race Master</h2>
+  <p>The Race Master runs the league: results (including reopening and correcting submitted rounds), the grid, calendar, seasons, transfer market, members and roles, League Settings, backups and restores, incident rulings and the Activity Log.</p>
+  <p>Site Race Masters (set in Accounts) are Race Master of every league. A league always keeps at least one Race Master.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="drivers">
+  <h2>Assigned drivers</h2>
+  <p>A member can be assigned one player driver. That gives them their own garage and contract talks, Team Standing, the press pen and incident reports. Any role except Spectator can have a driver, and each player driver keeps one accent colour across every page.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="joining">
+  <h2>Joining a league</h2>
+  <p>The Race Master chooses how new people get in, in League Settings. Existing members are never affected.</p>
+  <ul>
+    <li><b>Join requests enabled</b>: anyone with a login can ask to join from their League Library. The Race Master approves, approves with a different role, or declines each request.</li>
+    <li><b>Invite only</b>: requests are switched off. The Race Master invites people by login name and they accept from their League Library.</li>
+    <li><b>Closed to new members</b>: no requests, and invitations can't be accepted.</li>
+  </ul>
+  <p>Before joining, people only see a league's name, season and join status, never its results or members.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<h2 class="help-group-title" id="group-driver-development">Driver development</h2>
 
 <section class="card help" id="form">
   <h2>Form</h2>
   <p>How well you're driving <b>this season</b>, from 1 to 100 (50 is average). It's rebuilt from your results every time, so it reacts quickly and starts again each season.</p>
   <p>It goes up with a better average finish and qualifying, wins, podiums, poles, fastest laps, Driver of the Day and <b>racecraft</b>
     (places gained from the grid, weighted by where you finish: P20 → P1 counts far more than P20 → P19). It goes down with DNFs.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="reputation">
   <h2>Reputation</h2>
   <p>Your <b>long-term name</b> in the paddock. It builds slowly from points, wins, podiums, poles, Form and racecraft, and is locked at the end of each
     season and carried forward. Every rookie starts on {{ '%.0f'|format(C.ROOKIE_REPUTATION) }}.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="driver-value">
@@ -47,6 +99,7 @@
     The <b>car-adjusted rating</b> starts at 50 and moves 5 for every place you average ahead of (or behind) where your car should finish.</p>
   <p>Each team has an <b>entry bar</b> from its car's rank: 86 for the fastest car down to 44 for the slowest. Clear a team's bar and it'll make you an offer
     when a window opens; the further above, the keener they are. My Garage shows your value broken down, and how far you are from the next team up.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="car">
@@ -55,7 +108,16 @@
     Player drivers' points are ignored, so winning in a slow car makes you look good, not the car. Before round 3 it uses each team's car rating,
     which changes each winter and which the Race Master can edit in Paddock Admin to match the game.</p>
   <p>Only the order matters, not the size of the gap: the 7th-best car is expected to finish around P13–14.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
+
+<section class="card help" id="racecraft">
+  <h2>Racecraft</h2>
+  <p>Racecraft rewards places gained from your grid slot, weighted by where you finish: gaining places near the front counts far more than at the back (P20 → P1 scores 19, P20 → P19 only 0.2). Places lost cost 0.4 each, because it's often the car. It feeds into <a href="#form">Form</a> and, a little, <a href="#reputation">Reputation</a>.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<h2 class="help-group-title" id="group-career-and-contracts">Career and contracts</h2>
 
 <section class="card help" id="market">
   <h2>Transfer market</h2>
@@ -65,6 +127,7 @@
     <li><b>Approach teams</b> yourself, up to {{ C.APPROACHES_PER_WINDOW }} per window. If you run out of options, the weakest team with a free seat offers a last-chance lifeline.</li>
     <li><b>Contract length matters</b>: while your deal covers next season, teams won't talk to you, unless your team releases you.</li>
   </ul>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="pledges">
@@ -81,21 +144,24 @@
   <p>Better status and longer deals need a bigger pledge. Promise more than a team needs and you can win an extra year, or (for experienced drivers) one step more status.
     Your pledge is set when you sign, and every seated driver must have one: if yours is missing (or the Race Master asks for a new one) you'll choose it before carrying on.
     After three rounds your targets are re-set to the car's real pace in your league.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="relationship">
   <h2>Team relationship</h2>
-  <p>Your team rates you out of 100 after every race: <b>Delighted, Happy, Concerned, Unhappy</b> or <b>Seat at risk</b>. It compares your Form with your target,
-    your Reputation with where it should be by now, your head-to-head with your teammate, and your season goals, plus a small bonus or penalty from the press pen and team orders.
+  <p>Your team rates you out of 100 after every race: <b>Delighted, Happy, Concerned, Unhappy</b> or <b>Seat at risk</b>. It compares your average finish with your
+    <a href="#pledges">growth pledge</a>, your head-to-head with your teammate, and your season goals, plus a small bonus or penalty from the press pen and team orders.
     Early results count for less; the judgement firms up after about a third of the season.</p>
   <p>Fall behind and you'll get a quiet word, then a formal warning, then "seat at risk". Still at risk when Silly Season opens or the season ends and you're
     <b>released</b>: no renewal, and without a new deal you start next season as a reserve. A team that's happy with you always offers a renewal.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="goals">
   <h2>Season goals</h2>
   <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers)
     beating your teammate. Each goal that's on track adds {{ '%.0f'|format(C.GOAL_WEIGHT) }} to the relationship and each one behind takes {{ '%.0f'|format(C.GOAL_WEIGHT) }} away, growing as the season goes on.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="orders">
@@ -103,28 +169,94 @@
   <p>Seat status matters. A <b>No. 2</b> driver can be told before a race to let their teammate through (more likely when the teammate is ahead in the championship).
     It's judged from the result: finish ahead of them and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }} relationship, and a headline); finish behind and you followed it
     ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). If either of you doesn't finish, the order is void.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
-<section class="card help" id="press">
-  <h2>Press pen</h2>
-  <p>After each race the press have two questions for you, based on how it went. Answers nudge your relationship a little (the total from press and team orders is capped at
-    ±{{ '%.0f'|format(C.RELATION_EXTRA_CAP) }}) and some make headlines. It's optional; questions close when the next race is completed.</p>
+<h2 class="help-group-title" id="group-race-weekends">Race weekends</h2>
+
+<section class="card help" id="results">
+  <h2>Entering results</h2>
+  <p>Enter qualifying, Sprint and race positions, statuses, Fastest Lap and Driver of the Day. You can type positions, tap drivers in finishing order, or import screenshots. Everything saves automatically.</p>
+  <ul>
+    <li><b>Save states</b>: Saving, Saved, Waiting to reconnect (you're offline; edits are kept on this device and sent when the connection returns) and Save failed.</li>
+    <li><b>Conflicts</b>: if someone else changed the same value while you were offline, you'll see both values and choose which to keep.</li>
+    <li><b>Submitting</b>: a review screen checks for problems first. <b>Blocking errors</b> (duplicate positions, missing results, unsaved edits) must be fixed. <b>Warnings</b> (no Fastest Lap, AI difficulty not tracked) can be accepted.</li>
+    <li>Only a <b>Finished</b> result scores. GP points 25-18-15-12-10-8-6-4-2-1; there's no Fastest Lap point.</li>
+  </ul>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
-<section class="card help" id="incidents">
-  <h2>Incidents</h2>
-  <p>Anyone driving can report an incident from a race weekend. The Race Master reviews it and rules: no further action, a reprimand, a warning, or a penalty
-    (they adjust the results themselves). Rulings appear in the news and in the rivalry between the two drivers.</p>
+<section class="card help" id="sprints">
+  <h2>Sprint weekends</h2>
+  <p>On a Sprint weekend the Sprint has its own positions and status for every driver, scored 8-7-6-5-4-3-2-1 for the top eight finishers. The submission check makes sure Sprint results are complete before the round can be submitted.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
-<section class="card help" id="extras">
-  <h2>Extras</h2>
-  <p>The Race Master switches these on or off in League Settings: race-night check-in, comments &amp; reactions, the predictions game, the public results page and Discord posts.</p>
+<section class="card help" id="race-times">
+  <h2>Race times</h2>
+  <p>The Race Master can set a race time for each round, in the league's time zone. The round then shows <b>Starts in …</b>, then <b>Race window open</b> for a few hours (League Settings), then <b>Scheduled time passed · awaiting results</b> until someone submits it, and finally <b>Completed</b>. Nothing is ever completed automatically.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
 <section class="card help" id="difficulty">
   <h2>AI difficulty</h2>
   <p>Enter the AI level you raced on for each weekend. The recommender only suggests a change after 3–5 rounds at the same level point the same way, learns across seasons,
     ignores DNFs, and never moves more than one step at a time.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
+
+<section class="card help" id="press">
+  <h2>Press pen</h2>
+  <p>After each race the press have two questions for you, based on how it went. Answers nudge your relationship a little (the total from press and team orders is capped at
+    ±{{ '%.0f'|format(C.RELATION_EXTRA_CAP) }}) and some make headlines. It's optional; questions close when the next race is completed.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="incidents">
+  <h2>Incidents</h2>
+  <p>Anyone driving can report an incident from a race weekend. The Race Master reviews it and rules: no further action, a reprimand, a warning, or a penalty
+    (they adjust the results themselves). Rulings appear in the news and in the rivalry between the two drivers.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<h2 class="help-group-title" id="group-extra-features">Extra features</h2>
+
+<section class="card help" id="extras">
+  <h2>League features</h2>
+  <p>The Race Master switches these on or off in League Settings: race-night check-in, comments &amp; reactions, the predictions game, the public results page and Discord posts.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="notifications">
+  <h2>Notifications</h2>
+  <p>The bell shows results, offers, rulings, comments and team messages. Opening it doesn't mark anything read: use <b>Mark all as read</b>, and <b>Clear read</b> to hide old ones (they aren't deleted). You can turn on a sound, and phone or desktop alerts from the account menu.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="comments">
+  <h2>Comments and reactions</h2>
+  <p>When the Race Master switches them on, members can comment and react on race weekends and news, and vote for the fans' Driver of the Day. Spectators can read them.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="predictions">
+  <h2>Predictions</h2>
+  <p>Pick pole (3 points), the winner (5), fastest lap (2) and the top player driver (2) before each race. Picks lock at the race time and are scored when the round is submitted.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="public">
+  <h2>Public results</h2>
+  <p>The Race Master can share a read-only link with the standings, calendar and results. Anyone with the link can view it; nothing else in the league is visible, and it can be turned off at any time.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="discord">
+  <h2>Discord</h2>
+  <p>Paste a Discord channel webhook in League Settings to post race results and paddock headlines to your server automatically. Use the test button to check it works.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+<p class="muted small" id="help-empty" hidden>No topics match your search.</p>
+</div>
+</div>
 {% endblock %}

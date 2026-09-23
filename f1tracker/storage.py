@@ -138,6 +138,28 @@ def set_meta(conn, key, value):
     )
 
 
+JOIN_MODES = {"requests": "Join requests enabled", "invite": "Invite only", "closed": "Closed to new members"}
+
+
+def join_mode_from(meta):
+    """The league's join mode. Leagues from before v1.18 only had join_open: on = requests, off = invite only."""
+    mode = meta.get("join_mode")
+    if mode in JOIN_MODES:
+        return mode
+    return "requests" if meta.get("join_open") == "1" else "invite"
+
+
+def join_mode(conn):
+    return join_mode_from({"join_mode": get_meta(conn, "join_mode"), "join_open": get_meta(conn, "join_open")})
+
+
+def set_join_mode(conn, mode):
+    if mode not in JOIN_MODES:
+        raise ValueError("Unknown join mode")
+    set_meta(conn, "join_mode", mode)
+    set_meta(conn, "join_open", "1" if mode == "requests" else "0")  # older code and exports read this
+
+
 def _summary(path):
     token = path.stem
     try:
@@ -149,7 +171,11 @@ def _summary(path):
             ).fetchone()
             done = conn.execute("SELECT COUNT(*) FROM events WHERE status = 'Complete'").fetchone()[0]
             total = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-            members, requests, players = [], [], 0
+            members, requests, players, invited = [], [], 0, []
+            try:
+                invited = [r[0] for r in conn.execute("SELECT username FROM invitations WHERE status = 'Pending'")]
+            except sqlite3.OperationalError:
+                pass
             try:
                 members = [r[0] for r in conn.execute("SELECT username FROM career_members")]
                 players = conn.execute("SELECT COUNT(*) FROM drivers WHERE is_player = 1 AND active = 1").fetchone()[0]
@@ -169,7 +195,10 @@ def _summary(path):
         "size_kb": round(path.stat().st_size / 1024, 1),
         "last_opened": meta.get("last_opened_at", ""),
         "members": members,
-        "join_open": meta.get("join_open") == "1",
+        "join_open": join_mode_from(meta) == "requests",
+        "join_mode": join_mode_from(meta),
+        "join_label": JOIN_MODES[join_mode_from(meta)],
+        "invited": invited,
         "pending_requests": requests,
         "players": players,
     }

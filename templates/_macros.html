@@ -84,10 +84,11 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {%- endmacro %}
 
 {% macro race_clock(ev, big=False) -%}
+{% set st = ev|race_status %}
 <div class="race-clock {{ 'big' if big }}">
-  <span class="lights-out">Lights out {{ ev.race_at|race_at }}</span>
-  {% set cd = ev.race_at|countdown %}
-  <span class="countdown {{ 'live' if not cd }}" data-countdown="{{ ev.race_at }}">{{ cd or 'Race time' }}</span>
+  <span class="lights-out">{{ 'Lights out' if st[0] == 'upcoming' else 'Scheduled for' }} {{ ev.race_at|race_at }}</span>
+  <span class="countdown race-state state-{{ st[0] }}" role="status" data-countdown="{{ ev.race_at }}" data-event-status="{{ ev.status }}"
+        data-window="{{ g.race_window or 180 }}"><span class="state-ico" aria-hidden="true">{{ {'upcoming': '⏱', 'window': '🟢', 'overdue': '⏳', 'complete': '🏁'}.get(st[0], '') }}</span> <span class="state-text">{{ st[1] }}</span></span>
 </div>
 {%- endmacro %}
 

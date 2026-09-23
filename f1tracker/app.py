@@ -45,6 +45,7 @@ AUDIT_LABELS = {
     "calendar_add": "Added a race", "calendar_delete": "Removed a race", "members": "Changed league members",
     "members_add_player": "Added a player driver", "member_add": "Added a league member",
     "member_update": "Changed a member's role or driver", "member_remove": "Removed a league member", "members_request": "Answered a join request",
+    "member_invite_cancel": "Cancelled an invitation",
     "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
     "public_rotate": "Made a new public link", "discord_test": "Sent a Discord test message",
     "incident_report": "Reported an incident", "incident_rule": "Ruled on an incident",
@@ -140,6 +141,9 @@ def register_hooks(app):
     app.add_template_filter(lambda v: timefmt.day(v, _tz()), "day")
     app.add_template_filter(lambda v: timefmt.ago(v, _tz()), "ago")
     app.add_template_filter(lambda v: timefmt.countdown(v), "countdown")
+    app.add_template_filter(lambda ev: timefmt.race_status(ev["race_at"], ev["status"],
+                                                           g.get("race_window") or timefmt.DEFAULT_RACE_WINDOW),
+                            "race_status")
     app.add_template_filter(lambda v: timefmt.input_value(v, _tz()), "time_input")
 
     @app.context_processor
@@ -256,7 +260,9 @@ def career_page(master_only=False, ops_only=False):
                     roles.touch(conn, g.user["username"])
                     season_id = _selected_season(conn, token)
                     g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
+                    g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
                     g.ctx = {
+                        "race_window": g.race_window,
                         "timezone": g.tz,
                         "timezone_set": bool(storage.get_meta(conn, "timezone")),
                         "token": token,
@@ -496,8 +502,12 @@ def register_routes(app):
     @app.route("/account/email", methods=["POST"])
     def account_email():
         try:
-            auth.set_email(g.user["username"], request.form.get("email"), request.form.get("email_results"))
-            flash("Email settings saved.", "success")
+            saved = auth.set_email(g.user["username"], request.form.get("email"), request.form.get("email_results"))
+            if saved:
+                flash("Email settings saved." + (" Race results will be emailed to you." if request.form.get("email_results")
+                                                 else ""), "success")
+            else:
+                flash("Email address removed. Race-result emails are off until you add one.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
         return redirect(url_for("accounts_page"))
@@ -560,7 +570,8 @@ def register_routes(app):
                     memberships.setdefault(username, []).append(c["name"])
         return render_template("accounts.html", users=auth.list_users() if is_master() else [],
                                memberships=memberships, signups=auth.signups_allowed(),
-                               key_set=importer.configured(), mail=mailer.config(), mail_ready=mailer.configured())
+                               key_set=importer.configured(), mail=mailer.config(), mail_ready=mailer.configured(),
+                               pw_min=auth.PASSWORD_MIN)
 
     @app.route("/accounts/new", methods=["POST"])
     @master_required
@@ -609,24 +620,25 @@ def register_routes(app):
 
     @app.route("/account/password", methods=["POST"])
     def account_self_password():
-        if not auth.verify(g.user["username"], request.form.get("current_password")):
-            flash("Current password is wrong.", "error")
-        else:
-            try:
-                auth.set_password(g.user["username"], request.form.get("password"))
-                flash("Password changed.", "success")
-            except AuthError as exc:
-                flash(str(exc), "error")
-        return redirect(url_for("accounts_page"))
+        try:
+            auth.change_password(g.user["username"], request.form.get("current_password"),
+                                 request.form.get("password"), request.form.get("confirm_password"))
+            flash("Password changed. Use your new password next time you log in.", "success")
+        except AuthError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("accounts_page") + "#password")
 
     # ---------------------------------------------------------------- career library
     @app.route("/")
     def home():
         everything = storage.list_careers()
         careers = everything if is_master() else [c for c in everything if g.user["username"] in c["members"]]
-        joinable = [c for c in everything if c["join_open"] and g.user["username"] not in c["members"]
-                    and not is_master()]
-        return render_template("home.html", careers=careers, joinable=joinable,
+        me = g.user["username"]
+        outside = [c for c in everything if me not in c["members"] and not is_master()]
+        joinable = [c for c in outside if c["join_mode"] == "requests" and me not in c["invited"]]
+        invited = [c for c in outside if me in c["invited"]]
+        return render_template("home.html", careers=careers, joinable=joinable, invited=invited,
+                               join_modes=storage.JOIN_MODES,
                                users=auth.list_users() if is_master() else [], default_year=2026)
 
     @app.route("/career/<token>/join", methods=["POST"])
@@ -640,8 +652,10 @@ def register_routes(app):
             driver_name = ""
         try:
             with storage.session(token) as conn:
-                if storage.get_meta(conn, "join_open") != "1":
-                    raise ValidationError("This league isn't taking new drivers right now")
+                mode = storage.join_mode(conn)
+                if mode != "requests":
+                    raise ValidationError("This league is invite only" if mode == "invite"
+                                          else "This league is closed to new members")
                 me = g.user["username"]
                 if conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
                     raise ValidationError("You're already in this league")
@@ -680,7 +694,8 @@ def register_routes(app):
                 raise ValidationError("One login can only drive one player driver")
             with storage.session(token, create=True) as conn:
                 S.seed_career(conn, token, name, request.form.get("year") or 2026, [n for n, _ in rows])
-                storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+                mode = request.form.get("join_mode") or ("requests" if request.form.get("join_open") else "invite")
+                storage.set_join_mode(conn, mode if mode in storage.JOIN_MODES else "requests")
                 community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
                 players = S.player_drivers(conn)
                 for (_, login), driver in zip(rows, players):
@@ -699,7 +714,9 @@ def register_routes(app):
             return redirect(url_for("home"))
         flash("League created." + (" Rookie offers are waiting in each player's garage."
                                    if request.form.get("rookie_market") and rows else "")
-              + (" Other people can now ask to join from the league library." if request.form.get("join_open") else ""),
+              + (" Other people can now ask to join from the league library."
+                 if (request.form.get("join_mode") or ("requests" if request.form.get("join_open") else "")) == "requests"
+                 else ""),
               "success")
         return redirect(url_for("dashboard", token=token))
 
@@ -737,6 +754,7 @@ def register_routes(app):
         return page("dashboard.html", ctx, events=evs, next_event=nxt,
                     completed=sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE),
                     drivers=insights.standings_with_changes(conn, sid, 8),
+                    progress=insights.season_progress(conn, sid),
                     card=insights.driver_card(conn, sid, ctx["my_driver"]["id"]) if ctx["my_driver"] else None,
                     contract=market.current_contract(conn, ctx["my_driver"]["id"]) if ctx["my_driver"] else None,
                     constructors=S.constructor_standings(conn, sid)[:5],
@@ -1513,7 +1531,9 @@ def register_routes(app):
         return page("members.html", ctx, players=players, rows=rows, requests=requests,
                     free_drivers=[p for p in players if p["id"] not in assigned],
                     outsiders=[u for u in users.values() if u["username"] not in in_league],
-                    users=list(users.values()), join_open=storage.get_meta(conn, "join_open") == "1")
+                    users=list(users.values()), join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES,
+                    invitations=[dict(r) for r in conn.execute(
+                        "SELECT * FROM invitations WHERE status = 'Pending' ORDER BY created_at")])
 
     def _driver_from_form():
         raw = request.form.get("driver_id")
@@ -1583,6 +1603,8 @@ def register_routes(app):
         if role not in C.LEAGUE_ROLES:
             raise ValidationError("Choose a role")
         if decision == "approve":
+            if storage.join_mode(conn) == "closed":
+                raise ValidationError("This league is closed to new members. Change the join setting first, or decline.")
             if not auth.get_user(req["username"]):
                 raise ValidationError("That login no longer exists")
             keeper = role in ("driver_scorekeeper", "scorekeeper")
@@ -1609,11 +1631,81 @@ def register_routes(app):
                      ("Approved" if decision == "approve" else "Declined", storage.now_iso(), request_id))
         return redirect(url_for("members", token=ctx["token"]))
 
+    INVITE_ROLES = ("member", "scorekeeper", "spectator")
+
+    @app.route("/career/<token>/members/invite", methods=["POST"])
+    @career_page(master_only=True)
+    def member_invite(conn, ctx):
+        user = auth.get_user(request.form.get("username"))
+        role = request.form.get("role") or "member"
+        if not user:
+            raise ValidationError("There's no login with that name. They can sign up from the login page first.")
+        if role not in INVITE_ROLES:
+            raise ValidationError("Choose a role")
+        if storage.join_mode(conn) == "closed":
+            raise ValidationError("This league is closed to new members. Change the join setting first.")
+        if conn.execute("SELECT 1 FROM career_members WHERE username = ?", (user["username"],)).fetchone():
+            raise ValidationError(f"{user['display_name']} is already in this league")
+        conn.execute("""INSERT INTO invitations(username, role, invited_by, status, created_at) VALUES(?,?,?,'Pending',?)
+                        ON CONFLICT(username) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by,
+                        status = 'Pending', created_at = excluded.created_at, decided_at = NULL""",
+                     (user["username"], role, g.user["username"], storage.now_iso()))
+        community.audit(conn, g.user["username"], "Invited", f"{user['username']} as {C.ACCESS_ROLES[role]}")
+        if user["email"]:
+            mailer.send_later([user["email"]], f"You're invited to {ctx['career_name']}",
+                              f"{g.user['display_name']} invited you to join {ctx['career_name']} as "
+                              f"{C.ACCESS_ROLES[role]}. Accept it from your League Library:\n\n"
+                              f"{url_for('home', _external=True)}")
+        flash(f"Invitation sent to {user['display_name']}. They'll see it in their League Library.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/members/invite/<username>/cancel", methods=["POST"])
+    @career_page(master_only=True)
+    def member_invite_cancel(conn, ctx, username):
+        conn.execute("UPDATE invitations SET status = 'Cancelled', decided_at = ? WHERE username = ? AND status = 'Pending'",
+                     (storage.now_iso(), auth.normalise(username)))
+        flash("Invitation cancelled.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/invitation", methods=["POST"])
+    def invitation_answer(token):
+        """Someone invited to a league accepts or declines from their League Library."""
+        decision = request.form.get("decision")
+        try:
+            with storage.session(token) as conn:
+                me = g.user["username"]
+                inv = conn.execute("SELECT * FROM invitations WHERE username = ? AND status = 'Pending'", (me,)).fetchone()
+                if not inv or decision not in ("accept", "decline"):
+                    raise ValidationError("That invitation is no longer open")
+                if decision == "accept":
+                    if storage.join_mode(conn) == "closed":
+                        raise ValidationError("This league is closed to new members right now, so the invitation can't be accepted")
+                    if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
+                        roles.set_member(conn, me, "race_master" if g.user["is_master"] else inv["role"], None)
+                    feed.notify(conn, None, f"{g.user['display_name']} accepted an invitation and joined", "members")
+                conn.execute("UPDATE invitations SET status = ?, decided_at = ? WHERE username = ?",
+                             ("Accepted" if decision == "accept" else "Declined", storage.now_iso(), me))
+        except CareerNotFound:
+            abort(404)
+        except ValidationError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("home"))
+        if decision == "accept":
+            flash("You've joined the league.", "success")
+            return redirect(url_for("dashboard", token=token))
+        flash("Invitation declined.", "success")
+        return redirect(url_for("home"))
+
     @app.route("/career/<token>/members/settings", methods=["POST"])
     @career_page(master_only=True)
     def members_settings(conn, ctx):
-        storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
-        flash("Join requests are " + ("open." if request.form.get("join_open") else "closed."), "success")
+        mode = request.form.get("join_mode")
+        if mode is None:  # the pre-v1.18 checkbox form: ticked = requests, unticked = invite only
+            mode = "requests" if request.form.get("join_open") else "invite"
+        if mode not in storage.JOIN_MODES:
+            raise ValidationError("Choose how people can join")
+        storage.set_join_mode(conn, mode)
+        flash(f"Joining: {storage.JOIN_MODES[mode]}. Existing members aren't affected.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
     @app.route("/career/<token>/offers/send/<int:driver_id>", methods=["POST"])
@@ -1794,9 +1886,13 @@ def register_routes(app):
     def league_settings(conn, ctx):
         if request.method == "POST":
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
-            storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+            if request.form.get("join_mode") in storage.JOIN_MODES:
+                storage.set_join_mode(conn, request.form.get("join_mode"))
             discord.save_settings(conn, request.form.get("discord_webhook"), request.form.get("discord_results"),
                                   request.form.get("discord_news"))
+            window = request.form.get("race_window", type=int)
+            if window in timefmt.RACE_WINDOW_CHOICES:
+                storage.set_meta(conn, "race_window", str(window))
             zone = (request.form.get("timezone") or "").strip()
             if zone:
                 if not timefmt.valid_zone(zone):
@@ -1808,8 +1904,8 @@ def register_routes(app):
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
-                    zones=timefmt.COMMON_ZONES,
-                    join_open=storage.get_meta(conn, "join_open") == "1")
+                    zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
+                    join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES)
 
     @app.route("/career/<token>/settings/timezone", methods=["POST"])
     @career_page(master_only=True)
@@ -2027,6 +2123,7 @@ def register_routes(app):
                 if not community.features(conn)["public"] or not hmac.compare_digest(key, community.public_key(conn)):
                     abort(404)
                 g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
+                g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
                 sid = S.current_season_id(conn)
                 evs = S.events(conn, sid)
                 done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]

@@ -20,12 +20,19 @@
       {% if ctx.timezone not in zones %}<option value="{{ ctx.timezone }}" selected>{{ ctx.timezone.replace('_', ' ') }}</option>{% endif %}
       {% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == ctx.timezone }}>{{ z.replace('_', ' ') }}</option>{% endfor %}
     </select></label>
+  <label>How long a race stays "Race window open" after its scheduled time
+    <select name="race_window">
+      {% for w in windows %}<option value="{{ w }}" {{ 'selected' if w == ctx.race_window }}>{{ (w // 60) }} hour{{ 's' if w != 60 }}</option>{% endfor %}
+    </select></label>
+  <p class="muted small">After that, an unfinished round shows "Scheduled time passed · awaiting results". Rounds are never completed automatically.</p>
   <h2>Joining</h2>
-  <label class="toggle-row">
-    <input type="checkbox" name="join_open" value="1" {{ 'checked' if join_open }}>
-    <span class="switch"></span>
-    <span><b>Open to join requests</b><small class="muted">Anyone with a login can ask to join from the League Library. You approve each one in Players &amp; Logins.</small></span>
-  </label>
+  <label>How people join
+    <select name="join_mode">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == join_mode }}>{{ label }}</option>{% endfor %}</select></label>
+  <ul class="muted small">
+    <li><b>Join requests enabled</b>: anyone with a login can ask from their League Library; you approve each request in Players &amp; Logins.</li>
+    <li><b>Invite only</b>: no requests. Invite people from Players &amp; Logins and they accept from their League Library.</li>
+    <li><b>Closed to new members</b>: no requests, and invitations can't be accepted. Existing members are never affected.</li>
+  </ul>
   <h2>Discord <small class="muted">(optional)</small></h2>
   <p class="muted small">Post race results and paddock headlines to a Discord channel. In Discord: channel settings → Integrations → Webhooks →
     New Webhook → Copy Webhook URL, then paste it here. Leave it empty to turn Discord off. Garages, offers and team messages are never posted.</p>
