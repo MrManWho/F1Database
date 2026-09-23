@@ -1390,6 +1390,73 @@ def driver_history(conn, driver_id):
     }
 
 
+def results_transfer_preview(conn, from_id, to_id, season_id):
+    """What moving from_id's results in this season onto to_id would do. Nothing is changed here."""
+    dmap = driver_map(conn)
+    src, dst = dmap.get(from_id), dmap.get(to_id)
+    if not src or not dst:
+        raise ValidationError("Choose both drivers")
+    if from_id == to_id:
+        raise ValidationError("Choose two different drivers")
+    season = get_season(conn, season_id)
+    if season["status"] == C.SEASON_COMPLETE:
+        raise ValidationError("That season is finished; its Reputation is locked. Only rounds in an unfinished season can be moved.")
+    rows = _rows(conn, """SELECT r.*, e.round_number, e.name AS event_name, e.is_sprint, e.status AS event_status
+                          FROM results r JOIN events e ON e.id = r.event_id
+                          WHERE e.season_id = ? AND r.driver_id = ? ORDER BY e.round_number""", (season_id, from_id))
+    tmap = team_map(conn)
+    rounds = []
+    for r in rows:
+        if not _result_has_data(r):
+            continue
+        clash = _row(conn, "SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (r["event_id"], to_id))
+        pts = gp_points(r["race_position"], r["result_status"]) + \
+            sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
+        rounds.append({"event_id": r["event_id"], "round": r["round_number"], "name": r["event_name"],
+                       "team": tmap.get(r["team_id"]), "points": pts, "status": r["event_status"],
+                       "result": f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+                       else r["result_status"],
+                       "clash": bool(clash and _result_has_data(clash))})
+    seats = driver_seats(conn, season_id)
+    return {"from": src, "to": dst, "season": season, "rounds": rounds,
+            "points": sum(r["points"] for r in rounds if not r["clash"]),
+            "clashes": [r for r in rounds if r["clash"]],
+            "from_seat": seats.get(from_id), "to_seat": seats.get(to_id)}
+
+
+def transfer_results(conn, from_id, to_id, season_id, event_ids, swap_seats=False):
+    """Move one driver's results in the chosen rounds onto another driver (a wrong teammate, say).
+
+    The results keep their team, so constructors' points don't change. Rounds where the other driver already
+    has results are refused. Optionally swaps the two drivers' seats for the rounds still to come.
+    """
+    preview = results_transfer_preview(conn, from_id, to_id, season_id)
+    allowed = {r["event_id"]: r for r in preview["rounds"]}
+    chosen = [int(e) for e in event_ids if int(e) in allowed]
+    if not chosen:
+        raise ValidationError("Choose at least one round to move")
+    clashes = [allowed[e] for e in chosen if allowed[e]["clash"]]
+    if clashes:
+        raise ValidationError(f"{preview['to']['name']} already has results in "
+                              + ", ".join(f"R{c['round']}" for c in clashes) + ". Untick those rounds.")
+    for event_id in chosen:
+        # The target driver may have an empty placeholder row (never in a run round, but be safe).
+        conn.execute("DELETE FROM results WHERE event_id = ? AND driver_id = ?", (event_id, to_id))
+        conn.execute("UPDATE results SET driver_id = ? WHERE event_id = ? AND driver_id = ?", (to_id, event_id, from_id))
+    if swap_seats:
+        gmap = grid_map(conn, season_id)
+        a = next((k for k, v in gmap.items() if v == from_id), None)
+        b = next((k for k, v in gmap.items() if v == to_id), None)
+        if a:
+            gmap[a] = to_id
+        if b:
+            gmap[b] = from_id
+        write_grid(conn, season_id, gmap)
+        sync_not_run_results(conn, season_id)
+    return {"moved": len(chosen), "points": sum(allowed[e]["points"] for e in chosen), "from": preview["from"],
+            "to": preview["to"], "rounds": [allowed[e]["round"] for e in chosen]}
+
+
 def delete_driver(conn, driver_id, season_id, force=False):
     """Remove a driver completely. Drivers with race results need force=True, and those results go too
     (the other drivers' positions and points are left as entered)."""

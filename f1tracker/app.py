@@ -49,7 +49,7 @@ AUDIT_LABELS = {
     "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
     "public_rotate": "Made a new public link", "discord_test": "Sent a Discord test message",
     "incident_report": "Reported an incident", "incident_rule": "Ruled on an incident",
-    "incident_delete": "Deleted an incident report", "weekend_reopen": "Reopened a submitted round", "request_pledge": "Asked for a new growth pledge",
+    "incident_delete": "Deleted an incident report", "paddock_move_results": "Moved results between drivers", "weekend_reopen": "Reopened a submitted round", "request_pledge": "Asked for a new growth pledge",
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
 }
@@ -1531,8 +1531,35 @@ def register_routes(app):
             d["rep_now"] = S.starting_reputation(conn, sid, d["id"])
             d["history"] = S.driver_history(conn, d["id"])
         all_teams = [dict(t) for t in conn.execute("SELECT * FROM teams ORDER BY active DESC, id")]
+        move = None
+        src, dst = request.args.get("move_from", type=int), request.args.get("move_to", type=int)
+        if src and dst:
+            try:
+                move = S.results_transfer_preview(conn, src, dst, sid)
+            except ValidationError as exc:
+                flash(str(exc), "error")
         return page("paddock.html", ctx, all_drivers=all_drivers, all_teams=all_teams,
-                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid))
+                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid), move=move)
+
+    @app.route("/career/<token>/paddock/move-results", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_move_results(conn, ctx):
+        src, dst = _form_int("from_id"), _form_int("to_id")
+        sid = ctx["current_season_id"]
+        preview = S.results_transfer_preview(conn, src, dst, sid)
+        if request.form.get("confirm_name", "").strip() != preview["to"]["name"]:
+            raise ValidationError(f"Type {preview['to']['name']} exactly to confirm")
+        storage.auto_backup(ctx["token"], "before-moving-results", force=True)
+        done = S.transfer_results(conn, src, dst, sid, request.form.getlist("event_id"),
+                                  swap_seats=bool(request.form.get("swap_seats")))
+        g.audit_summary = (f"moved {done['from']['name']}'s results in "
+                           + ", ".join(f"R{r}" for r in done["rounds"]) + f" ({done['points']} pts) to {done['to']['name']}"
+                           + (" and swapped their seats" if request.form.get("swap_seats") else ""))
+        g.audit_link = f"driver/{dst}"
+        flash(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
+              f"{done['to']['name']}. Standings, Form and Reputation are recalculated. A backup was made first "
+              "(League & Saves → automatic backups).", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/driver", methods=["POST"])
     @career_page(master_only=True)

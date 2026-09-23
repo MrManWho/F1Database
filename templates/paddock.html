@@ -88,6 +88,53 @@
   <p class="muted small">Turning a team off removes its seats from the current season (its drivers become free agents) and from future seasons. Past results stay.</p>
 </section>
 
+<section class="card" id="move-results">
+  <h2>Move results to another driver</h2>
+  <p class="muted small">Use this when the wrong driver was in a seat (for example, your teammate in the game isn't the one the tracker had).
+    The results, and the points they scored, move to the right driver in the {{ season.year }} season. They stay with the same team, so constructors'
+    points don't change, and nobody's results are deleted. A backup is made first.</p>
+  <form method="get" action="{{ url_for('paddock_admin', token=ctx.token) }}#move-results" class="inline-form">
+    <label>Results currently under
+      <select name="move_from" required><option value="">Choose…</option>
+        {% for d in all_drivers %}<option value="{{ d.id }}" {{ 'selected' if move and move.from.id == d.id }}>{{ d.name }}{{ ' · ' ~ d.team.name if d.team }}</option>{% endfor %}
+      </select></label>
+    <label>Should belong to
+      <select name="move_to" required><option value="">Choose…</option>
+        {% for d in all_drivers %}<option value="{{ d.id }}" {{ 'selected' if move and move.to.id == d.id }}>{{ d.name }}{{ ' · ' ~ d.team.name if d.team else ' · no seat' }}</option>{% endfor %}
+      </select></label>
+    <button class="btn">Preview</button>
+  </form>
+  {% if move %}
+  <div class="move-preview">
+    {% if not move.rounds %}
+    <p class="muted">{{ move.from.name }} has no results in the {{ move.season.year }} season, so there's nothing to move.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('paddock_move_results', token=ctx.token) }}" class="stack" id="move-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="from_id" value="{{ move.from.id }}"><input type="hidden" name="to_id" value="{{ move.to.id }}">
+      <div class="table-wrap">
+      <table class="data-table compact">
+        <thead><tr><th>Move</th><th>Round</th><th>Team</th><th>Result</th><th class="num">Pts</th><th></th></tr></thead>
+        <tbody>{% for r in move.rounds %}
+          <tr><td><input type="checkbox" name="event_id" value="{{ r.event_id }}" {{ 'checked' if not r.clash else 'disabled' }} aria-label="Move R{{ r.round }}"></td>
+            <td>R{{ r.round }} {{ r.name }}</td><td>{{ r.team.name if r.team else '—' }}</td><td>{{ r.result }}</td><td class="num">{{ r.points }}</td>
+            <td class="small">{% if r.clash %}<span class="form-error">{{ move.to.name }} already raced this round</span>{% elif r.status != 'Complete' %}<span class="muted">round not completed yet</span>{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+      </div>
+      <p><b>{{ move.points }} points</b> move from <b>{{ move.from.name }}</b> to <b>{{ move.to.name }}</b>. Standings, Form, Reputation, Driver Value,
+        records and head-to-heads update straight away. Completed seasons aren't touched.</p>
+      {% if move.from_seat %}<label class="check"><input type="checkbox" name="swap_seats" value="1" checked>
+        Also give {{ move.to.name }} the seat {{ move.from.name }} has now{% if move.to_seat %} (and {{ move.from.name }} takes {{ move.to.name }}'s current seat){% else %} ({{ move.from.name }} becomes a free agent){% endif %}, for the rounds still to come</label>{% endif %}
+      <label>Type <b>{{ move.to.name }}</b> to confirm<input name="confirm_name" autocomplete="off" required></label>
+      <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('paddock_admin', token=ctx.token) }}#move-results">Cancel</a>
+        <button class="btn btn-primary">Move results</button></div>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
 <section class="card table-card">
   <h2>Drivers</h2>
   <div class="table-wrap">
