@@ -69,10 +69,15 @@
 
 <section class="card help" id="pledges">
   <h2>Growth pledges</h2>
-  <p>There's no money in contracts. Instead you <b>pledge how much you'll improve</b>, measured against what your car should manage, so it's fair at every team:</p>
-  <table class="data-table compact"><thead><tr><th>Pledge</th><th>Form target</th><th>Reputation</th><th></th></tr></thead><tbody>
-    {% for g in C.GROWTH_LEVELS %}<tr><td><b>{{ g.name }}</b></td><td>car + {{ g.form }}</td><td>+{{ g.rep }} a season</td><td class="muted small">{{ g.blurb }}</td></tr>{% endfor %}
+  <p>There's no money in contracts. Instead you <b>pledge how well you'll drive</b>: an average finishing position, measured against where your car should finish.
+    The fastest car should average about P1.5 and the slowest about P21.5. Each pledge promises to close a share of the gap between your car's expected finish and P1, so it's equally hard in any car:</p>
+  <table class="data-table compact"><thead><tr><th>Pledge</th><th class="num">Closes</th><th class="num">Fastest car</th><th class="num">Midfield (4th)</th><th class="num">Slowest car</th><th class="num">Reward if kept</th><th></th></tr></thead><tbody>
+    {% for g in C.GROWTH_LEVELS %}<tr><td><b>{{ g.name }}</b></td><td class="num">{{ (g.share * 100)|round|int }}%</td>
+      {% for rank in [1, 4, 11] %}{% set e = 2 * rank - 0.5 %}<td class="num">P{{ '%.1f'|format(e - g.share * (e - 1)) }}</td>{% endfor %}
+      <td class="num">+{{ g.reward }} Rep</td><td class="muted small">{{ g.blurb }}</td></tr>{% endfor %}
   </tbody></table>
+  <p>A DNF or DSQ counts as last place, and from round 5 your single worst weekend is dropped. Form and Reputation aren't used for the pledge because they depend so much on the car (a slow car rarely scores points).
+    Keep your pledge to the end of the season and the Reputation reward is added to your start for next season. Miss it and the team's mood suffers along the way.</p>
   <p>Better status and longer deals need a bigger pledge. Promise more than a team needs and you can win an extra year, or (for experienced drivers) one step more status.
     Your pledge is set when you sign, and every seated driver must have one: if yours is missing (or the Race Master asks for a new one) you'll choose it before carrying on.
     After three rounds your targets are re-set to the car's real pace in your league.</p>

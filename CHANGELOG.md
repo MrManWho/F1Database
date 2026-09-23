@@ -3,6 +3,13 @@
 Every version of F1 Universe Tracker, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.17 · Fair pledges
+- **Pledges are fair in every car.** A pledge is now an average finishing position, measured against where your car should finish. Each pledge closes the same share of the gap to P1 (Steady 0%, Solid 12%, Strong 25%, Breakout 40%). Before, the fastest car kept every pledge just by driving normally, and the slowest car couldn't keep anything above Steady however well it drove, because Reputation barely moves without points.
+- **DNFs and bad luck.** A DNF or DSQ counts as last place, and from round 5 your single worst weekend is dropped.
+- **Keeping your pledge pays.** At the end of the season, a kept pledge adds Reputation to your start for next season: +0.5 Steady, +1 Solid, +1.75 Strong, +2.5 Breakout.
+- **Team Standing** shows your average finish against your pledge and the car's expected finish. Form and Reputation are still shown for reference.
+- Pledges in progress keep their level; their targets are worked out again the new way, and your team tells you what that means.
+
 ## 1.16 · Polish, clearer roles and easier reading
 - **One place for roles.** Each league member has one role: Race Master, Scorekeeper, Member or Spectator, set on the league's Players & Logins page. A driver is assigned separately, so a Race Master or Scorekeeper can also drive. The old account-wide Scorekeeper switch is gone; anyone who had it keeps Scorekeeper in every league they belong to. A league always keeps at least one Race Master.
 - **Spectator view.** Spectators see plain text instead of greyed-out forms (results, calendar, grid, notes), with a "View only" badge. The server refuses any change from them.

@@ -10,7 +10,8 @@
 <div class="banner">Your pledge for this season is <b>{{ rel.level.name }}</b>, and it's locked in.
   The Race Master can ask you for a new one. <a href="{{ url_for('team_standing', token=ctx.token) }}">Team Standing →</a></div>
 {% endif %}
-<p class="muted">Targets are measured against what the {{ team_dot(rel.team) }}{{ rel.team.name }} car should manage (baseline Form {{ '%.0f'|format(options[0].form_base) }}).
+<p class="muted">Targets are measured against what the {{ team_dot(rel.team) }}{{ rel.team.name }} car should manage : its expected average finish is <b>P{{ '%.1f'|format(options[0].finish_base) }}</b>.
+  Each pledge promises to close part of the gap between that and P1, so it's equally hard in any car. Keep it and you start next season with extra Reputation.
   After three rounds they're re-set to the car's real pace in your league. A bigger pledge impresses the team, but fall short and they'll warn you, then drop you.
   <a href="{{ url_for('help_page') }}#pledges">How pledges work</a></p>
 <form method="post" class="pledge-grid {{ 'is-locked' if not required }}">
@@ -21,7 +22,7 @@
     <span class="pledge-card">
       <b>{{ g.name }}</b>
       <small class="muted">{{ g.blurb }}</small>
-      <span class="pledge-targets"><span>Form <strong>{{ '%.0f'|format(t.form_target) }}+</strong></span><span>Reputation <strong>{{ '%.1f'|format(t.rep_target) }}+</strong></span></span>
+      <span class="pledge-targets"><span>Average <strong>P{{ '%.1f'|format(t.finish_target) }}</strong> or better</span><span>Kept: <strong>+{{ t.reward }}</strong> Reputation</span></span>
     </span>
   </label>
   {% endfor %}

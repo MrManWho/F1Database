@@ -279,6 +279,10 @@ CREATE TABLE IF NOT EXISTS team_relations (
     pledged INTEGER NOT NULL DEFAULT 0,
     rebased INTEGER NOT NULL DEFAULT 0,
     bonus REAL NOT NULL DEFAULT 0,
+    finish_base REAL,
+    finish_target REAL,
+    outcome TEXT,
+    reward REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (season_id, driver_id)
 );
 
@@ -401,11 +405,14 @@ def migrate(conn):
                spectator) kept separate from the assigned driver; old Scorekeeper ticks become the Scorekeeper
                role and members without a driver become Spectators, so nobody loses access. Human drivers get a
                persistent accent colour (drivers.player_color). Members can hide old notifications (cleared_id).
+    v13 -> v14: growth pledges are judged on average finishing position against the car
+               (team_relations.finish_base / finish_target), with the season's outcome and Reputation reward
+               (outcome, reward). Existing relationships get their finish targets on first use.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "player_color" in _columns(conn, "drivers"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "finish_target" in _columns(conn, "team_relations"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -435,6 +442,12 @@ def migrate(conn):
         conn.execute("ALTER TABLE team_relations ADD COLUMN bonus REAL NOT NULL DEFAULT 0")
         conn.execute("UPDATE team_relations SET pledged = 1 WHERE offer_id IN "
                      "(SELECT id FROM offers WHERE growth IS NOT NULL)")
+    if "finish_target" not in _columns(conn, "team_relations"):
+        # v1.17: pledges are judged on average finish against the car; targets are filled in by relations.ensure.
+        conn.execute("ALTER TABLE team_relations ADD COLUMN finish_base REAL")
+        conn.execute("ALTER TABLE team_relations ADD COLUMN finish_target REAL")
+        conn.execute("ALTER TABLE team_relations ADD COLUMN outcome TEXT")
+        conn.execute("ALTER TABLE team_relations ADD COLUMN reward REAL NOT NULL DEFAULT 0")
     if "growth" not in _columns(conn, "offer_messages"):
         conn.execute("ALTER TABLE offer_messages ADD COLUMN growth INTEGER")
     if "race_at" not in _columns(conn, "events"):

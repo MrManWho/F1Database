@@ -957,10 +957,15 @@ def register_routes(app):
     def season_new(conn, ctx):
         latest = S.list_seasons(conn)[-1]
         released = relations.decide_releases(conn, latest["id"], final=True)
+        relations.settle(conn, latest["id"])
         new_id = S.create_next_season(conn, latest["id"], request.form.get("year"))
+        rewarded = relations.apply_rewards(conn, latest["id"], new_id)
         changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
         feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
+        if rewarded:
+            flash(f"{len(rewarded)} player driver(s) kept their pledge and start the new season with extra Reputation.",
+                  "success")
         if released:
             flash(f"{len(released)} player driver(s) were released by their team at the end of the season.", "success")
         session[f"season_{ctx['token']}"] = new_id
@@ -1154,7 +1159,8 @@ def register_routes(app):
         if not relations.needs_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"]):
             raise ValidationError("Your pledge is locked in for this season. The Race Master can ask you for a new one.")
         t = relations.set_pledge(conn, ctx["current_season_id"], ctx["my_driver"]["id"], request.form.get("growth"))
-        flash(f"Pledge locked in: Form {t['form_target']:.0f}+ and Reputation {t['rep_target']:.1f}+ this season.", "success")
+        flash(f"Pledge locked in: average P{t['finish_target']:.1f} or better this season "
+              f"(the car's expected finish is P{t['finish_base']:.1f}).", "success")
         return redirect(url_for("team_standing", token=ctx["token"]))
 
     @app.route("/career/<token>/team-standing/<int:driver_id>/request-pledge", methods=["POST"])

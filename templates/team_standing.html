@@ -59,19 +59,23 @@
 
   <section class="card">
     <h2>Your targets</h2>
-    <p class="muted small">Set by your <b>{{ rel.level.name }}</b> pledge against what the {{ team.name }} car should manage
-      (baseline Form {{ '%.0f'|format(rel.form_base) }}).</p>
-    {% set fmax = [rel.form_target, rel.form, 1]|max %}
+    <p class="muted small">Your <b>{{ rel.level.name }}</b> pledge is an average finish, measured against where the {{ team.name }} car
+      should finish (P{{ '%.1f'|format(rel.finish_base) }}). A DNF counts as last; from round 5 your worst weekend is dropped.</p>
+    {% set field = rel.field %}
+    {% macro fpos(v) %}{{ ((field - v) / (field - 1) * 100)|round(1) }}{% endmacro %}
     <div class="target-row">
-      <div class="target-head"><b>Form</b><span>{{ rel.form }} <small class="muted">/ target {{ rel.form_target }}</small></span></div>
-      <div class="target-bar"><span class="{{ 'ok' if rel.form >= rel.form_target else ('near' if rel.form >= rel.form_target - 5 else 'short') }}" style="width: {{ [rel.form, 100]|min }}%"></span>
-        <i style="left: {{ [rel.form_target, 100]|min }}%" title="Target"></i></div>
+      <div class="target-head"><b>Average finish</b><span>{% if rel.pace is not none %}P{{ '%.1f'|format(rel.pace) }}{% else %}—{% endif %}
+        <small class="muted">/ pledge P{{ '%.1f'|format(rel.finish_target) }} or better</small></span></div>
+      <div class="target-bar"><span class="{{ 'ok' if rel.on_pledge else ('near' if rel.pace is not none and rel.pace - rel.finish_target <= 1 else 'short') }}" style="width: {{ fpos(rel.pace) if rel.pace is not none else 0 }}%"></span>
+        <i style="left: {{ fpos(rel.finish_target) }}%" title="Pledge"></i><i class="car-mark" style="left: {{ fpos(rel.finish_base) }}%" title="Car's expected finish"></i></div>
+      <p class="muted small">{% if rel.pace is none %}No completed rounds yet.{% elif rel.on_pledge %}On pledge: keep it to the end and you start next season with <b>+{{ rel.reward_if_kept }} Reputation</b>.{% else %}{{ '%.1f'|format(rel.pace - rel.finish_target) }} places a race short of your pledge.{% endif %}
+        {% if rel.pace_dropped %} Your worst weekend isn't counted.{% endif %}</p>
     </div>
-    <div class="target-row">
-      <div class="target-head"><b>Reputation</b><span>{{ rel.rep }} <small class="muted">/ {{ rel.rep_expected }} expected by now · {{ rel.rep_target }} by season end</small></span></div>
-      <div class="target-bar"><span class="{{ 'ok' if rel.rep >= rel.rep_expected else ('near' if rel.rep >= rel.rep_expected - 1 else 'short') }}" style="width: {{ [rel.rep, 100]|min }}%"></span>
-        <i style="left: {{ [rel.rep_target, 100]|min }}%" title="Season target"></i></div>
+    <div class="h2h">
+      <div><small>Form</small><strong>{{ rel.form }}</strong></div>
+      <div><small>Reputation</small><strong>{{ rel.rep }}</strong> <span class="muted small">{{ '%+.1f'|format(rel.rep_change) }} this season</span></div>
     </div>
+    <p class="muted small">Form and Reputation are shown for reference. They depend a lot on the car, so the pledge doesn't use them.</p>
     {% if not rel.rebased %}<p class="muted small">Targets are re-set to the car's real pace after round 3.</p>{% endif %}
     <div class="h2h">
       <div><small>Race vs {{ teammate.name if teammate else 'teammate' }}</small><strong>{{ rel.h2h.race_won }}–{{ rel.h2h.race_total - rel.h2h.race_won }}</strong></div>

@@ -972,3 +972,4 @@ body.compact .stat strong { font-size: 1.3rem; }
 body.compact .sidebar nav a, body.compact .sidebar nav button { padding-top: .38rem; padding-bottom: .38rem; }
 body.compact .leader-list li, body.compact .bar-list li, body.compact .interest-list li { padding: .35rem .3rem; }
 body.compact .story-card { padding: .55rem .75rem; }
+.target-bar i.car-mark { background: var(--muted); width: 2px; opacity: .8; }

@@ -17,9 +17,7 @@ def _seat(conn):
 
 def _set_pledge(conn, sid, driver_id, growth):
     relations.ensure(conn, sid)
-    t = relations.targets_for(conn, sid, driver_id, S.driver_seats(conn, sid)[driver_id][0], growth)
-    conn.execute("UPDATE team_relations SET growth = ?, form_target = ?, rep_target = ? WHERE season_id = ? "
-                 "AND driver_id = ?", (growth, t["form_target"], t["rep_target"], sid, driver_id))
+    relations.set_pledge(conn, sid, driver_id, growth)
 
 
 def test_targets_are_fair_to_every_car():
@@ -38,7 +36,9 @@ def test_signing_sets_the_pledge_as_season_targets(db, rng):
     relations.ensure(db, sid)
     a = relations.assess(db, sid, david)
     assert a["growth"] == 2 and a["team_id"] == offer["team_id"] and a["level"]["name"] == "Strong"
-    assert a["form_target"] == round(min(97, a["form_base"] + C.GROWTH_LEVELS[2]["form"]), 1)
+    rank = S.team_strength_ranks(db, sid)[a["team_id"]]
+    assert a["finish_base"] == relations.expected_finish(rank)
+    assert a["finish_target"] == relations.pledged_finish(rank, 2) < a["finish_base"]
     assert a["status"] == "Happy" and a["score"] == C.RELATION_START  # nothing judged before a race
 
 
@@ -189,7 +189,7 @@ def test_contract_years_keep_you_off_the_market_unless_released(db, rng):
     market.accept_offer(db, offer["id"])          # 2026-2027
     assert market.get_offer(db, offer["id"])["years"] == 2
     relations.ensure(db, sid)                     # keep the team happy whatever happens on track
-    db.execute("UPDATE team_relations SET form_target = 0, rep_target = 0 WHERE driver_id = ?", (david,))
+    db.execute("UPDATE team_relations SET finish_target = 99, rebased = 1 WHERE driver_id = ?", (david,))
     market.close_window(db, market.windows(db)[0]["id"])
     for ev in S.events(db, sid)[:12]:
         run_event(db, ev)

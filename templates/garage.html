@@ -46,7 +46,7 @@
 
 {% macro pledge_text(team_id, growth) -%}
 {%- set t = pledges[team_id][growth or 0] -%}
-Form {{ '%.0f'|format(t.form_target) }}+ · Reputation {{ '%.1f'|format(t.rep_target) }}+
+Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(t.finish_base) }})
 {%- endmacro %}
 
 {% macro terms_line(role, years, growth, start, team_id) -%}

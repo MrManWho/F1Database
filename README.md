@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.16
+# F1 Universe Tracker v1.17
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
 their own login, garage, contract talks and relationship with their team. The Race Master or a
@@ -138,17 +138,23 @@ Offers are negotiations. Every deal has three terms:
 
 * **Seat status:** No. 2, Equal Status or No. 1.
 * **Length:** 1–5 years.
-* **Growth pledge:** how much you promise to improve each season. There's no money involved.
+* **Growth pledge:** how well you promise to drive each season. There's no money involved.
 
-| Pledge | Form target | Reputation target |
-|---|---|---|
-| Steady | what the car should manage | +0.5 a season |
-| Solid | car + 6 | +2 |
-| Strong | car + 12 | +4 |
-| Breakout | car + 20 | +7 |
+A pledge is an **average finishing position**, measured against where your car should finish (about
+P1.5 in the fastest car, P21.5 in the slowest). Each pledge closes the same share of the gap between
+that and P1, so it's equally hard in any car:
 
-Targets are measured against what your car should manage, so a pledge is equally fair at the front
-and the back of the grid.
+| Pledge | Closes | Fastest car | 4th-fastest | Slowest car | Reward if kept |
+|---|---|---|---|---|---|
+| Steady | 0% | P1.5 | P7.5 | P21.5 | +0.5 Reputation |
+| Solid | 12% | P1.4 | P6.7 | P19.0 | +1 |
+| Strong | 25% | P1.4 | P5.9 | P16.4 | +1.75 |
+| Breakout | 40% | P1.3 | P4.9 | P13.3 | +2.5 |
+
+A DNF or DSQ counts as last place, and from round 5 your single worst weekend is dropped. Keep your
+pledge to the end of the season and the reward is added to your starting Reputation for next season.
+Form and Reputation aren't used to judge the pledge: they depend too much on the car (a slow car
+rarely scores points, so its Reputation barely moves however well you drive).
 
 **What each team wants:**
 * Each team privately wants a minimum pledge. Keen teams accept Steady, and lukewarm ones want Strong.
@@ -169,7 +175,7 @@ and no approaches. The exception is if your team releases you.
 ### Team Standing: your relationship with your team
 
 Once results come in, your team rates you out of 100:
-- the score compares your Form with your target, and your Reputation with where it should be by now;
+- the score compares your average finish with your pledge, in steps scaled to your car;
 - your head-to-head against your teammate also counts;
 - the team's judgement firms up after about a third of the season.
 
@@ -186,7 +192,7 @@ and the warning is lifted.
 
 **Team Standing** (My career) shows:
 - your relationship and status;
-- your targets against your actual Form and Reputation;
+- your average finish against your pledge (and your Form and Reputation for reference);
 - your teammate head-to-head;
 - everything the team has said to you;
 - how eager every other team is.

@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.16"
-SCHEMA_VERSION = 13
+APP_VERSION = "1.17"
+SCHEMA_VERSION = 14
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -178,12 +178,17 @@ AVATAR_MAX_BYTES = 2 * 1024 * 1024
 # Contracts: instead of money, a driver pledges how much they'll grow. Targets are set against what the
 # car should manage (a slow car isn't expected to win), so the pledge is fair at every team.
 # form: Form above the car's baseline by season end; rep: Reputation gained over the season.
+# Growth pledges are judged on average finishing position against the car. "share" is how much of the gap
+# between the car's expected finish and P1 the driver promises to close, so every car has the same headroom
+# in proportion. "reward" is the Reputation added to next season's start for keeping the pledge.
 GROWTH_LEVELS = [
-    {"name": "Steady", "form": 0, "rep": 0.5, "blurb": "Deliver what the car is capable of"},
-    {"name": "Solid", "form": 6, "rep": 2.0, "blurb": "Beat the car's expected results"},
-    {"name": "Strong", "form": 12, "rep": 4.0, "blurb": "Clearly outperform the machinery"},
-    {"name": "Breakout", "form": 20, "rep": 7.0, "blurb": "A season people talk about"},
+    {"name": "Steady", "share": 0.0, "reward": 0.5, "blurb": "Deliver what the car is capable of"},
+    {"name": "Solid", "share": 0.12, "reward": 1.0, "blurb": "Beat the car's expected results"},
+    {"name": "Strong", "share": 0.25, "reward": 1.75, "blurb": "Clearly outperform the machinery"},
+    {"name": "Breakout", "share": 0.40, "reward": 2.5, "blurb": "A season people talk about"},
 ]
+PLEDGE_DROP_AFTER = 5     # from this many rounds, the worst weekend doesn't count toward the pledge
+PLEDGE_UNIT_SHARE = 0.12  # one "step" of pledge performance, as a share of the car's headroom (min 0.6 places)
 
 # Team relationship (0-100) bands, best first: (minimum score, status)
 RELATION_BANDS = [(80, "Delighted"), (55, "Happy"), (40, "Concerned"), (25, "Unhappy"), (0, "Seat at risk")]
