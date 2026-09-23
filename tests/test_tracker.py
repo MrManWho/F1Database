@@ -346,7 +346,7 @@ def test_login_is_required_and_setup_runs_first(app):
 
 def test_every_major_page_returns_successfully(master_client, data_dir):
     res = master_client.post("/careers/new", data={"name": "Web", "year": "2026", "rookie_market": "1",
-                                                   "account1": "david", "csrf_token": "tok"})
+                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         event = S.events(conn, S.current_season_id(conn))[0]
@@ -371,7 +371,7 @@ def test_players_only_see_their_own_career_and_offers(app, master_client):
     auth.create_user("carson", "Carson", "password1")
     auth.create_user("stranger", "Nobody", "password1")
     res = master_client.post("/careers/new", data={"name": "Two", "year": "2026", "rookie_market": "1",
-                                                   "account1": "david", "account2": "carson", "csrf_token": "tok"})
+                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         david, carson = players(conn)
@@ -491,7 +491,7 @@ def test_v4_offers_migrate_and_can_be_negotiated(career, rng):
 
 def test_garage_negotiation_routes(app, master_client):
     res = master_client.post("/careers/new", data={"name": "Talks", "year": "2026", "rookie_market": "1",
-                                                   "account1": "david", "csrf_token": "tok"})
+                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         david, _ = players(conn)
@@ -517,7 +517,7 @@ from f1tracker import feed, importer, insights  # noqa: E402
 
 
 def _career_token(master_client, rookies=False):
-    data = {"name": "V15", "year": "2026", "account1": "david", "csrf_token": "tok"}
+    data = {"name": "V15", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"}
     if rookies:
         data["rookie_market"] = "1"
     res = master_client.post("/careers/new", data=data)
@@ -724,7 +724,7 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
     auth.create_user("carson", "Carson", "password1")
     assert auth.role_of(auth.get_user("davidd")) == "steward"
     res = master_client.post("/careers/new", data={"name": "Steward", "year": "2026", "rookie_market": "1",
-                                                   "account1": "davidd", "account2": "carson", "csrf_token": "tok"})
+                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["davidd", "carson"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         david, carson = players(conn)
@@ -872,8 +872,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
     auth.create_user("carson", "Carson", "password1", email="carson@example.com")
     auth.create_user("quiet", "Quiet", "password1", email="quiet@example.com")
     auth.set_email("quiet", "quiet@example.com", False)
-    res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "account1": "david",
-                                                   "account2": "carson", "csrf_token": "tok"})
+    res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         conn.execute("INSERT INTO career_members VALUES('quiet', NULL)")
@@ -928,3 +927,79 @@ def test_mailer_sends_over_smtp_with_starttls(monkeypatch):
     assert mailer.send(["a@example.com", "b@example.com", "a@example.com"], "Hi", "Body", "<p>Body</p>") == 2
     assert calls[:3] == [("connect", "smtp.example.com", 587), ("starttls",), ("login", "bot@example.com", "app-pass")]
     assert [m["To"] for m in sent] == ["a@example.com", "b@example.com"] and "bot@example.com" in sent[0]["From"]
+
+
+# --------------------------------------------------------------------------- v1.9: open leagues
+
+def _new_league(master_client, names, logins=None, **extra):
+    data = {"name": "Open League", "year": "2026", "player_name": names,
+            "player_login": logins or [""] * len(names), "csrf_token": "tok", **extra}
+    res = master_client.post("/careers/new", data=data)
+    return res.headers["Location"].split("/career/")[1].split("/")[0]
+
+
+def test_leagues_can_have_any_number_of_players(master_client):
+    empty = _new_league(master_client, [""], rookie_market="1")
+    with storage.session(empty) as conn:
+        assert players(conn) == [] and conn.execute("SELECT COUNT(*) FROM drivers").fetchone()[0] == 22
+        assert market.windows(conn) == []
+    three = _new_league(master_client, ["Ana Silva", "Ben Okafor", "Chloe Park"], rookie_market="1", join_open="1")
+    with storage.session(three) as conn:
+        assert [p["name"] for p in S.player_drivers(conn)] == ["Ana Silva", "Ben Okafor", "Chloe Park"]
+        assert all(p["baseline_reputation"] == C.ROOKIE_REPUTATION for p in S.player_drivers(conn))
+        assert len({o["driver_id"] for o in market.offers(conn)}) == 3
+        slots = [s["slot"] for s in insights.progression_chart(conn, S.current_season_id(conn))["series"]]
+        assert len(slots) == len(set(slots))
+    assert master_client.get(f"/career/{three}/rivalry").status_code == 200
+    with storage.session(three) as conn:
+        a, b = driver_id(conn, "Max Verstappen"), driver_id(conn, "Lando Norris")
+    page = master_client.get(f"/career/{three}/rivalry?a={a}&b={b}").get_data(as_text=True)
+    assert "Max Verstappen" in page and "Lando Norris" in page
+
+
+def test_anyone_can_ask_to_join_and_the_race_master_approves(app, master_client):
+    token = _new_league(master_client, ["Ana Silva"], rookie_market="1", join_open="1")
+    auth.create_user("newbie", "Newbie", "password1", email="newbie@example.com")
+    newbie = app.test_client()
+    login(newbie, "newbie")
+    home = newbie.get("/").get_data(as_text=True)
+    assert "Open League" in home and "Ask to join" in home
+    newbie.post(f"/career/{token}/join", data={"driver_name": "Max Verstappen", "csrf_token": "tok"})  # taken
+    newbie.post(f"/career/{token}/join", data={"driver_name": "Nia Newbie", "message": "hi", "csrf_token": "tok"})
+    assert "Request sent" in newbie.get("/").get_data(as_text=True)
+    assert newbie.get(f"/career/{token}/dashboard").status_code == 403
+    with storage.session(token) as conn:
+        req = conn.execute("SELECT * FROM join_requests WHERE status = 'Pending'").fetchall()
+        assert len(req) == 1 and req[0]["driver_name"] == "Nia Newbie"
+    assert "Join requests" in master_client.get(f"/career/{token}/members").get_data(as_text=True)
+    master_client.post(f"/career/{token}/members/request/{req[0]['id']}/approve",
+                       data={"driver_name": "Nia Newbie", "send_offers": "1", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        nia = driver_id(conn, "Nia Newbie")
+        assert conn.execute("SELECT driver_id FROM career_members WHERE username = 'newbie'").fetchone()[0] == nia
+        mine = [o for o in market.offers(conn, driver_id=nia) if o["status"] == C.OFFER_PENDING]
+        assert mine and len(market.windows(conn)) == 1  # added to the already-open Rookie Draft
+        assert len({o["driver_id"] for o in market.offers(conn)}) == 2
+    garage = newbie.get(f"/career/{token}/garage").get_data(as_text=True)
+    assert "Nia Newbie" in garage and "Counter-offer" in garage
+    # Closing the league hides it from people who aren't in it.
+    master_client.post(f"/career/{token}/members/settings", data={"csrf_token": "tok"})
+    auth.create_user("late", "Late", "password1")
+    late = app.test_client()
+    login(late, "late")
+    assert "Open League" not in late.get("/").get_data(as_text=True)
+    assert late.post(f"/career/{token}/join", data={"driver_name": "Late Guy", "csrf_token": "tok"}).status_code == 302
+    with storage.session(token) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM join_requests WHERE username = 'late'").fetchone()[0] == 0
+
+
+def test_race_master_can_add_a_player_mid_season(master_client):
+    token = _new_league(master_client, ["Ana Silva"])
+    auth.create_user("ben", "Ben", "password1")
+    master_client.post(f"/career/{token}/members/player",
+                       data={"driver_name": "Ben Okafor", "username": "ben", "send_offers": "1", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        ben = driver_id(conn, "Ben Okafor")
+        windows = market.windows(conn)
+        assert len(windows) == 1 and windows[0]["kind"] == "Rookie Draft"
+        assert {o["driver_id"] for o in market.offers(conn)} == {ben}  # Ana doesn't get a surprise second round

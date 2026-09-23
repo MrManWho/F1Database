@@ -1,7 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Rivalry{% endblock %}
 {% block content %}
-{% set an = a.name.split(' ')[0] %}{% set bn = b.name.split(' ')[0] %}
+<form method="get" class="rival-pick card">
+  <label>Driver<select name="a" onchange="this.form.submit()">{% for d in options %}<option value="{{ d.id }}" {{ 'selected' if a and d.id == a.id }}>{{ d.name }}{{ ' ★' if d.is_player }}</option>{% endfor %}</select></label>
+  <span class="vs">vs</span>
+  <label>Rival<select name="b" onchange="this.form.submit()">{% for d in options %}<option value="{{ d.id }}" {{ 'selected' if b and d.id == b.id }}>{{ d.name }}{{ ' ★' if d.is_player }}</option>{% endfor %}</select></label>
+  <span class="muted small">★ = player driver. Any two drivers work, including AI rivals and teammates.</span>
+</form>
+{% if not b %}
+<section class="card empty-state"><p class="muted">Pick two different drivers to compare.</p></section>
+{% else %}
+{% set an = a.name.split(' ')[-1] %}{% set bn = b.name.split(' ')[-1] %}
 <div class="page-head"><div><div class="kicker">All-time head to head</div><h1>{{ a.name }} <span class="vs">vs</span> {{ b.name }}</h1></div></div>
 
 <div class="rival-board card">
@@ -77,4 +86,5 @@
   </table>
   </div>
 </section>
+{% endif %}
 {% endblock %}

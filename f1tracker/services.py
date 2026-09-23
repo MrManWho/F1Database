@@ -52,6 +52,7 @@ def parse_difficulty(value):
 # --------------------------------------------------------------------------- seeding
 
 def seed_career(conn, token, name, year, player_names=None):
+    """Create a league: the default grid and calendar plus any number of human player drivers."""
     year = int(year)
     if not C.MIN_YEAR <= year <= C.MAX_YEAR:
         raise ValidationError(f"Opening year must be between {C.MIN_YEAR} and {C.MAX_YEAR}")
@@ -67,12 +68,11 @@ def seed_career(conn, token, name, year, player_names=None):
     for dname in ai_names:
         conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player) VALUES(?,?,0)",
                      (dname, C.BASELINE_REPUTATION[dname]))
-    players = list(C.PLAYER_DRIVERS)
-    for index, custom in enumerate(player_names or []):
-        if custom and custom.strip() and index < len(players):
-            players[index] = (custom.strip()[:60], players[index][1])
+    players = [(" ".join(n.split())[:60], C.ROOKIE_REPUTATION) for n in (player_names or []) if n and n.strip()]
+    if len(players) > C.MAX_PLAYERS:
+        raise ValidationError(f"A league can have up to {C.MAX_PLAYERS} player drivers")
     if len({p[0].lower() for p in players} | {n.lower() for n in ai_names}) != len(players) + len(ai_names):
-        raise ValidationError("Player driver names must be unique")
+        raise ValidationError("Every driver needs a different name (and can't share a name with an F1 driver)")
     for pname, rep in players:
         conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player) VALUES(?,?,1)", (pname, rep))
 
@@ -90,6 +90,7 @@ def seed_career(conn, token, name, year, player_names=None):
         conn.execute("INSERT INTO events(season_id, round_number, name, location, is_sprint) VALUES(?,?,?,?,?)",
                      (season_id, rnd, ename, loc, int(sprint)))
     set_meta(conn, "current_season_id", season_id)
+    set_meta(conn, "join_open", "1")
     sync_not_run_results(conn, season_id)
     return season_id
 
@@ -1056,13 +1057,20 @@ def _parse_rep(value):
     return rep
 
 
-def add_driver(conn, name, baseline_reputation, season_id):
+def add_player_driver(conn, name, season_id):
+    """A new human player: a rookie without a seat until they sign a contract."""
+    return add_driver(conn, name, C.ROOKIE_REPUTATION, season_id, is_player=True)
+
+
+def add_driver(conn, name, baseline_reputation, season_id, is_player=False):
     name = _clean_name(name, "Driver name")
     if _row(conn, "SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (name,)):
         raise ValidationError("A driver with that name already exists")
     rep = _parse_rep(baseline_reputation)
-    did = conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player, active) VALUES(?,?,0,1)",
-                       (name, rep)).lastrowid
+    if is_player and len(player_drivers(conn)) >= C.MAX_PLAYERS:
+        raise ValidationError(f"A league can have up to {C.MAX_PLAYERS} player drivers")
+    did = conn.execute("INSERT INTO drivers(name, baseline_reputation, is_player, active) VALUES(?,?,?,1)",
+                       (name, rep, int(bool(is_player)))).lastrowid
     conn.execute("INSERT OR IGNORE INTO season_driver_state VALUES(?,?,?,NULL)", (season_id, did, rep))
     return did
 

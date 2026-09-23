@@ -1,9 +1,10 @@
-# F1 Universe Tracker v1.8
+# F1 Universe Tracker v1.9
 
-A companion database and "career control room" for a two-player F1 26 career (David Conley and
-Carson Hayes). The game handles the racing. This app remembers everything else: every result,
-Sprint, championship, transfer, Reputation change, contract offer and AI difficulty setting,
-across as many seasons as you play.
+A companion website for F1 game career **leagues**. Any number of people can drive: each player
+has their own login, garage and contract negotiations, and a Race Master or Race Steward enters the
+results after every race. The game handles the racing. The tracker remembers everything else:
+every result, Sprint, championship, transfer, Reputation change, contract offer and AI difficulty
+setting, across as many seasons as you play.
 
 It runs on your own computer with Flask, Waitress and SQLite. No accounts or data leave the machine.
 
@@ -12,8 +13,8 @@ It runs on your own computer with Flask, Waitress and SQLite. No accounts or dat
 1. Install Python 3.11+ from python.org and tick **Add python.exe to PATH**.
 2. Double-click **`run.bat`**. On first launch it creates a private `.venv` and installs Flask and Waitress.
 3. The browser opens at `http://127.0.0.1:8765`. On first visit, create the **Race Master** login.
-4. In **Accounts**, create a **Driver** login for your teammate.
-5. **New career**: pick each player's login and leave **Start as rookies** ticked.
+4. Create logins in **Accounts**, or let people sign up themselves.
+5. **New league**: add player drivers (or none), leave **Start as rookies** and **open to join** ticked.
 
 Keep the command window open while you play. Closing it stops the server. Your saves are not affected.
 
@@ -23,6 +24,21 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.9: open leagues for any number of players
+
+* **No built-in players.** A new league starts with the real F1 grid and as many player drivers as
+  you list (none is fine). Every player driver starts as a rookie on 45 Reputation without a seat.
+* **Anyone can join.** People sign up from the login page. Leagues marked *open* appear in their
+  **League Library** with an **Ask to join** form (they choose their driver name). The Race Master
+  approves or declines in **Players & Logins**, optionally sending rookie offers straight away.
+  New players' offers go into the transfer window that's already open, or a window opened just for
+  them, so nobody else gets a surprise round of offers.
+* **Players & Logins** (Race Master): join requests, **Add a player driver**, link logins, **Send
+  offers** to any player, and the open/closed switch.
+* **Rivalry** compares any two drivers (players or AI). It defaults to you vs the nearest player in
+  the table. **My Garage** shows your points against every other player.
+* Charts give each player driver their own colour (up to 8 lines).
 
 ## v1.8: email, password resets, tighter Steward
 

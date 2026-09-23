@@ -20,7 +20,7 @@ def data_dir(tmp_path, monkeypatch):
 def career():
     token = storage.new_token()
     with storage.session(token, create=True) as conn:
-        S.seed_career(conn, token, "Test Career", 2026)
+        S.seed_career(conn, token, "Test Career", 2026, ["David Conley", "Carson Hayes"])
     return token
 
 

@@ -448,3 +448,6 @@ input.imported { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(74, 163, 
 .news-del, .notif-del { position: absolute; top: .4rem; right: .2rem; }
 .notif-list li { position: relative; padding-right: 2.6rem; }
 .email-input { width: 190px; }
+.rival-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .8rem; }
+.player-link { display: flex; align-items: flex-end; gap: .6rem; }
+.player-link label { flex: 1; }

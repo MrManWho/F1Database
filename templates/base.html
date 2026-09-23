@@ -39,10 +39,10 @@
       <a href="{{ url_for('paddock_admin', token=t) }}" class="{{ 'active' if ep == 'paddock_admin' }}"><i>⚙</i>Paddock Admin</a>
       {% endif %}
       {% if ctx.is_master %}
-      <a href="{{ url_for('members', token=t) }}" class="{{ 'active' if ep == 'members' }}"><i>⚑</i>Player Logins</a>
+      <a href="{{ url_for('members', token=t) }}" class="{{ 'active' if ep == 'members' }}"><i>⚑</i>Players &amp; Logins</a>
       <button type="button" data-dialog="career-dialog"><i>⛁</i>Career &amp; Saves</button>
       {% endif %}
-      <a href="{{ url_for('home') }}"><i>⌂</i>Career Library</a>
+      <a href="{{ url_for('home') }}"><i>⌂</i>League Library</a>
     </nav>
     <div class="sidebar-foot">
       <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}">{{ ctx.role }}</span>
@@ -112,7 +112,7 @@
     <details class="auto-backups">
       <summary>Automatic backups ({{ ctx.auto_backups|length }} recent)</summary>
       <p class="muted small">Made once a day and after every completed race weekend. The newest {{ C.AUTO_BACKUPS_KEPT }} are kept.
-        To restore one, download it and use <em>Import .f1career</em> in the Career Library.</p>
+        To restore one, download it and use <em>Import .f1career</em> in the League Library.</p>
       <ul class="plain-list small">
         {% for b in ctx.auto_backups %}<li><a href="{{ url_for('auto_backup_download', token=t, name=b.name) }}">{{ b.when }}</a> · {{ b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' }} · {{ b.size_kb }} KB</li>
         {% else %}<li class="muted">None yet.</li>{% endfor %}

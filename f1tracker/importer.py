@@ -62,9 +62,9 @@ def _prompt(kind, entrants):
 pages of the same table (for example P1-P11 and P12-P22).
 
 Read every classified row and match each one to exactly one of these entrants. The game may show
-surnames only, three-letter abbreviations, or team names next to drivers; use those to match. Two
-entrants are human players whose in-game names may differ from the names below, so match them by
-team and seat if the name doesn't fit.
+surnames only, three-letter abbreviations, or team names next to drivers; use those to match. Some
+entrants may be human players whose in-game names differ from the names below, so match them by
+team if the name doesn't fit.
 
 Entrants:
 {lines}

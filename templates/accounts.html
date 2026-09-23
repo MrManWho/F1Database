@@ -25,11 +25,11 @@
   {% if user.is_master %}
   <section class="card">
     <h2>Add a login</h2>
-    <p class="muted small">Create a Driver login for your teammate, then link it to their driver in each career's <em>Player Logins</em> page.</p>
+    <p class="muted small">People can also sign up themselves from the login page. Link a login to a driver in each league's <em>Players &amp; Logins</em> page.</p>
     <form method="post" action="{{ url_for('account_new') }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
-      <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
+      <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="username"></label>
+      <label>Display name<input name="display_name" maxlength="60" placeholder="Display name"></label>
       <label>Email (optional)<input name="email" type="email"></label>
       <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
       <label>Role

@@ -182,6 +182,16 @@ CREATE TABLE IF NOT EXISTS notification_reads (
     last_seen_id INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS join_requests (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL,
+    driver_name TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Pending',
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_event ON results(event_id);
 CREATE INDEX IF NOT EXISTS idx_results_driver ON results(driver_id);
 CREATE INDEX IF NOT EXISTS idx_events_season ON events(season_id);
@@ -221,11 +231,12 @@ def migrate(conn):
               ratings for existing seasons are seeded from the team order when first needed.
     v6 -> v7: news and notifications remember what created them (e.g. "window:3"), so deleting a
               transfer window can remove its trail.
+    v7 -> v8: join requests, so anyone with a login can ask to join a league.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "team_seasons" in tables and "ref" in _columns(conn, "news"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):

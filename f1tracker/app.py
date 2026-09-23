@@ -262,7 +262,7 @@ def register_routes(app):
                 return redirect(url_for("register"))
             session.clear()
             session["user"] = username
-            flash("Account created. Ask the Race Master to link you to your driver.", "success")
+            flash("Account created. Pick an open league below and ask to join, or wait for a Race Master to add you.", "success")
             return redirect(url_for("home"))
         return render_template("login.html", mode="register", signups=auth.signups_allowed())
 
@@ -435,11 +435,39 @@ def register_routes(app):
     # ---------------------------------------------------------------- career library
     @app.route("/")
     def home():
-        careers = storage.list_careers()
-        if not is_master():
-            careers = [c for c in careers if g.user["username"] in c["members"]]
-        return render_template("home.html", careers=careers, users=auth.list_users() if is_master() else [],
-                               default_year=2026)
+        everything = storage.list_careers()
+        careers = everything if is_master() else [c for c in everything if g.user["username"] in c["members"]]
+        joinable = [c for c in everything if c["join_open"] and g.user["username"] not in c["members"]
+                    and not is_master()]
+        return render_template("home.html", careers=careers, joinable=joinable,
+                               users=auth.list_users() if is_master() else [], default_year=2026)
+
+    @app.route("/career/<token>/join", methods=["POST"])
+    def career_join(token):
+        driver_name = " ".join((request.form.get("driver_name") or "").split())[:60]
+        try:
+            with storage.session(token) as conn:
+                if storage.get_meta(conn, "join_open") != "1":
+                    raise ValidationError("This league isn't taking new drivers right now")
+                me = g.user["username"]
+                if conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
+                    raise ValidationError("You're already in this league")
+                if conn.execute("SELECT 1 FROM join_requests WHERE username = ? AND status = 'Pending'", (me,)).fetchone():
+                    raise ValidationError("Your request is already waiting for the Race Master")
+                if len(driver_name) < 2:
+                    raise ValidationError("Choose a driver name")
+                if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
+                    raise ValidationError("There's already a driver with that name in this league")
+                conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at) VALUES(?,?,?,?)",
+                             (me, driver_name, (request.form.get("message") or "").strip()[:300], storage.now_iso()))
+                feed.notify(conn, None, f"{g.user['display_name']} asked to join as {driver_name}", "members")
+        except CareerNotFound:
+            abort(404)
+        except ValidationError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("home"))
+        flash("Request sent. You'll see the league here once the Race Master approves it.", "success")
+        return redirect(url_for("home"))
 
     @app.route("/careers/new", methods=["POST"])
     @master_required
@@ -447,16 +475,22 @@ def register_routes(app):
         name = (request.form.get("name") or "").strip()[:80] or "F1 Career"
         token = storage.new_token()
         try:
+            names = request.form.getlist("player_name")
+            logins = request.form.getlist("player_login")
+            rows = [(n, logins[i] if i < len(logins) else "") for i, n in enumerate(names) if (n or "").strip()]
+            chosen = [auth.normalise(l) for _, l in rows if l]
+            if len(chosen) != len(set(chosen)):
+                raise ValidationError("One login can only drive one player driver")
             with storage.session(token, create=True) as conn:
-                S.seed_career(conn, token, name, request.form.get("year") or 2026,
-                              [request.form.get("player1"), request.form.get("player2")])
+                S.seed_career(conn, token, name, request.form.get("year") or 2026, [n for n, _ in rows])
+                storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
                 players = S.player_drivers(conn)
-                for field, driver in zip(("account1", "account2"), players):
-                    username = auth.normalise(request.form.get(field))
+                for (_, login), driver in zip(rows, players):
+                    username = auth.normalise(login)
                     if username and auth.get_user(username):
                         conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id) VALUES(?,?)",
                                      (username, driver["id"]))
-                if request.form.get("rookie_market"):
+                if request.form.get("rookie_market") and players:
                     market.open_window(conn, S.current_season_id(conn), kind="Rookie Draft")
         except (ValidationError, ValueError) as exc:
             try:
@@ -465,8 +499,10 @@ def register_routes(app):
                 pass
             flash(str(exc), "error")
             return redirect(url_for("home"))
-        flash("Career created." + (" Rookie offers are waiting in each player's garage."
-                                   if request.form.get("rookie_market") else ""), "success")
+        flash("League created." + (" Rookie offers are waiting in each player's garage."
+                                   if request.form.get("rookie_market") and rows else "")
+              + (" Other people can now ask to join from the league library." if request.form.get("join_open") else ""),
+              "success")
         return redirect(url_for("dashboard", token=token))
 
     @app.route("/careers/import", methods=["POST"])
@@ -701,8 +737,8 @@ def register_routes(app):
         if seat:
             mate_id = S.grid_map(conn, sid).get((seat[0], 2 if seat[1] == 1 else 1))
             teammate = S.driver_map(conn).get(mate_id)
-        rival = next((p for p in players if p["id"] != driver["id"]), None)
-        rival_row = next((r for r in standings if rival and r["driver_id"] == rival["id"]), None)
+        by_id = {r["driver_id"]: r for r in standings}
+        rivals = [{"driver": p, "row": by_id.get(p["id"])} for p in players if p["id"] != driver["id"]]
         recent = conn.execute("""SELECT r.*, e.name AS event_name, e.round_number, e.is_sprint FROM results r
                                  JOIN events e ON e.id = r.event_id WHERE r.driver_id = ? AND e.season_id = ?
                                  AND e.status != ? ORDER BY e.round_number DESC LIMIT 6""",
@@ -715,7 +751,7 @@ def register_routes(app):
             (window["id"], driver["id"], C.OFFER_ACCEPTED)).fetchone())
         return page("garage.html", ctx, driver=driver, me=me, interest=interest, row=row,
                     team=S.team_map(conn).get(seat[0]) if seat else None, teammate=teammate,
-                    rival=rival, rival_row=rival_row, recent=recent, players=players,
+                    rivals=rivals, recent=recent, players=players,
                     offers=market.offers(conn, driver_id=driver["id"]), can_respond=own or ctx["is_master"],
                     contract=market.current_contract(conn, driver["id"]), own=own,
                     rookie=market.career_starts(conn, driver["id"]) == 0,
@@ -843,19 +879,32 @@ def register_routes(app):
     @app.route("/career/<token>/rivalry")
     @career_page()
     def rivalry_page(conn, ctx):
-        players = S.player_drivers(conn)
-        if len(players) < 2:
-            abort(404)
-        a, b = players[0], players[1]
+        sid = ctx["season"]["id"]
+        dmap = S.driver_map(conn)
+        standings = S.driver_standings(conn, sid)
+        options = [r["driver"] for r in standings] + [d for d in S.drivers(conn) if d["id"] not in {r["driver_id"] for r in standings}]
+        a = dmap.get(request.args.get("a", type=int))
+        b = dmap.get(request.args.get("b", type=int))
+        if not a:
+            a = ctx["my_driver"] or next((r["driver"] for r in standings if r["driver"]["is_player"]), None) \
+                or (standings[0]["driver"] if standings else None)
+        if not b and a:
+            # default rival: the nearest other player in the table, else the nearest driver
+            order = [r["driver"] for r in standings]
+            mine = next((i for i, d in enumerate(order) if d["id"] == a["id"]), 0)
+            near = sorted((d for d in order if d["id"] != a["id"]), key=lambda d: (not d["is_player"],
+                          abs(next(i for i, x in enumerate(order) if x["id"] == d["id"]) - mine)))
+            b = near[0] if near else None
+        if not a or not b or a["id"] == b["id"]:
+            return page("rivalry.html", ctx, a=a, b=None, options=options, r=None, chart=None, season_chart=None)
         data = insights.rivalry(conn, a["id"], b["id"])
         chart = {"labels": data["labels"], "yLabel": "Race head-to-head lead", "zero": True,
                  "series": [{"name": f"{a['name']} ahead ↑ / {b['name']} ahead ↓", "values": data["swing"], "slot": 1}]}
-        sid = ctx["season"]["id"]
         progress = insights.points_progression(conn, sid, [a["id"], b["id"]])
         season_chart = {"labels": progress[0], "yLabel": "Points",
                         "series": [{"name": a["name"], "values": progress[1][a["id"]], "player": True, "slot": 1},
                                    {"name": b["name"], "values": progress[1][b["id"]], "player": True, "slot": 2}]}
-        return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart)
+        return page("rivalry.html", ctx, a=a, b=b, r=data, chart=chart, season_chart=season_chart, options=options)
 
     @app.route("/career/<token>/review/<int:season_id>")
     @career_page()
@@ -984,7 +1033,68 @@ def register_routes(app):
             flash("Player logins saved.", "success")
             return redirect(url_for("members", token=ctx["token"]))
         links = {r["username"]: r["driver_id"] for r in conn.execute("SELECT * FROM career_members")}
-        return page("members.html", ctx, players=players, users=auth.list_users(), links=links)
+        requests = [dict(r) for r in conn.execute("SELECT * FROM join_requests WHERE status = 'Pending' ORDER BY id")]
+        users = {u["username"]: u for u in auth.list_users()}
+        for r in requests:
+            r["user"] = users.get(r["username"])
+        return page("members.html", ctx, players=players, users=list(users.values()), links=links, requests=requests,
+                    join_open=storage.get_meta(conn, "join_open") == "1")
+
+    def _add_player(conn, ctx, username, driver_name, send_offers):
+        user = auth.get_user(username) if username else None
+        if username and not user:
+            raise ValidationError("Unknown login")
+        if user and conn.execute("SELECT 1 FROM career_members WHERE username = ? AND driver_id IS NOT NULL",
+                                 (user["username"],)).fetchone():
+            raise ValidationError(f"{user['username']} already drives in this league")
+        did = S.add_player_driver(conn, driver_name, ctx["current_season_id"])
+        if user:
+            conn.execute("INSERT OR REPLACE INTO career_members(username, driver_id) VALUES(?,?)", (user["username"], did))
+        name = S.driver_map(conn)[did]["name"]
+        feed.post(conn, ctx["current_season_id"], "paddock", f"{name} joins the grid as a rookie",
+                  "A new player driver has entered the league.", "drivers", driver_id=did)
+        if send_offers:
+            market.offers_for_player(conn, did)
+        return name
+
+    @app.route("/career/<token>/members/player", methods=["POST"])
+    @career_page(master_only=True)
+    def members_add_player(conn, ctx):
+        name = _add_player(conn, ctx, auth.normalise(request.form.get("username")), request.form.get("driver_name"),
+                           bool(request.form.get("send_offers")))
+        flash(f"{name} added" + (" and teams have sent rookie offers." if request.form.get("send_offers") else
+                                 ". Place them in a seat from Grid & Transfers or send offers later."), "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/members/request/<int:request_id>/<decision>", methods=["POST"])
+    @career_page(master_only=True)
+    def members_request(conn, ctx, request_id, decision):
+        req = conn.execute("SELECT * FROM join_requests WHERE id = ? AND status = 'Pending'", (request_id,)).fetchone()
+        if not req or decision not in ("approve", "decline"):
+            abort(404)
+        if decision == "approve":
+            name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
+                               bool(request.form.get("send_offers")))
+            flash(f"{req['username']} joined as {name}.", "success")
+        else:
+            flash(f"Request from {req['username']} declined.", "success")
+        conn.execute("UPDATE join_requests SET status = ?, decided_at = ? WHERE id = ?",
+                     ("Approved" if decision == "approve" else "Declined", storage.now_iso(), request_id))
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/members/settings", methods=["POST"])
+    @career_page(master_only=True)
+    def members_settings(conn, ctx):
+        storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+        flash("Join requests are " + ("open." if request.form.get("join_open") else "closed."), "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
+    @app.route("/career/<token>/offers/send/<int:driver_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def offers_send(conn, ctx, driver_id):
+        market.offers_for_player(conn, driver_id)
+        flash("Offers sent.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
 
     # ---------------------------------------------------------------- race API
     def _email_results(token, event_id):

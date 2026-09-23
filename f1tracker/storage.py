@@ -149,9 +149,11 @@ def _summary(path):
             ).fetchone()
             done = conn.execute("SELECT COUNT(*) FROM events WHERE status = 'Complete'").fetchone()[0]
             total = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-            members = []
+            members, requests, players = [], [], 0
             try:
                 members = [r[0] for r in conn.execute("SELECT username FROM career_members")]
+                players = conn.execute("SELECT COUNT(*) FROM drivers WHERE is_player = 1 AND active = 1").fetchone()[0]
+                requests = [r[0] for r in conn.execute("SELECT username FROM join_requests WHERE status = 'Pending'")]
             except sqlite3.OperationalError:
                 pass
         finally:
@@ -167,6 +169,9 @@ def _summary(path):
         "size_kb": round(path.stat().st_size / 1024, 1),
         "last_opened": meta.get("last_opened_at", ""),
         "members": members,
+        "join_open": meta.get("join_open") == "1",
+        "pending_requests": requests,
+        "players": players,
     }
 
 

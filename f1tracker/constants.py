@@ -1,14 +1,15 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.8"
-SCHEMA_VERSION = 7
+APP_VERSION = "1.9"
+SCHEMA_VERSION = 8
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
 MAX_POSITION = 22
 
-PLAYER_DRIVERS = [("David Conley", 42.0), ("Carson Hayes", 45.0)]
+ROOKIE_REPUTATION = 45.0     # every human player driver starts here
+MAX_PLAYERS = 11             # human player drivers per league
 
 # (name, code, colour, driver 1, driver 2) in default team order.
 TEAMS = [

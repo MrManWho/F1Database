@@ -31,22 +31,22 @@ def points_progression(conn, season_id, driver_ids):
     return [f"R{e['round_number']}" for e in rounds], series
 
 
-def progression_chart(conn, season_id, top=4):
-    """Series for the dashboard chart: the top of the table plus both player drivers."""
+def progression_chart(conn, season_id, top=4, max_series=8):
+    """Series for the title-fight chart: the top of the table plus the player drivers (up to 8 lines)."""
     table = S.driver_standings(conn, season_id)
     ids = [r["driver_id"] for r in table[:top]]
-    for p in S.player_drivers(conn):
-        if p["id"] not in ids and any(r["driver_id"] == p["id"] for r in table):
-            ids.append(p["id"])
+    for r in table:
+        if r["driver"]["is_player"] and r["driver_id"] not in ids and len(ids) < max_series:
+            ids.append(r["driver_id"])
     labels, series = points_progression(conn, season_id, ids)
     dmap = S.driver_map(conn)
-    # Colour follows the driver: players keep slots 1 and 2 everywhere; the others take 3 onwards.
-    player_slots = {p["id"]: i + 1 for i, p in enumerate(S.player_drivers(conn)[:2])}
-    out, next_slot = [], 3
+    # Colour follows the driver: player drivers keep their own slot (by join order); others fill the rest.
+    player_slots = {p["id"]: i + 1 for i, p in enumerate(S.player_drivers(conn)) if i < max_series}
+    used = {player_slots[d] for d in ids if d in player_slots}
+    free = [n for n in range(1, max_series + 1) if n not in used]
+    out = []
     for d in ids:
-        slot = player_slots.get(d)
-        if slot is None:
-            slot, next_slot = next_slot, next_slot + 1
+        slot = player_slots.get(d) or free.pop(0)
         out.append({"name": dmap[d]["name"], "values": series[d], "player": bool(dmap[d]["is_player"]), "slot": slot})
     return {"labels": labels, "yLabel": "Points", "series": out}
 

@@ -1,27 +1,98 @@
 {% extends "base.html" %}
-{% block title %}Player Logins{% endblock %}
+{% block title %}Players & Logins{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="kicker">Career access</div><h1>Player logins</h1></div>
+<div class="page-head"><div><div class="kicker">League access</div><h1>Players &amp; logins</h1></div>
   <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">Manage accounts →</a></div>
+
+{% if requests %}
 <section class="card">
-  <p class="muted">Link each player driver to a login. That person sees their own garage and can accept or decline their own offers. Race Masters can see every career anyway.</p>
+  <h2>Join requests</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Login</th><th>Driver name</th><th>Message</th><th></th></tr></thead>
+    <tbody>{% for r in requests %}
+      <tr>
+        <td><strong>{{ r.username }}</strong>{% if r.user %}<br><small class="muted">{{ r.user.display_name }}</small>{% endif %}</td>
+        <td><input form="approve-{{ r.id }}" name="driver_name" value="{{ r.driver_name }}" maxlength="60" required></td>
+        <td class="small">{{ r.message or '—' }}</td>
+        <td>
+          <div class="button-row tight">
+            <label class="check small"><input form="approve-{{ r.id }}" type="checkbox" name="send_offers" value="1" checked> Send rookie offers</label>
+            <button form="approve-{{ r.id }}" class="btn btn-sm btn-primary">Approve</button>
+            <button form="decline-{{ r.id }}" class="btn btn-sm btn-ghost">Decline</button>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% for r in requests %}
+  <form id="approve-{{ r.id }}" method="post" action="{{ url_for('members_request', token=ctx.token, request_id=r.id, decision='approve') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+  <form id="decline-{{ r.id }}" method="post" action="{{ url_for('members_request', token=ctx.token, request_id=r.id, decision='decline') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Add a player driver</h2>
+    <p class="muted small">Creates a new human player driver (a rookie on {{ '%.0f'|format(C.ROOKIE_REPUTATION) }} Reputation, no seat yet) and links it to a login.</p>
+    <form method="post" action="{{ url_for('members_add_player', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
+      <label>Login
+        <select name="username"><option value="">— link later —</option>
+          {% for u in users if u.username not in links or links[u.username] is none %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
+        </select></label>
+      <label class="check"><input type="checkbox" name="send_offers" value="1" checked> Send rookie offers straight away</label>
+      <button class="btn btn-primary">Add player</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Joining</h2>
+    <form method="post" action="{{ url_for('members_settings', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="check"><input type="checkbox" name="join_open" value="1" {{ 'checked' if join_open }}> Let anyone with a login ask to join this league</label>
+      <p class="muted small">Open leagues appear in everyone's League Library with an <em>Ask to join</em> form. You approve or decline each request here.
+        People sign up for a login from the login page.</p>
+      <button class="btn">Save</button>
+    </form>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Player drivers &amp; logins</h2>
+  <p class="muted">Each player driver can be linked to one login. That person sees their own garage and can negotiate their own offers.
+    Race Masters can see every league anyway.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for p in players %}
-    <label>{{ p.name }}
-      <select name="user_{{ p.id }}">
-        <option value="">— No login —</option>
-        {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
-      </select>
-    </label>
+    <div class="player-link">
+      <label>{{ p.name }}{% if not p.active %} <span class="pill">retired</span>{% endif %}
+        <select name="user_{{ p.id }}">
+          <option value="">— No login —</option>
+          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button>
+    </div>
+    {% else %}
+    <p class="muted">No player drivers yet. Add one above, or open the league to join requests.</p>
     {% endfor %}
     <fieldset>
       <legend>Spectators (view-only, no driver)</legend>
       {% for u in users if not u.is_master %}
       <label class="check"><input type="checkbox" name="viewers" value="{{ u.username }}" {{ 'checked' if u.username in links and links[u.username] is none }}> {{ u.display_name }} ({{ u.username }})</label>
-      {% else %}<p class="muted small">No other Driver logins.</p>{% endfor %}
+      {% else %}<p class="muted small">No other logins.</p>{% endfor %}
     </fieldset>
-    <button class="btn btn-primary">Save</button>
+    <button class="btn btn-primary">Save links</button>
   </form>
+  {% for p in players %}
+  <form id="offers-{{ p.id }}" method="post" action="{{ url_for('offers_send', token=ctx.token, driver_id=p.id) }}"
+        onsubmit="return confirm('Have teams send {{ p.name }} offers now?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+  {% endfor %}
 </section>
 {% endblock %}

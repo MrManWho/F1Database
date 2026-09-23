@@ -152,10 +152,10 @@
     <div class="h2h">
       <div><small>Race vs teammate</small><strong>{{ me.h2h.race_won }}–{{ me.h2h.race_total - me.h2h.race_won }}</strong></div>
       <div><small>Quali vs teammate</small><strong>{{ me.h2h.quali_won }}–{{ me.h2h.quali_total - me.h2h.quali_won }}</strong></div>
-      {% if rival %}
-      <div><small>Points vs {{ rival.name.split(' ')[0] }}</small><strong>{{ row.points if row else 0 }}–{{ rival_row.points if rival_row else 0 }}</strong></div>
-      <div><small>Wins vs {{ rival.name.split(' ')[0] }}</small><strong>{{ row.wins if row else 0 }}–{{ rival_row.wins if rival_row else 0 }}</strong></div>
-      {% endif %}
+      {% for rv in rivals[:4] %}
+      <div><small>Points vs <a href="{{ url_for('rivalry_page', token=ctx.token, a=driver.id, b=rv.driver.id) }}">{{ rv.driver.name }}</a></small>
+        <strong>{{ row.points if row else 0 }}–{{ rv.row.points if rv.row else 0 }}</strong></div>
+      {% endfor %}
     </div>
     <h3>Recent weekends</h3>
     {% if recent %}

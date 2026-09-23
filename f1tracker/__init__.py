@@ -1,4 +1,4 @@
-"""F1 Universe Tracker: a companion database for a two-player F1 career."""
+"""F1 Universe Tracker: a companion database for F1 game career leagues."""
 
 from .constants import APP_VERSION
 

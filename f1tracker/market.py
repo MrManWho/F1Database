@@ -207,6 +207,40 @@ def open_window(conn, season_id, kind=None, rng=None):
     return window_id
 
 
+def offers_for_player(conn, driver_id, rng=None):
+    """Send offers to one player driver (e.g. someone who just joined the league).
+
+    Uses the transfer window that is already open for the target year, or opens a new one just for
+    them, so the other players don't get a fresh round of offers.
+    """
+    rng = rng or random.Random()
+    season_id = S.current_season_id(conn)
+    year = target_year(conn, season_id)
+    player = S.driver_map(conn).get(driver_id)
+    if not player or not player["is_player"]:
+        raise S.ValidationError("Only player drivers receive offers")
+    window = conn.execute("SELECT id FROM market_windows WHERE status = ? AND target_year = ?",
+                          (C.WINDOW_OPEN, year)).fetchone()
+    if window:
+        window_id = window["id"]
+        if conn.execute("SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ?", (window_id, driver_id)).fetchone():
+            raise S.ValidationError(f"{player['name']} already has offers in this window")
+    else:
+        kind = "Rookie Draft" if career_starts(conn, driver_id) == 0 else \
+            ("Pre-season" if year == S.get_season(conn, season_id)["year"] else "Silly Season")
+        window_id = conn.execute("INSERT INTO market_windows(season_id, target_year, kind, status, opened_at) "
+                                 "VALUES(?,?,?,?,?)", (season_id, year, kind, C.WINDOW_OPEN, now_iso())).lastrowid
+    standings = {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
+    ranks = S.team_strength_ranks(conn, season_id)
+    _generate_for(conn, window_id, season_id, player, standings, ranks, S.driver_seats(conn, season_id),
+                  signed_team_ids(conn, year), rng)
+    n = conn.execute("SELECT COUNT(*) FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
+                     (window_id, driver_id, C.OFFER_PENDING)).fetchone()[0]
+    feed.notify(conn, driver_id, f"{n} team{'s' if n != 1 else ''} made you an offer for {year}", "garage",
+                ref=f"window:{window_id}")
+    return window_id
+
+
 def signed_team_ids(conn, year):
     return [r["team_id"] for r in conn.execute(
         """SELECT o.team_id FROM offers o JOIN market_windows w ON w.id = o.window_id

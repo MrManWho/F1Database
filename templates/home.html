@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Career Library{% endblock %}
+{% block title %}League Library{% endblock %}
 {% block plain %}
 <div class="page-head">
-  <div><div class="kicker">Career Library</div><h1>Your F1 universes</h1></div>
+  <div><div class="kicker">League Library</div><h1>F1 career leagues</h1></div>
   {% if user.is_master %}
   <div class="button-row">
     <button class="btn btn-ghost" data-dialog="import-dialog">Import .f1career</button>
-    <button class="btn btn-primary" data-dialog="new-dialog">New career</button>
+    <button class="btn btn-primary" data-dialog="new-dialog">New league</button>
   </div>
   {% endif %}
 </div>
@@ -22,44 +22,71 @@
       <span>{{ c.size_kb }} KB</span>
     </div>
     <div class="muted small">Last opened {{ c.last_opened }}</div>
-    {% if c.members %}<div class="small">Drivers: {{ c.members|join(', ') }}</div>{% endif %}
+    <div class="small muted">{{ c.players }} player driver{{ 's' if c.players != 1 }}{% if c.join_open %} · open to join{% endif %}
+      {% if user.is_master and c.pending_requests %} · <span class="pill pill-hot">{{ c.pending_requests|length }} join request{{ 's' if c.pending_requests|length != 1 }}</span>{% endif %}</div>
   </a>
   {% endfor %}
 </div>
-{% else %}
+{% elif user.is_master or not joinable %}
 <section class="card empty-state">
   <div class="big-code">🏁</div>
-  <h2>No careers yet</h2>
+  <h2>No leagues yet</h2>
   {% if user.is_master %}
-  <p class="muted">Start a new two-player career. You'll both begin as rookies: teams make offers, each of you picks a seat from your own login, and the Race Master enters the results.</p>
-  <button class="btn btn-primary" data-dialog="new-dialog">Create your first career</button>
+  <p class="muted">Create a league for any number of players. Everyone starts as a rookie: teams make offers, each player signs from their own login,
+    and a Race Master or Steward enters the results after every race.</p>
+  <button class="btn btn-primary" data-dialog="new-dialog">Create a league</button>
   {% else %}
-  <p class="muted">Ask the Race Master to link your login to a career.</p>
+  <p class="muted">You're not in a league yet. When a league is open to new drivers it appears here, and you can ask to join.</p>
   {% endif %}
 </section>
 {% endif %}
 
+{% if joinable %}
+<div class="page-head" style="margin-top:1.5rem"><div><div class="kicker">Open leagues</div><h2>Join a league</h2></div></div>
+<div class="career-grid">
+  {% for c in joinable %}
+  <article class="career-card card">
+    <div class="career-year">{{ c.year or '—' }}</div>
+    <h2>{{ c.name }}</h2>
+    <div class="career-meta"><span>{{ c.players }} player driver{{ 's' if c.players != 1 }}</span><span>{{ c.completed }}/{{ c.total }} rounds</span></div>
+    {% if user.username in c.pending_requests %}
+    <p class="pill">Request sent · waiting for the Race Master</p>
+    {% else %}
+    <form method="post" action="{{ url_for('career_join', token=c.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
+      <label>Message (optional)<input name="message" maxlength="300" placeholder="Say hi to the Race Master"></label>
+      <button class="btn btn-primary btn-sm">Ask to join</button>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if user.is_master %}
 <dialog id="new-dialog" class="dialog">
-  <div class="dialog-head"><h2>New career</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>New league</h2><button class="icon-btn" data-close>✕</button></div>
   <form method="post" action="{{ url_for('career_new') }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Career name<input name="name" value="David &amp; Carson F1 Career" maxlength="80" required></label>
+    <label>League name<input name="name" value="My F1 League" maxlength="80" required></label>
     <label>Opening year<input name="year" type="number" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" value="{{ default_year }}" required></label>
-    <div class="grid-2">
-      <label>Player 1 driver<input name="player1" value="David Conley" maxlength="60"></label>
-      <label>Player 1 login
-        <select name="account1"><option value="">— none yet —</option>
-          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if loop.index == 1 }}>{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
-        </select></label>
-      <label>Player 2 driver<input name="player2" value="Carson Hayes" maxlength="60"></label>
-      <label>Player 2 login
-        <select name="account2"><option value="">— none yet —</option>
-          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if loop.index == 2 }}>{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
-        </select></label>
-    </div>
-    <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Start as rookies: open the Rookie Draft so teams send each of you seat offers</label>
-    <button class="btn btn-primary">Create career</button>
+    <fieldset>
+      <legend>Player drivers (add as many as you like, or none; people can also ask to join later)</legend>
+      <div id="player-rows" class="stack">
+        <div class="grid-2 player-row">
+          <label>Driver name<input name="player_name" maxlength="60" placeholder="First Last"></label>
+          <label>Login
+            <select name="player_login"><option value="">— link later —</option>
+              {% for u in users %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
+            </select></label>
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" id="add-player-row">+ Add another player</button>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Start everyone as rookies: open the Rookie Draft so teams send seat offers</label>
+    <label class="check"><input type="checkbox" name="join_open" value="1" checked> Let people with a login ask to join this league</label>
+    <button class="btn btn-primary">Create league</button>
   </form>
 </dialog>
 <dialog id="import-dialog" class="dialog">
@@ -72,4 +99,21 @@
   </form>
 </dialog>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var btn = document.getElementById("add-player-row");
+  if (!btn) return;
+  btn.addEventListener("click", function () {
+    var rows = document.getElementById("player-rows");
+    if (rows.children.length >= {{ C.MAX_PLAYERS }}) return;
+    var copy = rows.firstElementChild.cloneNode(true);
+    copy.querySelector("input").value = "";
+    copy.querySelector("select").selectedIndex = 0;
+    rows.appendChild(copy);
+    copy.querySelector("input").focus();
+  });
+})();
+</script>
 {% endblock %}
