@@ -5,15 +5,29 @@ from . import services as S
 from .storage import now_iso
 
 
-def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, team_id=None):
-    conn.execute("""INSERT INTO news(season_id, kind, headline, body, link, driver_id, team_id, created_at)
-                    VALUES(?,?,?,?,?,?,?,?)""", (season_id, kind, headline, body, link, driver_id, team_id, now_iso()))
+def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, team_id=None, ref=None):
+    conn.execute("""INSERT INTO news(season_id, kind, headline, body, link, driver_id, team_id, created_at, ref)
+                    VALUES(?,?,?,?,?,?,?,?,?)""",
+                 (season_id, kind, headline, body, link, driver_id, team_id, now_iso(), ref))
 
 
-def notify(conn, driver_id, text, link=None):
+def notify(conn, driver_id, text, link=None, ref=None):
     """driver_id None = everyone in the career."""
-    conn.execute("INSERT INTO notifications(driver_id, text, link, created_at) VALUES(?,?,?,?)",
-                 (driver_id, text, link, now_iso()))
+    conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref) VALUES(?,?,?,?,?)",
+                 (driver_id, text, link, now_iso(), ref))
+
+
+def delete_news(conn, news_id):
+    conn.execute("DELETE FROM news WHERE id = ?", (news_id,))
+
+
+def delete_notification(conn, notification_id):
+    conn.execute("DELETE FROM notifications WHERE id = ?", (notification_id,))
+
+
+def delete_by_ref(conn, ref):
+    conn.execute("DELETE FROM news WHERE ref = ?", (ref,))
+    conn.execute("DELETE FROM notifications WHERE ref = ?", (ref,))
 
 
 def latest(conn, limit=10, season_id=None):
@@ -105,13 +119,15 @@ def on_weekend_complete(conn, event_id, link):
 
 def on_window_opened(conn, window_id, link):
     window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
+    ref = f"window:{window_id}"
     post(conn, window["season_id"], "market", f"{window['kind']} opens: teams are shopping for {window['target_year']}",
-         "Offers are going out to the player drivers.", link)
+         "Offers are going out to the player drivers.", link, ref=ref)
     for p in S.player_drivers(conn):
         n = conn.execute("SELECT COUNT(*) FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
                          (window_id, p["id"], C.OFFER_PENDING)).fetchone()[0]
         if n:
-            notify(conn, p["id"], f"{n} team{'s' if n != 1 else ''} made you an offer for {window['target_year']}", link)
+            notify(conn, p["id"], f"{n} team{'s' if n != 1 else ''} made you an offer for {window['target_year']}", link,
+                   ref=ref)
 
 
 def on_signed(conn, offer, link):
@@ -120,19 +136,21 @@ def on_signed(conn, offer, link):
     post(conn, offer["window_season"], "market",
          f"Official: {driver['name']} signs with {team['name']}",
          f"{offer['role']}, {offer['years']} year{'s' if offer['years'] != 1 else ''} from {offer['target_year']}.",
-         link, driver["id"], team["id"])
+         link, driver["id"], team["id"], ref=f"window:{offer['window_id']}")
     for p in S.player_drivers(conn):
         if p["id"] != driver["id"]:
-            notify(conn, p["id"], f"{driver['name']} just signed with {team['name']}", link)
+            notify(conn, p["id"], f"{driver['name']} just signed with {team['name']}", link,
+                   ref=f"window:{offer['window_id']}")
 
 
 def on_talks_collapsed(conn, offer_id, link):
     offer = conn.execute("""SELECT o.*, w.season_id FROM offers o JOIN market_windows w ON w.id = o.window_id
                             WHERE o.id = ?""", (offer_id,)).fetchone()
+    ref = f"window:{offer['window_id']}"
     team = S.team_map(conn)[offer["team_id"]]
     driver = S.driver_map(conn)[offer["driver_id"]]
     post(conn, offer["season_id"], "rumour", f"Paddock whispers: talks between {driver['name']} and {team['name']} break down",
-         "Sources say the two sides were too far apart.", link, driver["id"], team["id"])
+         "Sources say the two sides were too far apart.", link, driver["id"], team["id"], ref=ref)
 
 
 def on_new_offer(conn, driver_id, team_id, text, link):
@@ -161,3 +179,57 @@ def on_new_season(conn, old_id, new_id, car_changes, link):
             post(conn, new_id, "tech", f"Trouble at {worst['team']['name']}: new car is off the pace ({worst['change']:+.1f})",
                  f"Rated {worst['rating']:.1f} for {new['year']}.", link, team_id=worst["team"]["id"])
     notify(conn, None, f"The {new['year']} season has begun", link)
+
+
+# --------------------------------------------------------------------------- race results email
+
+def results_email(conn, event_id, url):
+    """Subject, plain text and HTML for the post-race email."""
+    from html import escape
+    event = dict(conn.execute("""SELECT e.*, s.year FROM events e JOIN seasons s ON s.id = e.season_id
+                                 WHERE e.id = ?""", (event_id,)).fetchone())
+    rows = S.weekend_rows(conn, event_id)
+    title = f"{event['year']} {event['name']}"
+    classified = sorted((r for r in rows if r["race_position"]), key=lambda r: r["race_position"])
+
+    def fin(r):
+        return f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"] else r["result_status"]
+
+    top = classified[:10]
+    players = [r for r in rows if r["driver"]["is_player"]]
+    table = S.driver_standings(conn, event["season_id"])
+    board = table[:5] + [r for r in table[5:] if r["driver"]["is_player"]]
+
+    lines = [f"{title}: round {event['round_number']} results", ""]
+    lines += [f"{fin(r):>4}  {r['driver']['name']} ({r['team']['name']})  +{r['gp_points'] + r['sprint_pts']}" for r in top]
+    if players:
+        lines += ["", "Your weekends:"]
+        for r in players:
+            q = f"Q P{r['qualifying_position']}" if r["qualifying_position"] else "Q —"
+            lines.append(f"  {r['driver']['name']}: {q} → {fin(r)}, {r['gp_points'] + r['sprint_pts']} pts")
+    lines += ["", "Championship:"] + [f"  {r['position']}. {r['driver']['name']} {r['points']}" for r in board]
+    lines += ["", f"Full results: {url}", "", "You get these because race-result emails are on in your account. "
+              "Turn them off in Accounts."]
+
+    def row_html(r, extra=""):
+        return (f"<tr><td style='padding:4px 8px;font-weight:700'>{escape(fin(r))}</td>"
+                f"<td style='padding:4px 8px;border-left:3px solid {escape(r['team']['color'])}'>{escape(r['driver']['name'])}"
+                f"<br><small style='color:#8d97a8'>{escape(r['team']['name'])}</small></td>"
+                f"<td style='padding:4px 8px;text-align:right'>{extra}</td></tr>")
+    html = [f"<div style='font-family:Segoe UI,Arial,sans-serif;background:#0c1019;color:#e8ecf3;padding:20px'>",
+            f"<div style='color:#e10600;font-size:12px;letter-spacing:2px;text-transform:uppercase'>Round {event['round_number']}</div>",
+            f"<h1 style='margin:4px 0 16px'>{escape(title)}</h1><table style='border-collapse:collapse;width:100%;max-width:560px'>"]
+    html += [row_html(r, f"+{r['gp_points'] + r['sprint_pts']}") for r in top]
+    html.append("</table>")
+    if players:
+        html.append("<h2 style='font-size:16px;margin:20px 0 8px'>Your weekends</h2><ul>")
+        for r in players:
+            q = f"P{r['qualifying_position']}" if r["qualifying_position"] else "—"
+            html.append(f"<li><b>{escape(r['driver']['name'])}</b>: qualified {q}, finished {escape(fin(r))}, "
+                        f"{r['gp_points'] + r['sprint_pts']} pts</li>")
+        html.append("</ul>")
+    html.append("<h2 style='font-size:16px;margin:20px 0 8px'>Championship</h2><ol style='padding-left:20px'>")
+    html += [f"<li value='{r['position']}'>{escape(r['driver']['name'])}: <b>{r['points']}</b></li>" for r in board]
+    html.append(f"</ol><p><a href='{escape(url)}' style='color:#ff5a4f'>Open the full results →</a></p>"
+                "<p style='color:#8d97a8;font-size:12px'>Turn these emails off in Accounts.</p></div>")
+    return f"🏁 {title}: results are in", "\n".join(lines), "".join(html)

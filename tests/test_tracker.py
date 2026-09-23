@@ -545,7 +545,7 @@ def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client):
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
     res = client.post("/register", data={"username": "carson", "display_name": "Carson", "password": "password1",
-                                         "confirm": "password1", "csrf_token": "tok"})
+                                         "confirm": "password1", "csrf_token": "tok", "email": "carson@example.com"})
     assert res.status_code == 302 and auth.get_user("carson")["is_master"] == 0
     assert token not in client.get("/").get_data(as_text=True)
     assert client.get(f"/career/{token}/dashboard").status_code == 403
@@ -744,9 +744,10 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
     steward.post(f"/career/{token}/calendar/add", data={"name": "Portuguese GP", "location": "Portimão", "csrf_token": "tok"})
     with storage.session(token) as conn:
         assert S.events(conn, S.current_season_id(conn))[-1]["name"] == "Portuguese GP"
-    # ...but never sees Carson's side of the market.
-    market_page = steward.get(f"/career/{token}/market").get_data(as_text=True)
-    assert "Race Steward" in market_page and carson_offer["reason"] not in market_page
+    # ...but never sees Carson's side of the market, and can't open windows or write storylines.
+    assert steward.get(f"/career/{token}/market").status_code == 302
+    assert steward.post(f"/career/{token}/market/open", data={"csrf_token": "tok"}).status_code == 403
+    assert steward.post(f"/career/{token}/contracts", data={"csrf_token": "tok"}).status_code == 403
     assert "Carson Hayes" not in steward.get(f"/career/{token}/garage?driver={carson}").get_data(as_text=True).split("<h1>")[1][:40]
     assert steward.post(f"/career/{token}/offers/{carson_offer['id']}/accept", data={"csrf_token": "tok"}).status_code == 403
     with storage.session(token) as conn:
@@ -831,3 +832,99 @@ def test_production_server_module_builds_the_app():
     assert server.app.config["SESSION_COOKIE_SECURE"] is True
     client = server.app.test_client()
     assert client.get("/login", headers={"X-Forwarded-Proto": "https"}).status_code in (200, 302)
+
+
+
+# --------------------------------------------------------------------------- v1.8: email, resets, clean-up
+
+@pytest.fixture
+def outbox(monkeypatch):
+    sent = []
+    from f1tracker import mailer
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_later", lambda to, subject, text, html=None: sent.append((list(to), subject, text)) or True)
+    return sent
+
+
+def test_forgot_password_emails_a_one_time_link(app, outbox):
+    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
+    auth.create_user("noemail", "No Email", "password1")
+    client = app.test_client()
+    client.get("/forgot")
+    with client.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    client.post("/forgot", data={"login": "noemail", "csrf_token": "tok"})
+    assert outbox == []
+    client.post("/forgot", data={"login": "CARSON@example.com", "csrf_token": "tok"})
+    assert outbox[0][0] == ["carson@example.com"]
+    link = next(w for w in outbox[0][2].split() if "/reset/" in w)
+    path = link.split("localhost", 1)[-1]
+    assert "Choose a new password" in client.get(path).get_data(as_text=True)
+    client.post(path, data={"password": "newpass99", "confirm": "newpass99", "csrf_token": "tok"})
+    assert auth.verify("carson", "newpass99")
+    assert client.get(path).status_code == 302  # the link only works once
+    for _ in range(10):
+        client.post("/forgot", data={"login": "carson", "csrf_token": "tok"})
+    assert len(outbox) <= auth.RESET_REQUESTS_PER_IP_PER_HOUR
+
+
+def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
+    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
+    auth.create_user("quiet", "Quiet", "password1", email="quiet@example.com")
+    auth.set_email("quiet", "quiet@example.com", False)
+    res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "account1": "david",
+                                                   "account2": "carson", "csrf_token": "tok"})
+    token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    with storage.session(token) as conn:
+        conn.execute("INSERT INTO career_members VALUES('quiet', NULL)")
+        event = S.events(conn, S.current_season_id(conn))[0]
+        rows = S.weekend_rows(conn, event["id"])
+    payload = {"mark_complete": True, "results": [
+        {"driver_id": r["driver_id"], "race_position": i + 1, "qualifying_position": i + 1} for i, r in enumerate(rows)]}
+    master_client.post(f"/api/career/{token}/weekend/{event['id']}", json=payload, headers={"X-CSRF-Token": "tok"})
+    assert len(outbox) == 1
+    to, subject, text = outbox[0]
+    assert to == ["carson@example.com"] and "Australian GP" in subject
+    assert rows[0]["driver"]["name"] in text and "Championship" in text
+
+
+def test_race_master_can_delete_a_transfer_window_and_its_trail(db, rng):
+    sid = S.current_season_id(db)
+    window = market.open_window(db, sid, rng=rng)
+    david, carson = players(db)
+    feed.post(db, sid, "result", "An unrelated headline")
+    assert db.execute("SELECT COUNT(*) FROM news WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM notifications WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 2
+    assert market.delete_window(db, window) == 0
+    assert market.offers(db) == [] and market.windows(db) == []
+    assert db.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == 0
+    assert [n["headline"] for n in feed.latest(db)] == ["An unrelated headline"]
+    assert db.execute("SELECT COUNT(*) FROM offer_messages").fetchone()[0] == 0
+
+
+def test_mailer_sends_over_smtp_with_starttls(monkeypatch):
+    from f1tracker import mailer
+    sent, calls = [], []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None):
+            calls.append(("connect", host, port))
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def starttls(self, context=None):
+            calls.append(("starttls",))
+        def login(self, user, password):
+            calls.append(("login", user, password))
+        def send_message(self, msg):
+            sent.append(msg)
+
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    auth.set_setting("smtp_host", "smtp.example.com")
+    auth.set_setting("smtp_username", "bot@example.com")
+    auth.set_setting("smtp_password", "app-pass")
+    assert mailer.configured()
+    assert mailer.send(["a@example.com", "b@example.com", "a@example.com"], "Hi", "Body", "<p>Body</p>") == 2
+    assert calls[:3] == [("connect", "smtp.example.com", 587), ("starttls",), ("login", "bot@example.com", "app-pass")]
+    assert [m["To"] for m in sent] == ["a@example.com", "b@example.com"] and "bot@example.com" in sent[0]["From"]

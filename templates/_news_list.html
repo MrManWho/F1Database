@@ -4,6 +4,8 @@
     <span class="news-kind">{{ {'result': 'Race', 'player': 'Spotlight', 'market': 'Market', 'rumour': 'Rumour', 'season': 'Season', 'tech': 'Tech', 'paddock': 'Paddock'}.get(n.kind, n.kind) }}</span>
     {% if n.link %}<a href="/career/{{ ctx.token }}/{{ n.link }}"><strong>{{ n.headline }}</strong></a>{% else %}<strong>{{ n.headline }}</strong>{% endif %}
     {% if n.body %}<small>{{ n.body }}</small>{% endif %}
+    {% if ctx.is_master %}<form method="post" action="{{ url_for('news_delete', token=ctx.token, news_id=n.id) }}" class="news-del"
+      onsubmit="return confirm('Delete this headline?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete headline">✕</button></form>{% endif %}
   </li>
   {% else %}
   <li class="muted">No news yet. Headlines appear as races are completed and deals are done.</li>

@@ -21,6 +21,10 @@
     <h2>{{ w.kind }} · for {{ w.target_year }}</h2>
     <div class="button-row tight">
       <span class="status-badge status-{{ 'active' if w.status == 'Open' else 'complete' }}">{{ w.status }}</span>
+      <form method="post" action="{{ url_for('market_delete', token=ctx.token, window_id=w.id) }}"
+            onsubmit="return confirm('Delete this window and every offer, conversation, headline and notification it created? Seats already changed by signings stay as they are.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Delete</button>
+      </form>
       {% if w.status == 'Open' %}
       <form method="post" action="{{ url_for('market_close', token=ctx.token, window_id=w.id) }}" onsubmit="return confirm('Close this window? Unanswered offers expire.');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Close window</button>

@@ -442,3 +442,9 @@ input.imported { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(74, 163, 
   .offer-terms { grid-template-columns: 1fr 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
 }
+
+/* v1.8 */
+.news-list li { position: relative; }
+.news-del, .notif-del { position: absolute; top: .4rem; right: .2rem; }
+.notif-list li { position: relative; padding-right: 2.6rem; }
+.email-input { width: 190px; }

@@ -29,7 +29,7 @@
       <a href="{{ url_for('drivers_page', token=t) }}" class="{{ 'active' if ep in ('drivers_page', 'driver_profile') }}"><i>☰</i>Drivers</a>
       <a href="{{ url_for('teams_page', token=t) }}" class="{{ 'active' if ep in ('teams_page', 'team_profile') }}"><i>▦</i>Constructors</a>
       <a href="{{ url_for('grid_page', token=t) }}" class="{{ 'active' if ep == 'grid_page' }}"><i>⇄</i>Grid &amp; Transfers</a>
-      {% if ctx.can_run %}
+      {% if ctx.is_master %}
       <a href="{{ url_for('market_page', token=t) }}" class="{{ 'active' if ep == 'market_page' }}"><i>✉</i>Transfer Market</a>
       {% endif %}
       <a href="{{ url_for('contracts_page', token=t) }}" class="{{ 'active' if ep == 'contracts_page' }}"><i>✎</i>Driver Market</a>
@@ -83,7 +83,9 @@
     <div class="dialog-head"><h2>Notifications</h2><button class="icon-btn" data-close>✕</button></div>
     <ul class="notif-list" id="notif-list">
       {% for n in ctx.notifications %}
-      <li class="{{ 'unread' if n.unread }}">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}<small>{{ n.created_at }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small></li>
+      <li class="{{ 'unread' if n.unread }}">{% if n.link %}<a href="/career/{{ t }}/{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}<small>{{ n.created_at }}{{ ' · for ' ~ n.driver.name if n.driver and not ctx.my_driver }}</small>
+        {% if ctx.is_master %}<form method="post" action="{{ url_for('notification_delete', token=t, notification_id=n.id) }}" class="notif-del">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>{% endif %}</li>
       {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
     </ul>
     <label class="check small"><input type="checkbox" id="notif-sound"> Play a sound when something new arrives</label>

@@ -14,7 +14,7 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import random
 
-from . import auth, feed, importer, insights, market, services as S, storage
+from . import auth, feed, importer, insights, mailer, market, services as S, storage
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -27,7 +27,7 @@ def _base_dir():
     return Path(__file__).resolve().parent.parent
 
 
-PUBLIC_ENDPOINTS = {"login", "setup", "static", "register"}
+PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "forgot", "reset_password"}
 
 
 def create_app(config=None):
@@ -221,7 +221,8 @@ def register_routes(app):
                 return redirect(url_for("setup"))
             try:
                 username = auth.create_user(request.form.get("username"), request.form.get("display_name"),
-                                            request.form.get("password"), is_master=True)
+                                            request.form.get("password"), is_master=True,
+                                            email=request.form.get("email"))
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("setup"))
@@ -255,7 +256,7 @@ def register_routes(app):
                 return redirect(url_for("register"))
             try:
                 username = auth.register(request.form.get("username"), request.form.get("display_name"),
-                                         request.form.get("password"), request.remote_addr)
+                                         request.form.get("password"), request.remote_addr, request.form.get("email"))
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("register"))
@@ -265,10 +266,90 @@ def register_routes(app):
             return redirect(url_for("home"))
         return render_template("login.html", mode="register", signups=auth.signups_allowed())
 
+    @app.route("/forgot", methods=["GET", "POST"])
+    def forgot():
+        if request.method == "POST":
+            if not auth.reset_request_allowed(request.remote_addr):
+                flash("Too many reset requests from this connection. Try again in an hour.", "error")
+                return redirect(url_for("forgot"))
+            sent = False
+            for user in auth.users_by_login(request.form.get("login")):
+                token = auth.create_reset_token(user["username"])
+                link = url_for("reset_password", token=token, _external=True)
+                text = (f"Hi {user['display_name']},\n\nSomeone asked to reset the password for '{user['username']}' on "
+                        f"F1 Universe Tracker. Open this link within {auth.RESET_MINUTES} minutes to choose a new one:\n\n"
+                        f"{link}\n\nIf that wasn't you, ignore this email and nothing changes.")
+                sent = mailer.send_later([user["email"]], "Reset your F1 Universe Tracker password", text) or sent
+            flash("If that account has an email address, a reset link is on its way. Check your inbox (and spam)."
+                  + ("" if mailer.configured() else " (Email isn't set up on this tracker yet, so ask the Race Master.)"),
+                  "success")
+            return redirect(url_for("login"))
+        return render_template("login.html", mode="forgot", signups=auth.signups_allowed())
+
+    @app.route("/reset/<token>", methods=["GET", "POST"])
+    def reset_password(token):
+        username = auth.reset_token_user(token)
+        if request.method == "POST":
+            if request.form.get("password") != request.form.get("confirm"):
+                flash("The two passwords don't match.", "error")
+                return redirect(url_for("reset_password", token=token))
+            try:
+                username = auth.use_reset_token(token, request.form.get("password"))
+            except AuthError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("forgot"))
+            session.clear()
+            flash("Password changed. Log in with your new password.", "success")
+            return redirect(url_for("login"))
+        if not username:
+            flash("That reset link has expired or was already used. Ask for a new one.", "error")
+            return redirect(url_for("forgot"))
+        return render_template("login.html", mode="reset", reset_user=username, signups=False)
+
+    @app.route("/account/email", methods=["POST"])
+    def account_email():
+        try:
+            auth.set_email(g.user["username"], request.form.get("email"), request.form.get("email_results"))
+            flash("Email settings saved.", "success")
+        except AuthError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("accounts_page"))
+
+    @app.route("/accounts/<username>/email", methods=["POST"])
+    @master_required
+    def account_set_email(username):
+        user = auth.get_user(username)
+        if not user:
+            abort(404)
+        try:
+            auth.set_email(username, request.form.get("email"), user["email_results"])
+            flash("Email updated.", "success")
+        except AuthError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("accounts_page"))
+
+    @app.route("/settings/test-email", methods=["POST"])
+    @master_required
+    def settings_test_email():
+        try:
+            mailer.send([g.user["email"]], "F1 Universe Tracker test email",
+                        "Email is working. Password resets and race-result emails will be sent from this address.")
+            flash(f"Test email sent to {g.user['email']}.", "success")
+        except mailer.MailError as exc:
+            flash(str(exc), "error")
+        except Exception:
+            flash("Add your own email address first (My account).", "error")
+        return redirect(url_for("accounts_page"))
+
     @app.route("/settings", methods=["POST"])
     @master_required
     def settings_save():
         auth.set_setting("allow_signups", "1" if request.form.get("allow_signups") else "0")
+        for field in ("smtp_host", "smtp_port", "smtp_username", "smtp_from"):
+            if field in request.form:
+                auth.set_setting(field, (request.form.get(field) or "").strip() or None)
+        if (request.form.get("smtp_password") or "").strip():
+            auth.set_setting("smtp_password", request.form.get("smtp_password").strip())
         key = (request.form.get("anthropic_api_key") or "").strip()
         if request.form.get("clear_key"):
             auth.set_setting("anthropic_api_key", None)
@@ -292,7 +373,7 @@ def register_routes(app):
                     memberships.setdefault(username, []).append(c["name"])
         return render_template("accounts.html", users=auth.list_users() if is_master() else [],
                                memberships=memberships, signups=auth.signups_allowed(),
-                               key_set=importer.configured())
+                               key_set=importer.configured(), mail=mailer.config(), mail_ready=mailer.configured())
 
     @app.route("/accounts/new", methods=["POST"])
     @master_required
@@ -300,7 +381,8 @@ def register_routes(app):
         try:
             role = request.form.get("role", "driver")
             auth.create_user(request.form.get("username"), request.form.get("display_name"),
-                             request.form.get("password"), is_master=role == "master", is_steward=role == "steward")
+                             request.form.get("password"), is_master=role == "master", is_steward=role == "steward",
+                             email=request.form.get("email"))
             flash("Account created.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
@@ -529,7 +611,7 @@ def register_routes(app):
     @career_page()
     def contracts_page(conn, ctx):
         if request.method == "POST":
-            if not ctx["can_run"]:
+            if not ctx["is_master"]:
                 abort(403)
             S.add_contract(conn, ctx["season"]["id"], request.form)
             flash("Negotiation added.", "success")
@@ -538,7 +620,7 @@ def register_routes(app):
                     drivers=S.drivers(conn, active_only=True), teams=S.teams(conn))
 
     @app.route("/career/<token>/contracts/<int:contract_id>/delete", methods=["POST"])
-    @career_page(ops_only=True)
+    @career_page(master_only=True)
     def contract_delete(conn, ctx, contract_id):
         conn.execute("DELETE FROM contracts WHERE id = ?", (contract_id,))
         flash("Negotiation deleted.", "success")
@@ -646,21 +728,21 @@ def register_routes(app):
     @app.route("/career/<token>/market")
     @career_page()
     def market_page(conn, ctx):
-        if not ctx["can_run"]:
+        if not ctx["is_master"]:
             return redirect(url_for("garage", token=ctx["token"]))
-        offers = market.offers(conn) if ctx["is_master"] else []
+        offers = market.offers(conn)
         return page("market.html", ctx, windows=market.windows(conn), offers=offers,
                     target=market.target_year(conn, ctx["current_season_id"]))
 
     @app.route("/career/<token>/market/open", methods=["POST"])
-    @career_page(ops_only=True)
+    @career_page(master_only=True)
     def market_open(conn, ctx):
         market.open_window(conn, ctx["current_season_id"])
         flash("Market window opened. Each player can now review their offers in My Garage.", "success")
         return redirect(url_for("market_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market/<int:window_id>/close", methods=["POST"])
-    @career_page(ops_only=True)
+    @career_page(master_only=True)
     def market_close(conn, ctx, window_id):
         market.close_window(conn, window_id)
         flash("Market window closed. Unanswered offers expired.", "success")
@@ -674,6 +756,29 @@ def register_routes(app):
         if not (mine or ctx["is_master"]):
             abort(403)
         return offer
+
+    @app.route("/career/<token>/market/<int:window_id>/delete", methods=["POST"])
+    @career_page(master_only=True)
+    def market_delete(conn, ctx, window_id):
+        applied = market.delete_window(conn, window_id)
+        flash("Transfer window deleted, with its offers, talks, news and notifications."
+              + (f" {applied} signing(s) had already moved a driver; fix seats in Grid & Transfers if needed."
+                 if applied else ""), "success")
+        return redirect(url_for("market_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/news/<int:news_id>/delete", methods=["POST"])
+    @career_page(master_only=True)
+    def news_delete(conn, ctx, news_id):
+        feed.delete_news(conn, news_id)
+        flash("Headline deleted.", "success")
+        return redirect(request.referrer or url_for("news_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/notifications/<int:notification_id>/delete", methods=["POST"])
+    @career_page(master_only=True)
+    def notification_delete(conn, ctx, notification_id):
+        feed.delete_notification(conn, notification_id)
+        flash("Notification deleted.", "success")
+        return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
 
     @app.route("/career/<token>/offers/<int:offer_id>/accept", methods=["POST"])
     @career_page()
@@ -882,6 +987,17 @@ def register_routes(app):
         return page("members.html", ctx, players=players, users=auth.list_users(), links=links)
 
     # ---------------------------------------------------------------- race API
+    def _email_results(token, event_id):
+        if not mailer.configured():
+            return
+        with storage.session(token) as conn:
+            usernames = [r["username"] for r in conn.execute("SELECT username FROM career_members")]
+            url = url_for("weekend", token=token, event_id=event_id, _external=True)
+            subject, text, html = feed.results_email(conn, event_id, url)
+        recipients = [u["email"] for u in (auth.get_user(n) for n in usernames)
+                      if u and u["email"] and u["email_results"]]
+        mailer.send_later(recipients, subject, text, html)
+
     def _may_enter_results(token):
         if is_master():
             return True
@@ -922,6 +1038,10 @@ def register_routes(app):
                 storage.auto_backup(token, f"after-round-{before['round_number']}", force=True)
             except Exception:
                 app.logger.exception("automatic backup failed")
+            try:
+                _email_results(token, event_id)
+            except Exception:
+                app.logger.exception("results email failed")
         return jsonify(ok=True, **result)
 
     @app.route("/api/career/<token>/weekend/<int:event_id>/import", methods=["POST"])

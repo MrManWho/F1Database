@@ -5,6 +5,7 @@ the career; player accounts are linked to a player driver inside each career and
 garage and offers.
 """
 
+import hashlib
 import re
 import secrets
 import sqlite3
@@ -20,6 +21,9 @@ IP_MAX_FAILURES = 20          # a single address guessing across many usernames
 SIGNUPS_PER_IP_PER_HOUR = 5
 
 USERNAME_RE = re.compile(r"^[a-z0-9_.-]{2,32}$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+RESET_MINUTES = 60
+RESET_REQUESTS_PER_IP_PER_HOUR = 5
 
 
 class AuthError(ValueError):
@@ -43,8 +47,18 @@ def accounts():
         first_at REAL NOT NULL,
         locked_until REAL NOT NULL DEFAULT 0)""")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    if "is_steward" not in {r[1] for r in conn.execute("PRAGMA table_info(users)")}:
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+    if "is_steward" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN is_steward INTEGER NOT NULL DEFAULT 0")
+    if "email" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "email_results" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    conn.execute("""CREATE TABLE IF NOT EXISTS password_resets (
+        token_hash TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        expires_at REAL NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0)""")
     try:
         yield conn
         conn.commit()
@@ -73,7 +87,8 @@ def user_count():
 
 def list_users():
     with accounts() as conn:
-        users = [dict(r) for r in conn.execute("SELECT id, username, display_name, is_master, is_steward, created_at "
+        users = [dict(r) for r in conn.execute("SELECT id, username, display_name, is_master, is_steward, email, "
+                                               "email_results, created_at "
                                                "FROM users ORDER BY is_master DESC, is_steward DESC, username")]
     for u in users:
         u["role"] = role_of(u)
@@ -116,8 +131,20 @@ def get_user(username):
         return dict(row) if row else None
 
 
-def create_user(username, display_name, password, is_master=False, is_steward=False):
+def clean_email(email, required=False):
+    email = (email or "").strip().lower()
+    if not email:
+        if required:
+            raise AuthError("Enter an email address")
+        return None
+    if len(email) > 254 or not EMAIL_RE.match(email):
+        raise AuthError("That email address doesn't look right")
+    return email
+
+
+def create_user(username, display_name, password, is_master=False, is_steward=False, email=None):
     username = normalise(username)
+    email = clean_email(email)
     if not USERNAME_RE.match(username):
         raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
     if len(password or "") < 6:
@@ -126,9 +153,10 @@ def create_user(username, display_name, password, is_master=False, is_steward=Fa
     with accounts() as conn:
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
             raise AuthError("That username is taken")
-        conn.execute("INSERT INTO users(username, display_name, password_hash, is_master, is_steward, created_at) "
-                     "VALUES(?,?,?,?,?,?)", (username, display_name, generate_password_hash(password),
-                                             int(bool(is_master)), int(bool(is_steward) and not is_master), now_iso()))
+        conn.execute("INSERT INTO users(username, display_name, password_hash, is_master, is_steward, email, created_at) "
+                     "VALUES(?,?,?,?,?,?,?)", (username, display_name, generate_password_hash(password),
+                                               int(bool(is_master)), int(bool(is_steward) and not is_master), email,
+                                               now_iso()))
     return username
 
 
@@ -238,7 +266,7 @@ def login(username, password, ip):
     return user
 
 
-def register(username, display_name, password, ip):
+def register(username, display_name, password, ip, email=None):
     """Self sign-up. New accounts are Drivers and see nothing until a Race Master links them."""
     if not signups_allowed():
         raise AuthError("Sign-ups are turned off. Ask the Race Master to create your login.")
@@ -249,10 +277,75 @@ def register(username, display_name, password, ip):
         count = row["count"] if row and now - row["first_at"] < 3600 else 0
         if count >= SIGNUPS_PER_IP_PER_HOUR:
             raise AuthError("Too many sign-ups from this connection. Try again later.")
-    name = create_user(username, display_name, password, is_master=False)
+    name = create_user(username, display_name, password, is_master=False, email=clean_email(email, required=True))
     with accounts() as conn:
         first = row["first_at"] if row and count else now
         conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
     return name
+
+
+
+# --------------------------------------------------------------------------- email & password resets
+
+def set_email(username, email, email_results):
+    email = clean_email(email)
+    with accounts() as conn:
+        conn.execute("UPDATE users SET email = ?, email_results = ? WHERE username = ?",
+                     (email, int(bool(email_results)), normalise(username)))
+
+
+def users_by_login(identifier):
+    """Accounts matching a username or an email address (several accounts may share an email)."""
+    ident = (identifier or "").strip().lower()
+    with accounts() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM users WHERE (username = ? OR lower(email) = ?) AND email IS NOT NULL AND email != ''",
+            (ident, ident))]
+
+
+def _hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def reset_request_allowed(ip):
+    key, now = f"reset:{ip or '?'}", time.time()
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
+        count = row["count"] if row and now - row["first_at"] < 3600 else 0
+        if count >= RESET_REQUESTS_PER_IP_PER_HOUR:
+            return False
+        first = row["first_at"] if row and count else now
+        conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
+                        ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
+                     (key, count + 1, first))
+    return True
+
+
+def create_reset_token(username):
+    token = secrets.token_urlsafe(32)
+    with accounts() as conn:
+        conn.execute("DELETE FROM password_resets WHERE username = ? OR expires_at < ?", (normalise(username), time.time()))
+        conn.execute("INSERT INTO password_resets(token_hash, username, expires_at) VALUES(?,?,?)",
+                     (_hash(token), normalise(username), time.time() + RESET_MINUTES * 60))
+    return token
+
+
+def reset_token_user(token):
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM password_resets WHERE token_hash = ?", (_hash(token or ""),)).fetchone()
+    if not row or row["used"] or row["expires_at"] < time.time():
+        return None
+    return row["username"]
+
+
+def use_reset_token(token, password):
+    username = reset_token_user(token)
+    if not username:
+        raise AuthError("That reset link has expired or was already used. Ask for a new one.")
+    set_password(username, password)
+    with accounts() as conn:
+        conn.execute("UPDATE password_resets SET used = 1 WHERE token_hash = ?", (_hash(token),))
+        conn.execute("DELETE FROM login_failures WHERE key = ?", (f"user:{username}",))
+    return username

@@ -12,6 +12,16 @@
       <button class="btn">Update password</button>
     </form>
   </section>
+  <section class="card">
+    <h2>My email</h2>
+    <form method="post" action="{{ url_for('account_email') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Email address<input name="email" type="email" value="{{ user.email or '' }}" autocomplete="email" placeholder="you@example.com"></label>
+      <label class="check"><input type="checkbox" name="email_results" value="1" {{ 'checked' if user.email_results }}> Email me the results after every race weekend</label>
+      <p class="muted small">Your email is used for "Forgot password?" links and, if ticked, race results. Nobody else sees it.</p>
+      <button class="btn">Save email</button>
+    </form>
+  </section>
   {% if user.is_master %}
   <section class="card">
     <h2>Add a login</h2>
@@ -20,6 +30,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
       <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
+      <label>Email (optional)<input name="email" type="email"></label>
       <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
       <label>Role
         <select name="role">
@@ -44,8 +55,25 @@
     <p class="muted small">Screenshot import sends the pictures you upload to Anthropic's API, which reads the classification.
       Each import costs a few cents on your Anthropic account. Get a key at console.anthropic.com. The key is stored in this PC's data folder.</p>
     {% if key_set %}<label class="check"><input type="checkbox" name="clear_key" value="1"> Remove the saved key</label>{% endif %}
+    <h3>Email (password resets &amp; race results) · {{ 'ready' if mail_ready else 'not set up' }}</h3>
+    <p class="muted small">Use any SMTP mail service. For Gmail: turn on 2-step verification, create an <em>App password</em>, then use
+      host <code>smtp.gmail.com</code>, port <code>587</code>, your Gmail address as username and sender, and the app password.
+      On Render you can set these as environment variables instead (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM).</p>
+    <div class="grid-2">
+      <label>SMTP host<input name="smtp_host" value="{{ mail.smtp_host }}" placeholder="smtp.gmail.com"></label>
+      <label>Port<input name="smtp_port" value="{{ mail.smtp_port }}" placeholder="587"></label>
+      <label>Username<input name="smtp_username" value="{{ mail.smtp_username }}" autocomplete="off"></label>
+      <label>Password {{ '(saved)' if mail.smtp_password else '' }}<input name="smtp_password" type="password" autocomplete="new-password" placeholder="{{ 'Leave blank to keep' if mail.smtp_password else '' }}"></label>
+      <label>Send from<input name="smtp_from" value="{{ mail.smtp_from }}" placeholder="you@gmail.com"></label>
+    </div>
     <button class="btn">Save settings</button>
   </form>
+  {% if mail_ready %}
+  <form method="post" action="{{ url_for('settings_test_email') }}" class="inline-form tight" style="margin-top:.6rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-sm">Send me a test email</button>
+  </form>
+  {% endif %}
 </section>
 
 <section class="card">
@@ -59,12 +87,19 @@
   </div>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Username</th><th>Name</th><th>Careers</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
+    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Careers</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td><strong>{{ u.username }}</strong></td>
         <td>{{ u.display_name }}</td>
+        <td>
+          <form method="post" action="{{ url_for('account_set_email', username=u.username) }}" class="inline-form tight">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input name="email" type="email" value="{{ u.email or '' }}" placeholder="none" class="email-input">
+            <button class="btn btn-sm btn-ghost">Save</button>
+          </form>
+        </td>
         <td>{% if memberships.get(u.username) %}{{ memberships[u.username]|join(', ') }}{% elif u.is_master %}<span class="muted">All (Race Master)</span>{% else %}<span class="pill pill-hot">Waiting to be assigned</span>{% endif %}</td>
         <td>
           <form method="post" action="{{ url_for('account_role', username=u.username) }}">

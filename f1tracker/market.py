@@ -614,7 +614,8 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
                              terms=("No. 2", 1, _floor_salary(ranks[team_id])))
     o = get_offer(conn, offer_id)
     _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["salary"])
-    feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "garage")
+    feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "garage",
+                ref=f"window:{window_id}")
     return offer_id
 
 
@@ -775,3 +776,24 @@ def current_contract(conn, driver_id):
     row["team"] = S.team_map(conn)[row["team_id"]]
     row["end_year"] = row["target_year"] + row["years"] - 1
     return row
+
+
+
+def delete_window(conn, window_id):
+    """Race Master clean-up: remove a transfer window with its offers, talks, news and notifications.
+
+    Seats already changed by a signing from this window are left as they are (fix them in Grid &
+    Transfers); the signing's Driver Market storyline entry can be deleted there too.
+    Returns how many signings had already been applied.
+    """
+    window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
+    if not window:
+        raise S.ValidationError("That window no longer exists")
+    applied = conn.execute("SELECT COUNT(*) FROM offers WHERE window_id = ? AND status = ? AND applied = 1",
+                           (window_id, C.OFFER_ACCEPTED)).fetchone()[0]
+    feed.delete_by_ref(conn, f"window:{window_id}")
+    conn.execute("""DELETE FROM offer_messages WHERE offer_id IN (SELECT id FROM offers WHERE window_id = ?)""",
+                 (window_id,))
+    conn.execute("DELETE FROM offers WHERE window_id = ?", (window_id,))
+    conn.execute("DELETE FROM market_windows WHERE id = ?", (window_id,))
+    return applied

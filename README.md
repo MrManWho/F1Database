@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.7
+# F1 Universe Tracker v1.8
 
 A companion database and "career control room" for a two-player F1 26 career (David Conley and
 Carson Hayes). The game handles the racing. This app remembers everything else: every result,
@@ -23,6 +23,25 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.8: email, password resets, tighter Steward
+
+* **Email addresses.** Sign-up asks for an email address. Anyone can add or change theirs in
+  **Accounts → My email**, and the Race Master can set anyone's in the logins table.
+* **Forgot password?** is on the login page. It emails a one-time link that works for 60 minutes.
+  Requests are rate-limited, and the page never reveals whether an account exists. Accounts
+  without an email can still be reset by the Race Master.
+* **Race results by email.** When a weekend is marked complete, every career member with an email
+  gets the top 10, both players' weekends and the championship. Turn it off per person in
+  **My email**.
+* **Setting up email:** **Accounts → Settings → Email**, or environment variables on Render
+  (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). Gmail works with an
+  App password (`smtp.gmail.com`, port 587). **Send me a test email** checks the setup.
+* **Race Stewards can no longer** open or close transfer windows or add or delete Driver Market
+  storylines. Silly Season still opens by itself at half-distance.
+* **Race Master clean-up.** Delete a whole transfer window from **Transfer Market**: its offers,
+  talks, headlines and notifications go with it. Seats already changed by a signing stay as they
+  are. Individual headlines and notifications have a ✕ for the Race Master.
 
 ## Hosting it as a website (Render)
 

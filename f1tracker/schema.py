@@ -164,7 +164,8 @@ CREATE TABLE IF NOT EXISTS news (
     link TEXT,
     driver_id INTEGER REFERENCES drivers(id),
     team_id INTEGER REFERENCES teams(id),
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    ref TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -172,7 +173,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     driver_id INTEGER REFERENCES drivers(id),
     text TEXT NOT NULL,
     link TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    ref TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notification_reads (
@@ -217,11 +219,13 @@ def migrate(conn):
               team limits filled in the first time someone negotiates on them.
     v5 -> v6: car ratings per team and season, the paddock news feed and notifications. Car
               ratings for existing seasons are seeded from the team order when first needed.
+    v6 -> v7: news and notifications remember what created them (e.g. "window:3"), so deleting a
+              transfer window can remove its trail.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "team_seasons" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "team_seasons" in tables and "ref" in _columns(conn, "news"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -232,6 +236,9 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    for table in ("news", "notifications"):
+        if "ref" not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN ref TEXT")
     offer_columns = _columns(conn, "offers")
     for name, ddl in OFFER_V5_COLUMNS:
         if name not in offer_columns:

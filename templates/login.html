@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up'}.get(mode, 'Log in') }}{% endblock %}
+{% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up', 'forgot': 'Forgot password', 'reset': 'New password'}.get(mode, 'Log in') }}{% endblock %}
 {% block plain %}
 <section class="auth-card card">
   <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
@@ -12,6 +12,7 @@
     {% if needs_code %}<label>Setup code (from your host's environment settings)<input name="setup_code" required autocomplete="off"></label>{% endif %}
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="david"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="David"></label>
+    <label>Email (optional; for password resets and race results)<input name="email" type="email" autocomplete="email"></label>
     <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
     <button class="btn btn-primary">Create account</button>
   </form>
@@ -23,6 +24,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
+    <label>Email<input name="email" type="email" autocomplete="email" required></label>
     <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
     <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
     <button class="btn btn-primary">Create account</button>
@@ -31,6 +33,25 @@
   <p class="muted">Sign-ups are turned off. Ask the Race Master to create your login.</p>
   {% endif %}
   <p class="muted small">Already have a login? <a href="{{ url_for('login') }}">Log in</a></p>
+  {% elif mode == 'forgot' %}
+  <h1>Forgot your password?</h1>
+  <p class="muted">Enter your username or email. If the account has an email address, we'll send a link to choose a new password.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username or email<input name="login" required autofocus></label>
+    <button class="btn btn-primary">Send reset link</button>
+  </form>
+  <p class="muted small">No email on your account? The Race Master can set a new password for you in Accounts.
+    <br><a href="{{ url_for('login') }}">Back to log in</a></p>
+  {% elif mode == 'reset' %}
+  <h1>Choose a new password</h1>
+  <p class="muted">For <b>{{ reset_user }}</b>.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>New password<input name="password" type="password" minlength="6" autocomplete="new-password" required autofocus></label>
+    <label>Confirm password<input name="confirm" type="password" minlength="6" autocomplete="new-password" required></label>
+    <button class="btn btn-primary">Save new password</button>
+  </form>
   {% else %}
   <h1>Log in</h1>
   <form method="post" class="stack">
@@ -39,7 +60,7 @@
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
     <button class="btn btn-primary">Log in</button>
   </form>
-  <p class="muted small">Forgot your password? Ask the Race Master to reset it from Accounts.
+  <p class="muted small"><a href="{{ url_for('forgot') }}">Forgot your password?</a>
     {% if signups %}<br>New here? <a href="{{ url_for('register') }}">Create a login</a>{% endif %}</p>
   <p class="muted small">After {{ C.LOGIN_MAX_FAILURES }} wrong passwords the login locks for {{ C.LOGIN_LOCK_MINUTES }} minutes.</p>
   {% endif %}
