@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Error {{ code }}{% endblock %}
+{% block plain %}
+<section class="card empty-state">
+  <div class="big-code">{{ code }}</div>
+  <h1>Red flag</h1>
+  <p class="muted">{{ message }}</p>
+  <a class="btn btn-primary" href="{{ url_for('home') }}">Back to Career Library</a>
+</section>
+{% endblock %}

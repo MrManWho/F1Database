@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Logins</div><h1>Accounts</h1></div></div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Change my password</h2>
+    <form method="post" action="{{ url_for('account_self_password') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+      <label>New password<input type="password" name="password" minlength="6" required autocomplete="new-password"></label>
+      <button class="btn">Update password</button>
+    </form>
+  </section>
+  {% if user.is_master %}
+  <section class="card">
+    <h2>Add a login</h2>
+    <p class="muted small">Create a Driver login for your teammate, then link it to their driver in each career's <em>Player Logins</em> page.</p>
+    <form method="post" action="{{ url_for('account_new') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="carson"></label>
+      <label>Display name<input name="display_name" maxlength="60" placeholder="Carson"></label>
+      <label>Password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
+      <label class="check"><input type="checkbox" name="is_master" value="1"> Also a Race Master (can enter results)</label>
+      <button class="btn btn-primary">Create login</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% if user.is_master %}
+<section class="card">
+  <h2>All logins</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.display_name }}</td>
+        <td>
+          <form method="post" action="{{ url_for('account_role', username=u.username) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="is_master" onchange="this.form.submit()">
+              <option value="1" {{ 'selected' if u.is_master }}>Race Master</option>
+              <option value="0" {{ 'selected' if not u.is_master }}>Driver</option>
+            </select>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('account_reset', username=u.username) }}" class="inline-form tight">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="password" name="password" minlength="6" placeholder="New password" required>
+            <button class="btn btn-sm btn-ghost">Set</button>
+          </form>
+        </td>
+        <td>
+          {% if u.username != user.username %}
+          <form method="post" action="{{ url_for('account_delete', username=u.username) }}" onsubmit="return confirm('Delete login {{ u.username }}?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Career Library{% endblock %}
+{% block plain %}
+<div class="page-head">
+  <div><div class="kicker">Career Library</div><h1>Your F1 universes</h1></div>
+  {% if user.is_master %}
+  <div class="button-row">
+    <button class="btn btn-ghost" data-dialog="import-dialog">Import .f1career</button>
+    <button class="btn btn-primary" data-dialog="new-dialog">New career</button>
+  </div>
+  {% endif %}
+</div>
+
+{% if careers %}
+<div class="career-grid">
+  {% for c in careers %}
+  <a class="career-card card" href="{{ url_for('dashboard', token=c.token) }}">
+    <div class="career-year">{{ c.year or '—' }}</div>
+    <h2>{{ c.name }}</h2>
+    <div class="career-meta">
+      <span>{{ c.completed }}/{{ c.total }} rounds</span>
+      <span>{{ c.size_kb }} KB</span>
+    </div>
+    <div class="muted small">Last opened {{ c.last_opened }}</div>
+    {% if c.members %}<div class="small">Drivers: {{ c.members|join(', ') }}</div>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<section class="card empty-state">
+  <div class="big-code">🏁</div>
+  <h2>No careers yet</h2>
+  {% if user.is_master %}
+  <p class="muted">Start a new two-player career. You'll both begin as rookies: teams make offers, each of you picks a seat from your own login, and the Race Master enters the results.</p>
+  <button class="btn btn-primary" data-dialog="new-dialog">Create your first career</button>
+  {% else %}
+  <p class="muted">Ask the Race Master to link your login to a career.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if user.is_master %}
+<dialog id="new-dialog" class="dialog">
+  <div class="dialog-head"><h2>New career</h2><button class="icon-btn" data-close>✕</button></div>
+  <form method="post" action="{{ url_for('career_new') }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Career name<input name="name" value="David &amp; Carson F1 Career" maxlength="80" required></label>
+    <label>Opening year<input name="year" type="number" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" value="{{ default_year }}" required></label>
+    <div class="grid-2">
+      <label>Player 1 driver<input name="player1" value="David Conley" maxlength="60"></label>
+      <label>Player 1 login
+        <select name="account1"><option value="">— none yet —</option>
+          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if loop.index == 1 }}>{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
+        </select></label>
+      <label>Player 2 driver<input name="player2" value="Carson Hayes" maxlength="60"></label>
+      <label>Player 2 login
+        <select name="account2"><option value="">— none yet —</option>
+          {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if loop.index == 2 }}>{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
+        </select></label>
+    </div>
+    <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Start as rookies: open the Rookie Draft so teams send each of you seat offers</label>
+    <button class="btn btn-primary">Create career</button>
+  </form>
+</dialog>
+<dialog id="import-dialog" class="dialog">
+  <div class="dialog-head"><h2>Import a career</h2><button class="icon-btn" data-close>✕</button></div>
+  <form method="post" action="{{ url_for('career_import') }}" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="file" name="file" accept=".f1career" required>
+    <p class="muted small">The imported save gets a new career ID, so it never overwrites an existing one. Max 100 MB.</p>
+    <button class="btn btn-primary">Import</button>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

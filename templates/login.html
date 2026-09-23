@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ 'First-time setup' if mode == 'setup' else 'Log in' }}{% endblock %}
+{% block plain %}
+<section class="auth-card card">
+  <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
+  {% if mode == 'setup' %}
+  <h1>Create the Race Master</h1>
+  <p class="muted">The Race Master enters qualifying, Sprint and race results, runs the calendar and opens the transfer market.
+    After this you can add a login for the other driver so each of you can check your own garage and offers.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="david"></label>
+    <label>Display name<input name="display_name" maxlength="60" placeholder="David"></label>
+    <label>Password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+    <button class="btn btn-primary">Create account</button>
+  </form>
+  {% else %}
+  <h1>Log in</h1>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username<input name="username" autocomplete="username" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn btn-primary">Log in</button>
+  </form>
+  <p class="muted small">Forgot your password? Ask the Race Master to reset it from Accounts.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}{{ driver.name }}{% endblock %}
+{% block content %}
+{% set latest = timeline[-1] if timeline else none %}
+<div class="profile-head" style="--team: {{ latest.team.color if latest and latest.team else '#e10600' }}">
+  <div>
+    <div class="kicker">Driver career profile</div>
+    <h1>{{ driver.name }} {% if driver.is_player %}<span class="pill pill-player">Player driver</span>{% endif %}</h1>
+    <div class="hero-meta">
+      <span>{{ latest.team.name if latest and latest.team else 'No team yet' }}</span>
+      <span>{{ totals.seasons }} active season{{ 's' if totals.seasons != 1 }}</span>
+      {% if contract %}<span>Contract: {{ contract.team.name }} through {{ contract.end_year }}</span>{% endif %}
+    </div>
+  </div>
+  {% if driver.is_player %}<a class="btn btn-ghost" href="{{ url_for('garage', token=ctx.token, driver=driver.id) }}">Garage →</a>{% endif %}
+</div>
+<div class="stat-grid">
+  {% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Poles', totals.poles),
+     ('Fastest Laps', totals.fastest_laps), ('Starts', totals.starts), ('Championships', totals.titles),
+     ('Best WDC', ('P' ~ totals.best_championship) if totals.best_championship else '—'),
+     ('Avg finish', totals.avg_finish if totals.avg_finish is not none else '—')] %}
+  <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
+  {% endfor %}
+</div>
+<section class="card table-card">
+  <h2>Year by year</h2>
+  {% if timeline %}
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Season</th><th>Team</th><th>WDC</th><th>Pts</th><th>Wins</th><th>Pod</th><th>Poles</th><th>FL</th><th>DOTD</th><th>Starts</th><th>DNF</th><th>Best</th><th>Form</th><th>Rep</th></tr></thead>
+    <tbody>
+    {% for t in timeline %}
+      <tr>
+        <td><strong>{{ t.season.year }}</strong></td>
+        <td>{% if t.team %}{{ team_dot(t.team) }}<a href="{{ url_for('team_profile', token=ctx.token, team_id=t.team.id) }}">{{ t.team.name }}</a>{% else %}—{% endif %}</td>
+        <td class="num">P{{ t.position }}</td><td class="num"><strong>{{ t.points }}</strong></td>
+        <td class="num">{{ t.wins }}</td><td class="num">{{ t.podiums }}</td><td class="num">{{ t.poles }}</td>
+        <td class="num">{{ t.fastest_laps }}</td><td class="num">{{ t.dotds }}</td><td class="num">{{ t.starts }}</td>
+        <td class="num">{{ t.dnfs }}</td><td class="num">{{ 'P' ~ t.best_finish if t.best_finish else '—' }}</td>
+        <td class="num">{{ t.form }}</td><td class="num">{{ t.reputation }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="muted">No active seasons yet.</p>{% endif %}
+</section>
+{% endblock %}

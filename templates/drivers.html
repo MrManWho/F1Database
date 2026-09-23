@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, driver_link, tier with context %}
+{% block title %}Drivers{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">Driver Database · {{ ctx.season.year }}</div><h1>Drivers' Championship</h1></div>
+  <div class="filters">
+    <input id="driver-search" type="search" placeholder="Search drivers">
+    <select id="team-filter"><option value="">All teams</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select>
+  </div>
+</div>
+<section class="card table-card">
+  <div class="table-wrap">
+  <table class="data-table sortable" id="driver-table">
+    <thead><tr>
+      <th data-sort>Pos</th><th data-sort>Driver</th><th data-sort>Team</th><th data-sort>Pts</th><th data-sort>Wins</th>
+      <th data-sort>Pod</th><th data-sort>Poles</th><th data-sort title="Fastest Laps">FL</th><th data-sort title="Driver of the Day">DOTD</th>
+      <th data-sort>DNF</th><th data-sort>Starts</th><th data-sort>Best</th><th data-sort>Avg fin</th><th data-sort>Avg quali</th>
+      <th data-sort>Form</th><th data-sort>Rep</th><th data-sort>Market</th>
+    </tr></thead>
+    <tbody>
+    {% for d in standings %}
+      <tr class="{{ 'player-row' if d.driver.is_player }}" data-name="{{ d.driver.name|lower }}" data-team="{{ d.team.id if d.team }}" style="--team: {{ d.team.color if d.team else '#555' }}">
+        <td class="num">{{ d.position }}</td>
+        <td>{{ driver_link(ctx, d.driver) }}{% if not d.seated %} <span class="pill">No seat</span>{% endif %}</td>
+        <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% endif %}</td>
+        <td class="num"><strong>{{ d.points }}</strong></td>
+        <td class="num">{{ d.wins }}</td><td class="num">{{ d.podiums }}</td><td class="num">{{ d.poles }}</td>
+        <td class="num">{{ d.fastest_laps }}</td><td class="num">{{ d.dotds }}</td><td class="num">{{ d.dnfs }}</td>
+        <td class="num">{{ d.starts }}</td>
+        <td class="num">{{ 'P' ~ d.best_finish if d.best_finish else '—' }}</td>
+        <td class="num">{{ d.avg_finish if d.avg_finish is not none else '—' }}</td>
+        <td class="num">{{ d.avg_quali if d.avg_quali is not none else '—' }}</td>
+        <td class="num">{{ d.form }}</td><td class="num">{{ d.reputation }}</td>
+        <td data-value="{{ d.market.score }}">{{ tier(d.market) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

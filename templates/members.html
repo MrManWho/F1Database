@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Player Logins{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Career access</div><h1>Player logins</h1></div>
+  <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">Manage accounts →</a></div>
+<section class="card">
+  <p class="muted">Link each player driver to a login. That person sees their own garage and can accept or decline their own offers. Race Masters can see every career anyway.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for p in players %}
+    <label>{{ p.name }}
+      <select name="user_{{ p.id }}">
+        <option value="">— No login —</option>
+        {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <fieldset>
+      <legend>Spectators (view-only, no driver)</legend>
+      {% for u in users if not u.is_master %}
+      <label class="check"><input type="checkbox" name="viewers" value="{{ u.username }}" {{ 'checked' if u.username in links and links[u.username] is none }}> {{ u.display_name }} ({{ u.username }})</label>
+      {% else %}<p class="muted small">No other Driver logins.</p>{% endfor %}
+    </fieldset>
+    <button class="btn btn-primary">Save</button>
+  </form>
+</section>
+{% endblock %}

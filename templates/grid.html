@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}Grid & Transfers{% endblock %}
+{% block content %}
+{% set ro = not ctx.is_master %}
+<div class="page-head"><div><div class="kicker">Grid &amp; Transfers · {{ ctx.season.year }}</div><h1>The {{ ctx.season.year }} grid</h1></div></div>
+
+<section class="card">
+  <h2>Player seats</h2>
+  <p class="muted small">Normally you sign seats through offers in My Garage. The Race Master can also place players directly here. Taking a seat replaces its current occupant.</p>
+  {% if not ro %}
+  <form method="post" action="{{ url_for('grid_players', token=ctx.token) }}" id="player-form" class="player-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for p in players %}
+    {% set cur = seats.get(p.id) %}
+    <label class="player-pick">
+      <span><strong>{{ p.name }}</strong></span>
+      <select name="seat_{{ p.id }}" data-player="{{ p.id }}">
+        <option value="">Unassigned</option>
+        {% for t in grid %}{% for s in t.seats %}
+        <option value="{{ t.id }}:{{ s.seat_no }}" data-occupant="{{ s.driver.name if s.driver and s.driver.id != p.id else '' }}"
+          {{ 'selected' if cur and cur[0] == t.id and cur[1] == s.seat_no }}>{{ t.name }} · Seat {{ s.seat_no }}{{ ' (' ~ s.driver.name ~ ')' if s.driver }}</option>
+        {% endfor %}{% endfor %}
+      </select>
+      <small class="muted" id="preview-{{ p.id }}"></small>
+    </label>
+    {% endfor %}
+    <p class="error-text" id="player-clash" hidden>Both players cannot take the same seat.</p>
+    <button class="btn btn-primary" type="submit">Place players</button>
+  </form>
+  {% else %}
+  <ul class="plain-list">{% for p in players %}{% set cur = seats.get(p.id) %}<li><strong>{{ p.name }}</strong>: {% if cur %}{% for t in grid if t.id == cur[0] %}{{ t.name }}{% endfor %} · Seat {{ cur[1] }}{% else %}No race seat yet{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Complete grid editor</h2>{% if not ro %}<div class="grid-health" id="grid-health"></div>{% endif %}</div>
+  <form method="post" action="{{ url_for('grid_save', token=ctx.token) }}" id="{{ 'grid-form' if not ro }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-editor">
+      {% for t in grid %}
+      <div class="grid-team" style="--team: {{ t.color }}">
+        <div class="grid-team-head">{{ team_dot(t) }}<strong>{{ t.name }}</strong><span class="code">{{ t.abbreviation }}</span></div>
+        {% for s in t.seats %}
+        <div class="seat {{ 'player-seat' if s.driver and s.driver.is_player }}">
+          <small>Seat {{ s.seat_no }}</small>
+          {% if ro %}<span>{{ s.driver.name if s.driver else 'Vacant' }}</span>{% else %}
+          <select name="seat_{{ t.id }}_{{ s.seat_no }}">
+            <option value="">— Vacant —</option>
+            {% for d in all_drivers %}<option value="{{ d.id }}" {{ 'data-player=1' if d.is_player }} {{ 'selected' if s.driver and s.driver.id == d.id }}>{{ d.name }}</option>{% endfor %}
+          </select>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if not ro %}
+    <p class="muted small">Completed and in-progress rounds keep their original lineups. Only rounds not yet run pick up the new grid.</p>
+    <button class="btn btn-primary" type="submit">Save grid</button>
+    {% endif %}
+  </form>
+</section>
+{% endblock %}

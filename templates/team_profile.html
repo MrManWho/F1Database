@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<div class="profile-head" style="--team: {{ team.color }}">
+  <div><div class="kicker">Constructor profile · {{ team.abbreviation }}</div><h1>{{ team.name }}</h1></div>
+</div>
+<div class="stat-grid">
+  {% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Fastest Laps', totals.fastest_laps), ('DNFs', totals.dnfs), ('Championships', totals.titles)] %}
+  <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
+  {% endfor %}
+</div>
+<section class="card table-card">
+  <h2>Season archive</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Year</th><th>WCC</th><th>Driver 1</th><th>Driver 2</th><th>Pts</th><th>Wins</th><th>Pod</th><th>FL</th><th>DNF</th></tr></thead>
+    <tbody>
+    {% for a in archive %}
+    <tr>
+      <td><strong>{{ a.season.year }}</strong></td><td class="num">P{{ a.position }}</td>
+      {% for d in a.drivers %}<td>{% if d %}<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=d.id) }}" class="{{ 'is-player' if d.is_player }}">{{ d.name }}</a>{% else %}—{% endif %}</td>{% endfor %}
+      <td class="num"><strong>{{ a.points }}</strong></td><td class="num">{{ a.wins }}</td><td class="num">{{ a.podiums }}</td>
+      <td class="num">{{ a.fastest_laps }}</td><td class="num">{{ a.dnfs }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Points always stay with the team a driver represented at each event. Driver columns show the season's final lineup.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}Transfer Market{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">Race Master · Transfer Market</div><h1>Offers &amp; windows</h1></div>
+  <form method="post" action="{{ url_for('market_open', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary">Open window for {{ target }}</button>
+  </form>
+</div>
+<p class="muted">Opening a window has every team judge each player driver and send offers. Before the first round they're for this season; after that they're for next season.
+  The Rookie Draft opens by itself when a career starts as rookies, and Silly Season opens by itself once half the calendar is complete. Players accept offers from their own login.</p>
+
+{% for w in windows %}
+<section class="card">
+  <div class="card-head">
+    <h2>{{ w.kind }} · for {{ w.target_year }}</h2>
+    <div class="button-row tight">
+      <span class="status-badge status-{{ 'active' if w.status == 'Open' else 'complete' }}">{{ w.status }}</span>
+      {% if w.status == 'Open' %}
+      <form method="post" action="{{ url_for('market_close', token=ctx.token, window_id=w.id) }}" onsubmit="return confirm('Close this window? Unanswered offers expire.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Close window</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Driver</th><th>Team</th><th>Role</th><th>Term</th><th>Interest</th><th>Status</th><th>Why</th></tr></thead>
+    <tbody>
+    {% for o in offers if o.window_id == w.id %}
+    <tr>
+      <td><a href="{{ url_for('garage', token=ctx.token, driver=o.driver_id) }}" class="is-player">{{ o.driver.name }}</a></td>
+      <td>{{ team_dot(o.team) }}{{ o.team.name }}</td><td>{{ o.role }}</td><td>{{ o.years }} yr</td>
+      <td class="num">{{ '%+.1f'|format(o.interest) }}</td>
+      <td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}{{ ' · applied' if o.applied }}</span></td>
+      <td class="small">{{ o.reason }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% else %}
+<section class="card empty-state"><p class="muted">No transfer windows yet.</p></section>
+{% endfor %}
+{% endblock %}

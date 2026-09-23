@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, difficulty with context %}
+{% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
+{% block content %}
+{% set ro = not ctx.is_master %}
+<div class="weekend-head">
+  <div>
+    <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>
+    <h1>{{ event.name }}</h1>
+    <div class="hero-meta">
+      <span>{{ event.location }}</span>
+      <span class="pill {{ 'pill-sprint' if event.is_sprint }}">{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</span>
+      <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ event.status }}</span>
+    </div>
+  </div>
+  <div class="button-row">
+    {% if prev_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}">← R{{ prev_event.round_number }}</a>{% endif %}
+    {% if next_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">R{{ next_event.round_number }} →</a>{% endif %}
+  </div>
+</div>
+
+{% if ro %}
+<div class="banner">View only. The Race Master enters results for this weekend.</div>
+{% endif %}
+
+<section class="card diff-strip">
+  {{ difficulty(rec, compact=True) }}
+  <div class="diff-input">
+    <label>AI difficulty used
+      <input type="number" id="ai-difficulty" min="{{ C.MIN_DIFFICULTY }}" max="{{ C.MAX_DIFFICULTY }}" step="1"
+             value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked" {{ 'disabled' if ro }}>
+    </label>
+    {% if not ro %}
+    <div class="button-row tight">
+      {% if rec.recommended is not none %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
+      <button type="button" class="btn btn-sm btn-ghost" id="no-track">Don't track this round</button>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card table-card">
+  <div class="card-head">
+    <h2>Results</h2>
+    <div class="save-state" id="save-state" data-state="saved">{{ 'Read only' if ro else 'All changes saved' }}</div>
+  </div>
+  <div class="table-wrap">
+  <table class="data-table entry-table" id="entry-table"
+         data-url="{{ url_for('api_weekend', token=ctx.token, event_id=event.id) }}"
+         data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}"
+         data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'>
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th>Quali</th>
+        {% if event.is_sprint %}<th>Sprint</th><th>Sprint status</th><th>Sprint pts</th>{% endif %}
+        <th>Race</th><th>GP status</th><th>Race pts</th><th>Total</th>
+        <th title="Fastest Lap">FL</th><th title="Driver of the Day">DOTD</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr data-driver-id="{{ r.driver_id }}" class="{{ 'player-row' if r.driver.is_player }}" style="--team: {{ r.team.color }}">
+        <td class="driver-cell">{{ team_dot(r.team) }}<span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small></span></td>
+        <td><input class="pos-input" data-field="qualifying_position" inputmode="numeric" value="{{ r.qualifying_position or '' }}" {{ 'disabled' if ro }}></td>
+        {% if event.is_sprint %}
+        <td><input class="pos-input" data-field="sprint_position" inputmode="numeric" value="{{ r.sprint_position or '' }}" {{ 'disabled' if ro }}></td>
+        <td><select data-field="sprint_status_override" {{ 'disabled' if ro }}>
+          {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.sprint_status) or (s == 'Auto' and r.sprint_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
+        </select></td>
+        <td class="num sp-pts">{{ r.sprint_pts }}</td>
+        {% endif %}
+        <td><input class="pos-input" data-field="race_position" inputmode="numeric" value="{{ r.race_position or '' }}" {{ 'disabled' if ro }}></td>
+        <td><select data-field="status_override" {{ 'disabled' if ro }}>
+          {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.result_status) or (s == 'Auto' and r.result_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
+        </select></td>
+        <td class="num gp-pts">{{ r.gp_points }}</td>
+        <td class="num tot-pts"><strong>{{ r.gp_points + r.sprint_pts }}</strong></td>
+        <td class="center"><input type="radio" name="fastest_lap" data-field="fastest_lap" {{ 'checked' if r.fastest_lap }} {{ 'disabled' if ro }}></td>
+        <td class="center"><input type="radio" name="driver_of_day" data-field="driver_of_day" {{ 'checked' if r.driver_of_day }} {{ 'disabled' if ro }}></td>
+        <td><input class="note-input" data-field="notes" maxlength="1000" value="{{ r.notes }}" {{ 'disabled' if ro }} placeholder="—"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="entry-foot">
+    <label class="grow">Weekend notes
+      <textarea id="event-notes" maxlength="4000" rows="3" {{ 'disabled' if ro }}>{{ event.notes }}</textarea>
+    </label>
+    {% if not ro %}
+    <div class="button-row">
+      <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
+      <button type="button" class="btn btn-primary" id="mark-complete">Mark weekend complete</button>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>{% endblock %}

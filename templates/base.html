@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}{{ APP_NAME }}{% endblock %} · {{ APP_NAME }}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}">
+{% if ctx is defined and ctx %}
+  {% set t = ctx.token %}
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('dashboard', token=t) }}">
+      <span class="brand-mark">F1</span>
+      <span><strong>Universe Tracker</strong><small>v{{ APP_VERSION }} · {{ ctx.career_name }}</small></span>
+    </a>
+    <nav>
+      {% set ep = request.endpoint %}
+      <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}"><i>◉</i>Control Room</a>
+      <a href="{{ url_for('weekend_next', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next') }}"><i>⏱</i>Race Entry</a>
+      {% if ctx.my_driver or ctx.is_master %}
+      <a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}"><i>★</i>My Garage
+        {% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }} offer{{ "s" if ctx.pending_offers != 1 }}</span>{% endif %}</a>
+      {% endif %}
+      <a href="{{ url_for('drivers_page', token=t) }}" class="{{ 'active' if ep in ('drivers_page', 'driver_profile') }}"><i>☰</i>Drivers</a>
+      <a href="{{ url_for('teams_page', token=t) }}" class="{{ 'active' if ep in ('teams_page', 'team_profile') }}"><i>▦</i>Constructors</a>
+      <a href="{{ url_for('grid_page', token=t) }}" class="{{ 'active' if ep == 'grid_page' }}"><i>⇄</i>Grid &amp; Transfers</a>
+      {% if ctx.is_master %}
+      <a href="{{ url_for('market_page', token=t) }}" class="{{ 'active' if ep == 'market_page' }}"><i>✉</i>Transfer Market</a>
+      {% endif %}
+      <a href="{{ url_for('contracts_page', token=t) }}" class="{{ 'active' if ep == 'contracts_page' }}"><i>✎</i>Driver Market</a>
+      <a href="{{ url_for('records', token=t) }}" class="{{ 'active' if ep == 'records' }}"><i>♛</i>Hall of Records</a>
+      <a href="{{ url_for('seasons_page', token=t) }}" class="{{ 'active' if ep == 'seasons_page' }}"><i>▤</i>Seasons &amp; Calendar</a>
+      {% if ctx.is_master %}
+      <a href="{{ url_for('members', token=t) }}" class="{{ 'active' if ep == 'members' }}"><i>⚑</i>Player Logins</a>
+      <button type="button" data-dialog="career-dialog"><i>⛁</i>Career &amp; Saves</button>
+      {% endif %}
+      <a href="{{ url_for('home') }}"><i>⌂</i>Career Library</a>
+    </nav>
+    <div class="sidebar-foot">
+      <span class="role-chip {{ 'master' if ctx.is_master else '' }}">{{ 'Race Master' if ctx.is_master else 'Driver' }}</span>
+      <span>{{ user.display_name }}{% if ctx.my_driver %} · {{ ctx.my_driver.name }}{% endif %}</span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Menu">☰</button>
+      <form method="get" class="season-picker">
+        <label>Season
+          <select name="season" onchange="this.form.submit()">
+            {% for s in ctx.seasons %}
+            <option value="{{ s.id }}" {{ 'selected' if s.id == ctx.season.id }}>{{ s.year }}{{ ' ★' if s.id == ctx.current_season_id }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <span class="status-badge status-{{ ctx.season.status|lower }}">{{ ctx.season.status }}</span>
+      </form>
+      <div class="topbar-actions">
+        {% if ctx.is_master %}
+        <form method="post" action="{{ url_for('save_now', token=t) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
+        </form>
+        {% endif %}
+        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}">{{ user.display_name[:1]|upper }}</button>
+      </div>
+    </header>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% if ctx.is_master %}
+  <dialog id="career-dialog" class="dialog">
+    <div class="dialog-head"><h2>Career &amp; Saves</h2><button class="icon-btn" data-close>✕</button></div>
+    <p class="muted">Every change is saved automatically to <code>{{ t }}.f1career</code>.</p>
+    <form method="post" action="{{ url_for('rename', token=t) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Rename career<input name="name" value="{{ ctx.career_name }}" maxlength="80" required></label>
+      <button class="btn btn-sm">Rename</button>
+    </form>
+    <form method="post" action="{{ url_for('save_as', token=t) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Save As (independent copy)<input name="name" value="{{ ctx.career_name }} (copy)" maxlength="80" required></label>
+      <button class="btn btn-sm">Save As</button>
+    </form>
+    <div class="button-row">
+      <a class="btn btn-ghost" href="{{ url_for('backup', token=t) }}">Download backup</a>
+      <a class="btn btn-ghost" href="{{ url_for('export', token=t) }}">Export JSON</a>
+    </div>
+    <form method="post" action="{{ url_for('delete', token=t) }}" class="danger-zone"
+          onsubmit="return confirm('Delete this career permanently? Download a backup first if you might want it back.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <strong>Danger zone</strong>
+      <button class="btn btn-danger btn-sm">Delete career</button>
+    </form>
+  </dialog>
+  {% endif %}
+{% else %}
+  <header class="plain-head">
+    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">F1</span><span><strong>Universe Tracker</strong><small>v{{ APP_VERSION }}</small></span></a>
+    {% if user %}
+    <div class="topbar-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('accounts_page') }}">Accounts</a>
+      <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}">{{ user.display_name[:1]|upper }}</button>
+    </div>
+    {% endif %}
+  </header>
+  <main class="content plain-content">
+    {% block plain %}{% endblock %}
+  </main>
+{% endif %}
+
+{% if user %}
+<dialog id="account-dialog" class="dialog">
+  <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else 'Driver' }}</p>
+  <div class="button-row">
+    <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Change password' }}</a>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn">Log out</button>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+<div class="toast-stack" id="toasts">
+  {% for category, message in get_flashed_messages(with_categories=true) %}
+  <div class="toast toast-{{ category }}"><span>{{ message }}</span><button type="button" data-dismiss>✕</button></div>
+  {% endfor %}
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

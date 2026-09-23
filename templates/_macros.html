@@ -1,0 +1,35 @@
+{% macro team_dot(team) -%}
+<span class="team-dot" style="--team: {{ team.color if team else '#555' }}"></span>
+{%- endmacro %}
+
+{% macro driver_link(ctx, driver) -%}
+<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=driver.id) }}" class="driver-link {{ 'is-player' if driver.is_player }}">{{ driver.name }}</a>
+{%- endmacro %}
+
+{% macro tier(m) -%}
+<span class="tier tier-{{ m.name|lower|replace(' ', '-') }}" title="{{ m.description }} · score {{ m.score }}">{{ m.name }}</span>
+{%- endmacro %}
+
+{% macro difficulty(rec, compact=False) -%}
+<div class="diff-rec diff-{{ rec.direction or 'none' }}">
+  <div class="diff-number">
+    {% if rec.recommended is not none %}
+      <span class="diff-arrow">{% if rec.direction == 'up' %}▲{% elif rec.direction == 'down' %}▼{% else %}●{% endif %}</span>
+      <strong>{{ rec.recommended }}</strong>
+    {% else %}<strong>—</strong>{% endif %}
+    <small>Recommended AI</small>
+  </div>
+  <div class="diff-copy">
+    <p>{{ rec.reason }}</p>
+    {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
+    {% if not compact %}
+    <div class="diff-facts">
+      {% if rec.current is not none %}<span>Last used <b>{{ rec.current }}</b></span>{% endif %}
+      {% if rec.sample %}<span>Sample <b>{{ rec.sample|length }}</b>/{{ C.DIFF_MAX_ROUNDS }} rounds</span>{% endif %}
+      {% if rec.average is not none %}<span>Avg score <b>{{ '%+.2f'|format(rec.average) }}</b></span>{% endif %}
+      {% if rec.sweet_spot %}<span title="Recency-weighted estimate across {{ rec.sweet_spot.rounds }} rounds and {{ rec.sweet_spot.seasons }} season(s)">Career sweet spot <b>{{ '%.1f'|format(rec.sweet_spot.value) }}</b> · {{ rec.sweet_spot.confidence }} confidence</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}

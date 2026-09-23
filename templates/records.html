@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Hall of Records{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">All seasons</div><h1>Hall of Records</h1></div></div>
+<div class="stat-grid">
+  {% for key, label in [('points', 'Career points'), ('wins', 'Most wins'), ('poles', 'Most poles'), ('titles', 'Most titles')] %}
+  {% set l = leaders[key] %}
+  <div class="stat card feature"><small>{{ label }}</small>
+    {% if l %}<strong>{{ l[key] }}</strong><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=l.driver.id) }}">{{ l.driver.name }}</a>{% else %}<strong>—</strong>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<section class="card table-card">
+  <div class="table-wrap">
+  <table class="data-table sortable">
+    <thead><tr><th data-sort>#</th><th data-sort>Driver</th><th data-sort>Pts</th><th data-sort>Wins</th><th data-sort>Pod</th><th data-sort>Poles</th><th data-sort>FL</th><th data-sort>Starts</th><th data-sort>Titles</th><th data-sort>Best WDC</th><th data-sort>Seasons</th><th data-sort>Avg fin</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr class="{{ 'player-row' if r.driver.is_player }}">
+      <td class="num">{{ r.rank }}</td>
+      <td><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=r.driver.id) }}" class="{{ 'is-player' if r.driver.is_player }}">{{ r.driver.name }}</a></td>
+      <td class="num"><strong>{{ r.points }}</strong></td><td class="num">{{ r.wins }}</td><td class="num">{{ r.podiums }}</td>
+      <td class="num">{{ r.poles }}</td><td class="num">{{ r.fastest_laps }}</td><td class="num">{{ r.starts }}</td>
+      <td class="num">{{ r.titles }}</td><td class="num">{{ 'P' ~ r.best_championship if r.best_championship else '—' }}</td>
+      <td class="num">{{ r.seasons }}</td><td class="num">{{ r.avg_finish if r.avg_finish is not none else '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

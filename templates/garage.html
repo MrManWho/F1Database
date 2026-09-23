@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, tier with context %}
+{% block title %}{{ driver.name }} · Garage{% endblock %}
+{% block content %}
+<div class="profile-head" style="--team: {{ team.color if team else '#e10600' }}">
+  <div>
+    <div class="kicker">{{ 'My Garage' if own else 'Garage' }} · {{ ctx.season.year }}</div>
+    <h1>{{ driver.name }}</h1>
+    <div class="hero-meta">
+      <span>{% if team %}{{ team_dot(team) }}{{ team.name }}{% else %}No race seat{% endif %}</span>
+      {% if teammate %}<span>Teammate: {{ teammate.name }}</span>{% endif %}
+      {% if contract %}<span>Contract: {{ contract.team.name }} {{ contract.target_year }}{{ '–' ~ contract.end_year if contract.end_year != contract.target_year }} · {{ contract.role }}</span>{% endif %}
+      {% if rookie %}<span class="pill pill-hot">Rookie</span>{% endif %}
+    </div>
+  </div>
+  {% if ctx.is_master and players|length > 1 %}
+  <div class="button-row">
+    {% for p in players %}<a class="btn btn-sm {{ 'btn-primary' if p.id == driver.id else 'btn-ghost' }}" href="?driver={{ p.id }}">{{ p.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="stat-grid">
+  <div class="stat card feature"><small>Driver value</small><strong>{{ me.value }}</strong><span class="muted small">What teams judge you on</span></div>
+  <div class="stat card"><small>Reputation</small><strong>{{ me.reputation }}</strong></div>
+  <div class="stat card"><small>Form</small><strong>{{ me.form }}</strong></div>
+  <div class="stat card"><small>Car-adjusted</small><strong>{{ me.car }}</strong><span class="muted small">50 = matching the car</span></div>
+  <div class="stat card"><small>Market tier</small><strong>{{ tier(row.market) if row else '—' }}</strong></div>
+  <div class="stat card"><small>Points</small><strong>{{ row.points if row else 0 }}</strong><span class="muted small">{{ 'P' ~ row.position ~ ' in WDC' if row else '' }}</span></div>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Offers</h2></div>
+  {% set pending = offers|selectattr('status', 'equalto', 'Pending')|list %}
+  {% if pending %}
+  <div class="offer-grid">
+    {% for o in pending %}
+    <article class="offer-card" style="--team: {{ o.team.color }}">
+      <div class="offer-top">{{ team_dot(o.team) }}<strong>{{ o.team.name }}</strong><span class="pill">{{ o.kind }}</span></div>
+      <div class="offer-terms">
+        <span><small>Role</small><b>{{ o.role }}</b></span>
+        <span><small>Term</small><b>{{ o.years }} yr · {{ o.target_year }}{{ '–' ~ o.end_year if o.years > 1 }}</b></span>
+        <span><small>Interest</small><b>{{ '%+.1f'|format(o.interest) }}</b></span>
+      </div>
+      <p>{{ o.reason }}</p>
+      {% if can_respond %}
+      <div class="button-row">
+        <form method="post" action="{{ url_for('offer_accept', token=ctx.token, offer_id=o.id) }}"
+              onsubmit="return confirm('Sign with {{ o.team.name }} for {{ o.target_year }}? Your other offers in this window will be withdrawn.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Accept</button>
+        </form>
+        <form method="post" action="{{ url_for('offer_decline', token=ctx.token, offer_id=o.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost btn-sm">Decline</button>
+        </form>
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No offers on the table right now. Teams make offers when a transfer window opens: the Rookie Draft at the start of a career, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
+  {% endif %}
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>Who's watching you</h2></div>
+    <p class="muted small">A live read of each team's interest. A team usually makes an offer once you're <b>Interested</b> or better when a window opens.</p>
+    <ul class="interest-list">
+      {% for i in interest %}
+      <li class="interest-{{ i.label|lower }}" style="--team: {{ i.team.color }}">
+        <span class="who">{{ team_dot(i.team) }}{{ i.team.name }}{% if i.current %} <span class="pill">Your team</span>{% endif %}<small>Constructor rank {{ i.rank }}</small></span>
+        <span class="meter"><span style="width: {{ [[(i.interest + 15) / 30 * 100, 3]|max, 100]|min }}%"></span></span>
+        <span class="label">{{ i.label }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>Head to head</h2>
+    <div class="h2h">
+      <div><small>Race vs teammate</small><strong>{{ me.h2h.race_won }}–{{ me.h2h.race_total - me.h2h.race_won }}</strong></div>
+      <div><small>Quali vs teammate</small><strong>{{ me.h2h.quali_won }}–{{ me.h2h.quali_total - me.h2h.quali_won }}</strong></div>
+      {% if rival %}
+      <div><small>Points vs {{ rival.name.split(' ')[0] }}</small><strong>{{ row.points if row else 0 }}–{{ rival_row.points if rival_row else 0 }}</strong></div>
+      <div><small>Wins vs {{ rival.name.split(' ')[0] }}</small><strong>{{ row.wins if row else 0 }}–{{ rival_row.wins if rival_row else 0 }}</strong></div>
+      {% endif %}
+    </div>
+    <h3>Recent weekends</h3>
+    {% if recent %}
+    <table class="data-table compact">
+      <thead><tr><th>Rnd</th><th>Event</th><th>Q</th><th>Race</th><th>Pts</th></tr></thead>
+      <tbody>
+      {% for r in recent %}
+      <tr><td>R{{ r.round_number }}</td><td>{{ r.event_name }}</td><td class="num">{{ r.qualifying_position or '—' }}</td>
+        <td class="num">{% if r.result_status == 'Finished' %}P{{ r.race_position }}{% else %}{{ r.result_status }}{% endif %}</td>
+        <td class="num">{{ (C.GP_POINTS.get(r.race_position, 0) if r.result_status == 'Finished' else 0) + (C.SPRINT_POINTS.get(r.sprint_position, 0) if r.is_sprint and r.sprint_status == 'Finished' else 0) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No results yet this season.</p>{% endif %}
+    <a href="{{ url_for('driver_profile', token=ctx.token, driver_id=driver.id) }}">Full career profile →</a>
+  </section>
+</div>
+
+{% set past = offers|rejectattr('status', 'equalto', 'Pending')|list %}
+{% if past %}
+<section class="card table-card">
+  <h2>Offer history</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Window</th><th>Team</th><th>Role</th><th>Term</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for o in past %}
+    <tr><td>{{ o.kind }} {{ o.target_year }}</td><td>{{ team_dot(o.team) }}{{ o.team.name }}</td><td>{{ o.role }}</td>
+      <td>{{ o.years }} yr</td><td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
