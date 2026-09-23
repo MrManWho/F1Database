@@ -16,7 +16,7 @@ from .schema import REQUIRED_TABLES, migrate
 CAREER_EXT = ".f1career"
 EXPORT_TABLES = [
     "meta", "teams", "drivers", "seasons", "season_grid", "season_driver_state",
-    "events", "results", "contracts", "market_windows", "offers", "career_members",
+    "events", "results", "contracts", "market_windows", "offers", "offer_messages", "career_members",
 ]
 
 

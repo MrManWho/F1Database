@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.3"
-SCHEMA_VERSION = 4
+APP_VERSION = "1.4"
+SCHEMA_VERSION = 5
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -116,6 +116,11 @@ OFFER_ACCEPTED = "Accepted"
 OFFER_DECLINED = "Declined"
 OFFER_EXPIRED = "Expired"
 OFFER_WITHDRAWN = "Withdrawn"
+OFFER_COLLAPSED = "Collapsed"   # the team walked away from talks
+OFFER_REJECTED = "Rejected"     # the team turned down a driver's approach
+CONTRACT_ROLES = ["No. 2", "Equal Status", "No. 1"]   # lowest to highest status
+MAX_CONTRACT_YEARS = 5
+APPROACHES_PER_WINDOW = 3
 WINDOW_OPEN = "Open"
 WINDOW_CLOSED = "Closed"
 MAX_OFFERS_PER_WINDOW = 4

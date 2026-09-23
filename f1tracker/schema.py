@@ -117,7 +117,29 @@ CREATE TABLE IF NOT EXISTS offers (
     status TEXT NOT NULL DEFAULT 'Pending',
     applied INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    responded_at TEXT
+    responded_at TEXT,
+    salary REAL,
+    origin TEXT NOT NULL DEFAULT 'team',
+    stage TEXT NOT NULL DEFAULT 'Offer',
+    patience INTEGER,
+    final INTEGER NOT NULL DEFAULT 0,
+    lifeline INTEGER NOT NULL DEFAULT 0,
+    ceiling_role TEXT,
+    min_years INTEGER,
+    max_years INTEGER,
+    max_salary REAL
+);
+
+CREATE TABLE IF NOT EXISTS offer_messages (
+    id INTEGER PRIMARY KEY,
+    offer_id INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+    author TEXT NOT NULL,
+    action TEXT NOT NULL,
+    role TEXT,
+    years INTEGER,
+    salary REAL,
+    message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS career_members (
@@ -129,7 +151,21 @@ CREATE INDEX IF NOT EXISTS idx_results_event ON results(event_id);
 CREATE INDEX IF NOT EXISTS idx_results_driver ON results(driver_id);
 CREATE INDEX IF NOT EXISTS idx_events_season ON events(season_id);
 CREATE INDEX IF NOT EXISTS idx_offers_driver ON offers(driver_id);
+CREATE INDEX IF NOT EXISTS idx_offer_messages ON offer_messages(offer_id);
 """
+
+OFFER_V5_COLUMNS = [
+    ("salary", "REAL"),
+    ("origin", "TEXT NOT NULL DEFAULT 'team'"),
+    ("stage", "TEXT NOT NULL DEFAULT 'Offer'"),
+    ("patience", "INTEGER"),
+    ("final", "INTEGER NOT NULL DEFAULT 0"),
+    ("lifeline", "INTEGER NOT NULL DEFAULT 0"),
+    ("ceiling_role", "TEXT"),
+    ("min_years", "INTEGER"),
+    ("max_years", "INTEGER"),
+    ("max_salary", "REAL"),
+]
 
 REQUIRED_TABLES = {"meta", "drivers", "teams", "seasons", "events", "results"}
 
@@ -144,11 +180,13 @@ def migrate(conn):
     v1 -> v2: results.sprint_status (existing Sprint positions become Finished).
     v2 -> v3: events.ai_difficulty (blank for existing rounds).
     v3 -> v4: transfer market tables and career membership (created empty).
+    v4 -> v5: negotiation columns on offers plus the offer_messages log. Older offers get their
+              team limits filled in the first time someone negotiates on them.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "offers" in tables:
+        if row and row[0] == str(SCHEMA_VERSION) and "offer_messages" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -159,6 +197,10 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    offer_columns = _columns(conn, "offers")
+    for name, ddl in OFFER_V5_COLUMNS:
+        if name not in offer_columns:
+            conn.execute(f"ALTER TABLE offers ADD COLUMN {name} {ddl}")
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

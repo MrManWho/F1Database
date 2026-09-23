@@ -398,3 +398,114 @@ def test_players_only_see_their_own_career_and_offers(app, master_client):
     login(stranger, "stranger")
     assert stranger.get(f"/career/{token}/dashboard").status_code == 403
     assert token not in stranger.get("/").get_data(as_text=True)
+
+
+# --------------------------------------------------------------------------- negotiations (v1.4)
+
+def _rookie_window(db, rng):
+    sid = S.current_season_id(db)
+    window = market.open_window(db, sid, rng=rng)
+    david, carson = players(db)
+    return sid, window, david, carson
+
+
+def test_reasonable_counter_is_agreed_then_signed(db, rng):
+    sid, window, david, _ = _rookie_window(db, rng)
+    offer = market.offers(db, driver_id=david)[0]
+    assert offer["salary"] and offer["ceiling_role"] == "No. 2" and offer["max_years"] <= 3
+    ask_salary = offer["max_salary"]  # right at the team's private limit
+    result = market.counter_offer(db, offer["id"], "No. 2", offer["min_years"], ask_salary, rng=rng)
+    assert result == "agreed"
+    agreed = market.get_offer(db, offer["id"])
+    assert agreed["final"] and agreed["stage"] == "Terms agreed" and agreed["salary"] == ask_salary
+    with pytest.raises(S.ValidationError, match="final offer"):
+        market.counter_offer(db, offer["id"], "No. 2", 1, 0.5, rng=rng)
+    market.accept_offer(db, offer["id"])
+    assert S.driver_seats(db, sid)[david][0] == offer["team_id"]
+    authors = [m["author"] for m in market.offers(db, driver_id=david)[0]["messages"]]
+    assert authors[:3] == ["team", "driver", "team"]
+
+
+def test_rookies_cannot_demand_number_one_and_greed_ends_talks(db, rng):
+    _sid, window, david, _ = _rookie_window(db, rng)
+    offers = market.offers(db, driver_id=david)
+    first = offers[0]
+    result = market.counter_offer(db, first["id"], "No. 1", 5, 50, rng=rng)
+    assert result == "final"  # a greedy ask burns two rounds of patience at once
+    assert market.get_offer(db, first["id"])["role"] == "No. 2"
+    with pytest.raises(S.ValidationError, match="final offer"):
+        market.counter_offer(db, first["id"], "No. 1", 5, 50, rng=rng)
+
+    second = offers[1]
+    result = market.counter_offer(db, second["id"], "Equal Status", 2, round(second["max_salary"] * 1.2, 1), rng=rng)
+    assert result == "countered"
+    countered = market.get_offer(db, second["id"])
+    assert countered["role"] == "No. 2" and countered["salary"] <= countered["max_salary"]
+    assert countered["salary"] >= second["salary"]
+    result = market.counter_offer(db, second["id"], "No. 1", 5, 60, rng=rng)
+    assert result == "collapsed" and market.get_offer(db, second["id"])["status"] == C.OFFER_COLLAPSED
+
+
+def test_approaches_are_judged_limited_and_lifeline_when_out_of_options(db, rng):
+    sid, window, david, _ = _rookie_window(db, rng)
+    mclaren = 1
+    offer_id, result = market.approach_team(db, window, david, mclaren, rng=rng)
+    assert result == "rejected"
+    with pytest.raises(S.ValidationError):
+        market.approach_team(db, window, david, mclaren, rng=rng)  # once per team per window
+    talked = {o["team_id"] for o in market.offers(db, driver_id=david)}
+    backmarker = next(t for t in (7, 8, 9, 10, 11) if t not in talked)
+    offer_id, result = market.approach_team(db, window, david, backmarker, rng=rng)
+    assert result == "offer" and market.get_offer(db, offer_id)["origin"] == "driver"
+    offer_id, result = market.approach_team(db, window, david, 2, rng=rng)
+    assert result == "rejected" and market.approaches_left(db, window, david) == 0
+    with pytest.raises(S.ValidationError, match="approaches"):
+        market.approach_team(db, window, david, 3, rng=rng)
+    for o in market.offers(db, driver_id=david):
+        if o["status"] == C.OFFER_PENDING and not o["lifeline"]:
+            market.decline_offer(db, o["id"], rng=rng)
+    lifelines = [o for o in market.offers(db, driver_id=david) if o["lifeline"]]
+    assert len(lifelines) == 1 and lifelines[0]["status"] == C.OFFER_PENDING and lifelines[0]["final"]
+    market.decline_offer(db, lifelines[0]["id"], rng=rng)
+    assert len([o for o in market.offers(db, driver_id=david) if o["lifeline"]]) == 1  # only one lifeline
+
+
+def test_v4_offers_migrate_and_can_be_negotiated(career, rng):
+    with storage.session(career) as conn:
+        _sid, _window, david, _ = _rookie_window(conn, rng)
+        offer_id = market.offers(conn, driver_id=david)[0]["id"]
+    raw = sqlite3.connect(str(storage.career_path(career)))
+    raw.execute("DROP TABLE offer_messages")
+    for column in ("salary", "origin", "stage", "patience", "final", "lifeline", "ceiling_role", "min_years",
+                   "max_years", "max_salary"):
+        raw.execute(f"ALTER TABLE offers DROP COLUMN {column}")
+    raw.execute("UPDATE meta SET value = '4' WHERE key = 'schema_version'")
+    raw.commit()
+    raw.close()
+    with storage.session(career) as conn:
+        assert market.get_offer(conn, offer_id)["salary"] is None
+        result = market.counter_offer(conn, offer_id, "No. 2", 1, 0.3, rng=rng)
+        assert result == "agreed"
+        assert market.get_offer(conn, offer_id)["max_salary"] is not None
+
+
+def test_garage_negotiation_routes(app, master_client):
+    res = master_client.post("/careers/new", data={"name": "Talks", "year": "2026", "rookie_market": "1",
+                                                   "account1": "david", "csrf_token": "tok"})
+    token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    with storage.session(token) as conn:
+        david, _ = players(conn)
+        offer = market.offers(conn, driver_id=david)[0]
+        window = offer["window_id"]
+    page = master_client.get(f"/career/{token}/garage").get_data(as_text=True)
+    assert "Counter-offer" in page and "Approach a team" in page
+    res = master_client.post(f"/career/{token}/offers/{offer['id']}/counter",
+                             data={"role": "No. 2", "years": "1", "salary": "0.3", "csrf_token": "tok"})
+    assert res.status_code == 302
+    with storage.session(token) as conn:
+        assert market.get_offer(conn, offer["id"])["stage"] == "Terms agreed"
+    res = master_client.post(f"/career/{token}/market/approach",
+                             data={"driver_id": david, "window_id": window, "team_id": 1, "terms": "talks",
+                                   "csrf_token": "tok"})
+    assert res.status_code == 302
+    assert "Conversation" in master_client.get(f"/career/{token}/garage").get_data(as_text=True)

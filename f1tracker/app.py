@@ -558,12 +558,21 @@ def register_routes(app):
                                  AND e.status != ? ORDER BY e.round_number DESC LIMIT 6""",
                               (driver["id"], sid, C.EVENT_NOT_RUN)).fetchall()
         own = ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]
+        window = conn.execute("SELECT * FROM market_windows WHERE status = ? ORDER BY target_year DESC, id DESC",
+                              (C.WINDOW_OPEN,)).fetchone()
+        signed_in_window = bool(window and conn.execute(
+            "SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
+            (window["id"], driver["id"], C.OFFER_ACCEPTED)).fetchone())
         return page("garage.html", ctx, driver=driver, me=me, interest=interest, row=row,
                     team=S.team_map(conn).get(seat[0]) if seat else None, teammate=teammate,
                     rival=rival, rival_row=rival_row, recent=recent, players=players,
                     offers=market.offers(conn, driver_id=driver["id"]), can_respond=own or ctx["is_master"],
                     contract=market.current_contract(conn, driver["id"]), own=own,
-                    rookie=market.career_starts(conn, driver["id"]) == 0)
+                    rookie=market.career_starts(conn, driver["id"]) == 0,
+                    experience=market.experience(conn, driver["id"]), window=window,
+                    approaches=market.approaches_left(conn, window["id"], driver["id"]) if window else 0,
+                    approachable=market.approachable_teams(conn, window["id"], driver["id"]) if window else [],
+                    signed_in_window=signed_in_window, going_rate=market.market_salary(me["value"]))
 
     @app.route("/career/<token>/market")
     @career_page()
@@ -612,6 +621,44 @@ def register_routes(app):
         market.decline_offer(conn, offer_id)
         flash("Offer declined.", "success")
         return redirect(url_for("garage", token=ctx["token"], driver=offer["driver_id"]))
+
+    @app.route("/career/<token>/offers/<int:offer_id>/counter", methods=["POST"])
+    @career_page()
+    def offer_counter(conn, ctx, offer_id):
+        offer = _offer_for_user(conn, ctx, offer_id)
+        result = market.counter_offer(conn, offer_id, request.form.get("role"), request.form.get("years"),
+                                      request.form.get("salary"), request.form.get("message", ""))
+        team = S.team_map(conn)[offer["team_id"]]["name"]
+        flash({"agreed": f"{team} agreed to your terms. Sign the contract to make it official.",
+               "countered": f"{team} came back with a counter-offer.",
+               "final": f"{team} have made their final offer.",
+               "collapsed": f"{team} walked away from the table."}[result],
+              "error" if result == "collapsed" else "success")
+        return redirect(url_for("garage", token=ctx["token"], driver=offer["driver_id"]) + f"#offer-{offer_id}")
+
+    @app.route("/career/<token>/market/approach", methods=["POST"])
+    @career_page()
+    def market_approach(conn, ctx):
+        driver_id = _form_int("driver_id")
+        mine = ctx["my_driver"] and ctx["my_driver"]["id"] == driver_id
+        if not (mine or ctx["is_master"]) or driver_id not in {p["id"] for p in S.player_drivers(conn)}:
+            abort(403)
+        window_id, team_id = _form_int("window_id"), _form_int("team_id")
+        terms = request.form.get("terms") == "custom"
+        offer_id, result = market.approach_team(
+            conn, window_id, driver_id, team_id,
+            request.form.get("role") if terms else None, request.form.get("years") if terms else None,
+            request.form.get("salary") if terms else None, request.form.get("message", ""))
+        team = S.team_map(conn)[team_id]["name"]
+        flash({"rejected": f"{team} turned you down.",
+               "trial": f"{team} offered a one-year trial.",
+               "offer": f"{team} want to talk. Their opening terms are in your garage.",
+               "agreed": f"{team} agreed to your terms! Sign to make it official.",
+               "countered": f"{team} came back with a counter-offer.",
+               "final": f"{team} made a take-it-or-leave-it offer.",
+               "collapsed": f"{team} weren't impressed by your demands and ended talks."}[result],
+              "error" if result in ("rejected", "collapsed") else "success")
+        return redirect(url_for("garage", token=ctx["token"], driver=driver_id) + f"#offer-{offer_id}")
 
     @app.route("/career/<token>/members", methods=["GET", "POST"])
     @career_page(master_only=True)

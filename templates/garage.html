@@ -29,36 +29,107 @@
   <div class="stat card"><small>Points</small><strong>{{ row.points if row else 0 }}</strong><span class="muted small">{{ 'P' ~ row.position ~ ' in WDC' if row else '' }}</span></div>
 </div>
 
+{% macro terms_line(role, years, salary, start) -%}
+<span><small>Role</small><b>{{ role }}</b></span>
+<span><small>Term</small><b>{{ years }} yr · {{ start }}{{ '–' ~ (start + years - 1) if years > 1 }}</b></span>
+<span><small>Salary</small><b>{{ '$%.1fM'|format(salary) if salary is not none else '—' }}</b></span>
+{%- endmacro %}
+
+{% macro thread(o) -%}
+<ol class="thread">
+  {% for m in o.messages %}
+  <li class="msg msg-{{ m.author }}">
+    <span class="msg-who">{{ o.team.name if m.author == 'team' else ('You' if m.author == 'driver' else 'Paddock') }}</span>
+    {% if m.message %}<span class="msg-text">{{ m.message }}</span>{% endif %}
+    {% if m.role %}<span class="msg-terms">{{ m.role }} · {{ m.years }} yr · {{ '$%.1fM'|format(m.salary) if m.salary is not none else '—' }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{%- endmacro %}
+
 <section class="card">
-  <div class="card-head"><h2>Offers</h2></div>
+  <div class="card-head">
+    <h2>Negotiations</h2>
+    <span class="muted small">{{ experience }} · going rate about <b>${{ '%.1f'|format(going_rate) }}M</b>/yr before team budgets</span>
+  </div>
   {% set pending = offers|selectattr('status', 'equalto', 'Pending')|list %}
   {% if pending %}
   <div class="offer-grid">
     {% for o in pending %}
-    <article class="offer-card" style="--team: {{ o.team.color }}">
-      <div class="offer-top">{{ team_dot(o.team) }}<strong>{{ o.team.name }}</strong><span class="pill">{{ o.kind }}</span></div>
-      <div class="offer-terms">
-        <span><small>Role</small><b>{{ o.role }}</b></span>
-        <span><small>Term</small><b>{{ o.years }} yr · {{ o.target_year }}{{ '–' ~ o.end_year if o.years > 1 }}</b></span>
-        <span><small>Interest</small><b>{{ '%+.1f'|format(o.interest) }}</b></span>
-      </div>
-      <p>{{ o.reason }}</p>
+    <article class="offer-card" id="offer-{{ o.id }}" style="--team: {{ o.team.color }}">
+      <div class="offer-top">{{ team_dot(o.team) }}<strong>{{ o.team.name }}</strong>
+        <span class="pill mood mood-{{ o.mood|lower|replace(' ', '-') }}">{{ o.mood }}</span></div>
+      <div class="muted small">{{ o.stage }} · {{ o.kind }} for {{ o.target_year }}{{ ' · you approached them' if o.origin == 'driver' }}</div>
+      <div class="offer-terms">{{ terms_line(o.role, o.years, o.salary, o.target_year) }}</div>
+      {% set last = o.messages|selectattr('author', 'equalto', 'team')|list|last %}
+      {% if last %}<p class="team-says">“{{ last.message }}”</p>{% endif %}
+      {% if o.messages|length > 1 %}<details class="thread-box"><summary>Conversation ({{ o.messages|length }})</summary>{{ thread(o) }}</details>{% endif %}
       {% if can_respond %}
       <div class="button-row">
         <form method="post" action="{{ url_for('offer_accept', token=ctx.token, offer_id=o.id) }}"
-              onsubmit="return confirm('Sign with {{ o.team.name }} for {{ o.target_year }}? Your other offers in this window will be withdrawn.');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Accept</button>
+              onsubmit="return confirm('Sign with {{ o.team.name }}: {{ o.role }}, {{ o.years }} year(s) from {{ o.target_year }}? Your other talks this window will end.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Sign contract</button>
         </form>
-        <form method="post" action="{{ url_for('offer_decline', token=ctx.token, offer_id=o.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost btn-sm">Decline</button>
+        {% if not o.final %}<button type="button" class="btn btn-sm" data-dialog="counter-{{ o.id }}">Counter-offer</button>{% endif %}
+        <form method="post" action="{{ url_for('offer_decline', token=ctx.token, offer_id=o.id) }}"
+              onsubmit="return confirm('Walk away from {{ o.team.name }}? You can\'t reopen these talks this window.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost btn-sm">Walk away</button>
         </form>
       </div>
+      {% if not o.final %}
+      <dialog id="counter-{{ o.id }}" class="dialog">
+        <div class="dialog-head"><h2>Counter {{ o.team.name }}</h2><button class="icon-btn" data-close>✕</button></div>
+        <p class="muted small">Teams have limits they won't reveal. Reasonable asks move them toward you, but greedy ones use up
+          their patience twice as fast and can end talks. Their mood right now: <b>{{ o.mood }}</b>.</p>
+        <form method="post" action="{{ url_for('offer_counter', token=ctx.token, offer_id=o.id) }}" class="stack">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="grid-3">
+            <label>Seat status<select name="role">{% for r in C.CONTRACT_ROLES|reverse %}<option {{ 'selected' if r == o.role }}>{{ r }}</option>{% endfor %}</select></label>
+            <label>Years<select name="years">{% for y in range(1, C.MAX_CONTRACT_YEARS + 1) %}<option {{ 'selected' if y == o.years }}>{{ y }}</option>{% endfor %}</select></label>
+            <label>Salary ($M/yr)<input name="salary" type="number" step="0.1" min="0.1" max="100" value="{{ '%.1f'|format(o.salary or 1) }}" required></label>
+          </div>
+          <label>Message (optional)<textarea name="message" rows="2" maxlength="500" placeholder="I've outqualified my teammate all year…"></textarea></label>
+          <button class="btn btn-primary">Send counter-offer</button>
+        </form>
+      </dialog>
+      {% endif %}
       {% endif %}
     </article>
     {% endfor %}
   </div>
+  {% elif signed_in_window %}
+  <p class="muted">You've signed your deal for this window. See your contract above.</p>
+  {% elif window %}
+  <p class="muted">No offers on the table.{% if approaches %} Try approaching a team below.{% else %} You've used all your approaches. If nothing else comes, you keep your current seat, or sit out as a reserve without losing Reputation. The Race Master can still place you by hand.{% endif %}</p>
   {% else %}
-  <p class="muted">No offers on the table right now. Teams make offers when a transfer window opens: the Rookie Draft at the start of a career, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
+  <p class="muted">The transfer market is closed. Teams make offers when a window opens: the Rookie Draft at the start of a career, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
+  {% endif %}
+
+  {% if window and can_respond and not signed_in_window %}
+  <div class="approach">
+    <div class="card-head"><h3>Approach a team</h3><span class="pill">{{ approaches }} of {{ C.APPROACHES_PER_WINDOW }} approaches left</span></div>
+    {% if approaches and approachable %}
+    <form method="post" action="{{ url_for('market_approach', token=ctx.token) }}" class="stack" id="approach-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="driver_id" value="{{ driver.id }}"><input type="hidden" name="window_id" value="{{ window.id }}">
+      <div class="grid-3">
+        <label>Team<select name="team_id">{% for i in interest if i.team in approachable %}<option value="{{ i.team.id }}">{{ i.team.name }} ({{ i.label }})</option>{% endfor %}</select></label>
+        <label>Pitch<select name="terms" id="approach-terms"><option value="talks">Ask about a seat</option><option value="custom">Propose my terms</option></select></label>
+      </div>
+      <div class="grid-3" id="approach-custom" hidden>
+        <label>Seat status<select name="role">{% for r in C.CONTRACT_ROLES|reverse %}<option {{ 'selected' if r == 'No. 2' }}>{{ r }}</option>{% endfor %}</select></label>
+        <label>Years<select name="years">{% for y in range(1, C.MAX_CONTRACT_YEARS + 1) %}<option>{{ y }}</option>{% endfor %}</select></label>
+        <label>Salary ($M/yr)<input name="salary" type="number" step="0.1" min="0.1" max="100" value="{{ '%.1f'|format(going_rate) }}"></label>
+      </div>
+      <label>Message (optional)<textarea name="message" rows="2" maxlength="500" placeholder="I'm looking for a seat for {{ window.target_year }}…"></textarea></label>
+      <p class="muted small">Teams that rate you (see the interest board) will talk. Top-3 teams won't sign rookies, and teams that aren't interested say no.
+        Each team can only be approached once per window.</p>
+      <button class="btn btn-primary">Send approach</button>
+    </form>
+    {% else %}
+    <p class="muted small">{{ 'No approaches left this window.' if not approaches else 'No other teams have a seat available.' }}</p>
+    {% endif %}
+  </div>
   {% endif %}
 </section>
 
@@ -109,15 +180,27 @@
   <h2>Offer history</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Window</th><th>Team</th><th>Role</th><th>Term</th><th>Status</th></tr></thead>
+    <thead><tr><th>Window</th><th>Team</th><th>Role</th><th>Term</th><th>Salary</th><th>Status</th><th>Talks</th></tr></thead>
     <tbody>
     {% for o in past %}
     <tr><td>{{ o.kind }} {{ o.target_year }}</td><td>{{ team_dot(o.team) }}{{ o.team.name }}</td><td>{{ o.role }}</td>
-      <td>{{ o.years }} yr</td><td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}</span></td></tr>
+      <td>{{ o.years }} yr</td><td>{{ '$%.1fM'|format(o.salary) if o.salary is not none else '—' }}</td>
+      <td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}</span></td>
+      <td>{% if o.messages %}<details class="thread-box"><summary>{{ o.messages|length }} message{{ 's' if o.messages|length != 1 }}</summary>{{ thread(o) }}</details>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 </section>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var sel = document.getElementById("approach-terms");
+  if (!sel) return;
+  var box = document.getElementById("approach-custom");
+  sel.addEventListener("change", function () { box.hidden = sel.value !== "custom"; });
+})();
+</script>
 {% endblock %}

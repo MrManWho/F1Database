@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.3
+# F1 Universe Tracker v1.4
 
 A companion database and "career control room" for a two-player F1 26 career (David Conley and
 Carson Hayes). The game handles the racing. This app remembers everything else: every result,
@@ -76,6 +76,45 @@ the previous season, otherwise the default team order.
 * Deals signed for next season are applied to the grid when the Race Master creates that season.
   Closing a window expires any unanswered offers.
 
+### Contract negotiations (v1.4)
+
+An offer is the start of a negotiation, not a take-it-or-leave-it choice. Every offer has a
+**seat status** (No. 2, Equal Status or No. 1), a **length** (1–5 years) and a **salary** ($M a
+year). On each offer you can:
+
+* **Sign contract**: accept the terms currently on the table.
+* **Counter-offer**: ask for different status, years or salary, and add a message. The team
+  replies straight away in the conversation thread: it agrees, meets you partway, or refuses.
+* **Walk away**: end the talks. You can't reopen talks with that team in this window.
+
+Each team has private limits that you never see directly:
+
+| Limit | How it's set |
+|---|---|
+| Top seat status | Compared with the team's best other driver. **Rookies are No. 2**, unless a backmarker rates them at least as highly (then Equal Status). Young drivers (under 30 starts) only get No. 1 if they're clearly better. |
+| Contract length | Rookies 1–2 years (3 if a team is very keen). Everyone else 1–3 years. |
+| Salary ceiling | Your going rate × team budget (the fastest car pays 1.8×, the slowest 0.7×), nudged up by interest. Rookies are capped around $1–4M. |
+| Patience | 1–4 rounds of haggling, depending on how keen the team is. Rookies get one fewer round, but always at least two. |
+
+If you ask for something within their limits, they **agree**, and you still have to sign. A modest
+ask above their limits gets a **counter-offer** that meets you partway and uses up one round of
+patience. A **greedy** ask uses up two: more than 40% over their salary ceiling, two status levels
+too high, or years well outside their range. When patience reaches zero, the team makes a
+**final offer**. If you push past that point, they **walk away**. The badge on each offer card
+shows the team's mood: Open to talks, Losing patience, Final offer or Terms agreed.
+
+**Approaching teams.** You can contact up to **3 teams per window** yourself. You can either ask
+about a seat or propose your own terms.
+* Teams that rate you will open talks.
+* Top-3 teams won't sign rookies.
+* Teams that aren't interested turn you down.
+* A team that's on the fence offers a one-year trial on a take-it-or-leave-it basis.
+
+**Running out of offers.** If you have nothing pending, nothing signed and no approaches left, the
+weakest team with a free seat makes one **last-chance offer** (No. 2, one year). If you turn that
+down too, you keep your current seat if you have one. Otherwise you sit out as a reserve, and your
+Reputation carries over unchanged. The Race Master can still place you by hand.
+
 **My Garage** also shows a live **Who's watching you** board: each team's current interest
 (Keen, Interested, Watching or Cold), so you can see which teams you're getting closer to before
 a window opens. It also shows teammate and David-vs-Carson head-to-heads, recent weekends,
@@ -123,15 +162,16 @@ that round. The recommender is built to move slowly:
   each event.
 * Driver and team profiles, Hall of Records, Grid & Transfers (atomic swaps), Driver Market
   storylines, and the seasons and calendar editor. Round swaps are now atomic too.
-* Saves from v1.0–v1.2 upgrade to schema v4 automatically when opened.
+* Saves from v1.0–v1.3 upgrade to schema v5 automatically when opened.
 
 ## Updating
 
-Your careers, logins and the secret key live in the data folder, not the program folder, so
-updating is a drag-and-drop:
+Your careers, logins and the secret key live in the data folder, not the program folder:
 
 1. Close the tracker window.
-2. Extract the new version and drag its files over the old folder, choosing **Replace**. Keep `.venv`.
+2. Double-click **`update.bat`**. It downloads the latest version from GitHub and installs it over
+   the program folder. You can also do it by hand: download the ZIP and drag its files over the
+   old folder, choosing **Replace** and keeping `.venv`.
 3. Start `run_lan.bat` / `run.bat` again. Logged-in players stay logged in.
 
 `run.bat` reinstalls packages automatically if `requirements.txt` changed. When an update bumps
