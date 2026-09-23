@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}">
+<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); } catch (e) {}</script>
+{% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
   <aside class="sidebar" id="sidebar">
@@ -18,32 +20,50 @@
     </a>
     <nav>
       {% set ep = request.endpoint %}
-      <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}"><i>◉</i>Control Room</a>
-      <a href="{{ url_for('weekend_next', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next') }}"><i>⏱</i>Race Entry</a>
+      {% macro item(endpoint, label, ic, active, extra='') -%}
+      <a href="{{ endpoint }}" class="{{ 'active' if active }}" title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
+      {%- endmacro %}
+      <div class="nav-group">
+        <div class="nav-title">Race weekend</div>
+        {{ item(url_for('dashboard', token=t), 'Control Room', 'home', ep == 'dashboard') }}
+        {{ item(url_for('weekend_next', token=t), 'Enter results' if ctx.can_run else 'Race results', 'flag', ep in ('weekend', 'weekend_next')) }}
+      </div>
       {% if ctx.my_driver or ctx.is_master %}
-      <a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}"><i>★</i>My Garage
-        {% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }} offer{{ "s" if ctx.pending_offers != 1 }}</span>{% endif %}</a>
+      <div class="nav-group">
+        <div class="nav-title">My career</div>
+        {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
+        {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
+        {{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}
+      </div>
       {% endif %}
-      <a href="{{ url_for('rivalry_page', token=t) }}" class="{{ 'active' if ep == 'rivalry_page' }}"><i>⚔</i>Rivalry</a>
-      <a href="{{ url_for('news_page', token=t) }}" class="{{ 'active' if ep == 'news_page' }}"><i>✦</i>Paddock News</a>
-      <a href="{{ url_for('drivers_page', token=t) }}" class="{{ 'active' if ep in ('drivers_page', 'driver_profile') }}"><i>☰</i>Drivers</a>
-      <a href="{{ url_for('teams_page', token=t) }}" class="{{ 'active' if ep in ('teams_page', 'team_profile') }}"><i>▦</i>Constructors</a>
-      <a href="{{ url_for('grid_page', token=t) }}" class="{{ 'active' if ep == 'grid_page' }}"><i>⇄</i>Grid &amp; Transfers</a>
+      <div class="nav-group">
+        <div class="nav-title">Championship</div>
+        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep in ('drivers_page', 'driver_profile')) }}
+        {{ item(url_for('teams_page', token=t), 'Constructors', 'teams', ep in ('teams_page', 'team_profile')) }}
+        {{ item(url_for('news_page', token=t), 'Paddock News', 'news', ep == 'news_page') }}
+        {{ item(url_for('records', token=t), 'Hall of Records', 'records', ep == 'records') }}
+        {% if not (ctx.my_driver or ctx.is_master) %}{{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}{% endif %}
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">Season</div>
+        {{ item(url_for('seasons_page', token=t), 'Calendar & Seasons', 'calendar', ep in ('seasons_page', 'season_review')) }}
+        {{ item(url_for('grid_page', token=t), 'Grid', 'grid', ep == 'grid_page') }}
+        {{ item(url_for('contracts_page', token=t), 'Driver Market', 'contracts', ep == 'contracts_page') }}
+      </div>
       {% if ctx.is_master %}
-      <a href="{{ url_for('market_page', token=t) }}" class="{{ 'active' if ep == 'market_page' }}"><i>✉</i>Transfer Market</a>
+      <div class="nav-group">
+        <div class="nav-title">Race Master</div>
+        {{ item(url_for('market_page', token=t), 'Transfer Market', 'market', ep == 'market_page') }}
+        {{ item(url_for('paddock_admin', token=t), 'Paddock Admin', 'settings', ep == 'paddock_admin') }}
+        {{ item(url_for('members', token=t), 'Players & Logins', 'players', ep == 'members') }}
+        <button type="button" data-dialog="career-dialog" title="League & Saves">{{ icon('saves') }}<span class="label">League &amp; Saves</span></button>
+      </div>
       {% endif %}
-      <a href="{{ url_for('contracts_page', token=t) }}" class="{{ 'active' if ep == 'contracts_page' }}"><i>✎</i>Driver Market</a>
-      <a href="{{ url_for('records', token=t) }}" class="{{ 'active' if ep == 'records' }}"><i>♛</i>Hall of Records</a>
-      <a href="{{ url_for('seasons_page', token=t) }}" class="{{ 'active' if ep == 'seasons_page' }}"><i>▤</i>Seasons &amp; Calendar</a>
-      {% if ctx.can_run %}
-      <a href="{{ url_for('paddock_admin', token=t) }}" class="{{ 'active' if ep == 'paddock_admin' }}"><i>⚙</i>Paddock Admin</a>
-      {% endif %}
-      {% if ctx.is_master %}
-      <a href="{{ url_for('members', token=t) }}" class="{{ 'active' if ep == 'members' }}"><i>⚑</i>Players &amp; Logins</a>
-      <button type="button" data-dialog="career-dialog"><i>⛁</i>Career &amp; Saves</button>
-      {% endif %}
-      <a href="{{ url_for('home') }}"><i>⌂</i>League Library</a>
+      <div class="nav-group">
+        {{ item(url_for('home'), 'League Library', 'library', false) }}
+      </div>
     </nav>
+    <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
     <div class="sidebar-foot">
       <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}">{{ ctx.role }}</span>
       <span>{{ user.display_name }}{% if ctx.my_driver %} · {{ ctx.my_driver.name }}{% endif %}</span>
@@ -63,7 +83,7 @@
         <span class="status-badge status-{{ ctx.season.status|lower }}">{{ ctx.season.status }}</span>
       </form>
       <div class="topbar-actions">
-        {% if ctx.can_run %}
+        {% if ctx.is_master %}
         <form method="post" action="{{ url_for('save_now', token=t) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
@@ -93,11 +113,11 @@
 
   {% if ctx.is_master %}
   <dialog id="career-dialog" class="dialog">
-    <div class="dialog-head"><h2>Career &amp; Saves</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="dialog-head"><h2>League &amp; Saves</h2><button class="icon-btn" data-close>✕</button></div>
     <p class="muted">Every change is saved automatically to <code>{{ t }}.f1career</code>.</p>
     <form method="post" action="{{ url_for('rename', token=t) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Rename career<input name="name" value="{{ ctx.career_name }}" maxlength="80" required></label>
+      <label>Rename league<input name="name" value="{{ ctx.career_name }}" maxlength="80" required></label>
       <button class="btn btn-sm">Rename</button>
     </form>
     <form method="post" action="{{ url_for('save_as', token=t) }}" class="inline-form">
@@ -119,10 +139,10 @@
       </ul>
     </details>
     <form method="post" action="{{ url_for('delete', token=t) }}" class="danger-zone"
-          onsubmit="return confirm('Delete this career permanently? Download a backup first if you might want it back.');">
+          onsubmit="return confirm('Delete this league permanently? Download a backup first if you might want it back.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <strong>Danger zone</strong>
-      <button class="btn btn-danger btn-sm">Delete career</button>
+      <button class="btn btn-danger btn-sm">Delete league</button>
     </form>
   </dialog>
   {% endif %}
@@ -144,7 +164,7 @@
 {% if user %}
 <dialog id="account-dialog" class="dialog">
   <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
-  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Race Steward' if user.is_steward else 'Driver') }}</p>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Scorekeeper' if user.is_steward else 'Driver') }}</p>
   <div class="button-row">
     <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Change password' }}</a>
     <form method="post" action="{{ url_for('logout') }}">

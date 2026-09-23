@@ -215,3 +215,39 @@ def season_review(conn, season_id):
     players = [r for r in table if r["driver"]["is_player"]]
     return {"season": season, "awards": awards, "table": table[:10], "teams": teams[:5], "players": players,
             "champion_team": teams[0] if teams and teams[0]["points"] else None}
+
+
+def standings_with_changes(conn, season_id, limit=8):
+    """Driver standings with places gained/lost since the previous round (by points)."""
+    table = S.driver_standings(conn, season_id)
+    ids = [r["driver_id"] for r in table]
+    labels, series = points_progression(conn, season_id, ids)
+    if len(labels) >= 2:
+        before = sorted(ids, key=lambda d: (-series[d][-2], next(r["position"] for r in table if r["driver_id"] == d)))
+        prev = {d: i + 1 for i, d in enumerate(before)}
+        for r in table:
+            r["change"] = prev[r["driver_id"]] - r["position"]
+    else:
+        for r in table:
+            r["change"] = 0
+    top = table[:limit]
+    extra = [r for r in table[limit:] if r["driver"]["is_player"]]
+    return top + extra
+
+
+def driver_card(conn, season_id, driver_id):
+    """Everything the dashboard's 'your driver' panel shows."""
+    row = next((r for r in S.driver_standings(conn, season_id) if r["driver_id"] == driver_id), None)
+    recent = conn.execute("""SELECT r.*, e.round_number, e.name AS event_name, e.is_sprint FROM results r
+                             JOIN events e ON e.id = r.event_id WHERE r.driver_id = ? AND e.season_id = ?
+                             AND e.status = ? ORDER BY e.round_number DESC LIMIT 5""",
+                          (driver_id, season_id, C.EVENT_COMPLETE)).fetchall()
+    form = []
+    for r in reversed(recent):
+        finished = r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+        form.append({"round": r["round_number"], "event": r["event_name"],
+                     "label": f"P{r['race_position']}" if finished else r["result_status"],
+                     "kind": "win" if finished and r["race_position"] == 1 else
+                             "points" if finished and r["race_position"] <= 10 else
+                             "finish" if finished else "out"})
+    return {"row": row, "form": form, "driver": S.driver_map(conn)[driver_id]}

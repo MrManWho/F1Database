@@ -41,8 +41,8 @@
     <form method="post" action="{{ url_for('paddock_driver', token=ctx.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Name<input name="name" required maxlength="60" placeholder="A new F2 graduate"></label>
-      <label>Starting Reputation (1–100)<input name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="60" required></label>
-      <p class="muted small">New drivers start without a seat. Put them in a car from Grid &amp; Transfers.</p>
+      <p class="muted small">Every new driver starts at {{ '%.0f'|format(C.ROOKIE_REPUTATION) }} Reputation, like any rookie, with no seat.
+        Put them in a car from Grid &amp; Transfers. Human players are added in <em>Players &amp; Logins</em>.</p>
       <button class="btn btn-primary">Add driver</button>
     </form>
   </section>
@@ -89,7 +89,7 @@
   <h2>Drivers</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Name</th><th>Seat</th><th>Baseline Rep</th><th>Rep now</th><th>Active</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Seat</th><th>Baseline Rep</th><th>Rep now</th><th>Active</th><th></th><th></th></tr></thead>
     <tbody>{% for d in all_drivers %}
       {% set f = 'driver-' ~ d.id %}
       <tr class="{{ 'player-row' if d.is_player }}">
@@ -99,10 +99,27 @@
         <td class="num">{{ d.rep_now }}</td>
         <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if d.active }}></td>
         <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
+        <td><button type="button" class="btn btn-sm btn-danger" data-dialog="del-driver-{{ d.id }}">Delete</button></td>
       </tr>
     {% endfor %}</tbody>
   </table>
   </div>
+  {% for d in all_drivers %}
+  <dialog id="del-driver-{{ d.id }}" class="dialog">
+    <div class="dialog-head"><h2>Delete {{ d.name }}?</h2><button class="icon-btn" data-close>✕</button></div>
+    <form method="post" action="{{ url_for('paddock_driver_delete', token=ctx.token, driver_id=d.id) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="muted">This removes {{ d.name }} from the league for good{{ ', including their login link, garage and offers' if d.is_player }}.
+        If you might use them in a future season, close this and untick <b>Active</b> instead.</p>
+      {% if d.history.races %}
+      <div class="banner banner-warn">{{ d.name }} has <b>{{ d.history.races }}</b> race result(s). Deleting them removes those results too,
+        which changes the standings and constructor points for those races.</div>
+      <label class="check"><input type="checkbox" name="force" value="1" required> Also delete their race results</label>
+      {% endif %}
+      <button class="btn btn-danger">Delete permanently</button>
+    </form>
+  </dialog>
+  {% endfor %}
   {% for d in all_drivers %}
   <form id="driver-{{ d.id }}" method="post" action="{{ url_for('paddock_driver', token=ctx.token) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="driver_id" value="{{ d.id }}"></form>

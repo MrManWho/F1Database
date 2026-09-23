@@ -176,7 +176,13 @@
       window.F1.toast(parts.join(" and ") + " result(s) still incomplete.", "error");
       return;
     }
-    save(true).then(function (ok) { if (ok) window.F1.toast("Weekend complete.", "success"); });
+    const master = table.dataset.master === "1";
+    if (!master && !confirm("Submit these results? After submitting, only the Race Master can change them.")) return;
+    save(true).then(function (ok) {
+      if (!ok) return;
+      window.F1.toast(master ? "Weekend complete." : "Results submitted.", "success");
+      if (!master) { dirty = false; setTimeout(function () { window.location.reload(); }, 900); }
+    });
   });
 
   // ---- Quick order (tap mode): tap drivers in finishing order to number a column.

@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.9
+# F1 Universe Tracker v1.10
 
 A companion website for F1 game career **leagues**. Any number of people can drive: each player
 has their own login, garage and contract negotiations, and a Race Master or Race Steward enters the
@@ -24,6 +24,34 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.10: Scorekeeper role, cleaner navigation, deleting drivers
+
+* **Scorekeeper** (was Race Steward) can do exactly one thing: enter qualifying, Sprint and race results,
+  plus the AI difficulty. The button says **Submit results**. After a weekend is submitted it's locked
+  for them, and only the Race Master can change it. Scorekeepers can't touch the grid, calendar,
+  seasons, Paddock Admin, the transfer market or saves.
+* **Navigation** is grouped (Race weekend · My career · Championship · Season · Race Master) with icons,
+  and it can collapse to an icon rail (the **Collapse** button; the choice is remembered).
+* **Control Room** has a season progress strip (one dot per round, with the next race and Sprint
+  weekends marked), a **Your driver** card (position, points, Form and Reputation bars, last five
+  results) and position-change arrows in the standings.
+* **New drivers** always start at 45 Reputation, like every rookie.
+* **Delete drivers** permanently from Paddock Admin. Drivers with race results need an extra tick,
+  and their results go too. To keep someone for a future season, untick **Active** instead.
+
+## Where your data lives (and why updates don't lose it)
+
+Everything a league contains (drivers, results, seasons, offers, news) is one SQLite file per league,
+plus `accounts.db` for logins and settings. These live in the **data folder**, not with the code:
+
+* **On Render:** the persistent disk mounted at `/data` (set in `render.yaml`). A deploy replaces
+  only the program files. The disk stays attached to the service, so every league, login and backup
+  survives. Automatic backups are on the same disk under `/data/backups`.
+* **At home:** `%LOCALAPPDATA%\F1UniverseTracker` on Windows.
+
+When an update changes the save format, each league is copied to `backups/` before it's upgraded.
+Download a backup to your own computer now and then too (Race Master → League & Saves).
 
 ## v1.9: open leagues for any number of players
 
@@ -108,7 +136,7 @@ There are three roles, set per login in **Accounts**:
 | Role | Can do | Can't see |
 |---|---|---|
 | **Race Master** | Everything: logins, player links, saves, backups and export, every garage, every offer and negotiation thread | nothing is hidden |
-| **Race Steward** | Enter qualifying, Sprint and race results (including screenshot import and AI difficulty). Run the grid, calendar, seasons, car ratings and Driver Market storylines. Open and close transfer windows. | Other players' garages, offers, negotiation threads and notifications; logins; backups and exports (these contain everyone's offers) |
+| **Scorekeeper** | Enter results (including screenshot import and AI difficulty) until the weekend is submitted | Other players' garages, offers and notifications; every admin page |
 | **Driver** | Their own garage and offers; everything else read-only | same as Steward |
 
 To keep the career honest, give the person entering results (e.g. David) the **Race Steward** role

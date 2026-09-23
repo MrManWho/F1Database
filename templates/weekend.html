@@ -2,7 +2,8 @@
 {% from "_macros.html" import team_dot, difficulty with context %}
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
-{% set ro = not ctx.can_run %}
+{% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
+{% set ro = not ctx.can_run or locked %}
 <div class="weekend-head">
   <div>
     <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>
@@ -19,8 +20,10 @@
   </div>
 </div>
 
-{% if ro %}
-<div class="banner">View only. The Race Master enters results for this weekend.</div>
+{% if locked %}
+<div class="banner">These results have been submitted. Only the Race Master can change them now.</div>
+{% elif ro %}
+<div class="banner">View only. The Race Master or a Scorekeeper enters results for this weekend.</div>
 {% endif %}
 
 <section class="card diff-strip">
@@ -64,7 +67,7 @@
   <div class="table-wrap">
   <table class="data-table entry-table" id="entry-table"
          data-url="{{ url_for('api_weekend', token=ctx.token, event_id=event.id) }}"
-         data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}"
+         data-sprint="{{ 1 if event.is_sprint else 0 }}" data-readonly="{{ 1 if ro else 0 }}" data-master="{{ 1 if ctx.is_master else 0 }}"
          data-max="{{ [rows|length, C.MAX_POSITION]|max }}"
          data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'>
     <thead>
@@ -109,7 +112,7 @@
     {% if not ro %}
     <div class="button-row">
       <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
-      <button type="button" class="btn btn-primary" id="mark-complete">Mark weekend complete</button>
+      <button type="button" class="btn btn-primary" id="mark-complete">{{ 'Mark weekend complete' if ctx.is_master else 'Submit results' }}</button>
     </div>
     {% endif %}
   </div>

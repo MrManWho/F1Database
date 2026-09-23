@@ -739,11 +739,20 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
                        json={"results": [{"driver_id": ids[0], "race_position": 1}], "ai_difficulty": 88})
     assert res.get_json()["ok"]
     page = steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
-    assert "Mark weekend complete" in page and "View only" not in page
-    assert steward.get(f"/career/{token}/paddock").status_code == 200
-    steward.post(f"/career/{token}/calendar/add", data={"name": "Portuguese GP", "location": "Portimão", "csrf_token": "tok"})
-    with storage.session(token) as conn:
-        assert S.events(conn, S.current_season_id(conn))[-1]["name"] == "Portuguese GP"
+    assert "Submit results" in page and "View only" not in page
+    # Scorekeepers only enter results: no admin pages, calendar or grid changes.
+    assert steward.get(f"/career/{token}/paddock").status_code == 403
+    assert steward.post(f"/career/{token}/calendar/add", data={"name": "X GP", "csrf_token": "tok"}).status_code == 403
+    assert steward.post(f"/career/{token}/grid/save", data={"csrf_token": "tok"}).status_code == 403
+    assert steward.post(f"/career/{token}/seasons/new", data={"year": "2027", "csrf_token": "tok"}).status_code == 403
+    # Once submitted, the weekend is locked for them (but not for the Race Master).
+    full = {"mark_complete": True, "results": [{"driver_id": d, "race_position": i + 1} for i, d in enumerate(ids)]}
+    assert steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full).get_json()["ok"]
+    again = steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"}, json=full)
+    assert again.status_code == 403 and "Race Master" in again.get_json()["error"]
+    assert "have been submitted" in steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
+    assert master_client.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
+                              json=full).get_json()["ok"]
     # ...but never sees Carson's side of the market, and can't open windows or write storylines.
     assert steward.get(f"/career/{token}/market").status_code == 302
     assert steward.post(f"/career/{token}/market/open", data={"csrf_token": "tok"}).status_code == 403
@@ -1003,3 +1012,22 @@ def test_race_master_can_add_a_player_mid_season(master_client):
         windows = market.windows(conn)
         assert len(windows) == 1 and windows[0]["kind"] == "Rookie Draft"
         assert {o["driver_id"] for o in market.offers(conn)} == {ben}  # Ana doesn't get a surprise second round
+
+
+
+# --------------------------------------------------------------------------- v1.10
+
+def test_drivers_can_be_deleted_completely(db):
+    sid = S.current_season_id(db)
+    spare = S.add_driver(db, "Spare Driver", C.ROOKIE_REPUTATION, sid)
+    assert S.delete_driver(db, spare, sid) == "Spare Driver"
+    assert db.execute("SELECT COUNT(*) FROM drivers WHERE id = ?", (spare,)).fetchone()[0] == 0
+    perez = driver_id(db, "Sergio Perez")
+    seat = S.driver_seats(db, sid)[perez]
+    run_event(db, S.events(db, sid)[0])
+    with pytest.raises(S.ValidationError, match="race result"):
+        S.delete_driver(db, perez, sid)
+    S.delete_driver(db, perez, sid, force=True)
+    assert perez not in S.driver_seats(db, sid)
+    assert db.execute("SELECT COUNT(*) FROM results WHERE driver_id = ?", (perez,)).fetchone()[0] == 0
+    assert S.grid_map(db, sid)[seat] is None or S.grid_map(db, sid)[seat] != perez

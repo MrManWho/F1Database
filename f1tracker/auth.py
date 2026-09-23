@@ -97,7 +97,7 @@ def list_users():
 
 ROLES = {
     "master": "Race Master",     # full admin: logins, saves, every garage and negotiation
-    "steward": "Race Steward",   # runs race weekends and seasons, but only sees their own garage
+    "steward": "Scorekeeper",    # enters race results (until submitted) and nothing else
     "driver": "Driver",          # their own garage and offers, everything else read-only
 }
 

@@ -1198,3 +1198,43 @@ def recalculate_reputation_history(conn):
         prev_final = final
     after = {r["driver_id"]: r["reputation"] for r in driver_standings(conn, current)}
     return {did: (before.get(did), after[did]) for did in after}
+
+
+
+def driver_history(conn, driver_id):
+    """How much of the record a driver appears in (to warn before deleting them)."""
+    return {
+        "races": _row(conn, """SELECT COUNT(*) AS n FROM results r JOIN events e ON e.id = r.event_id
+                               WHERE r.driver_id = ? AND e.status != ?""", (driver_id, C.EVENT_NOT_RUN))["n"],
+        "offers": _row(conn, "SELECT COUNT(*) AS n FROM offers WHERE driver_id = ?", (driver_id,))["n"],
+    }
+
+
+def delete_driver(conn, driver_id, season_id, force=False):
+    """Remove a driver completely. Drivers with race results need force=True, and those results go too
+    (the other drivers' positions and points are left as entered)."""
+    driver = _row(conn, "SELECT * FROM drivers WHERE id = ?", (driver_id,))
+    if not driver:
+        raise ValidationError("Driver not found")
+    history = driver_history(conn, driver_id)
+    if history["races"] and not force:
+        raise ValidationError(f"{driver['name']} has {history['races']} race result(s). Tick 'also delete their race "
+                              "results' to remove them anyway, or untick Active to retire them instead.")
+    for sid in [r["season_id"] for r in _rows(conn, "SELECT DISTINCT season_id FROM season_grid WHERE driver_id = ?",
+                                              (driver_id,))]:
+        gmap = grid_map(conn, sid)
+        seat = next(k for k, v in gmap.items() if v == driver_id)
+        gmap[seat] = None
+        if sid == season_id:
+            gmap[seat] = best_free_ai(conn, sid, set(gmap.values()), exclude={driver_id})
+        write_grid(conn, sid, gmap)
+    conn.execute("DELETE FROM results WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM offer_messages WHERE offer_id IN (SELECT id FROM offers WHERE driver_id = ?)", (driver_id,))
+    conn.execute("DELETE FROM offers WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM contracts WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM season_driver_state WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM career_members WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM notifications WHERE driver_id = ?", (driver_id,))
+    conn.execute("UPDATE news SET driver_id = NULL WHERE driver_id = ?", (driver_id,))
+    conn.execute("DELETE FROM drivers WHERE id = ?", (driver_id,))
+    return driver["name"]

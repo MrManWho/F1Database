@@ -45,6 +45,12 @@
     if (e.target.tagName === "DIALOG") e.target.close();  // backdrop click
   });
 
+  const rail = document.getElementById("rail-toggle");
+  if (rail) rail.addEventListener("click", function () {
+    const on = document.body.classList.toggle("rail");
+    try { localStorage.setItem("f1-rail", on ? "1" : "0"); } catch (e) { /* private mode */ }
+  });
+
   const menu = document.getElementById("menu-btn");
   if (menu) menu.addEventListener("click", function () { document.getElementById("sidebar").classList.toggle("open"); });
 

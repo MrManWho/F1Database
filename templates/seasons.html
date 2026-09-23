@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><div class="kicker">Seasons &amp; Calendar</div><h1>Season archive</h1></div>
-  {% if ctx.can_run %}<button class="btn btn-primary" data-dialog="season-dialog">Create next season</button>{% endif %}
+  {% if ctx.is_master %}<button class="btn btn-primary" data-dialog="season-dialog">Create next season</button>{% endif %}
 </div>
 <div class="season-grid">
   {% for s in seasons_list %}
@@ -15,7 +15,7 @@
     <div class="button-row tight">
       {% if s.id == ctx.season.id %}<span class="pill">Viewing</span>{% else %}<a class="btn btn-sm btn-ghost" href="?season={{ s.id }}">View calendar</a>{% endif %}
       {% if s.id == ctx.current_season_id %}<span class="pill pill-hot">Current</span>
-      {% elif ctx.can_run %}
+      {% elif ctx.is_master %}
       <form method="post" action="{{ url_for('season_switch', token=ctx.token) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="season_id" value="{{ s.id }}">
         <button class="btn btn-sm btn-ghost">Make current</button>
@@ -31,25 +31,25 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Round</th><th>Grand Prix</th><th>Location</th><th>Sprint</th><th>AI used</th><th>Status</th>{% if ctx.can_run %}<th></th>{% endif %}</tr></thead>
+      <thead><tr><th>Round</th><th>Grand Prix</th><th>Location</th><th>Sprint</th><th>AI used</th><th>Status</th>{% if ctx.is_master %}<th></th>{% endif %}</tr></thead>
       <tbody>
       {% for e in events %}
       <tr>
-        <td><input type="number" name="round_{{ e.id }}" value="{{ e.round_number }}" min="1" class="narrow" {{ 'disabled' if not ctx.can_run }}></td>
-        <td><input name="name_{{ e.id }}" value="{{ e.name }}" required maxlength="80" {{ 'disabled' if not ctx.can_run }}></td>
-        <td><input name="location_{{ e.id }}" value="{{ e.location }}" maxlength="80" {{ 'disabled' if not ctx.can_run }}></td>
-        <td class="center"><input type="checkbox" name="sprint_{{ e.id }}" value="1" {{ 'checked' if e.is_sprint }} {{ 'disabled' if not ctx.can_run }}></td>
+        <td><input type="number" name="round_{{ e.id }}" value="{{ e.round_number }}" min="1" class="narrow" {{ 'disabled' if not ctx.is_master }}></td>
+        <td><input name="name_{{ e.id }}" value="{{ e.name }}" required maxlength="80" {{ 'disabled' if not ctx.is_master }}></td>
+        <td><input name="location_{{ e.id }}" value="{{ e.location }}" maxlength="80" {{ 'disabled' if not ctx.is_master }}></td>
+        <td class="center"><input type="checkbox" name="sprint_{{ e.id }}" value="1" {{ 'checked' if e.is_sprint }} {{ 'disabled' if not ctx.is_master }}></td>
         <td class="num">{{ e.ai_difficulty if e.ai_difficulty is not none else '—' }}</td>
         <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}" class="status-badge status-{{ e.status|lower|replace(' ', '-') }}">{{ e.status }}</a></td>
-        {% if ctx.can_run %}<td>{% if e.status == 'Not Run' %}<button class="btn btn-sm btn-ghost" type="submit" form="del-{{ e.id }}">Remove</button>{% endif %}</td>{% endif %}
+        {% if ctx.is_master %}<td>{% if e.status == 'Not Run' %}<button class="btn btn-sm btn-ghost" type="submit" form="del-{{ e.id }}">Remove</button>{% endif %}</td>{% endif %}
       </tr>
       {% endfor %}
       </tbody>
     </table>
     </div>
-    {% if ctx.can_run %}<button class="btn btn-primary">Save calendar</button>{% endif %}
+    {% if ctx.is_master %}<button class="btn btn-primary">Save calendar</button>{% endif %}
   </form>
-  {% if ctx.can_run %}
+  {% if ctx.is_master %}
   {% for e in events if e.status == 'Not Run' %}
   <form id="del-{{ e.id }}" method="post" action="{{ url_for('calendar_delete', token=ctx.token, event_id=e.id) }}" onsubmit="return confirm('Remove {{ e.name }} from the calendar?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
@@ -66,7 +66,7 @@
   {% endif %}
 </section>
 
-{% if ctx.can_run %}
+{% if ctx.is_master %}
 <dialog id="season-dialog" class="dialog">
   <div class="dialog-head"><h2>Create the {{ next_year }} season</h2><button class="icon-btn" data-close>✕</button></div>
   {% if not all_complete %}<div class="banner banner-warn">The {{ latest.year }} season still has unfinished rounds. Creating the next season marks it Complete anyway.</div>{% endif %}
