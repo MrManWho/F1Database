@@ -1,7 +1,7 @@
 HOW TO UPDATE F1 UNIVERSE TRACKER
 =================================
 
-Your careers, logins and passwords are NOT stored in this folder. They live in
+Your leagues, logins and passwords are NOT stored in this folder. They live in
 %LOCALAPPDATA%\F1UniverseTracker, so replacing the program files never touches them.
 
 EASY WAY
@@ -17,6 +17,6 @@ BY HAND
 4. Double-click run_lan.bat (or run.bat) again.
 
 Anyone who was logged in stays logged in - they may just need to refresh.
-If an update changes the save format, each career is backed up automatically to
+If an update changes the save format, each league is backed up automatically to
 %LOCALAPPDATA%\F1UniverseTracker\backups before anything is changed.
 New Python packages install themselves the next time you launch.

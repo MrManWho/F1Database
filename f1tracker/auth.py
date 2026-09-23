@@ -108,7 +108,7 @@ def list_users():
 ROLES = {
     "master": "Race Master",     # full admin: logins, saves, every garage and negotiation
     "steward": "Scorekeeper",    # enters race results (until submitted) and nothing else
-    "driver": "Driver",          # their own garage and offers, everything else read-only
+    "driver": "Member",          # league access (driver / Scorekeeper / spectator) is set per league
 }
 
 

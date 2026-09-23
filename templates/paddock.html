@@ -8,7 +8,7 @@
   <div class="card-head"><h2>Car ratings</h2><span class="muted small">Set these to match the game's car performance</span></div>
   <p class="muted small">Car ratings decide which cars count as fast before three rounds of this season are done. That affects the bar teams set in the
     transfer market and the "vs the car" part of the difficulty score. Every winter the cars develop on their own: they drift toward the pack,
-    better finishers get more money, and there's some luck. You can always correct them here.</p>
+    better constructors' finishers develop faster, and there's some luck. You can always correct them here.</p>
   <form method="post" action="{{ url_for('paddock_cars', token=ctx.token) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="rating-grid">

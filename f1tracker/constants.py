@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.13"
-SCHEMA_VERSION = 10
+APP_VERSION = "1.14"
+SCHEMA_VERSION = 11
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -174,3 +174,17 @@ REACTIONS = ["🔥", "👏", "😂", "😬", "🏆", "💀"]
 PREDICTION_POINTS = {"pole": 3, "winner": 5, "fastest_lap": 2, "top_player": 2}
 
 AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+# Contracts: instead of money, a driver pledges how much they'll grow. Targets are set against what the
+# car should manage (a slow car isn't expected to win), so the pledge is fair at every team.
+# form: Form above the car's baseline by season end; rep: Reputation gained over the season.
+GROWTH_LEVELS = [
+    {"name": "Steady", "form": 0, "rep": 0.5, "blurb": "Deliver what the car is capable of"},
+    {"name": "Solid", "form": 6, "rep": 2.0, "blurb": "Beat the car's expected results"},
+    {"name": "Strong", "form": 12, "rep": 4.0, "blurb": "Clearly outperform the machinery"},
+    {"name": "Breakout", "form": 20, "rep": 7.0, "blurb": "A season people talk about"},
+]
+
+# Team relationship (0-100) bands, best first: (minimum score, status)
+RELATION_BANDS = [(80, "Delighted"), (55, "Happy"), (40, "Concerned"), (25, "Unhappy"), (0, "Seat at risk")]
+RELATION_START = 60.0

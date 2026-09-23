@@ -42,11 +42,12 @@
         {{ item(url_for('dashboard', token=t), 'Control Room', 'home', ep == 'dashboard') }}
         {{ item(url_for('weekend_next', token=t), 'Enter results' if ctx.can_run else 'Race results', 'flag', ep in ('weekend', 'weekend_next')) }}
       </div>
-      {% if ctx.my_driver or ctx.is_master %}
+      {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
+      {% if ctx.my_driver %}
       <div class="nav-group">
         <div class="nav-title">My career</div>
-        {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
         {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
+        {{ item(url_for('team_standing', token=t), 'Team Standing', 'teams', ep == 'team_standing') }}
         {{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}
       </div>
       {% endif %}
@@ -57,17 +58,21 @@
         {{ item(url_for('news_page', token=t), 'Paddock News', 'news', ep == 'news_page') }}
         {{ item(url_for('records', token=t), 'Hall of Records', 'records', ep == 'records') }}
         {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
-        {% if not (ctx.my_driver or ctx.is_master) %}{{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}{% endif %}
+        {% if not ctx.my_driver %}{{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}{% endif %}
       </div>
       <div class="nav-group">
         <div class="nav-title">Season</div>
         {{ item(url_for('seasons_page', token=t), 'Calendar & Seasons', 'calendar', ep in ('seasons_page', 'season_review')) }}
-        {{ item(url_for('grid_page', token=t), 'Grid', 'grid', ep == 'grid_page') }}
+        {{ item(url_for('grid_page', token=t), 'Grid & Transfers', 'grid', ep == 'grid_page') }}
         {{ item(url_for('contracts_page', token=t), 'Driver Market', 'contracts', ep == 'contracts_page') }}
       </div>
       {% if ctx.is_master %}
       <div class="nav-group">
         <div class="nav-title">Race Master</div>
+        {% if not ctx.my_driver %}
+        {{ item(url_for('garage', token=t), 'Player Garages', 'garage', ep == 'garage', badge) }}
+        {{ item(url_for('team_standing', token=t), 'Team Standings', 'teams', ep == 'team_standing') }}
+        {% endif %}
         {{ item(url_for('market_page', token=t), 'Transfer Market', 'market', ep == 'market_page') }}
         {{ item(url_for('paddock_admin', token=t), 'Paddock Admin', 'settings', ep == 'paddock_admin') }}
         {{ item(url_for('members', token=t), 'Players & Logins', 'players', ep == 'members') }}
@@ -203,7 +208,8 @@
     </div>
   </div>
   <div class="button-row">
-    <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Change password' }}</a>
+    <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Account & password' }}</a>
+    <a class="btn btn-ghost" href="{{ url_for('changelog_page') }}">What's new in v{{ APP_VERSION }}</a>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn">Log out</button>

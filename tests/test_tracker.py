@@ -412,14 +412,15 @@ def _rookie_window(db, rng):
 def test_reasonable_counter_is_agreed_then_signed(db, rng):
     sid, window, david, _ = _rookie_window(db, rng)
     offer = market.offers(db, driver_id=david)[0]
-    assert offer["salary"] and offer["ceiling_role"] == "No. 2" and offer["max_years"] <= 3
-    ask_salary = offer["max_salary"]  # right at the team's private limit
-    result = market.counter_offer(db, offer["id"], "No. 2", offer["min_years"], ask_salary, rng=rng)
+    assert offer["growth"] is not None and offer["ceiling_role"] == "No. 2" and offer["max_years"] <= 3
+    assert offer["min_growth"] >= 1  # teams sign rookies to develop them
+    pledge = market.growth_needed(offer["min_growth"], "No. 2", offer["min_years"])  # exactly what they need
+    result = market.counter_offer(db, offer["id"], "No. 2", offer["min_years"], pledge, rng=rng)
     assert result == "agreed"
     agreed = market.get_offer(db, offer["id"])
-    assert agreed["final"] and agreed["stage"] == "Terms agreed" and agreed["salary"] == ask_salary
+    assert agreed["final"] and agreed["stage"] == "Terms agreed" and agreed["growth"] == pledge
     with pytest.raises(S.ValidationError, match="final offer"):
-        market.counter_offer(db, offer["id"], "No. 2", 1, 0.5, rng=rng)
+        market.counter_offer(db, offer["id"], "No. 2", 1, 0, rng=rng)
     market.accept_offer(db, offer["id"])
     assert S.driver_seats(db, sid)[david][0] == offer["team_id"]
     authors = [m["author"] for m in market.offers(db, driver_id=david)[0]["messages"]]
@@ -430,20 +431,41 @@ def test_rookies_cannot_demand_number_one_and_greed_ends_talks(db, rng):
     _sid, window, david, _ = _rookie_window(db, rng)
     offers = market.offers(db, driver_id=david)
     first = offers[0]
-    result = market.counter_offer(db, first["id"], "No. 1", 5, 50, rng=rng)
+    result = market.counter_offer(db, first["id"], "No. 1", 5, 0, rng=rng)
     assert result == "final"  # a greedy ask burns two rounds of patience at once
     assert market.get_offer(db, first["id"])["role"] == "No. 2"
     with pytest.raises(S.ValidationError, match="final offer"):
-        market.counter_offer(db, first["id"], "No. 1", 5, 50, rng=rng)
+        market.counter_offer(db, first["id"], "No. 1", 5, 0, rng=rng)
 
     second = offers[1]
-    result = market.counter_offer(db, second["id"], "Equal Status", 2, round(second["max_salary"] * 1.2, 1), rng=rng)
-    assert result == "countered"
+    result = market.counter_offer(db, second["id"], "Equal Status", 2, 3, rng=rng)
+    assert result == "countered"  # even a Breakout pledge can't buy a rookie better status
     countered = market.get_offer(db, second["id"])
-    assert countered["role"] == "No. 2" and countered["salary"] <= countered["max_salary"]
-    assert countered["salary"] >= second["salary"]
-    result = market.counter_offer(db, second["id"], "No. 1", 5, 60, rng=rng)
+    assert countered["role"] == "No. 2" and countered["growth"] == 3
+    result = market.counter_offer(db, second["id"], "No. 1", 5, 0, rng=rng)
     assert result == "collapsed" and market.get_offer(db, second["id"])["status"] == C.OFFER_COLLAPSED
+
+
+def test_low_pledge_is_countered_and_big_pledge_buys_leverage(db, rng):
+    sid = S.current_season_id(db)
+    david, _ = players(db)
+    window = market.open_window(db, sid, rng=rng)
+    offer = market.offers(db, driver_id=david)[0]
+    # Pretend this is an experienced driver whose team is lukewarm: No. 2 ceiling, 1-2 years, needs a Solid pledge.
+    db.execute("UPDATE offers SET ceiling_role = 'No. 2', min_years = 1, max_years = 2, min_growth = 1, patience = 3, "
+               "final = 0 WHERE id = ?", (offer["id"],))
+    orig = market.experience
+    market.experience = lambda conn, did: "Established"
+    try:
+        assert market.counter_offer(db, offer["id"], "No. 2", 1, 0, rng=rng) == "countered"
+        o = market.get_offer(db, offer["id"])
+        assert o["growth"] == 1 and "Solid season" in market.offers(db, driver_id=david)[0]["messages"][-1]["message"]
+        # Two levels over what Equal Status needs (1) = Breakout: status one step past the ceiling, plus an extra year.
+        assert market.counter_offer(db, offer["id"], "Equal Status", 3, 3, rng=rng) == "agreed"
+        o = market.get_offer(db, offer["id"])
+        assert (o["role"], o["years"], o["growth"]) == ("Equal Status", 3, 3)
+    finally:
+        market.experience = orig
 
 
 def test_approaches_are_judged_limited_and_lifeline_when_out_of_options(db, rng):
@@ -477,16 +499,16 @@ def test_v4_offers_migrate_and_can_be_negotiated(career, rng):
     raw = sqlite3.connect(str(storage.career_path(career)))
     raw.execute("DROP TABLE offer_messages")
     for column in ("salary", "origin", "stage", "patience", "final", "lifeline", "ceiling_role", "min_years",
-                   "max_years", "max_salary"):
+                   "max_years", "max_salary", "growth", "min_growth"):
         raw.execute(f"ALTER TABLE offers DROP COLUMN {column}")
     raw.execute("UPDATE meta SET value = '4' WHERE key = 'schema_version'")
     raw.commit()
     raw.close()
     with storage.session(career) as conn:
-        assert market.get_offer(conn, offer_id)["salary"] is None
-        result = market.counter_offer(conn, offer_id, "No. 2", 1, 0.3, rng=rng)
+        assert market.get_offer(conn, offer_id)["growth"] is None
+        result = market.counter_offer(conn, offer_id, "No. 2", 1, 3, rng=rng)
         assert result == "agreed"
-        assert market.get_offer(conn, offer_id)["max_salary"] is not None
+        assert market.get_offer(conn, offer_id)["min_growth"] is not None
 
 
 def test_garage_negotiation_routes(app, master_client):
@@ -500,7 +522,7 @@ def test_garage_negotiation_routes(app, master_client):
     page = master_client.get(f"/career/{token}/garage").get_data(as_text=True)
     assert "Counter-offer" in page and "Approach a team" in page
     res = master_client.post(f"/career/{token}/offers/{offer['id']}/counter",
-                             data={"role": "No. 2", "years": "1", "salary": "0.3", "csrf_token": "tok"})
+                             data={"role": "No. 2", "years": "1", "growth": "3", "csrf_token": "tok"})
     assert res.status_code == 302
     with storage.session(token) as conn:
         assert market.get_offer(conn, offer["id"])["stage"] == "Terms agreed"
@@ -1129,7 +1151,7 @@ def test_join_requests_carry_a_role_the_race_master_can_change(app, master_clien
     # Scorekeeper flags survive the links form.
     master_client.post(f"/career/{token}/members", data={
         f"user_{members['sam']['driver_id']}": "sam", f"user_{members['lee']['driver_id']}": "lee",
-        "viewers": ["kim"], "scorekeepers": ["lee"], "csrf_token": "tok"})
+        f"keeper_{members['lee']['driver_id']}": "1", "member_kim": "spectator", "csrf_token": "tok"})
     with storage.session(token) as conn:
         flags = {r["username"]: r["scorekeeper"] for r in conn.execute("SELECT * FROM career_members")}
     assert flags == {"sam": 0, "lee": 1, "kim": 0}

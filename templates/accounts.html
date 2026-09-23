@@ -79,15 +79,16 @@
 <section class="card">
   <h2>All logins</h2>
   <div class="role-help small muted">
-    <p><b>Race Master</b>: full admin. Manages logins, saves and backups, and can see every garage, offer and negotiation.
-      Best kept as a separate admin login you rarely use.</p>
-    <p><b>Scorekeeper</b>: enters qualifying, Sprint and race results (and the AI difficulty used). Once a weekend is submitted only
-      the Race Master can change it. Otherwise the same as a Driver: their own garage, offers and notifications only.</p>
-    <p><b>Driver</b>: their own garage and offers. Everything else is read-only.</p>
+    <p><b>Race Master</b>: full admin of every league. Manages logins, saves and backups, and can see every garage, offer and negotiation.
+      A Race Master only drives if you link them to a player driver in a league.</p>
+    <p><b>Scorekeeper</b>: enters qualifying, Sprint and race results (and the AI difficulty used) in every league they belong to.
+      Once a weekend is submitted only the Race Master can change it. To make someone Scorekeeper in just one league, use that league's
+      Players &amp; Logins page instead.</p>
+    <p><b>Member</b>: a normal login. What they can do in each league (drive, keep score or just watch) is set in that league's Players &amp; Logins.</p>
   </div>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Careers</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
+    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Leagues</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>

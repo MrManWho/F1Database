@@ -29,10 +29,21 @@
   <div class="stat card"><small>Points</small><strong>{{ row.points if row else 0 }}</strong><span class="muted small">{{ 'P' ~ row.position ~ ' in WDC' if row else '' }}</span></div>
 </div>
 
-{% macro terms_line(role, years, salary, start) -%}
+{% macro pledge_text(team_id, growth) -%}
+{%- set t = pledges[team_id][growth or 0] -%}
+Form {{ '%.0f'|format(t.form_target) }}+ · Reputation {{ '%.1f'|format(t.rep_target) }}+
+{%- endmacro %}
+
+{% macro terms_line(role, years, growth, start, team_id) -%}
 <span><small>Role</small><b>{{ role }}</b></span>
 <span><small>Term</small><b>{{ years }} yr · {{ start }}{{ '–' ~ (start + years - 1) if years > 1 }}</b></span>
-<span><small>Salary</small><b>{{ '$%.1fM'|format(salary) if salary is not none else '—' }}</b></span>
+<span title="{{ pledge_text(team_id, growth) }} by the end of each season"><small>Growth pledge</small><b>{{ C.GROWTH_LEVELS[growth or 0].name }}</b></span>
+{%- endmacro %}
+
+{% macro growth_select(team_id, selected) -%}
+<select name="growth">
+  {% for g in C.GROWTH_LEVELS %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == (selected or 0) }}>{{ g.name }}{% if team_id %}: {{ pledge_text(team_id, loop.index0) }}{% else %}: {{ g.blurb }}{% endif %}</option>{% endfor %}
+</select>
 {%- endmacro %}
 
 {% macro thread(o) -%}
@@ -41,7 +52,7 @@
   <li class="msg msg-{{ m.author }}">
     <span class="msg-who">{{ o.team.name if m.author == 'team' else ('You' if m.author == 'driver' else 'Paddock') }}</span>
     {% if m.message %}<span class="msg-text">{{ m.message }}</span>{% endif %}
-    {% if m.role %}<span class="msg-terms">{{ m.role }} · {{ m.years }} yr · {{ '$%.1fM'|format(m.salary) if m.salary is not none else '—' }}</span>{% endif %}
+    {% if m.role %}<span class="msg-terms">{{ m.role }} · {{ m.years }} yr{% if m.growth is not none %} · {{ C.GROWTH_LEVELS[m.growth].name }} pledge{% endif %}</span>{% endif %}
   </li>
   {% endfor %}
 </ol>
@@ -50,8 +61,13 @@
 <section class="card">
   <div class="card-head">
     <h2>Negotiations</h2>
-    <span class="muted small">{{ experience }} · going rate about <b>${{ '%.1f'|format(going_rate) }}M</b>/yr before team budgets</span>
+    <span class="muted small">{{ experience }} · contracts are about status, length and the growth you promise</span>
   </div>
+  {% if locked %}
+  <div class="banner">Under contract with <b>{{ locked.team.name }}</b> through <b>{{ locked.end_year }}</b>.
+    Teams can't talk to you until your deal runs out, unless {{ locked.team.name }} release you.
+    <a href="{{ url_for('team_standing', token=ctx.token, driver=driver.id) }}">How they rate you →</a></div>
+  {% endif %}
   {% set pending = offers|selectattr('status', 'equalto', 'Pending')|list %}
   {% if pending %}
   <div class="offer-grid">
@@ -60,7 +76,9 @@
       <div class="offer-top">{{ team_dot(o.team) }}<strong>{{ o.team.name }}</strong>
         <span class="pill mood mood-{{ o.mood|lower|replace(' ', '-') }}">{{ o.mood }}</span></div>
       <div class="muted small">{{ o.stage }} · {{ o.kind }} for {{ o.target_year }}{{ ' · you approached them' if o.origin == 'driver' }}</div>
-      <div class="offer-terms">{{ terms_line(o.role, o.years, o.salary, o.target_year) }}</div>
+      <div class="offer-terms">{{ terms_line(o.role, o.years, o.growth, o.target_year, o.team_id) }}</div>
+      <p class="muted small pledge-note">You'd be promising <b>{{ pledge_text(o.team_id, o.growth) }}</b> by season end
+        ({{ C.GROWTH_LEVELS[o.growth or 0].blurb|lower }}). Fall short and {{ o.team.name }} lose patience.</p>
       {% set last = o.messages|selectattr('author', 'equalto', 'team')|list|last %}
       {% if last %}<p class="team-says">“{{ last.message }}”</p>{% endif %}
       {% if o.messages|length > 1 %}<details class="thread-box"><summary>Conversation ({{ o.messages|length }})</summary>{{ thread(o) }}</details>{% endif %}
@@ -79,15 +97,17 @@
       {% if not o.final %}
       <dialog id="counter-{{ o.id }}" class="dialog">
         <div class="dialog-head"><h2>Counter {{ o.team.name }}</h2><button class="icon-btn" data-close>✕</button></div>
-        <p class="muted small">Teams have limits they won't reveal. Reasonable asks move them toward you, but greedy ones use up
-          their patience twice as fast and can end talks. Their mood right now: <b>{{ o.mood }}</b>.</p>
+        <p class="muted small">Teams have limits they won't reveal. Better status and longer deals need a bigger growth pledge,
+          and a big pledge can win you more than they first offered. But you have to deliver it: fall short during the season
+          and the team will warn you, then drop you. Greedy asks use up their patience twice as fast.
+          Their mood right now: <b>{{ o.mood }}</b>.</p>
         <form method="post" action="{{ url_for('offer_counter', token=ctx.token, offer_id=o.id) }}" class="stack">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="grid-3">
             <label>Seat status<select name="role">{% for r in C.CONTRACT_ROLES|reverse %}<option {{ 'selected' if r == o.role }}>{{ r }}</option>{% endfor %}</select></label>
             <label>Years<select name="years">{% for y in range(1, C.MAX_CONTRACT_YEARS + 1) %}<option {{ 'selected' if y == o.years }}>{{ y }}</option>{% endfor %}</select></label>
-            <label>Salary ($M/yr)<input name="salary" type="number" step="0.1" min="0.1" max="100" value="{{ '%.1f'|format(o.salary or 1) }}" required></label>
           </div>
+          <label>Growth pledge (targets for each season of the deal){{ growth_select(o.team_id, o.growth) }}</label>
           <label>Message (optional)<textarea name="message" rows="2" maxlength="500" placeholder="I've outqualified my teammate all year…"></textarea></label>
           <button class="btn btn-primary">Send counter-offer</button>
         </form>
@@ -105,7 +125,7 @@
   <p class="muted">The transfer market is closed. Teams make offers when a window opens: the Rookie Draft at the start of a career, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
   {% endif %}
 
-  {% if window and can_respond and not signed_in_window %}
+  {% if window and can_respond and not signed_in_window and not locked %}
   <div class="approach">
     <div class="card-head"><h3>Approach a team</h3><span class="pill">{{ approaches }} of {{ C.APPROACHES_PER_WINDOW }} approaches left</span></div>
     {% if approaches and approachable %}
@@ -119,8 +139,8 @@
       <div class="grid-3" id="approach-custom" hidden>
         <label>Seat status<select name="role">{% for r in C.CONTRACT_ROLES|reverse %}<option {{ 'selected' if r == 'No. 2' }}>{{ r }}</option>{% endfor %}</select></label>
         <label>Years<select name="years">{% for y in range(1, C.MAX_CONTRACT_YEARS + 1) %}<option>{{ y }}</option>{% endfor %}</select></label>
-        <label>Salary ($M/yr)<input name="salary" type="number" step="0.1" min="0.1" max="100" value="{{ '%.1f'|format(going_rate) }}"></label>
       </div>
+      <label id="approach-growth" hidden>Growth pledge{{ growth_select(none, 1) }}</label>
       <label>Message (optional)<textarea name="message" rows="2" maxlength="500" placeholder="I'm looking for a seat for {{ window.target_year }}…"></textarea></label>
       <p class="muted small">Teams that rate you (see the interest board) will talk. Top-3 teams won't sign rookies, and teams that aren't interested say no.
         Each team can only be approached once per window.</p>
@@ -135,17 +155,10 @@
 
 <div class="grid-2">
   <section class="card">
-    <div class="card-head"><h2>Who's watching you</h2></div>
-    <p class="muted small">A live read of each team's interest. A team usually makes an offer once you're <b>Interested</b> or better when a window opens.</p>
-    <ul class="interest-list">
-      {% for i in interest %}
-      <li class="interest-{{ i.label|lower }}" style="--team: {{ i.team.color }}">
-        <span class="who">{{ team_dot(i.team) }}{{ i.team.name }}{% if i.current %} <span class="pill">Your team</span>{% endif %}<small>Constructor rank {{ i.rank }}</small></span>
-        <span class="meter"><span style="width: {{ [[(i.interest + 15) / 30 * 100, 3]|max, 100]|min }}%"></span></span>
-        <span class="label">{{ i.label }}</span>
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="card-head"><h2>Who's watching you</h2><a href="{{ url_for('team_standing', token=ctx.token, driver=driver.id) }}">Team standing →</a></div>
+    <p class="muted small">A live read of each team's interest. A team usually makes an offer once you're <b>Interested</b> or better when a window opens.
+      Your own team's view depends on how you're doing against your targets.</p>
+    {% include "_interest_list.html" %}
   </section>
   <section class="card">
     <h2>Head to head</h2>
@@ -185,11 +198,11 @@
   <h2>Offer history</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Window</th><th>Team</th><th>Role</th><th>Term</th><th>Salary</th><th>Status</th><th>Talks</th></tr></thead>
+    <thead><tr><th>Window</th><th>Team</th><th>Role</th><th>Term</th><th>Pledge</th><th>Status</th><th>Talks</th></tr></thead>
     <tbody>
     {% for o in past %}
     <tr><td>{{ o.kind }} {{ o.target_year }}</td><td>{{ team_dot(o.team) }}{{ o.team.name }}</td><td>{{ o.role }}</td>
-      <td>{{ o.years }} yr</td><td>{{ '$%.1fM'|format(o.salary) if o.salary is not none else '—' }}</td>
+      <td>{{ o.years }} yr</td><td>{{ C.GROWTH_LEVELS[o.growth].name if o.growth is not none else '—' }}</td>
       <td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}</span></td>
       <td>{% if o.messages %}<details class="thread-box"><summary>{{ o.messages|length }} message{{ 's' if o.messages|length != 1 }}</summary>{{ thread(o) }}</details>{% endif %}</td></tr>
     {% endfor %}
@@ -205,7 +218,8 @@
   var sel = document.getElementById("approach-terms");
   if (!sel) return;
   var box = document.getElementById("approach-custom");
-  sel.addEventListener("change", function () { box.hidden = sel.value !== "custom"; });
+  var growth = document.getElementById("approach-growth");
+  sel.addEventListener("change", function () { box.hidden = growth.hidden = sel.value !== "custom"; });
 })();
 </script>
 {% endblock %}

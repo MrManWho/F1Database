@@ -9,11 +9,8 @@
     <button class="btn btn-primary">Open window for {{ target }}</button>
   </form>
 </div>
-{% if not ctx.is_master %}
-<div class="banner">You're a Race Steward: you can open and close windows, but each player's offers and negotiations stay private to them.</div>
-{% endif %}
-<p class="muted">Opening a window has every team judge each player driver and send offers. Before the first round they're for this season; after that they're for next season.
-  The Rookie Draft opens by itself when a career starts as rookies, and Silly Season opens by itself once half the calendar is complete. Players accept offers from their own login.</p>
+<p class="muted">Opening a window has every team judge each player driver and send offers (drivers still under contract for that season are left alone). Before the first round they're for this season; after that they're for next season.
+  The Rookie Draft opens by itself when a league starts as rookies, and Silly Season opens by itself once half the calendar is complete. Players accept offers from their own login.</p>
 
 {% for w in windows %}
 <section class="card">
@@ -35,18 +32,18 @@
   {% if ctx.is_master %}
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Driver</th><th>Team</th><th>Role</th><th>Term</th><th>Salary</th><th>Interest</th><th>Stage</th><th>Status</th><th>Talks</th></tr></thead>
+    <thead><tr><th>Driver</th><th>Team</th><th>Role</th><th>Term</th><th>Pledge</th><th>Interest</th><th>Stage</th><th>Status</th><th>Talks</th></tr></thead>
     <tbody>
     {% for o in offers if o.window_id == w.id %}
     <tr>
       <td><a href="{{ url_for('garage', token=ctx.token, driver=o.driver_id) }}" class="is-player">{{ o.driver.name }}</a></td>
       <td>{{ team_dot(o.team) }}{{ o.team.name }}</td><td>{{ o.role }}</td><td>{{ o.years }} yr</td>
-      <td class="num">{{ '$%.1fM'|format(o.salary) if o.salary is not none else '—' }}</td>
+      <td>{{ C.GROWTH_LEVELS[o.growth].name if o.growth is not none else '—' }}</td>
       <td class="num">{{ '%+.1f'|format(o.interest) }}</td>
       <td class="small">{{ o.stage }}{{ ' · approach' if o.origin == 'driver' }}</td>
       <td><span class="offer-status offer-{{ o.status|lower }}">{{ o.status }}{{ ' · applied' if o.applied }}</span></td>
       <td class="small">{% if o.messages %}<details class="thread-box"><summary>{{ o.messages|length }} msg</summary>
-        <ol class="thread">{% for m in o.messages %}<li class="msg msg-{{ m.author }}"><span class="msg-who">{{ o.team.name if m.author == 'team' else (o.driver.name if m.author == 'driver' else 'Paddock') }}</span>{{ m.message }}{% if m.role %}<span class="msg-terms">{{ m.role }} · {{ m.years }} yr · {{ '$%.1fM'|format(m.salary) if m.salary is not none else '—' }}</span>{% endif %}</li>{% endfor %}</ol>
+        <ol class="thread">{% for m in o.messages %}<li class="msg msg-{{ m.author }}"><span class="msg-who">{{ o.team.name if m.author == 'team' else (o.driver.name if m.author == 'driver' else 'Paddock') }}</span>{{ m.message }}{% if m.role %}<span class="msg-terms">{{ m.role }} · {{ m.years }} yr{% if m.growth is not none %} · {{ C.GROWTH_LEVELS[m.growth].name }} pledge{% endif %}</span>{% endif %}</li>{% endfor %}</ol>
       </details>{% endif %}</td>
     </tr>
     {% endfor %}

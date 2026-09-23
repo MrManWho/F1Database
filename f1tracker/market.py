@@ -16,6 +16,7 @@ import random
 
 from . import constants as C
 from . import feed
+from . import relations
 from . import services as S
 from .storage import now_iso
 
@@ -96,6 +97,33 @@ def driver_value(conn, season_id, driver_id, standings=None, ranks=None):
     }
 
 
+def contract_covering(conn, driver_id, year):
+    """The signed deal that covers this year, if any."""
+    row = conn.execute("""SELECT o.*, w.target_year FROM offers o JOIN market_windows w ON w.id = o.window_id
+                          WHERE o.driver_id = ? AND o.status = ? AND w.target_year <= ?
+                          AND w.target_year + o.years - 1 >= ? ORDER BY w.target_year DESC, o.id DESC LIMIT 1""",
+                       (driver_id, C.OFFER_ACCEPTED, year, year)).fetchone()
+    if not row:
+        return None
+    row = dict(row)
+    row["team"] = S.team_map(conn)[row["team_id"]]
+    row["end_year"] = row["target_year"] + row["years"] - 1
+    return row
+
+
+def locked_in(conn, season_id, driver_id, year):
+    """A contract that still covers `year` keeps a driver off the market, unless the team has released them."""
+    deal = contract_covering(conn, driver_id, year)
+    if not deal or relations.is_released(conn, season_id, driver_id):
+        return None
+    return deal
+
+
+def _renewal_interest(interest, bonus):
+    """A team that's happy with its driver always wants to keep them."""
+    return max(interest, bonus) if bonus >= 2 else interest
+
+
 def career_starts(conn, driver_id):
     return conn.execute("SELECT COUNT(*) FROM results WHERE driver_id = ? AND result_status IN (?,?,?)",
                         (driver_id, *sorted(C.START_STATUSES))).fetchone()[0]
@@ -109,14 +137,19 @@ def team_interest(conn, season_id, driver_id):
     seats = S.driver_seats(conn, season_id)
     my_team = seats.get(driver_id, (None,))[0]
     rookie = career_starts(conn, driver_id) == 0
+    bonus = relations.interest_bonus(conn, season_id, driver_id, my_team) if my_team else 0
     out = []
     for team in S.teams(conn):
         rank = ranks.get(team["id"], len(ranks))
-        interest = me["value"] - team_bar(rank) + (3 if team["id"] == my_team else 0)
+        interest = me["value"] - team_bar(rank)
+        if team["id"] == my_team:
+            interest = -20.0 if bonus is None else _renewal_interest(interest + bonus, bonus)
         if rookie and rank > len(ranks) - 5:
             interest = max(interest, 1.0 + (rank - (len(ranks) - 5)))
+        released = team["id"] == my_team and bonus is None
         out.append({"team": team, "rank": rank, "bar": round(team_bar(rank), 1), "interest": round(interest, 1),
-                    "label": interest_label(interest), "current": team["id"] == my_team})
+                    "label": "Letting you go" if released else interest_label(interest),
+                    "current": team["id"] == my_team, "released": released})
     out.sort(key=lambda t: -t["interest"])
     return me, out
 
@@ -195,6 +228,8 @@ def open_window(conn, season_id, kind=None, rng=None):
             else ("Pre-season" if year == S.get_season(conn, season_id)["year"] else "Silly Season")
     window_id = conn.execute("INSERT INTO market_windows(season_id, target_year, kind, status, opened_at) "
                              "VALUES(?,?,?,?,?)", (season_id, year, kind, C.WINDOW_OPEN, now_iso())).lastrowid
+    if year > S.get_season(conn, season_id)["year"]:
+        relations.decide_releases(conn, season_id)
     standings = {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
     ranks = S.team_strength_ranks(conn, season_id)
     seats = S.driver_seats(conn, season_id)
@@ -219,6 +254,9 @@ def offers_for_player(conn, driver_id, rng=None):
     player = S.driver_map(conn).get(driver_id)
     if not player or not player["is_player"]:
         raise S.ValidationError("Only player drivers receive offers")
+    deal = locked_in(conn, season_id, driver_id, year)
+    if deal:
+        raise S.ValidationError(f"{player['name']} is under contract with {deal['team']['name']} through {deal['end_year']}")
     window = conn.execute("SELECT id FROM market_windows WHERE status = ? AND target_year = ?",
                           (C.WINDOW_OPEN, year)).fetchone()
     if window:
@@ -259,18 +297,20 @@ def experience(conn, driver_id):
     return "Veteran"
 
 
-def team_wealth(rank):
-    """How much a team can spend relative to the midfield (fastest car 1.8x, slowest 0.7x)."""
-    return round(1.8 - (rank - 1) * 0.11, 2)
-
-
-def market_salary(value):
-    """A driver's going rate in $M a year, before team wealth and interest."""
-    return round(max(0.4, ((max(value, 40) - 40) / 10) ** 2 * 1.2 + 0.5), 1)
-
-
 def _role_index(role):
     return C.CONTRACT_ROLES.index(role) if role in C.CONTRACT_ROLES else 0
+
+
+MAX_GROWTH = len(C.GROWTH_LEVELS) - 1
+
+
+def growth_needed(min_growth, role, years):
+    """The smallest pledge a team accepts for these terms: better status and longer deals need more."""
+    return (min_growth or 0) + (1 if role == "No. 1" else 0) + (1 if years >= 3 else 0)
+
+
+def growth_name(index):
+    return relations.growth_level(index)["name"] if index is not None else "—"
 
 
 def team_limits(conn, season_id, driver_id, team_id, interest, standings=None, ranks=None):
@@ -279,7 +319,9 @@ def team_limits(conn, season_id, driver_id, team_id, interest, standings=None, r
     - Role ceiling: compared with the team's best other driver. Rookies are No. 2 unless a
       backmarker genuinely rates them; young drivers only get No. 1 status if they are clearly faster.
     - Years: rookies get 1-2 years (3 only if a team is very keen); everyone else 1-3.
-    - Salary ceiling: going rate x team wealth, nudged up by interest. Rookies are capped.
+    - Minimum growth: how big a pledge (see C.GROWTH_LEVELS) the team needs before it commits. Keen
+      teams accept a Steady pledge; lukewarm ones want to see a Strong season. No. 1 status and 3+ year
+      deals each need one level more (growth_needed).
     - Patience: how many rounds of haggling before the team issues a final offer or walks.
     """
     standings = standings if standings is not None else {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
@@ -294,11 +336,9 @@ def team_limits(conn, season_id, driver_id, team_id, interest, standings=None, r
         ceiling = "Equal Status" if rank >= 8 and me["value"] >= best and interest >= 4 else "No. 2"
     elif exp == "Young driver" and ceiling == "No. 1" and me["value"] < best + 8:
         ceiling = "Equal Status"
-    wealth = team_wealth(rank)
-    max_salary = market_salary(me["value"]) * wealth * (1 + S.clamp(interest, -5, 15) / 50)
+    min_growth = 0 if interest >= 10 else 1 if interest >= 4 else 2 if interest >= -2 else 3
     if exp == "Rookie":
-        max_salary = min(max_salary, 2.0 * wealth)
-    max_salary = round(max(0.3, max_salary), 1)
+        min_growth = max(min_growth, 1)  # teams hire rookies to develop
     if exp == "Rookie":
         min_years, max_years = 1, (3 if interest >= 10 else 2)
     else:
@@ -308,7 +348,7 @@ def team_limits(conn, season_id, driver_id, team_id, interest, standings=None, r
         patience -= 1  # rookies have less leverage, but always get a couple of rounds
 
     return {"ceiling_role": ceiling, "min_years": min_years, "max_years": max_years,
-            "max_salary": max_salary, "patience": patience, "value": me, "experience": exp}
+            "min_growth": min_growth, "patience": patience, "value": me, "experience": exp}
 
 
 def _opening_terms(limits, interest, rookie, rng):
@@ -319,30 +359,40 @@ def _opening_terms(limits, interest, rookie, rng):
     else:
         years = 1 + int(interest >= 6) + int(interest >= 12)
     years = int(S.clamp(years, limits["min_years"], limits["max_years"]))
-    salary = round(max(0.3, limits["max_salary"] * 0.8), 1)
-    return role, years, salary
+    while growth_needed(limits["min_growth"], role, years) > MAX_GROWTH and years > 1:
+        years -= 1
+    if growth_needed(limits["min_growth"], role, years) > MAX_GROWTH:
+        role = "Equal Status" if role == "No. 1" else role
+    return role, years, min(MAX_GROWTH, growth_needed(limits["min_growth"], role, years))
 
 
-def _log(conn, offer_id, author, action, message, role=None, years=None, salary=None):
-    conn.execute("""INSERT INTO offer_messages(offer_id, author, action, role, years, salary, message, created_at)
-                    VALUES(?,?,?,?,?,?,?,?)""", (offer_id, author, action, role, years, salary, message, now_iso()))
+def _log(conn, offer_id, author, action, message, role=None, years=None, growth=None):
+    conn.execute("""INSERT INTO offer_messages(offer_id, author, action, role, years, growth, message, created_at)
+                    VALUES(?,?,?,?,?,?,?,?)""", (offer_id, author, action, role, years, growth, message, now_iso()))
 
 
 def _create_offer(conn, window_id, season_id, driver_id, team_id, interest, reason, rng, standings, ranks,
                   origin="team", rookie=False, stage="Offer", final=False, lifeline=False, terms=None):
     limits = team_limits(conn, season_id, driver_id, team_id, interest, standings, ranks)
-    role, years, salary = terms or _opening_terms(limits, interest, rookie, rng)
+    role, years, growth = terms or _opening_terms(limits, interest, rookie, rng)
     offer_id = conn.execute(
-        """INSERT INTO offers(window_id, driver_id, team_id, role, years, salary, interest, reason, status,
-           created_at, origin, stage, patience, final, lifeline, ceiling_role, min_years, max_years, max_salary)
+        """INSERT INTO offers(window_id, driver_id, team_id, role, years, growth, interest, reason, status,
+           created_at, origin, stage, patience, final, lifeline, ceiling_role, min_years, max_years, min_growth)
            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (window_id, driver_id, team_id, role, years, salary, round(interest, 1), reason, C.OFFER_PENDING,
+        (window_id, driver_id, team_id, role, years, growth, round(interest, 1), reason, C.OFFER_PENDING,
          now_iso(), origin, stage, 0 if final else limits["patience"], int(final), int(lifeline),
-         limits["ceiling_role"], limits["min_years"], limits["max_years"], limits["max_salary"])).lastrowid
+         limits["ceiling_role"], limits["min_years"], limits["max_years"], limits["min_growth"])).lastrowid
     return offer_id
 
 
 def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, signed, rng):
+    year = conn.execute("SELECT target_year FROM market_windows WHERE id = ?", (window_id,)).fetchone()[0]
+    deal = locked_in(conn, season_id, player["id"], year)
+    if deal:
+        feed.notify(conn, player["id"], f"You're under contract with {deal['team']['name']} through "
+                    f"{deal['end_year']}, so there are no transfer talks for you this window.", "team-standing",
+                    ref=f"window:{window_id}")
+        return 0
     me = driver_value(conn, season_id, player["id"], standings, ranks)
     rookie = career_starts(conn, player["id"]) == 0
     my_team = seats.get(player["id"], (None,))[0]
@@ -358,12 +408,15 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
             weights.pop(i)
             candidates.append((pick, 1.0 + rng.uniform(0, 4), False))
     else:
+        bonus = relations.interest_bonus(conn, season_id, player["id"], my_team) if my_team else 0
         for tid in order:
             if _full_of_players(conn, season_id, tid, signed) and tid != my_team:
                 continue
+            if tid == my_team and bonus is None:
+                continue  # released: no renewal
             interest = me["value"] - team_bar(ranks[tid]) + rng.uniform(-JITTER, JITTER)
             if tid == my_team:
-                interest += 3
+                interest = _renewal_interest(interest + bonus, bonus)
             if interest >= 0:
                 candidates.append((tid, interest, False))
         # Players hear from the best cars that want them; a renewal offer is always kept.
@@ -373,7 +426,9 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
         if renewal and renewal[0] not in candidates:
             candidates[-1] = renewal[0]
         if not candidates:
-            fallback = my_team or order[-1]
+            fallback = my_team if my_team and bonus is not None else next(
+                (t for t in reversed(order) if t != my_team and not _full_of_players(conn, season_id, t, signed)),
+                order[-1])
             candidates.append((fallback, 0.0, True))
     tmap = S.team_map(conn)
     for tid, interest, last_chance in candidates:
@@ -382,16 +437,12 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
             reason = f"{tmap[tid]['name']} will give you one more chance to prove yourself."
             offer_id = _create_offer(conn, window_id, season_id, player["id"], tid, interest, reason, rng,
                                      standings, ranks, rookie=rookie, stage="Last-chance offer", final=True,
-                                     lifeline=True, terms=("No. 2", 1, _floor_salary(ranks[tid])))
+                                     lifeline=True, terms=("No. 2", 1, 1))
         else:
             offer_id = _create_offer(conn, window_id, season_id, player["id"], tid, interest, reason, rng,
                                      standings, ranks, rookie=rookie)
         o = get_offer(conn, offer_id)
-        _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["salary"])
-
-
-def _floor_salary(rank):
-    return round(0.5 * team_wealth(rank), 1)
+        _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["growth"])
 
 
 def close_window(conn, window_id):
@@ -409,14 +460,17 @@ def get_offer(conn, offer_id):
 
 
 def _ensure_limits(conn, offer):
-    """Offers made before v1.4 have no stored limits; work them out on first use."""
-    if offer["ceiling_role"] and offer["max_salary"] is not None and offer["patience"] is not None:
+    """Offers made before v1.14 (salary era) have no growth terms; work them out on first use."""
+    if offer["ceiling_role"] and offer["min_growth"] is not None and offer["growth"] is not None \
+            and offer["patience"] is not None:
         return offer
     limits = team_limits(conn, offer["window_season"], offer["driver_id"], offer["team_id"], offer["interest"])
-    salary = offer["salary"] if offer["salary"] is not None else round(limits["max_salary"] * 0.8, 1)
-    conn.execute("""UPDATE offers SET ceiling_role=?, min_years=?, max_years=?, max_salary=?, patience=?, salary=?
+    growth = offer["growth"] if offer["growth"] is not None else \
+        min(MAX_GROWTH, growth_needed(limits["min_growth"], offer["role"], offer["years"]))
+    conn.execute("""UPDATE offers SET ceiling_role=COALESCE(ceiling_role, ?), min_years=COALESCE(min_years, ?),
+                    max_years=COALESCE(max_years, ?), min_growth=?, patience=COALESCE(patience, ?), growth=?
                     WHERE id=?""", (limits["ceiling_role"], limits["min_years"], limits["max_years"],
-                                    limits["max_salary"], limits["patience"], salary, offer["id"]))
+                                    limits["min_growth"], limits["patience"], growth, offer["id"]))
     return get_offer(conn, offer["id"])
 
 
@@ -427,7 +481,7 @@ def _open_offer(conn, offer_id):
     return _ensure_limits(conn, offer)
 
 
-def parse_terms(role, years, salary):
+def parse_terms(role, years, growth):
     if role not in C.CONTRACT_ROLES:
         raise S.ValidationError("Choose No. 1, Equal Status or No. 2")
     try:
@@ -437,37 +491,48 @@ def parse_terms(role, years, salary):
     if not 1 <= years <= C.MAX_CONTRACT_YEARS:
         raise S.ValidationError(f"Contracts run from 1 to {C.MAX_CONTRACT_YEARS} years")
     try:
-        salary = round(float(salary), 1)
+        growth = int(growth)
     except (TypeError, ValueError):
-        raise S.ValidationError("Salary must be a number (in $ millions)")
-    if not 0.1 <= salary <= 100:
-        raise S.ValidationError("Salary must be between $0.1M and $100M")
-    return role, years, salary
+        raise S.ValidationError("Choose how much growth you're promising")
+    if not 0 <= growth <= MAX_GROWTH:
+        raise S.ValidationError("Choose how much growth you're promising")
+    return role, years, growth
 
 
-def _money(value):
-    return f"${value:.1f}M"
+def _evaluate(conn, offer, role, years, growth, rng):
+    """The team's response to the driver's proposed terms.
 
-
-def _evaluate(conn, offer, role, years, salary, rng):
-    """The team's response to the driver's proposed terms."""
+    A bigger pledge than the team needs buys leverage: two levels over lets an experienced driver push
+    status one step past the team's ceiling, and one level over lets anyone add a year.
+    """
     team = S.team_map(conn)[offer["team_id"]]["name"]
-    ceiling = offer["ceiling_role"]
-    role_gap = _role_index(role) - _role_index(ceiling)
+    min_g = offer["min_growth"] or 0
+    ceiling_i = _role_index(offer["ceiling_role"])
     lo, hi = offer["min_years"], offer["max_years"]
-    max_salary = offer["max_salary"]
+    rookie = experience(conn, offer["driver_id"]) == "Rookie"
+    stretched = False
+    if not rookie and ceiling_i < len(C.CONTRACT_ROLES) - 1 and \
+            growth >= growth_needed(min_g, C.CONTRACT_ROLES[ceiling_i + 1], years) + 1 and \
+            _role_index(role) > ceiling_i:
+        ceiling_i += 1
+        stretched = True
+    if growth >= growth_needed(min_g, role, years) + 1:
+        hi = min(C.MAX_CONTRACT_YEARS, hi + 1)
+    ceiling = C.CONTRACT_ROLES[ceiling_i]
+    role_gap = _role_index(role) - ceiling_i
     years_ok = lo <= years <= hi
-    if role_gap <= 0 and years_ok and salary <= max_salary:
-        conn.execute("UPDATE offers SET role=?, years=?, salary=?, final=1, stage=? WHERE id=?",
-                     (role, years, salary, "Terms agreed", offer["id"]))
-        _log(conn, offer["id"], "team", "agree",
-             rng.choice([f"{team} can work with that. Terms agreed. Sign when you're ready.",
-                         f"Deal. {team} accept your terms. The contract is on the table.",
-                         f"{team} are happy with that. Put pen to paper and it's done."]),
-             role, years, salary)
+    need = growth_needed(min_g, role, years)
+    if role_gap <= 0 and years_ok and growth >= need and need <= MAX_GROWTH:
+        conn.execute("UPDATE offers SET role=?, years=?, growth=?, final=1, stage=? WHERE id=?",
+                     (role, years, growth, "Terms agreed", offer["id"]))
+        lead = f"That pledge convinced {team}. " if stretched else ""
+        _log(conn, offer["id"], "team", "agree", lead + rng.choice([
+            f"{team} can work with that. Terms agreed. Sign when you're ready.",
+            f"Deal. {team} accept your terms. The contract is on the table.",
+            f"{team} are happy with that. Put pen to paper and it's done."]), role, years, growth)
         return "agreed"
 
-    greedy = salary > max_salary * 1.4 or role_gap >= 2 or years < lo - 1 or years > hi + 1
+    greedy = role_gap >= 2 or years < lo - 1 or years > hi + 1 or growth < need - 1
     patience = (offer["patience"] or 0) - (2 if greedy else 1)
     if patience < 0:
         conn.execute("UPDATE offers SET status=?, stage=?, patience=0, responded_at=? WHERE id=?",
@@ -477,22 +542,24 @@ def _evaluate(conn, offer, role, years, salary, rng):
                                               else "They weren't prepared to keep haggling."))
         return "collapsed"
 
-    new_role = C.CONTRACT_ROLES[min(_role_index(role), _role_index(ceiling))]
+    new_role = C.CONTRACT_ROLES[min(_role_index(role), ceiling_i)]
     new_years = int(S.clamp(years, lo, hi))
-    current = offer["salary"] or 0
-    if salary <= max_salary:
-        new_salary = salary
-    else:
-        new_salary = round(max(current, current + (max_salary - current) * 0.6), 1)
+    while growth_needed(min_g, new_role, new_years) > MAX_GROWTH and new_years > 1:
+        new_years -= 1
+    while growth_needed(min_g, new_role, new_years) > MAX_GROWTH and _role_index(new_role) > 0:
+        new_role = C.CONTRACT_ROLES[_role_index(new_role) - 1]
+    new_growth = max(growth, min(MAX_GROWTH, growth_needed(min_g, new_role, new_years)))
     notes = []
     if role_gap > 0:
         notes.append(f"{ceiling} is as far as we can go on status" if ceiling != "No. 2"
                      else "we can't promise more than a No. 2 role")
-    if years < lo or years > hi:
+    if not years_ok or new_years != years:
         notes.append(f"we're only comfortable with {lo}-{hi} year{'s' if hi != 1 else ''}"
                      if lo != hi else f"it has to be a {lo}-year deal")
-    if salary > max_salary:
-        notes.append(f"we can stretch to {_money(new_salary)}")
+    if new_growth > growth:
+        notes.append(f"for that we'd need you to commit to a {growth_name(new_growth)} season")
+    if not notes:
+        notes.append("that's not quite what we had in mind")
     final = patience == 0
     stage = "Final offer" if final else "Counter-offer"
     lead = "That's a big ask. " if greedy else ""
@@ -500,21 +567,21 @@ def _evaluate(conn, offer, role, years, salary, rng):
     message = lead + f"{team}: " + body[:1].upper() + body[1:] + "."
     if final:
         message += " This is our final offer."
-    conn.execute("UPDATE offers SET role=?, years=?, salary=?, patience=?, final=?, stage=? WHERE id=?",
-                 (new_role, new_years, new_salary, patience, int(final), stage, offer["id"]))
-    _log(conn, offer["id"], "team", "counter", message, new_role, new_years, new_salary)
+    conn.execute("UPDATE offers SET role=?, years=?, growth=?, patience=?, final=?, stage=? WHERE id=?",
+                 (new_role, new_years, new_growth, patience, int(final), stage, offer["id"]))
+    _log(conn, offer["id"], "team", "counter", message, new_role, new_years, new_growth)
     return "final" if final else "countered"
 
 
-def counter_offer(conn, offer_id, role, years, salary, message="", rng=None):
+def counter_offer(conn, offer_id, role, years, growth, message="", rng=None):
     rng = rng or random.Random()
     offer = _open_offer(conn, offer_id)
     if offer["final"]:
         raise S.ValidationError("This is a final offer. You can sign it or walk away, but not counter.")
-    role, years, salary = parse_terms(role, years, salary)
-    _log(conn, offer_id, "driver", "counter", (message or "").strip()[:500], role, years, salary)
+    role, years, growth = parse_terms(role, years, growth)
+    _log(conn, offer_id, "driver", "counter", (message or "").strip()[:500], role, years, growth)
     conn.execute("UPDATE offers SET stage = ? WHERE id = ?", ("Negotiating", offer_id))
-    result = _evaluate(conn, get_offer(conn, offer_id), role, years, salary, rng)
+    result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng)
     if result == "collapsed":
         feed.on_talks_collapsed(conn, offer_id, "news")
         ensure_lifeline(conn, offer["window_id"], offer["driver_id"], rng)
@@ -537,7 +604,7 @@ def approachable_teams(conn, window_id, driver_id):
             and not _full_of_players(conn, window["season_id"], t["id"], signed)]
 
 
-def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, salary=None, message="", rng=None):
+def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, growth=None, message="", rng=None):
     """A player driver contacts a team. The team decides whether to talk, and on what terms."""
     rng = rng or random.Random()
     window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
@@ -546,13 +613,16 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, sa
     if conn.execute("SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
                     (window_id, driver_id, C.OFFER_ACCEPTED)).fetchone():
         raise S.ValidationError("You've already signed a deal in this window")
+    deal = locked_in(conn, window["season_id"], driver_id, window["target_year"])
+    if deal:
+        raise S.ValidationError(f"You're under contract with {deal['team']['name']} through {deal['end_year']}")
     if approaches_left(conn, window_id, driver_id) <= 0:
         raise S.ValidationError(f"You've used all {C.APPROACHES_PER_WINDOW} approaches for this window")
     if team_id not in {t["id"] for t in approachable_teams(conn, window_id, driver_id)}:
         raise S.ValidationError("You can't approach that team right now (already in talks, or no seat for you)")
     has_terms = role not in (None, "")
     if has_terms:
-        role, years, salary = parse_terms(role, years, salary)
+        role, years, growth = parse_terms(role, years, growth)
 
     season_id = window["season_id"]
     standings = {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
@@ -561,13 +631,18 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, sa
     exp = experience(conn, driver_id)
     rank = ranks[team_id]
     my_team = S.driver_seats(conn, season_id).get(driver_id, (None,))[0]
-    interest = me["value"] - team_bar(rank) + rng.uniform(-JITTER, JITTER) + (3 if team_id == my_team else 0)
+    interest = me["value"] - team_bar(rank) + rng.uniform(-JITTER, JITTER)
+    if team_id == my_team:
+        bonus = relations.interest_bonus(conn, season_id, driver_id, my_team)
+        interest = -20.0 if bonus is None else interest + bonus
     if exp == "Rookie" and rank > len(ranks) - 5:
         interest = max(interest, 1.0 + rng.uniform(0, 3))  # backmarkers will talk to any rookie
     team = S.team_map(conn)[team_id]["name"]
     note = (message or "").strip()[:500] or "Is there a seat for me?"
 
-    if exp == "Rookie" and rank <= 3:
+    if team_id == my_team and relations.is_released(conn, season_id, driver_id):
+        verdict = f"{team} have made their decision. They won't be renewing your contract."
+    elif exp == "Rookie" and rank <= 3:
         verdict = f"{team} don't sign rookies straight into a race seat. Come back with a season under your belt."
     elif interest < -6:
         verdict = rng.choice([f"{team} thank you for reaching out, but you're not on their list.",
@@ -577,12 +652,12 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, sa
         verdict = None
     if verdict:
         offer_id = conn.execute(
-            """INSERT INTO offers(window_id, driver_id, team_id, role, years, salary, interest, reason, status,
+            """INSERT INTO offers(window_id, driver_id, team_id, role, years, growth, interest, reason, status,
                created_at, responded_at, origin, stage, patience, final) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (window_id, driver_id, team_id, role or "No. 2", years or 1, salary, round(interest, 1), verdict,
+            (window_id, driver_id, team_id, role or "No. 2", years or 1, growth, round(interest, 1), verdict,
              C.OFFER_REJECTED, now_iso(), now_iso(), "driver", "Not interested", 0, 1)).lastrowid
         _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
-             years if has_terms else None, salary if has_terms else None)
+             years if has_terms else None, growth if has_terms else None)
         _log(conn, offer_id, "team", "reject", verdict)
         ensure_lifeline(conn, window_id, driver_id, rng)
         return offer_id, "rejected"
@@ -591,26 +666,27 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, sa
         reason = f"{team} weren't planning to add anyone, but they'll offer a one-year trial."
         offer_id = _create_offer(conn, window_id, season_id, driver_id, team_id, interest, reason, rng, standings,
                                  ranks, origin="driver", stage="Trial offer", final=True,
-                                 terms=("No. 2", 1, _floor_salary(rank)))
+                                 terms=("No. 2", 1, 2))
         _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
-             years if has_terms else None, salary if has_terms else None)
+             years if has_terms else None, growth if has_terms else None)
         o = get_offer(conn, offer_id)
-        _log(conn, offer_id, "team", "offer", reason + " Take it or leave it.", o["role"], o["years"], o["salary"])
+        _log(conn, offer_id, "team", "offer", reason + " Take it or leave it: you'd need a Strong season.",
+             o["role"], o["years"], o["growth"])
         return offer_id, "trial"
 
     reason = f"{team} are interested and open to talks."
     offer_id = _create_offer(conn, window_id, season_id, driver_id, team_id, interest, reason, rng, standings,
                              ranks, origin="driver", rookie=exp == "Rookie", stage="Talks")
     _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
-         years if has_terms else None, salary if has_terms else None)
+         years if has_terms else None, growth if has_terms else None)
     if has_terms:
-        result = _evaluate(conn, get_offer(conn, offer_id), role, years, salary, rng)
+        result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng)
         if result == "collapsed":
             ensure_lifeline(conn, window_id, driver_id, rng)
         return offer_id, result
     o = get_offer(conn, offer_id)
     _log(conn, offer_id, "team", "offer", f"{team} would like to open talks. Here's where they'd start.",
-         o["role"], o["years"], o["salary"])
+         o["role"], o["years"], o["growth"])
     return offer_id, "offer"
 
 
@@ -636,6 +712,9 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
     burned = {r[0] for r in conn.execute(
         "SELECT team_id FROM offers WHERE window_id = ? AND driver_id = ? AND status IN (?, ?)",
         (window_id, driver_id, C.OFFER_COLLAPSED, C.OFFER_REJECTED))}
+    seat = S.driver_seats(conn, season_id).get(driver_id)
+    if seat and relations.is_released(conn, season_id, driver_id):
+        burned.add(seat[0])
     options = [t for t in sorted(ranks, key=lambda t: -ranks[t])
                if not _full_of_players(conn, season_id, t, signed)]
     if not options:
@@ -645,9 +724,9 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
     reason = f"Word travels fast. {team} have heard you're still looking and offer one last lifeline."
     offer_id = _create_offer(conn, window_id, season_id, driver_id, team_id, 0.0, reason, rng, None, ranks,
                              stage="Last-chance offer", final=True, lifeline=True,
-                             terms=("No. 2", 1, _floor_salary(ranks[team_id])))
+                             terms=("No. 2", 1, 1))
     o = get_offer(conn, offer_id)
-    _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["salary"])
+    _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["growth"])
     feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "garage",
                 ref=f"window:{window_id}")
     return offer_id
@@ -668,7 +747,7 @@ def accept_offer(conn, offer_id):
     stamp = now_iso()
     conn.execute("UPDATE offers SET status = ?, stage = ?, responded_at = ? WHERE id = ?",
                  (C.OFFER_ACCEPTED, "Signed", stamp, offer_id))
-    _log(conn, offer_id, "driver", "sign", "Signed.", offer["role"], offer["years"], offer["salary"])
+    _log(conn, offer_id, "driver", "sign", "Signed.", offer["role"], offer["years"], offer["growth"])
     for other in conn.execute("SELECT id FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
                               (offer["window_id"], offer["driver_id"], C.OFFER_PENDING)).fetchall():
         _log(conn, other["id"], "system", "withdrawn", "Signed elsewhere.")
@@ -681,12 +760,12 @@ def accept_offer(conn, offer_id):
                         AND status = ?""", (C.OFFER_WITHDRAWN, "Seats filled", stamp, offer["window_id"],
                                             offer["team_id"], C.OFFER_PENDING))
     team = S.team_map(conn)[offer["team_id"]]
-    salary = f", {_money(offer['salary'])}/yr" if offer["salary"] is not None else ""
+    pledge = f", {growth_name(offer['growth'])} growth pledge" if offer["growth"] is not None else ""
     conn.execute("""INSERT INTO contracts(season_id, driver_id, team_id, negotiation_stage, requested_role,
                     team_response, outcome, conditions, notes, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
                  (offer["window_season"], offer["driver_id"], offer["team_id"], "Signed", offer["role"],
                   "Offer accepted", f"Signed with {team['name']} from {offer['target_year']}",
-                  f"{offer['years']}-year deal{salary}", offer["reason"], stamp))
+                  f"{offer['years']}-year deal{pledge}", offer["reason"], stamp))
     feed.on_signed(conn, offer, "news")
     apply_signings(conn)
     return offer
@@ -735,13 +814,29 @@ def _seat_to_take(conn, season_id, team_id, driver_id):
     return (team_id, options[0][1])
 
 
-def on_new_season(conn, season_id):
-    """Close windows aimed at earlier years and apply signings for the new season."""
+def on_new_season(conn, season_id, previous_id=None):
+    """Close windows aimed at earlier years, apply signings, and bench released drivers with no new deal."""
     year = S.get_season(conn, season_id)["year"]
     for w in conn.execute("SELECT id FROM market_windows WHERE status = ? AND target_year <= ?",
                           (C.WINDOW_OPEN, year)).fetchall():
         close_window(conn, w["id"])
     apply_signings(conn)
+    if previous_id:
+        seats = S.driver_seats(conn, season_id)
+        old = S.driver_seats(conn, previous_id)
+        for rel in conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND released = 1",
+                                (previous_id,)).fetchall():
+            did = rel["driver_id"]
+            signed_new = conn.execute(
+                """SELECT 1 FROM offers o JOIN market_windows w ON w.id = o.window_id WHERE o.driver_id = ?
+                   AND o.status = ? AND w.target_year = ?""", (did, C.OFFER_ACCEPTED, year)).fetchone()
+            still_there = seats.get(did) and old.get(did) and seats[did][0] == rel["team_id"]
+            if still_there and not signed_new:
+                S.place_players(conn, season_id, {did: None})
+                team = S.team_map(conn)[rel["team_id"]]["name"]
+                feed.notify(conn, did, f"{team} released you. You're a reserve driver until a team signs you.",
+                            "team-standing")
+    relations.ensure(conn, season_id)
 
 
 def maybe_open_silly_season(conn, season_id):

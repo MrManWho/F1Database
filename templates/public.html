@@ -27,7 +27,7 @@
   <section class="card table-card">
     <h2>Drivers</h2>
     <table class="data-table compact"><tbody>
-    {% for d in drivers if d.has_results or loop.index <= 22 %}
+    {% for d in drivers if d.has_results or d.seat %}
       <tr class="{{ 'player-row' if d.driver.is_player }}"><td class="num">{{ d.position }}</td>
         <td class="driver-cell">{{ avatar(token, d.driver, profiles.get(d.driver_id), 'sm', key) }}<span><strong>{{ d.driver.name }}</strong><small>{{ d.team.name if d.team else '' }}</small></span></td>
         <td class="num">{{ d.wins }} W</td><td class="num"><b>{{ d.points }}</b></td></tr>

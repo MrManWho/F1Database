@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Players & Logins{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="kicker">League access</div><h1>Players &amp; logins</h1></div>
+<div class="page-head"><div><div class="kicker">League access</div><h1>Players &amp; Logins</h1></div>
   <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">Manage accounts →</a></div>
 
 {% if requests %}
@@ -68,38 +68,48 @@
 </div>
 
 <section class="card">
-  <h2>Player drivers &amp; logins</h2>
-  <p class="muted">Each player driver can be linked to one login. That person sees their own garage and can negotiate their own offers.
-    Tick <em>Scorekeeper</em> to let someone enter race results in this league (they can't change a race once it's submitted).
-    Race Masters can see every league anyway.</p>
+  <h2>Who's in this league</h2>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h3>Player drivers</h3>
+    <p class="muted small">Link each player driver to the login that drives it. That person sees their own garage and team standing.
+      Tick <em>Can enter results</em> to also make them this league's Scorekeeper.</p>
+    <div class="member-table">
     {% for p in players %}
-    <div class="player-link">
-      <label>{{ p.name }}{% if not p.active %} <span class="pill">retired</span>{% endif %}
-        <select name="user_{{ p.id }}">
-          <option value="">— No login —</option>
+    {% set linked = (links.items()|selectattr(1, 'equalto', p.id)|map('first')|list) %}
+    <div class="member-row">
+      <div class="member-name"><strong>{{ p.name }}</strong>{% if not p.active %} <span class="pill">retired</span>{% endif %}</div>
+      <label class="sr-label">Login
+        <select name="user_{{ p.id }}" aria-label="Login for {{ p.name }}">
+          <option value="">— Nobody yet —</option>
           {% for u in users %}<option value="{{ u.username }}" {{ 'selected' if links.get(u.username) == p.id }}>{{ u.display_name }} ({{ u.username }}){{ ' · Race Master' if u.is_master }}</option>{% endfor %}
-        </select>
-      </label>
-      {% set linked = (links.items()|selectattr(1, 'equalto', p.id)|map('first')|list) %}
-      {% if linked %}<label class="check small"><input type="checkbox" name="scorekeepers" value="{{ linked[0] }}" {{ 'checked' if linked[0] in scorekeepers }}> Scorekeeper</label>{% endif %}
+        </select></label>
+      <label class="check small"><input type="checkbox" name="keeper_{{ p.id }}" value="1" {{ 'checked' if linked and linked[0] in scorekeepers }}> Can enter results</label>
       <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button>
     </div>
     {% else %}
     <p class="muted">No player drivers yet. Add one above, or open the league to join requests.</p>
     {% endfor %}
-    <fieldset>
-      <legend>Members without a driver</legend>
-      <p class="muted small">Spectators can view the league. Scorekeepers can also enter race results.</p>
-      {% for u in users if not u.is_master and (u.username not in links or links[u.username] is none) %}
-      <div class="button-row tight">
-        <label class="check"><input type="checkbox" name="viewers" value="{{ u.username }}" {{ 'checked' if u.username in links }}> {{ u.display_name }} ({{ u.username }})</label>
-        <label class="check small"><input type="checkbox" name="scorekeepers" value="{{ u.username }}" {{ 'checked' if u.username in scorekeepers }}> Scorekeeper</label>
-      </div>
-      {% else %}<p class="muted small">No other logins.</p>{% endfor %}
-    </fieldset>
-    <button class="btn btn-primary">Save links</button>
+    </div>
+
+    <h3>Everyone else</h3>
+    <p class="muted small"><b>Spectators</b> can follow the league (standings, results, news). <b>Scorekeepers</b> can also enter race results,
+      but can't change a race once it's submitted. Race Masters always have full access and don't need to be listed.</p>
+    <div class="member-table">
+    {% for u in users if not u.is_master and (u.username not in links or links[u.username] is none) %}
+    {% set access = 'scorekeeper' if u.username in scorekeepers else ('spectator' if u.username in links else '') %}
+    <div class="member-row">
+      <div class="member-name"><strong>{{ u.display_name }}</strong> <small class="muted">{{ u.username }}</small></div>
+      <label class="sr-label">Access
+        <select name="member_{{ u.username }}" aria-label="Access for {{ u.display_name }}">
+          <option value="" {{ 'selected' if not access }}>Not in this league</option>
+          <option value="spectator" {{ 'selected' if access == 'spectator' }}>Spectator (view only)</option>
+          <option value="scorekeeper" {{ 'selected' if access == 'scorekeeper' }}>Scorekeeper (enters results)</option>
+        </select></label>
+    </div>
+    {% else %}<p class="muted small">No other logins yet.</p>{% endfor %}
+    </div>
+    <div><button class="btn btn-primary">Save</button></div>
   </form>
   {% for p in players %}
   <form id="offers-{{ p.id }}" method="post" action="{{ url_for('offers_send', token=ctx.token, driver_id=p.id) }}"

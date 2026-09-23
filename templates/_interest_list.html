@@ -1,0 +1,10 @@
+{% from "_macros.html" import team_dot with context %}
+<ul class="interest-list">
+  {% for i in interest %}
+  <li class="interest-{{ i.label|lower|replace(' ', '-') }}" style="--team: {{ i.team.color }}">
+    <span class="who">{{ team_dot(i.team) }}{{ i.team.name }}{% if i.current %} <span class="pill">Your team</span>{% endif %}<small>Constructor rank {{ i.rank }}</small></span>
+    <span class="meter"><span style="width: {{ [[(i.interest + 15) / 30 * 100, 3]|max, 100]|min }}%"></span></span>
+    <span class="label">{{ i.label }}</span>
+  </li>
+  {% endfor %}
+</ul>

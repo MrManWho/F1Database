@@ -128,7 +128,9 @@ CREATE TABLE IF NOT EXISTS offers (
     ceiling_role TEXT,
     min_years INTEGER,
     max_years INTEGER,
-    max_salary REAL
+    max_salary REAL,
+    growth INTEGER,
+    min_growth INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS offer_messages (
@@ -140,7 +142,8 @@ CREATE TABLE IF NOT EXISTS offer_messages (
     years INTEGER,
     salary REAL,
     message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    growth INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS career_members (
@@ -253,6 +256,34 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS team_relations (
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    offer_id INTEGER,
+    growth INTEGER NOT NULL DEFAULT 0,
+    form_base REAL NOT NULL,
+    form_target REAL NOT NULL,
+    rep_start REAL NOT NULL,
+    rep_target REAL NOT NULL,
+    score REAL NOT NULL DEFAULT 60,
+    status TEXT NOT NULL DEFAULT 'Happy',
+    warning_level INTEGER NOT NULL DEFAULT 0,
+    released INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (season_id, driver_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_notes (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    tone TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target);
 CREATE INDEX IF NOT EXISTS idx_results_event ON results(event_id);
 CREATE INDEX IF NOT EXISTS idx_results_driver ON results(driver_id);
@@ -272,6 +303,8 @@ OFFER_V5_COLUMNS = [
     ("min_years", "INTEGER"),
     ("max_years", "INTEGER"),
     ("max_salary", "REAL"),
+    ("growth", "INTEGER"),
+    ("min_growth", "INTEGER"),
 ]
 
 REQUIRED_TABLES = {"meta", "drivers", "teams", "seasons", "events", "results"}
@@ -297,11 +330,13 @@ def migrate(conn):
     v8 -> v9: per-league Scorekeepers (career_members.scorekeeper) and the role asked for in a join request.
     v9 -> v10: race times (events.race_at), check-ins, comments, reactions, fan votes, driver profiles,
                predictions and the Race Master's activity log (all created empty).
+    v10 -> v11: contracts are about growth instead of money (offers.growth / min_growth, the growth asked
+               for in each message), plus team relationships and team notes. Old salaries are kept but unused.
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "race_at" in _columns(conn, "events"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "growth" in _columns(conn, "offer_messages"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -312,6 +347,8 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    if "growth" not in _columns(conn, "offer_messages"):
+        conn.execute("ALTER TABLE offer_messages ADD COLUMN growth INTEGER")
     if "race_at" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN race_at TEXT")
     if "scorekeeper" not in _columns(conn, "career_members"):

@@ -69,10 +69,10 @@
 <section class="card table-card">
   <h2>Contract history</h2>
   <table class="data-table compact">
-    <thead><tr><th>Team</th><th>Role</th><th>Years</th><th>Salary</th></tr></thead>
+    <thead><tr><th>Team</th><th>Role</th><th>Years</th><th>Growth pledge</th></tr></thead>
     <tbody>{% for c in contracts %}<tr><td>{{ team_dot(c.team) }}{{ c.team.name }}</td><td>{{ c.role }}</td>
       <td>{{ c.target_year }}{% if c.end_year != c.target_year %}–{{ c.end_year }}{% endif %}</td>
-      <td class="num">{{ ('$%.1fM'|format(c.salary)) if c.salary and (ctx.is_master or (ctx.my_driver and ctx.my_driver.id == driver.id)) else '—' }}</td></tr>{% endfor %}</tbody>
+      <td>{{ C.GROWTH_LEVELS[c.growth].name if c.growth is not none else '—' }}</td></tr>{% endfor %}</tbody>
   </table>
 </section>
 {% endif %}

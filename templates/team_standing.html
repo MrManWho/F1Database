@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot with context %}
+{% block title %}Team Standing{% endblock %}
+{% block content %}
+{% set team = rel.team if rel else none %}
+<div class="profile-head" style="--team: {{ team.color if team else '#e10600' }}">
+  <div class="grow">
+    <div class="kicker">Team standing · {{ ctx.season.year }}</div>
+    {% if driver %}
+    <h1>{% if team %}{{ team_dot(team) }}{{ team.name }}{% else %}No race seat{% endif %}</h1>
+    <div class="hero-meta">
+      <span>{{ driver.name }}</span>
+      {% if contract %}<span>{{ contract.role }} · {{ contract.target_year }}{{ '–' ~ contract.end_year if contract.end_year != contract.target_year }}</span>{% endif %}
+      {% if rel %}<span>{{ rel.level.name }} growth pledge</span>{% endif %}
+    </div>
+    {% else %}<h1>No player drivers yet</h1>{% endif %}
+  </div>
+  {% if ctx.is_master and players|length > 1 %}
+  <div class="button-row">
+    {% for p in players %}<a class="btn btn-sm {{ 'btn-primary' if driver and p.id == driver.id else 'btn-ghost' }}" href="?driver={{ p.id }}">{{ p.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if rel %}
+{% set tone = {'Delighted': 'good', 'Happy': 'good', 'Concerned': 'warn', 'Unhappy': 'bad', 'Seat at risk': 'bad', 'Released': 'bad'}[rel.status] %}
+<div class="grid-2">
+  <section class="card relation-card rel-{{ tone }}">
+    <div class="card-head"><h2>Relationship</h2><span class="rel-status">{{ rel.status }}</span></div>
+    <div class="rel-meter"><span style="width: {{ rel.score }}%"></span>
+      {% for floor, name in C.RELATION_BANDS[:-1] %}<i style="left: {{ floor }}%" title="{{ name }}"></i>{% endfor %}</div>
+    <div class="rel-scale small muted"><span>Seat at risk</span><span>Unhappy</span><span>Concerned</span><span>Happy</span><span>Delighted</span></div>
+    <p class="rel-says">
+      {% if rel.status == 'Released' %}{{ team.name }} have decided to let you go at the end of the season. Find a new team in the transfer market.
+      {% elif rel.done < 3 %}Early days. {{ team.name }} won't judge you properly until a few rounds are in ({{ rel.done }} of {{ rel.total }} done).
+      {% elif rel.status == 'Delighted' %}{{ team.name }} couldn't be happier. You're beating the targets you promised, and a renewal on better terms is likely.
+      {% elif rel.status == 'Happy' %}{{ team.name }} are happy. You're on track with what you promised.
+      {% elif rel.status == 'Concerned' %}{{ team.name }} are starting to worry. You're behind the growth you promised.
+      {% elif rel.status == 'Unhappy' %}{{ team.name }} are unhappy and have made it known. Turn it around or your seat will be at risk.
+      {% else %}{{ team.name }} are close to dropping you. If this is still the case when Silly Season opens or the season ends, you'll be released.{% endif %}
+    </p>
+    <p class="muted small">Score {{ '%.0f'|format(rel.score) }}/100 · {{ rel.done }} of {{ rel.total }} rounds · the team's judgement firms up after about a third of the season.</p>
+  </section>
+
+  <section class="card">
+    <h2>Your targets</h2>
+    <p class="muted small">Set by your <b>{{ rel.level.name }}</b> pledge against what the {{ team.name }} car should manage
+      (baseline Form {{ '%.0f'|format(rel.form_base) }}).</p>
+    {% set fmax = [rel.form_target, rel.form, 1]|max %}
+    <div class="target-row">
+      <div class="target-head"><b>Form</b><span>{{ rel.form }} <small class="muted">/ target {{ rel.form_target }}</small></span></div>
+      <div class="target-bar"><span class="{{ 'ok' if rel.form >= rel.form_target else ('near' if rel.form >= rel.form_target - 5 else 'short') }}" style="width: {{ [rel.form, 100]|min }}%"></span>
+        <i style="left: {{ [rel.form_target, 100]|min }}%" title="Target"></i></div>
+    </div>
+    <div class="target-row">
+      <div class="target-head"><b>Reputation</b><span>{{ rel.rep }} <small class="muted">/ {{ rel.rep_expected }} expected by now · {{ rel.rep_target }} by season end</small></span></div>
+      <div class="target-bar"><span class="{{ 'ok' if rel.rep >= rel.rep_expected else ('near' if rel.rep >= rel.rep_expected - 1 else 'short') }}" style="width: {{ [rel.rep, 100]|min }}%"></span>
+        <i style="left: {{ [rel.rep_target, 100]|min }}%" title="Season target"></i></div>
+    </div>
+    <div class="h2h">
+      <div><small>Race vs {{ teammate.name if teammate else 'teammate' }}</small><strong>{{ rel.h2h.race_won }}–{{ rel.h2h.race_total - rel.h2h.race_won }}</strong></div>
+      <div><small>Quali vs teammate</small><strong>{{ rel.h2h.quali_won }}–{{ rel.h2h.quali_total - rel.h2h.quali_won }}</strong></div>
+    </div>
+  </section>
+</div>
+{% elif driver %}
+<section class="card"><p class="muted">{{ driver.name }} doesn't have a race seat this season, so no team is judging them right now.
+  Keep an eye on the transfer market in {% if own %}My Garage{% else %}the garage{% endif %}.</p></section>
+{% endif %}
+
+{% if driver %}
+<div class="grid-2">
+  <section class="card">
+    <h2>What the team has said</h2>
+    {% if notes %}
+    <ul class="team-notes">{% for n in notes %}<li class="note-{{ n.tone }}"><span>{{ n.text }}</span><small class="muted"><time data-local="{{ n.created_at }}">{{ n.created_at[:10] }}</time></small></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">Nothing yet. Teams speak up when you're well ahead of, or behind, your targets.</p>{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Eagerness around the paddock</h2><a href="{{ url_for('garage', token=ctx.token, driver=driver.id) }}">Garage →</a></div>
+    <p class="muted small">How keen each team is on you right now. Teams make offers when a transfer window opens.</p>
+    {% include "_interest_list.html" %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}
