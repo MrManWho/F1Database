@@ -1,5 +1,8 @@
 """Paddock news headlines and per-player notifications, generated from what happens in the career."""
 
+import threading
+from pathlib import Path
+
 from . import constants as C
 from . import services as S
 from .storage import now_iso
@@ -11,10 +14,28 @@ def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, te
                  (season_id, kind, headline, body, link, driver_id, team_id, now_iso(), ref))
 
 
+_outbox = threading.local()
+
+
 def notify(conn, driver_id, text, link=None, ref=None):
     """driver_id None = everyone in the career."""
     conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref) VALUES(?,?,?,?,?)",
                  (driver_id, text, link, now_iso(), ref))
+    try:
+        token = Path(conn.execute("PRAGMA database_list").fetchone()[2]).stem
+    except Exception:
+        token = None
+    if token:
+        if not hasattr(_outbox, "items"):
+            _outbox.items = []
+        _outbox.items.append((token, driver_id, text, link))
+
+
+def take_outbox():
+    """Notifications made during this request, for phone alerts once it has been saved."""
+    items = getattr(_outbox, "items", [])
+    _outbox.items = []
+    return items
 
 
 def delete_news(conn, news_id):

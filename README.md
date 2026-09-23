@@ -1,4 +1,4 @@
-# F1 Universe Tracker v1.12
+# F1 Universe Tracker v1.13
 
 A companion website for F1 game career **leagues**. Any number of people can drive: each player
 has their own login, garage and contract negotiations, and a Race Master or Race Steward enters the
@@ -24,6 +24,38 @@ Keep the command window open while you play. Closing it stops the server. Your s
 laptop or phone on the same home network, start **`run_lan.bat`** instead. The window prints an
 address like `http://192.168.1.20:8765` for the other device. Windows may ask you to allow Python
 through the firewall. Only do this on a network you trust, and use real passwords.
+
+## v1.13: race night, chat, predictions, profiles and a proper app
+
+**Extras you can switch on or off.** When you create a league there's an *Extras* section. You can change the
+same switches later under **Race Master → League Settings**. Turning an extra off hides it; nothing is deleted.
+
+| Extra | New leagues | What it does |
+|---|---|---|
+| Race-night check-in | off | Members tap *I'm in / Maybe / Can't make it* for the next race |
+| Comments & reactions | on | Chat and emoji reactions on race weekends and news, plus a fans' Driver of the Day vote |
+| Predictions game | on | Pick pole (3 pts), winner (5), fastest lap (2) and top player driver (2) before each race |
+| Public results page | off | A read-only link to standings, the calendar and results, with no login needed |
+
+- **Race night.** The Race Master sets a race time on the weekend page and it shows as a countdown, in each viewer's
+  own time zone. The race-night card holds the check-ins and predictions. Once the race is done it becomes the
+  *Race story*: the podium, biggest movers, pole, fastest lap, DNFs and the fan vote.
+- **Predictions.** Picks lock when the race time passes or the first results go in. Everyone's picks are shown
+  after that. The **Predictions** page has the season table.
+- **Driver profiles.** Each player can edit their own driver's photo, car number, nationality flag, helmet colour and
+  bio; the Race Master can edit any driver's. Profiles now also show a trophy cabinet and the contract history
+  (salaries stay private to that player and the Race Master).
+- **Awards & records.** The season review adds *Iron man*, *Qualifying ace*, *Drive of the season* and *Fans' choice*.
+  The Hall of Records adds a champions list and a record book: season bests, biggest comeback, win from furthest
+  back, and winning, podium and points streaks.
+- **Activity log** (Race Master only): who entered or changed what, and when. Autosaves are merged.
+- **Install it like an app.** Open the site on your phone, then:
+  - iPhone: Safari → Share → *Add to Home Screen*.
+  - Android/desktop: the account menu (your initial, top right) has an *Install* button.
+- **Phone & desktop alerts.** Open the account menu → *Turn on alerts* to get a notification for new results, offers
+  and comments. This needs the https Render address, and on iPhone it only works from the installed app. The in-app
+  bell works as before.
+- **Light theme.** Account menu → Theme: Dark, Light or Match my device.
 
 ## v1.12: pick a role when you ask to join
 

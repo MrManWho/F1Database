@@ -14,7 +14,7 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import random
 
-from . import auth, feed, importer, insights, mailer, market, services as S, storage
+from . import auth, community, feed, importer, insights, mailer, market, push, services as S, storage
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -28,7 +28,26 @@ def _base_dir():
 
 
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
-                    "reset_password"}
+                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar"}
+
+# What the Race Master's activity log calls each action (endpoints not listed are logged by name).
+AUDIT_LABELS = {
+    "grid_players": "Placed player drivers", "grid_save": "Saved the grid", "contracts_page": "Logged a negotiation",
+    "contract_delete": "Deleted a negotiation", "season_switch": "Switched season", "season_new": "Started a new season",
+    "calendar_save": "Edited the calendar", "market_open": "Opened a transfer window",
+    "market_close": "Closed a transfer window", "market_delete": "Deleted a transfer window",
+    "news_delete": "Deleted a news story", "notification_delete": "Deleted a notification",
+    "offer_accept": "Accepted an offer", "offer_decline": "Declined an offer", "offer_counter": "Made a counter-offer",
+    "market_approach": "Approached a team", "paddock_driver": "Edited a driver", "paddock_driver_delete": "Deleted a driver",
+    "paddock_team": "Edited a team", "paddock_cars": "Changed car ratings", "paddock_recalculate": "Recalculated reputation",
+    "calendar_add": "Added a race", "calendar_delete": "Removed a race", "members": "Changed player logins",
+    "members_add_player": "Added a player driver", "members_request": "Answered a join request",
+    "members_settings": "Changed joining", "offers_send": "Sent offers", "league_settings": "Changed league settings",
+    "public_rotate": "Made a new public link", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
+    "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
+}
+QUIET_ENDPOINTS = {"notifications_read", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+                   "save_now"}
 
 
 def create_app(config=None):
@@ -61,6 +80,7 @@ def csrf_token():
 def register_hooks(app):
     @app.before_request
     def guard():
+        feed.take_outbox()
         g.user = None
         endpoint = request.endpoint or ""
         if endpoint == "static":
@@ -84,10 +104,26 @@ def register_hooks(app):
                 return redirect(request.referrer or url_for("home"))
         return None
 
+    @app.after_request
+    def send_alerts(response):
+        items = feed.take_outbox()
+        if items and response.status_code < 400 and not app.config.get("TESTING"):
+            try:
+                push.dispatch(items, request.host_url.rstrip("/"), exclude=g.user["username"] if g.get("user") else None)
+            except Exception:
+                app.logger.exception("push alerts failed")
+        return response
+
     @app.context_processor
     def inject():
+        key = None
+        if g.get("user"):
+            try:
+                key = push.public_key()
+            except Exception:
+                app.logger.exception("push keys unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
-                "APP_NAME": C.APP_NAME, "C": C}
+                "APP_NAME": C.APP_NAME, "C": C, "push_key": key}
 
     @app.errorhandler(403)
     def forbidden(_e):
@@ -172,6 +208,7 @@ def career_page(master_only=False, ops_only=False):
                         "can_run": can_run(linked),
                         "role": auth.ROLES[auth.role_of(g.user)],
                         "my_driver": _member_driver(conn),
+                        "features": community.features(conn),
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
                                                      (C.WINDOW_OPEN,)).fetchone()[0],
                     }
@@ -182,10 +219,16 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
                         conn, g.user["username"], mine["id"] if mine else None, is_master() and not mine)
                     storage.touch_opened(conn)
-                    return fn(conn, g.ctx, *args, **kwargs)
+                    result = fn(conn, g.ctx, *args, **kwargs)
+                    if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS:
+                        detail = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in kwargs.items())
+                        community.audit(conn, g.user["username"], AUDIT_LABELS.get(request.endpoint, request.endpoint),
+                                        detail)
+                    return result
             except CareerNotFound:
                 abort(404)
             except (ValidationError, AuthError) as exc:
+                feed.take_outbox()  # nothing was saved, so nothing to alert about
                 if request.method != "POST":
                     raise
                 flash(str(exc), "error")
@@ -547,6 +590,7 @@ def register_routes(app):
             with storage.session(token, create=True) as conn:
                 S.seed_career(conn, token, name, request.form.get("year") or 2026, [n for n, _ in rows])
                 storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+                community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
                 players = S.player_drivers(conn)
                 for (_, login), driver in zip(rows, players):
                     username = auth.normalise(login)
@@ -607,7 +651,8 @@ def register_routes(app):
                     constructors=S.constructor_standings(conn, sid)[:5],
                     rec=S.difficulty_recommendation(conn, before),
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
-                    news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid))
+                    news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
+                    hub=_hub(conn, ctx, nxt) if nxt else None)
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
@@ -626,7 +671,7 @@ def register_routes(app):
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=S.difficulty_recommendation(conn, (season["year"], event["round_number"])),
                     importer_ready=importer.configured(),
-                    gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS)
+                    gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True))
 
     @app.route("/career/<token>/weekend")
     @career_page()
@@ -649,9 +694,20 @@ def register_routes(app):
         if not driver:
             abort(404)
         timeline = S.driver_timeline(conn, driver_id)
+        trophies = []
+        for t in timeline:
+            if t["season"]["status"] == C.SEASON_COMPLETE or t["season"]["id"] == ctx["current_season_id"]:
+                for a in insights.season_review(conn, t["season"]["id"])["awards"]:
+                    if a["driver"]["id"] == driver_id:
+                        trophies.append({"year": t["season"]["year"], "title": a["title"], "value": a["value"],
+                                         "live": t["season"]["status"] != C.SEASON_COMPLETE})
+        owner = next((u for u, d in community.member_driver_ids(conn).items() if d == driver_id), None)
         return page("driver_profile.html", ctx, driver=driver, timeline=timeline,
                     totals=S.career_totals(timeline), contract=market.current_contract(conn, driver_id),
-                    trend=insights.driver_round_timeline(conn, driver_id))
+                    trend=insights.driver_round_timeline(conn, driver_id), profile=community.profile(conn, driver_id),
+                    contracts=community.contract_history(conn, driver_id), trophies=trophies,
+                    can_edit=_may_edit_profile(ctx, driver_id), nationalities=community.NATIONALITIES,
+                    owner=auth.get_user(owner) if owner else None)
 
     @app.route("/career/<token>/teams")
     @career_page()
@@ -734,7 +790,7 @@ def register_routes(app):
 
         def leader(key):
             return max(rows, key=lambda r: (r[key], r["points"]), default=None)
-        return page("records.html", ctx, rows=rows, leaders={
+        return page("records.html", ctx, rows=rows, all_time=insights.all_time_records(conn), leaders={
             "points": leader("points"), "wins": leader("wins"), "poles": leader("poles"), "titles": leader("titles")})
 
     @app.route("/career/<token>/seasons")
@@ -939,7 +995,10 @@ def register_routes(app):
     @app.route("/career/<token>/news")
     @career_page()
     def news_page(conn, ctx):
-        return page("news.html", ctx, news=feed.latest(conn, 100))
+        news = feed.latest(conn, 100)
+        social = _social(conn, ctx, [f"news:{n['id']}" for n in news])
+        threads = {t: community.comments(conn, t) for t in social["comment_counts"]}
+        return page("news.html", ctx, news=news, threads=threads, **social)
 
     @app.route("/career/<token>/rivalry")
     @career_page()
@@ -1236,6 +1295,9 @@ def register_routes(app):
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
                     return jsonify(ok=False, error="This weekend has been submitted. Only the Race Master can change it now."), 403
                 result = S.save_weekend(conn, event_id, payload)
+                community.audit(conn, g.user["username"],
+                                "Submitted results" if result["complete"] and before["status"] != C.EVENT_COMPLETE
+                                else "Edited results", f"R{before['round_number']} {before['name']}")
                 opened = None
                 newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
                 if newly_complete:
@@ -1245,6 +1307,7 @@ def register_routes(app):
         except CareerNotFound:
             return jsonify(ok=False, error="Career not found"), 404
         except ValidationError as exc:
+            feed.take_outbox()
             return jsonify(ok=False, error=str(exc)), 400
         if newly_complete:
             try:
@@ -1296,6 +1359,298 @@ def register_routes(app):
     def notifications_read(conn, ctx):
         feed.mark_read(conn, g.user["username"])
         return jsonify(ok=True)
+
+
+    # ---------------------------------------------------------------- community
+    def _social(conn, ctx, targets):
+        if not ctx["features"]["comments"]:
+            return {"reacts": {}, "comment_counts": {}}
+        return {"reacts": community.reactions(conn, targets, g.user["username"]),
+                "comment_counts": community.comment_counts(conn, targets)}
+
+    def _hub(conn, ctx, event, full=False):
+        """Race-night data for a weekend: countdown, check-ins, picks, and (once run) the story and fan vote."""
+        feats = ctx["features"]
+        me = g.user["username"]
+        hub = {"event": event, "started": community.race_started(event), "complete": event["status"] == C.EVENT_COMPLETE}
+        if feats["checkin"] and not hub["complete"]:
+            hub["checkins"], hub["checkin_counts"] = community.checkins(conn, event["id"])
+            hub["my_checkin"] = next((r["status"] for r in hub["checkins"] if r["username"] == me), None)
+        if feats["predictions"]:
+            hub["picks_locked"] = community.predictions_locked(event)
+            picks, outcome = community.event_predictions(conn, event["id"])
+            hub["my_picks"] = next((p for p in picks if p["username"] == me), None)
+            hub["picks"] = picks if hub["picks_locked"] else []
+            hub["pick_count"] = len(picks)
+            hub["outcome"] = outcome
+        if full:
+            entrants = sorted(S.weekend_rows(conn, event["id"]), key=lambda r: r["driver"]["name"])
+            hub["entrants"] = [r["driver"] for r in entrants]
+            hub["players"] = [r["driver"] for r in entrants if r["driver"]["is_player"]]
+            if hub["complete"]:
+                hub["story"] = community.race_story(conn, event["id"])
+                if feats["comments"]:
+                    hub["fans"] = community.fan_votes(conn, event["id"], me)
+            if feats["comments"]:
+                target = f"event:{event['id']}"
+                hub["target"] = target
+                hub["comments"] = community.comments(conn, target)
+                hub["reacts"] = community.reactions(conn, [target], me)[target]
+        return hub
+
+    def _need(ctx, feature):
+        if not ctx["features"][feature]:
+            raise ValidationError("The Race Master has switched that off for this league")
+
+    def _back(ctx, anchor=""):
+        return redirect((request.referrer or url_for("dashboard", token=ctx["token"])).split("#")[0] + anchor)
+
+    @app.route("/career/<token>/settings", methods=["GET", "POST"])
+    @career_page(master_only=True)
+    def league_settings(conn, ctx):
+        if request.method == "POST":
+            community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
+            storage.set_meta(conn, "join_open", "1" if request.form.get("join_open") else "0")
+            flash("League settings saved.", "success")
+            return redirect(url_for("league_settings", token=ctx["token"]))
+        feats = community.features(conn)
+        link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
+            if feats["public"] else None
+        return page("settings.html", ctx, feats=feats, public_link=link,
+                    join_open=storage.get_meta(conn, "join_open") == "1")
+
+    @app.route("/career/<token>/settings/public-link", methods=["POST"])
+    @career_page(master_only=True)
+    def public_rotate(conn, ctx):
+        community.public_key(conn, rotate=True)
+        flash("New public link made. The old one no longer works.", "success")
+        return redirect(url_for("league_settings", token=ctx["token"]))
+
+    @app.route("/career/<token>/activity")
+    @career_page(master_only=True)
+    def activity_log(conn, ctx):
+        who = auth.normalise(request.args.get("who")) or None
+        rows = community.audit_entries(conn, 400, who)
+        names = {u["username"]: u["display_name"] for u in auth.list_users()}
+        people = sorted({r["username"] for r in community.audit_entries(conn, 2000)})
+        return page("activity.html", ctx, rows=rows, names=names, people=people, who=who)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/time", methods=["POST"])
+    @career_page(master_only=True)
+    def race_time(conn, ctx, event_id):
+        if not S.get_event(conn, event_id):
+            abort(404)
+        when = community.parse_race_at(request.form.get("race_at"), request.form.get("tz"))
+        community.set_race_at(conn, event_id, when)
+        if when:
+            event = S.get_event(conn, event_id)
+            feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']}", f"weekend/{event_id}",
+                        ref=f"racetime:{event_id}")
+        flash("Race time saved." if when else "Race time cleared.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+
+    @app.route("/career/<token>/weekend/<int:event_id>/checkin", methods=["POST"])
+    @career_page()
+    def checkin(conn, ctx, event_id):
+        _need(ctx, "checkin")
+        community.set_checkin(conn, event_id, g.user["username"], request.form.get("status"))
+        if request.headers.get("X-Requested-With") == "fetch":
+            rows, counts = community.checkins(conn, event_id)
+            return jsonify(ok=True, counts=counts)
+        return _back(ctx, "#race-night")
+
+    @app.route("/career/<token>/comments", methods=["POST"])
+    @career_page()
+    def comment_add(conn, ctx):
+        _need(ctx, "comments")
+        target = request.form.get("target", "")
+        community.add_comment(conn, target, g.user["username"], request.form.get("body"))
+        kind, _, raw = target.partition(":")
+        link = f"weekend/{raw}" if kind == "event" else "news"
+        if kind == "event":
+            ev = S.get_event(conn, int(raw))
+            about = f"R{ev['round_number']} {ev['name']}"
+        else:
+            row = conn.execute("SELECT headline FROM news WHERE id = ?", (int(raw),)).fetchone()
+            about = f"“{row['headline'][:60]}”"
+        feed.notify(conn, None, f"{g.user['display_name']} commented on {about}", link, ref=f"comment:{target}")
+        if kind == "news":
+            return redirect(url_for("news_page", token=ctx["token"], open=target) + f"#news-{raw}")
+        return _back(ctx, "#comments")
+
+    @app.route("/career/<token>/comments/<int:comment_id>/delete", methods=["POST"])
+    @career_page()
+    def comment_delete(conn, ctx, comment_id):
+        community.delete_comment(conn, comment_id, g.user["username"], is_master())
+        return _back(ctx, "#comments")
+
+    @app.route("/career/<token>/react", methods=["POST"])
+    @career_page()
+    def react(conn, ctx):
+        _need(ctx, "comments")
+        target = request.form.get("target", "")
+        community.toggle_reaction(conn, target, g.user["username"], request.form.get("emoji"))
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True, reactions=community.reactions(conn, [target], g.user["username"])[target])
+        return _back(ctx)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/fan-vote", methods=["POST"])
+    @career_page()
+    def fan_vote_route(conn, ctx, event_id):
+        _need(ctx, "comments")
+        community.fan_vote(conn, event_id, g.user["username"], _form_int("driver_id"))
+        flash("Vote counted.", "success")
+        return _back(ctx, "#race-night")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/predict", methods=["POST"])
+    @career_page()
+    def prediction_save(conn, ctx, event_id):
+        _need(ctx, "predictions")
+        community.save_prediction(conn, event_id, g.user["username"],
+                                  {k: request.form.get(k) for k in community.PICKS})
+        flash("Picks saved. You can change them until the race starts.", "success")
+        return _back(ctx, "#race-night")
+
+    @app.route("/career/<token>/predictions")
+    @career_page()
+    def predictions_page(conn, ctx):
+        if not ctx["features"]["predictions"]:
+            abort(404)
+        sid = ctx["season"]["id"]
+        rounds = []
+        for ev in S.events(conn, sid):
+            if ev["status"] == C.EVENT_COMPLETE:
+                picks, outcome = community.event_predictions(conn, ev["id"])
+                if picks:
+                    rounds.append({"event": ev, "picks": picks, "outcome": outcome})
+        return page("predictions.html", ctx, table=community.leaderboard(conn, sid), rounds=list(reversed(rounds)),
+                    next_event=S.next_incomplete_event(conn, sid), dmap=S.driver_map(conn))
+
+    # ---------------------------------------------------------------- driver profiles
+    def _may_edit_profile(ctx, driver_id):
+        return ctx["is_master"] or bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver_id)
+
+    def _avatar_dir(token):
+        path = storage.data_dir() / "avatars" / storage.sanitize_token(token)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @app.route("/career/<token>/driver/<int:driver_id>/profile", methods=["POST"])
+    @career_page()
+    def profile_save(conn, ctx, driver_id):
+        if not _may_edit_profile(ctx, driver_id):
+            abort(403)
+        community.save_profile(conn, driver_id, request.form.get("number"), request.form.get("nationality"),
+                               request.form.get("helmet_color"), request.form.get("bio"))
+        flash("Profile saved.", "success")
+        return redirect(url_for("driver_profile", token=ctx["token"], driver_id=driver_id))
+
+    @app.route("/career/<token>/driver/<int:driver_id>/avatar", methods=["POST"])
+    @career_page()
+    def profile_avatar(conn, ctx, driver_id):
+        if not _may_edit_profile(ctx, driver_id) or not S.driver_map(conn).get(driver_id):
+            abort(403)
+        folder = _avatar_dir(ctx["token"])
+        old = community.profile(conn, driver_id).get("avatar")
+        if request.form.get("remove"):
+            filename = None
+        else:
+            upload = request.files.get("avatar")
+            data = upload.read(C.AVATAR_MAX_BYTES + 1) if upload else b""
+            if not data:
+                raise ValidationError("Choose a picture first")
+            if len(data) > C.AVATAR_MAX_BYTES:
+                raise ValidationError("Pictures are limited to 2 MB")
+            ext = community.image_kind(data)
+            if not ext:
+                raise ValidationError("Use a PNG, JPG or WebP picture")
+            filename = f"{driver_id}-{secrets.token_hex(4)}.{ext}"
+            (folder / filename).write_bytes(data)
+        community.set_avatar(conn, driver_id, filename)
+        if old and old != filename and (folder / old).exists():
+            (folder / old).unlink()
+        flash("Photo updated." if filename else "Photo removed.", "success")
+        return redirect(url_for("driver_profile", token=ctx["token"], driver_id=driver_id))
+
+    @app.route("/career/<token>/avatar/<name>")
+    def avatar(token, name):
+        if not g.user and not request.args.get("k"):
+            abort(404)
+        safe = Path(name).name
+        path = storage.data_dir() / "avatars" / (storage.sanitize_token(token) or "_") / safe
+        if safe != name or not path.is_file():
+            abort(404)
+        if not g.user or not (is_master() or _is_member(token)):
+            try:
+                with storage.session(token) as conn:
+                    ok = community.features(conn)["public"] and hmac.compare_digest(
+                        request.args.get("k", ""), community.public_key(conn))
+            except CareerNotFound:
+                ok = False
+            if not ok:
+                abort(404)
+        response = send_file(path, max_age=86400)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    def _is_member(token):
+        try:
+            with storage.session(token) as conn:
+                return bool(conn.execute("SELECT 1 FROM career_members WHERE username = ?",
+                                         (g.user["username"],)).fetchone())
+        except CareerNotFound:
+            return False
+
+    # ---------------------------------------------------------------- public page
+    @app.route("/public/<token>/<key>")
+    def public_page(token, key):
+        try:
+            with storage.session(token) as conn:
+                if not community.features(conn)["public"] or not hmac.compare_digest(key, community.public_key(conn)):
+                    abort(404)
+                sid = S.current_season_id(conn)
+                evs = S.events(conn, sid)
+                done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]
+                last = done[-1] if done else None
+                return render_template(
+                    "public.html", name=storage.get_meta(conn, "career_name", "F1 League"), season=S.get_season(conn, sid),
+                    drivers=S.driver_standings(conn, sid), constructors=S.constructor_standings(conn, sid), events=evs,
+                    winners={e["id"]: community.race_story(conn, e["id"])["podium"][:1] for e in done},
+                    last=last, story=community.race_story(conn, last["id"]) if last else None,
+                    profiles=community.profiles(conn), token=token, key=key,
+                    next_event=S.next_incomplete_event(conn, sid))
+        except CareerNotFound:
+            abort(404)
+
+    # ---------------------------------------------------------------- app install & phone alerts
+    @app.route("/sw.js")
+    def service_worker():
+        response = send_file(Path(app.static_folder) / "sw.js", mimetype="application/javascript", max_age=0)
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
+
+    @app.route("/manifest.webmanifest")
+    def web_manifest():
+        return send_file(Path(app.static_folder) / "manifest.webmanifest", mimetype="application/manifest+json")
+
+    @app.route("/push/subscribe", methods=["POST"])
+    def push_subscribe():
+        try:
+            push.subscribe(g.user["username"], request.get_json(silent=True) or {})
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True)
+
+    @app.route("/push/unsubscribe", methods=["POST"])
+    def push_unsubscribe():
+        push.unsubscribe((request.get_json(silent=True) or {}).get("endpoint", ""), g.user["username"])
+        return jsonify(ok=True)
+
+    @app.route("/push/test", methods=["POST"])
+    def push_test():
+        sent = push.send([g.user["username"]], "F1 Universe Tracker", "Alerts are working 🏁", url_for("home"))
+        return jsonify(ok=bool(sent), sent=sent,
+                       error=None if sent else "Nothing was delivered. Turn alerts on for this device first.")
 
     # ---------------------------------------------------------------- saves
     @app.route("/career/<token>/save", methods=["POST"])

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, avatar with context %}
+{% block title %}{{ name }}{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">{{ season.year }} season · public results</div><h1>{{ name }}</h1></div>
+  {% if not user %}<a class="btn btn-ghost" href="{{ url_for('login') }}">Log in</a>{% endif %}</div>
+
+{% if next_event %}
+<section class="card hero">
+  <div class="kicker">Next up · Round {{ next_event.round_number }}</div>
+  <h2 class="hero-title">{{ next_event.name }}</h2>
+  <div class="hero-meta"><span>{{ next_event.location }}</span>{% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
+  {% if next_event.race_at %}<p class="hero-countdown">Lights out in <span class="countdown" data-countdown="{{ next_event.race_at }}"><time data-local="{{ next_event.race_at }}">{{ next_event.race_at }}</time></span></p>{% endif %}
+</section>
+{% endif %}
+
+{% if story and story.podium %}
+<section class="card">
+  <h2>Latest: R{{ last.round_number }} {{ last.name }}</h2>
+  <div class="podium">
+    {% for r in story.podium %}<div class="podium-step p{{ loop.index }}" style="--team: {{ r.team.color }}"><span class="podium-pos">P{{ loop.index }}</span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small></div>{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card table-card">
+    <h2>Drivers</h2>
+    <table class="data-table compact"><tbody>
+    {% for d in drivers if d.has_results or loop.index <= 22 %}
+      <tr class="{{ 'player-row' if d.driver.is_player }}"><td class="num">{{ d.position }}</td>
+        <td class="driver-cell">{{ avatar(token, d.driver, profiles.get(d.driver_id), 'sm', key) }}<span><strong>{{ d.driver.name }}</strong><small>{{ d.team.name if d.team else '' }}</small></span></td>
+        <td class="num">{{ d.wins }} W</td><td class="num"><b>{{ d.points }}</b></td></tr>
+    {% endfor %}</tbody></table>
+  </section>
+  <section class="card table-card">
+    <h2>Constructors</h2>
+    <table class="data-table compact"><tbody>{% for t in constructors %}
+      <tr><td class="num">{{ t.position }}</td><td>{{ team_dot(t.team) }}{{ t.team.name }}</td><td class="num"><b>{{ t.points }}</b></td></tr>
+    {% endfor %}</tbody></table>
+  </section>
+</div>
+
+<section class="card table-card">
+  <h2>Calendar</h2>
+  <table class="data-table compact"><tbody>{% for e in events %}
+    <tr><td class="num">R{{ e.round_number }}</td><td><strong>{{ e.name }}</strong>{% if e.is_sprint %} <span class="pill pill-sprint">Sprint</span>{% endif %}<br><small class="muted">{{ e.location }}</small></td>
+      <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}<time data-local="{{ e.race_at }}">{{ e.race_at }}</time>{% else %}<span class="muted">{{ e.status }}</span>{% endif %}</td></tr>
+  {% endfor %}</tbody></table>
+</section>
+<p class="muted small">Powered by F1 Universe Tracker v{{ APP_VERSION }}.</p>
+{% endblock %}

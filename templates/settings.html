@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}League Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Race Master</div><h1>League settings</h1></div></div>
+
+<form method="post" class="card stack settings-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Features</h2>
+  <p class="muted small">Switch extras on when your league is big enough to need them. Turning something off hides it; nothing is deleted.</p>
+  {% for key, (label, desc, default) in C.FEATURES.items() %}
+  <label class="toggle-row">
+    <input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if feats[key] }}>
+    <span class="switch"></span>
+    <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span>
+  </label>
+  {% endfor %}
+  <h2>Joining</h2>
+  <label class="toggle-row">
+    <input type="checkbox" name="join_open" value="1" {{ 'checked' if join_open }}>
+    <span class="switch"></span>
+    <span><b>Open to join requests</b><small class="muted">Anyone with a login can ask to join from the League Library. You approve each one in Players &amp; Logins.</small></span>
+  </label>
+  <div><button class="btn btn-primary">Save settings</button></div>
+</form>
+
+{% if public_link %}
+<section class="card">
+  <h2>Public results page</h2>
+  <p class="muted small">Anyone with this link can see the standings, calendar and results. No logins, garages, offers or chat are shown.</p>
+  <div class="copy-row"><input readonly value="{{ public_link }}" id="public-link" onclick="this.select()">
+    <button type="button" class="btn btn-sm" data-copy="#public-link">Copy</button>
+    <a class="btn btn-sm btn-ghost" href="{{ public_link }}" target="_blank" rel="noopener">Open</a></div>
+  <form method="post" action="{{ url_for('public_rotate', token=ctx.token) }}" class="inline-form"
+        onsubmit="return confirm('Make a new link? Anyone using the old one will lose access.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-ghost">Make a new link</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

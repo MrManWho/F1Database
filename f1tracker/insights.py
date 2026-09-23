@@ -207,6 +207,32 @@ def season_review(conn, season_id):
         delta, r = max(improved, key=lambda x: x[0])
         if delta > 0:
             award("Most improved", r, f"+{delta:.1f}", "Reputation gained")
+    rows_all = _season_rows(conn, season_id)
+    iron = [(sum(1 for x in rows_all if x["driver_id"] == r["driver_id"] and x["result_status"] == C.STATUS_FINISHED), r)
+            for r in table if r["starts"] >= 3 and r["dnfs"] == 0]
+    if iron:
+        n, r = max(iron, key=lambda x: (x[0], x[1]["points"]))
+        award("Iron man", r, f"{n} finishes", "not a single DNF")
+    quali = []
+    for r in table:
+        qs = [x["qualifying_position"] for x in rows_all if x["driver_id"] == r["driver_id"] and x["qualifying_position"]]
+        if len(qs) >= 3:
+            quali.append((sum(qs) / len(qs), r))
+    if quali:
+        q, r = min(quali, key=lambda x: (x[0], -x[1]["points"]))
+        award("Qualifying ace", r, f"P{q:.1f}", "average grid slot")
+    drives = [x for x in rows_all if x["result_status"] == C.STATUS_FINISHED and x["race_position"]
+              and x["qualifying_position"] and x["qualifying_position"] > x["race_position"]]
+    if drives:
+        best = max(drives, key=lambda x: (x["qualifying_position"] - x["race_position"], -x["race_position"]))
+        row = next((r for r in table if r["driver_id"] == best["driver_id"]), None)
+        award("Drive of the season", row, f"P{best['qualifying_position']} → P{best['race_position']}",
+              f"R{best['round_number']} {best['event_name']}")
+    fans = conn.execute("""SELECT v.driver_id, COUNT(*) AS n FROM fan_votes v JOIN events e ON e.id = v.event_id
+                           WHERE e.season_id = ? GROUP BY v.driver_id ORDER BY n DESC LIMIT 1""", (season_id,)).fetchone()
+    if fans:
+        row = next((r for r in table if r["driver_id"] == fans["driver_id"]), None)
+        award("Fans' choice", row, f"{fans['n']} vote{'s' if fans['n'] != 1 else ''}", "fan Driver of the Day votes")
     rookies = [r for r in table if _first_season_year(conn, r["driver_id"]) == season["year"]
                and (r["driver"]["is_player"] or season["year"] != first_year)]
     if rookies:
@@ -251,3 +277,66 @@ def driver_card(conn, season_id, driver_id):
                              "points" if finished and r["race_position"] <= 10 else
                              "finish" if finished else "out"})
     return {"row": row, "form": form, "driver": S.driver_map(conn)[driver_id]}
+
+
+def all_time_records(conn):
+    """Single-season and single-race bests, plus streaks, across every season of the league."""
+    dmap = S.driver_map(conn)
+    records = []
+
+    def add(title, driver_id, value, note=""):
+        if driver_id in dmap:
+            records.append({"title": title, "driver": dmap[driver_id], "value": value, "note": note})
+
+    cache = S.all_season_standings(conn)
+    season_rows = [(data["season"], r) for data in cache.values() for r in data["drivers"] if r.get("has_results", True)]
+    for key, title, unit in (("points", "Most points in a season", "pts"), ("wins", "Most wins in a season", "wins"),
+                             ("poles", "Most poles in a season", "poles"), ("podiums", "Most podiums in a season", "podiums")):
+        best = max(season_rows, key=lambda x: (x[1][key], x[1]["points"]), default=None)
+        if best and best[1][key]:
+            add(title, best[1]["driver_id"], f"{best[1][key]} {unit}", str(best[0]["year"]))
+
+    rows = conn.execute("""SELECT r.*, e.round_number, e.name AS event_name, s.year FROM results r
+                           JOIN events e ON e.id = r.event_id JOIN seasons s ON s.id = e.season_id
+                           WHERE e.status = ? ORDER BY s.year, e.round_number""", (C.EVENT_COMPLETE,)).fetchall()
+    drives = [r for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+              and r["qualifying_position"] and r["qualifying_position"] > r["race_position"]]
+    if drives:
+        best = max(drives, key=lambda x: (x["qualifying_position"] - x["race_position"], -x["race_position"]))
+        add("Biggest comeback", best["driver_id"],
+            f"+{best['qualifying_position'] - best['race_position']} places",
+            f"P{best['qualifying_position']} → P{best['race_position']}, {best['year']} {best['event_name']}")
+    wins_from = [r for r in rows if r["race_position"] == 1 and r["result_status"] == C.STATUS_FINISHED
+                 and r["qualifying_position"]]
+    if wins_from:
+        best = max(wins_from, key=lambda x: x["qualifying_position"])
+        if best["qualifying_position"] > 1:
+            add("Win from furthest back", best["driver_id"], f"from P{best['qualifying_position']}",
+                f"{best['year']} {best['event_name']}")
+
+    def streak(test):
+        best, current = {}, {}
+        for r in rows:
+            d = r["driver_id"]
+            current[d] = current.get(d, 0) + 1 if test(r) else 0
+            if current[d] > best.get(d, (0,))[0]:
+                best[d] = (current[d], r["year"], r["event_name"])
+        return max(best.items(), key=lambda x: x[1][0], default=None)
+
+    for title, test, unit in (
+            ("Longest winning streak", lambda r: r["race_position"] == 1 and r["result_status"] == C.STATUS_FINISHED, "wins"),
+            ("Longest podium streak", lambda r: r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+             and r["race_position"] <= 3, "podiums"),
+            ("Longest points streak", lambda r: r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+             and r["race_position"] <= 10, "races")):
+        found = streak(test)
+        if found and found[1][0] >= 2:
+            add(title, found[0], f"{found[1][0]} {unit} in a row", f"ending {found[1][1]} {found[1][2]}")
+
+    champions = []
+    for data in cache.values():
+        season = data["season"]
+        if season["status"] == C.SEASON_COMPLETE and data["drivers"] and data["drivers"][0]["points"]:
+            champions.append({"season": season, "driver": dmap.get(data["drivers"][0]["driver_id"]),
+                              "points": data["drivers"][0]["points"]})
+    return {"records": records, "champions": sorted(champions, key=lambda c: -c["season"]["year"])}

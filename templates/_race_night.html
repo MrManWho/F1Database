@@ -1,0 +1,111 @@
+{# Race-night hub. Needs: ctx, hub; full=True on the weekend page, False for the dashboard summary. #}
+{% from "_macros.html" import team_dot with context %}
+{% set ev = hub.event %}
+{% set wk = url_for('weekend', token=ctx.token, event_id=ev.id) %}
+<section class="card race-night" id="race-night">
+  <div class="card-head">
+    <h2>{{ 'Race story' if hub.complete else 'Race night' }}</h2>
+    {% if ev.race_at and not hub.complete %}
+    <span class="countdown" data-countdown="{{ ev.race_at }}"><time data-local="{{ ev.race_at }}">{{ ev.race_at }}</time></span>
+    {% elif not hub.complete %}<span class="muted small">No race time set{{ ' yet' if not ctx.is_master }}</span>{% endif %}
+  </div>
+
+  {% if full and ctx.is_master and not hub.complete %}
+  <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=ev.id) }}" class="inline-form race-time-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="tz" value="0">
+    <label>Race time (your local time)<input type="datetime-local" name="race_at" data-utc="{{ ev.race_at or '' }}"></label>
+    <button class="btn btn-sm">Save time</button>
+    {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="race_at" value="">Clear</button>{% endif %}
+  </form>
+  {% endif %}
+
+  {% if full and hub.story is defined %}
+  {% set st = hub.story %}
+  <div class="podium">
+    {% for r in st.podium %}
+    <div class="podium-step p{{ loop.index }}" style="--team: {{ r.team.color }}">
+      <span class="podium-pos">P{{ loop.index }}</span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="story-facts">
+    {% if st.pole %}<span>⏱ Pole <b>{{ st.pole.driver.name }}</b></span>{% endif %}
+    {% if st.fastest_lap %}<span>🟣 Fastest lap <b>{{ st.fastest_lap.driver.name }}</b></span>{% endif %}
+    {% if st.dotd %}<span>⭐ Driver of the Day <b>{{ st.dotd.driver.name }}</b></span>{% endif %}
+    {% for m in st.gainers %}<span class="up">▲{{ m.gained }} <b>{{ m.driver.name }}</b> P{{ m.qualifying_position }}→P{{ m.race_position }}</span>{% endfor %}
+    {% for m in st.losers %}<span class="down">▼{{ 0 - m.gained }} <b>{{ m.driver.name }}</b></span>{% endfor %}
+    {% for r in st.dnfs %}<span class="down">{{ r.result_status }} <b>{{ r.driver.name }}</b></span>{% endfor %}
+  </div>
+  {% if hub.fans is defined %}
+  <div class="hub-block">
+    <div class="hub-title">Fans' Driver of the Day <span class="muted small">{{ hub.fans.total }} vote{{ 's' if hub.fans.total != 1 }}</span></div>
+    <form method="post" action="{{ url_for('fan_vote_route', token=ctx.token, event_id=ev.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="driver_id" required><option value="">Pick a driver…</option>
+        {% for d in hub.entrants %}<option value="{{ d.id }}" {{ 'selected' if hub.fans.mine == d.id }}>{{ d.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-sm">{{ 'Change vote' if hub.fans.mine else 'Vote' }}</button>
+    </form>
+    {% if hub.fans.tally %}
+    <ul class="bar-list fan-bars">
+      {% for t in hub.fans.tally[:5] %}<li><span class="who">{{ t.driver.name }}</span>
+        <span class="bar"><span style="width: {{ t.votes / hub.fans.total * 100 }}%; background: var(--amber)"></span></span><span class="pts">{{ t.votes }}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+  {% if hub.checkins is defined %}
+  <div class="hub-block">
+    <div class="hub-title">Who's racing?
+      <span class="muted small">{{ hub.checkin_counts['in'] }} in · {{ hub.checkin_counts['maybe'] }} maybe · {{ hub.checkin_counts['out'] }} out</span></div>
+    <form method="post" action="{{ url_for('checkin', token=ctx.token, event_id=ev.id) }}" class="button-row tight checkin-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for key, label in C.CHECKIN_CHOICES.items() %}
+      <button class="btn btn-sm {{ 'btn-primary' if hub.my_checkin == key else 'btn-ghost' }} checkin-{{ key }}" name="status" value="{{ key }}">{{ label }}</button>
+      {% endfor %}
+    </form>
+    {% if full %}
+    <ul class="checkin-list">
+      {% for r in hub.checkins %}<li class="ci-{{ r.status or 'none' }}"><span>{{ r.name }}</span>{% if r.driver %}<small class="muted">{{ r.driver.name }}</small>{% endif %}
+        <b>{{ C.CHECKIN_CHOICES.get(r.status, 'No answer') }}</b></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if hub.picks_locked is defined %}
+  <div class="hub-block">
+    <div class="hub-title">Predictions
+      <span class="muted small">{{ hub.pick_count }} pick{{ 's' if hub.pick_count != 1 }} in{{ ' · locked' if hub.picks_locked }}</span></div>
+    {% if not hub.picks_locked %}
+      {% if full %}
+      <form method="post" action="{{ url_for('prediction_save', token=ctx.token, event_id=ev.id) }}" class="pick-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% for key, label, pool in [('pole', 'Pole', hub.entrants), ('winner', 'Winner', hub.entrants), ('fastest_lap', 'Fastest lap', hub.entrants), ('top_player', 'Top player driver', hub.players)] if pool %}
+        <label>{{ label }} <small class="muted">{{ C.PREDICTION_POINTS[key] }} pts</small>
+          <select name="{{ key }}"><option value="">—</option>
+            {% for d in pool %}<option value="{{ d.id }}" {{ 'selected' if hub.my_picks and hub.my_picks[key ~ '_id'] == d.id }}>{{ d.name }}</option>{% endfor %}
+          </select></label>
+        {% endfor %}
+        <button class="btn btn-sm btn-primary">{{ 'Update picks' if hub.my_picks else 'Lock in picks' }}</button>
+      </form>
+      <p class="muted small">Everyone's picks are revealed once the race starts or results go in.</p>
+      {% else %}
+      <p>{% if hub.my_picks %}✅ Your picks are in.{% else %}You haven't picked yet.{% endif %}
+        <a href="{{ wk }}#race-night">{{ 'Change them' if hub.my_picks else 'Make your picks' }} →</a></p>
+      {% endif %}
+    {% elif full and hub.picks %}
+      <div class="table-wrap"><table class="data-table compact">
+        <thead><tr><th>Who</th><th>Pole</th><th>Winner</th><th>FL</th><th>Top player</th>{% if hub.outcome %}<th>Pts</th>{% endif %}</tr></thead>
+        <tbody>{% for p in hub.picks %}<tr>
+          <td><strong>{{ p.name }}</strong></td>
+          {% for k in ['pole', 'winner', 'fastest_lap', 'top_player'] %}<td class="{{ 'pick-hit' if p.hits.get(k) }}">{{ p[k].name if p[k] else '—' }}</td>{% endfor %}
+          {% if hub.outcome %}<td class="num"><b>{{ p.points }}</b></td>{% endif %}
+        </tr>{% endfor %}</tbody>
+      </table></div>
+    {% elif full %}<p class="muted small">Nobody made picks for this one.</p>{% endif %}
+  </div>
+  {% endif %}
+
+</section>

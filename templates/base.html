@@ -5,7 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}{{ APP_NAME }}{% endblock %} · {{ APP_NAME }}</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
+  <meta name="theme-color" content="#07090f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  {% if push_key %}<meta name="push-key" content="{{ push_key }}">{% endif %}
+  <script>
+    (function () {
+      var t = "dark";
+      try { t = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
+      if (t === "auto") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}">
@@ -42,6 +56,7 @@
         {{ item(url_for('teams_page', token=t), 'Constructors', 'teams', ep in ('teams_page', 'team_profile')) }}
         {{ item(url_for('news_page', token=t), 'Paddock News', 'news', ep == 'news_page') }}
         {{ item(url_for('records', token=t), 'Hall of Records', 'records', ep == 'records') }}
+        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
         {% if not (ctx.my_driver or ctx.is_master) %}{{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}{% endif %}
       </div>
       <div class="nav-group">
@@ -56,6 +71,8 @@
         {{ item(url_for('market_page', token=t), 'Transfer Market', 'market', ep == 'market_page') }}
         {{ item(url_for('paddock_admin', token=t), 'Paddock Admin', 'settings', ep == 'paddock_admin') }}
         {{ item(url_for('members', token=t), 'Players & Logins', 'players', ep == 'members') }}
+        {{ item(url_for('league_settings', token=t), 'League Settings', 'toggles', ep == 'league_settings') }}
+        {{ item(url_for('activity_log', token=t), 'Activity Log', 'log', ep == 'activity_log') }}
         <button type="button" data-dialog="career-dialog" title="League & Saves">{{ icon('saves') }}<span class="label">League &amp; Saves</span></button>
       </div>
       {% endif %}
@@ -164,7 +181,27 @@
 {% if user %}
 <dialog id="account-dialog" class="dialog">
   <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
-  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Scorekeeper' if user.is_steward else 'Driver') }}</p>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Race Master' if user.is_master else ('Scorekeeper' if user.is_steward else 'Member') }}</p>
+  <div class="stack">
+    <label>Theme
+      <select id="theme-pick">
+        <option value="dark">Dark</option><option value="light">Light</option><option value="auto">Match my device</option>
+      </select></label>
+    <div class="device-box">
+      <strong>Phone &amp; desktop alerts</strong>
+      <p class="muted small" id="push-status">Get a notification when results go up, offers arrive or someone comments.</p>
+      <div class="button-row tight">
+        <button type="button" class="btn btn-sm btn-primary" id="push-on" hidden>Turn on alerts</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="push-test" hidden>Send a test</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="push-off" hidden>Turn off on this device</button>
+      </div>
+    </div>
+    <div class="device-box" id="install-box" hidden>
+      <strong>Install the app</strong>
+      <p class="muted small" id="install-help">Add F1 Tracker to your home screen so it opens like an app.</p>
+      <button type="button" class="btn btn-sm" id="install-btn" hidden>Install</button>
+    </div>
+  </div>
   <div class="button-row">
     <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">{{ 'Manage accounts' if user.is_master else 'Change password' }}</a>
     <form method="post" action="{{ url_for('logout') }}">

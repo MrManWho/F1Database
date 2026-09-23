@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS events (
     ai_difficulty INTEGER,
     status TEXT NOT NULL DEFAULT 'Not Run',
     notes TEXT NOT NULL DEFAULT '',
+    race_at TEXT,
     UNIQUE (season_id, round_number)
 );
 
@@ -194,6 +195,65 @@ CREATE TABLE IF NOT EXISTS join_requests (
     decided_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS checkins (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, username)
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY,
+    target TEXT NOT NULL,
+    username TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reactions (
+    target TEXT NOT NULL,
+    username TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY (target, username, emoji)
+);
+
+CREATE TABLE IF NOT EXISTS fan_votes (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    PRIMARY KEY (event_id, username)
+);
+
+CREATE TABLE IF NOT EXISTS driver_profiles (
+    driver_id INTEGER PRIMARY KEY REFERENCES drivers(id) ON DELETE CASCADE,
+    number INTEGER,
+    nationality TEXT NOT NULL DEFAULT '',
+    helmet_color TEXT NOT NULL DEFAULT '',
+    avatar TEXT,
+    bio TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS predictions (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    pole_id INTEGER,
+    winner_id INTEGER,
+    fastest_lap_id INTEGER,
+    top_player_id INTEGER,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, username)
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target);
 CREATE INDEX IF NOT EXISTS idx_results_event ON results(event_id);
 CREATE INDEX IF NOT EXISTS idx_results_driver ON results(driver_id);
 CREATE INDEX IF NOT EXISTS idx_events_season ON events(season_id);
@@ -235,11 +295,13 @@ def migrate(conn):
               transfer window can remove its trail.
     v7 -> v8: join requests, so anyone with a login can ask to join a league.
     v8 -> v9: per-league Scorekeepers (career_members.scorekeeper) and the role asked for in a join request.
+    v9 -> v10: race times (events.race_at), check-ins, comments, reactions, fan votes, driver profiles,
+               predictions and the Race Master's activity log (all created empty).
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "scorekeeper" in _columns(conn, "career_members"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "race_at" in _columns(conn, "events"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -250,6 +312,8 @@ def migrate(conn):
         )
     if "ai_difficulty" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN ai_difficulty INTEGER")
+    if "race_at" not in _columns(conn, "events"):
+        conn.execute("ALTER TABLE events ADD COLUMN race_at TEXT")
     if "scorekeeper" not in _columns(conn, "career_members"):
         conn.execute("ALTER TABLE career_members ADD COLUMN scorekeeper INTEGER NOT NULL DEFAULT 0")
     if "role" not in _columns(conn, "join_requests"):

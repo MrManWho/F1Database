@@ -44,6 +44,7 @@
       {% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
       <span class="status-badge status-{{ next_event.status|lower|replace(' ', '-') }}">{{ next_event.status }}</span>
     </div>
+    {% if next_event.race_at %}<p class="hero-countdown">Lights out in <span class="countdown" data-countdown="{{ next_event.race_at }}"><time data-local="{{ next_event.race_at }}">{{ next_event.race_at }}</time></span></p>{% endif %}
     {% else %}
     <div class="kicker">Season complete</div>
     <h2 class="hero-title">All {{ events|length }} rounds are in the books</h2>
@@ -90,6 +91,10 @@
   </section>
   {% endif %}
 </div>
+
+{% if hub and (hub.checkins is defined or hub.picks_locked is defined) %}
+{% set full = False %}{% include "_race_night.html" with context %}
+{% endif %}
 
 <div class="grid-2">
   <section class="card">

@@ -1,8 +1,8 @@
 """Static universe data and rule tables for F1 Universe Tracker."""
 
 APP_NAME = "F1 Universe Tracker"
-APP_VERSION = "1.12"
-SCHEMA_VERSION = 9
+APP_VERSION = "1.13"
+SCHEMA_VERSION = 10
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -157,3 +157,20 @@ LEAGUE_ROLES = {
     "scorekeeper": "Scorekeeper only",
     "spectator": "Spectator (view only)",
 }
+
+# League features the Race Master can switch on or off (League settings, and when creating a league).
+# key -> (label, description, default)
+FEATURES = {
+    "checkin": ("Race-night check-in", "Members say whether they're in for the next race. Handy for bigger leagues.", False),
+    "comments": ("Comments & reactions", "Comment and react on race weekends and news, and vote for the fans' Driver of the Day.", True),
+    "predictions": ("Predictions game", "Pick pole, winner and fastest lap before each race and climb the predictions table.", True),
+    "public": ("Public results page", "A read-only link with standings and results you can share with anyone, no login needed.", False),
+}
+
+CHECKIN_CHOICES = {"in": "I'm in", "maybe": "Maybe", "out": "Can't make it"}
+REACTIONS = ["🔥", "👏", "😂", "😬", "🏆", "💀"]
+
+# Predictions: points for each correct pick
+PREDICTION_POINTS = {"pole": 3, "winner": 5, "fastest_lap": 2, "top_player": 2}
+
+AVATAR_MAX_BYTES = 2 * 1024 * 1024

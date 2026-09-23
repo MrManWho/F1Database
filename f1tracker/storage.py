@@ -318,3 +318,6 @@ def delete_career(token):
         extra = Path(str(path) + suffix)
         if extra.exists():
             extra.unlink()
+    avatars = data_dir() / "avatars" / sanitize_token(token)
+    if avatars.is_dir():
+        shutil.rmtree(avatars, ignore_errors=True)

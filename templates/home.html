@@ -90,6 +90,12 @@
     </fieldset>
     <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Start everyone as rookies: open the Rookie Draft so teams send seat offers</label>
     <label class="check"><input type="checkbox" name="join_open" value="1" checked> Let people with a login ask to join this league</label>
+    <fieldset>
+      <legend>Extras (change any time in League Settings)</legend>
+      {% for key, (label, desc, default) in C.FEATURES.items() %}
+      <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> <span><b>{{ label }}</b> <small class="muted">· {{ desc }}</small></span></label>
+      {% endfor %}
+    </fieldset>
     <button class="btn btn-primary">Create league</button>
   </form>
 </dialog>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Activity Log{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Race Master only</div><h1>Activity log</h1></div>
+  <form method="get" class="inline-form"><label>Person
+    <select name="who" onchange="this.form.submit()"><option value="">Everyone</option>
+      {% for p in people %}<option value="{{ p }}" {{ 'selected' if p == who }}>{{ names.get(p, p) }}</option>{% endfor %}
+    </select></label></form></div>
+<section class="card table-card">
+  <p class="muted small">Who changed what, newest first. Autosaves while someone is typing results are merged into one line.</p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td class="small"><time data-local="{{ r.created_at }}">{{ r.created_at[:16]|replace('T', ' ') }}</time></td>
+        <td><strong>{{ names.get(r.username, r.username) }}</strong></td><td>{{ r.action }}</td><td class="small muted">{{ r.detail }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">Nothing logged yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

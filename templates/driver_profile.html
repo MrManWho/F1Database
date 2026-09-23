@@ -1,19 +1,25 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot with context %}
+{% from "_macros.html" import team_dot, avatar with context %}
 {% block title %}{{ driver.name }}{% endblock %}
 {% block content %}
 {% set latest = timeline[-1] if timeline else none %}
 <div class="profile-head" style="--team: {{ latest.team.color if latest and latest.team else '#e10600' }}">
-  <div>
-    <div class="kicker">Driver career profile</div>
-    <h1>{{ driver.name }} {% if driver.is_player %}<span class="pill pill-player">Player driver</span>{% endif %}</h1>
+  {{ avatar(ctx.token, driver, profile, 'xl') }}
+  <div class="grow">
+    <div class="kicker">Driver career profile{% if owner %} · {{ owner.display_name }}{% endif %}</div>
+    <h1>{% if profile.number is not none %}<span class="car-num">#{{ profile.number }}</span> {% endif %}{{ driver.name }} {% if profile.flag %}<span title="{{ profile.country }}">{{ profile.flag }}</span>{% endif %}
+      {% if driver.is_player %}<span class="pill pill-player">Player driver</span>{% endif %}</h1>
     <div class="hero-meta">
       <span>{{ latest.team.name if latest and latest.team else 'No team yet' }}</span>
       <span>{{ totals.seasons }} active season{{ 's' if totals.seasons != 1 }}</span>
       {% if contract %}<span>Contract: {{ contract.team.name }} through {{ contract.end_year }}</span>{% endif %}
     </div>
+    {% if profile.bio %}<p class="bio">{{ profile.bio }}</p>{% endif %}
   </div>
-  {% if driver.is_player %}<a class="btn btn-ghost" href="{{ url_for('garage', token=ctx.token, driver=driver.id) }}">Garage →</a>{% endif %}
+  <div class="button-row">
+    {% if can_edit %}<button class="btn" type="button" data-dialog="profile-dialog">Edit profile</button>{% endif %}
+    {% if driver.is_player and (ctx.is_master or (ctx.my_driver and ctx.my_driver.id == driver.id)) %}<a class="btn btn-ghost" href="{{ url_for('garage', token=ctx.token, driver=driver.id) }}">Garage →</a>{% endif %}
+  </div>
 </div>
 <div class="stat-grid">
   {% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Poles', totals.poles),
@@ -23,6 +29,15 @@
   <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>
   {% endfor %}
 </div>
+{% if trophies %}
+<section class="card">
+  <h2>Trophy cabinet</h2>
+  <div class="trophies">
+    {% for t in trophies %}<div class="trophy {{ 'live' if t.live }}" title="{{ 'Season still running' if t.live }}">
+      <span class="trophy-ico">{{ '👑' if 'Champion' in t.title else '🏆' }}</span><b>{{ t.title }}</b><small>{{ t.year }} · {{ t.value }}{{ ' · so far' if t.live }}</small></div>{% endfor %}
+  </div>
+</section>
+{% endif %}
 <section class="card">
   <div class="card-head"><h2>Form &amp; Reputation</h2><span class="muted small">After every round of the career</span></div>
   <div class="chart" data-height="240" data-chart='{{ {"labels": trend.labels, "yLabel": "Rating", "series": [{"name": "Reputation", "values": trend.reputation, "slot": 1}, {"name": "Form", "values": trend.form, "slot": 3}]}|tojson }}'></div>
@@ -50,4 +65,36 @@
   </div>
   {% else %}<p class="muted">No active seasons yet.</p>{% endif %}
 </section>
+{% if contracts %}
+<section class="card table-card">
+  <h2>Contract history</h2>
+  <table class="data-table compact">
+    <thead><tr><th>Team</th><th>Role</th><th>Years</th><th>Salary</th></tr></thead>
+    <tbody>{% for c in contracts %}<tr><td>{{ team_dot(c.team) }}{{ c.team.name }}</td><td>{{ c.role }}</td>
+      <td>{{ c.target_year }}{% if c.end_year != c.target_year %}–{{ c.end_year }}{% endif %}</td>
+      <td class="num">{{ ('$%.1fM'|format(c.salary)) if c.salary and (ctx.is_master or (ctx.my_driver and ctx.my_driver.id == driver.id)) else '—' }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+{% if can_edit %}
+<dialog id="profile-dialog" class="dialog">
+  <div class="dialog-head"><h2>Edit profile</h2><button class="icon-btn" data-close>✕</button></div>
+  <form method="post" action="{{ url_for('profile_avatar', token=ctx.token, driver_id=driver.id) }}" enctype="multipart/form-data" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Photo (PNG, JPG or WebP, up to 2 MB)<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"></label>
+    <button class="btn btn-sm">Upload</button>
+    {% if profile.avatar %}<button class="btn btn-sm btn-ghost" name="remove" value="1" formnovalidate>Remove photo</button>{% endif %}
+  </form>
+  <form method="post" action="{{ url_for('profile_save', token=ctx.token, driver_id=driver.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2">
+      <label>Car number<input name="number" type="number" min="0" max="99" value="{{ profile.number if profile.number is not none }}"></label>
+      <label>Nationality<select name="nationality">{% for code, label in nationalities %}<option value="{{ code }}" {{ 'selected' if code == profile.nationality }}>{{ label }}</option>{% endfor %}</select></label>
+    </div>
+    <label>Helmet colour<input name="helmet_color" type="color" value="{{ profile.helmet_color or '#e10600' }}"></label>
+    <label>Bio<textarea name="bio" maxlength="500" rows="3" placeholder="A line or two about this driver">{{ profile.bio }}</textarea></label>
+    <button class="btn btn-primary">Save profile</button>
+  </form>
+</dialog>
+{% endif %}
 {% endblock %}

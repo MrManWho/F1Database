@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, difficulty with context %}
+{% from "_macros.html" import team_dot, difficulty, reaction_bar, comment_thread with context %}
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
 {% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
@@ -25,6 +25,8 @@
 {% elif ro %}
 <div class="banner">View only. The Race Master or a Scorekeeper enters results for this weekend.</div>
 {% endif %}
+
+{% set full = True %}{% include "_race_night.html" with context %}
 
 <section class="card diff-strip">
   {{ difficulty(rec, compact=True) }}
@@ -117,6 +119,13 @@
     {% endif %}
   </div>
 </section>
+{% if hub.comments is defined %}
+<section class="card" id="comments">
+  <div class="card-head"><h2>Paddock chat</h2><span class="muted small">{{ hub.comments|length }} comment{{ 's' if hub.comments|length != 1 }}</span></div>
+  {{ reaction_bar(ctx, hub.target, hub.reacts) }}
+  {{ comment_thread(ctx, hub.target, hub.comments) }}
+</section>
+{% endif %}
 {% if not ro %}
 <dialog id="import-dialog" class="dialog">
   <div class="dialog-head"><h2>Import from screenshot</h2><button class="icon-btn" data-close>✕</button></div>

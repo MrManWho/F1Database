@@ -1,9 +1,17 @@
+{% from "_macros.html" import reaction_bar, comment_thread with context %}
 <ul class="news-list">
   {% for n in news %}
-  <li class="news-{{ n.kind }}" style="--team: {{ n.team.color if n.team else 'var(--line)' }}">
+  <li class="news-{{ n.kind }}" id="news-{{ n.id }}" style="--team: {{ n.team.color if n.team else 'var(--line)' }}">
     <span class="news-kind">{{ {'result': 'Race', 'player': 'Spotlight', 'market': 'Market', 'rumour': 'Rumour', 'season': 'Season', 'tech': 'Tech', 'paddock': 'Paddock'}.get(n.kind, n.kind) }}</span>
     {% if n.link %}<a href="/career/{{ ctx.token }}/{{ n.link }}"><strong>{{ n.headline }}</strong></a>{% else %}<strong>{{ n.headline }}</strong>{% endif %}
     {% if n.body %}<small>{{ n.body }}</small>{% endif %}
+    {% if reacts is defined and reacts %}{% set tgt = 'news:' ~ n.id %}
+    <div class="news-social">
+      {{ reaction_bar(ctx, tgt, reacts[tgt]) }}
+      <details {{ 'open' if request.args.get('open') == tgt }}><summary class="small">💬 {{ comment_counts.get(tgt, 0) }} comment{{ 's' if comment_counts.get(tgt, 0) != 1 }}</summary>
+        {{ comment_thread(ctx, tgt, threads.get(tgt, [])) }}</details>
+    </div>
+    {% endif %}
     {% if ctx.is_master %}<form method="post" action="{{ url_for('news_delete', token=ctx.token, news_id=n.id) }}" class="news-del"
       onsubmit="return confirm('Delete this headline?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete headline">✕</button></form>{% endif %}
   </li>

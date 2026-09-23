@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Predictions{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.season.year }} mini-game</div><h1>Predictions</h1></div>
+  {% if next_event %}<a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}#race-night">Pick R{{ next_event.round_number }} {{ next_event.name }} →</a>{% endif %}</div>
+<p class="muted">Before each race pick pole ({{ C.PREDICTION_POINTS.pole }} pts), the winner ({{ C.PREDICTION_POINTS.winner }}),
+  fastest lap ({{ C.PREDICTION_POINTS.fastest_lap }}) and the top player driver ({{ C.PREDICTION_POINTS.top_player }}).
+  Picks lock when the race starts or the first results go in.</p>
+<section class="card table-card">
+  <h2>Table</h2>
+  <table class="data-table">
+    <thead><tr><th>#</th><th>Player</th><th>Pts</th><th>Correct picks</th><th>Perfect rounds</th><th>Rounds played</th></tr></thead>
+    <tbody>{% for r in table %}
+      <tr class="{{ 'player-row' if r.username == user.username }}"><td class="num">{{ r.position }}</td><td><strong>{{ r.name }}</strong></td>
+        <td class="num"><b>{{ r.points }}</b></td><td class="num">{{ r.correct }}</td><td class="num">{{ r.exact }}</td><td class="num">{{ r.rounds }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No scored rounds yet. Make your picks for the next race.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% for rd in rounds %}
+<section class="card table-card">
+  <div class="card-head"><h2>R{{ rd.event.round_number }} {{ rd.event.name }}</h2>
+    <span class="muted small">Pole {{ dmap[rd.outcome.pole].name if rd.outcome.pole else '—' }} · Win {{ dmap[rd.outcome.winner].name if rd.outcome.winner else '—' }}
+      · FL {{ dmap[rd.outcome.fastest_lap].name if rd.outcome.fastest_lap else '—' }} · Top player {{ dmap[rd.outcome.top_player].name if rd.outcome.top_player else '—' }}</span></div>
+  <div class="table-wrap"><table class="data-table compact">
+    <thead><tr><th>Who</th><th>Pole</th><th>Winner</th><th>FL</th><th>Top player</th><th>Pts</th></tr></thead>
+    <tbody>{% for p in rd.picks|sort(attribute='points', reverse=True) %}<tr>
+      <td><strong>{{ p.name }}</strong></td>
+      {% for k in ['pole', 'winner', 'fastest_lap', 'top_player'] %}<td class="{{ 'pick-hit' if p.hits.get(k) }}">{{ p[k].name if p[k] else '—' }}</td>{% endfor %}
+      <td class="num"><b>{{ p.points }}</b></td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endfor %}
+{% endblock %}

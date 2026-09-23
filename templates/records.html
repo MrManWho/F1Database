@@ -10,6 +10,28 @@
   </div>
   {% endfor %}
 </div>
+{% if all_time.champions %}
+<section class="card">
+  <h2>Champions</h2>
+  <div class="trophies">{% for c in all_time.champions %}<div class="trophy"><span class="trophy-ico">👑</span>
+    <b><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=c.driver.id) }}">{{ c.driver.name }}</a></b><small>{{ c.season.year }} · {{ c.points }} pts</small></div>{% endfor %}</div>
+</section>
+{% endif %}
+{% if all_time.records %}
+<section class="card">
+  <h2>Record book</h2>
+  <div class="award-grid">
+    {% for r in all_time.records %}
+    <article class="award card">
+      <small>{{ r.title }}</small>
+      <h3><a href="{{ url_for('driver_profile', token=ctx.token, driver_id=r.driver.id) }}" class="{{ 'is-player' if r.driver.is_player }}">{{ r.driver.name }}</a></h3>
+      <div class="award-value">{{ r.value }}</div>
+      {% if r.note %}<div class="muted small">{{ r.note }}</div>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 <section class="card table-card">
   <div class="table-wrap">
   <table class="data-table sortable">

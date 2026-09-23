@@ -33,3 +33,40 @@
   </div>
 </div>
 {%- endmacro %}
+
+{% macro avatar(token, driver, prof, size='md', key=None) -%}
+{%- set helmet = (prof.helmet_color if prof and prof.helmet_color) or 'var(--panel-2)' -%}
+<span class="avatar-pic av-{{ size }}" style="--helmet: {{ helmet }}">
+  {%- if prof and prof.avatar -%}<img src="{{ url_for('avatar', token=token, name=prof.avatar, k=key) }}" alt="" loading="lazy">
+  {%- else -%}{{ driver.name.split()|map('first')|join('')|upper|truncate(2, True, '') }}{%- endif -%}
+  {%- if prof and prof.number is not none %}<b class="av-num">{{ prof.number }}</b>{% endif -%}
+</span>
+{%- endmacro %}
+
+{% macro reaction_bar(ctx, target, reacts, count=None, link=None) -%}
+<div class="react-bar" data-target="{{ target }}" data-url="{{ url_for('react', token=ctx.token) }}">
+  {% for r in reacts %}<button type="button" class="react {{ 'mine' if r.mine }}" data-emoji="{{ r.emoji }}"
+     title="{{ r.who|join(', ') if r.who else 'React' }}">{{ r.emoji }}<span>{{ r.count if r.count }}</span></button>{% endfor %}
+  {% if link %}<a class="small react-comments" href="{{ link }}">💬 {{ count or 0 }}</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro comment_thread(ctx, target, comments) -%}
+<div class="comments">
+  {% for c in comments %}
+  <div class="comment">
+    <div class="comment-head"><strong>{{ c.name }}</strong><small class="muted">{{ c.created_at[:16]|replace('T', ' ') }}</small>
+      {% if c.username == user.username or ctx.is_master %}
+      <form method="post" action="{{ url_for('comment_delete', token=ctx.token, comment_id=c.id) }}" class="comment-del">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete">✕</button></form>
+      {% endif %}</div>
+    <p>{{ c.body }}</p>
+  </div>
+  {% else %}<p class="muted small">No comments yet. Say something.</p>{% endfor %}
+  <form method="post" action="{{ url_for('comment_add', token=ctx.token) }}" class="comment-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="target" value="{{ target }}">
+    <input name="body" maxlength="1000" placeholder="Add a comment…" required autocomplete="off">
+    <button class="btn btn-sm btn-primary">Post</button>
+  </form>
+</div>
+{%- endmacro %}

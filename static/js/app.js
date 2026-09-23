@@ -225,3 +225,166 @@
     sync();
   });
 })();
+
+/* v1.13: local times, countdowns, reactions, theme, install and phone alerts. */
+(function () {
+  "use strict";
+  var F1 = window.F1 || {};
+  var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
+
+  // Race times are stored in UTC; show them in the viewer's own time zone.
+  function parse(iso) { var d = new Date(iso); return isNaN(d) ? null : d; }
+  document.querySelectorAll("time[data-local]").forEach(function (el) {
+    var d = parse(el.dataset.local);
+    if (d) el.textContent = d.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  });
+  var counters = document.querySelectorAll("[data-countdown]");
+  function tick() {
+    var now = Date.now();
+    counters.forEach(function (el) {
+      var d = parse(el.dataset.countdown);
+      if (!d) return;
+      var left = Math.floor((d - now) / 1000);
+      var out = el.querySelector(".cd") || el.appendChild(Object.assign(document.createElement("b"), { className: "cd" }));
+      if (left <= 0) { out.textContent = "🏁 Race time!"; el.classList.add("live"); return; }
+      var days = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+      out.textContent = (days ? days + "d " : "") + h + "h " + String(m).padStart(2, "0") + "m " + (days ? "" : String(s).padStart(2, "0") + "s");
+    });
+  }
+  if (counters.length) { tick(); setInterval(tick, 1000); }
+
+  // Race-time form: prefill in local time and tell the server our offset.
+  document.querySelectorAll(".race-time-form").forEach(function (form) {
+    var input = form.querySelector('input[type="datetime-local"]');
+    var d = input.dataset.utc && parse(input.dataset.utc);
+    if (d) {
+      var local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      input.value = local.toISOString().slice(0, 16);
+    }
+    form.addEventListener("submit", function () {
+      var when = input.value ? new Date(input.value) : new Date();
+      form.querySelector('input[name="tz"]').value = when.getTimezoneOffset();
+    });
+  });
+
+  // Reactions toggle in place.
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".react-bar .react");
+    if (!btn) return;
+    var bar = btn.closest(".react-bar");
+    var body = new FormData();
+    body.append("target", bar.dataset.target);
+    body.append("emoji", btn.dataset.emoji);
+    body.append("csrf_token", csrf);
+    fetch(bar.dataset.url, { method: "POST", body: body, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) { if (F1.toast) F1.toast(res.error || "Couldn't react", "error"); return; }
+        res.reactions.forEach(function (r) {
+          var b = bar.querySelector('[data-emoji="' + r.emoji + '"]');
+          if (!b) return;
+          b.classList.toggle("mine", r.mine);
+          b.querySelector("span").textContent = r.count || "";
+          b.title = r.who.length ? r.who.join(", ") : "React";
+        });
+      }).catch(function () { if (F1.toast) F1.toast("Couldn't react. Check your connection.", "error"); });
+  });
+
+  // Copy buttons
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-copy]");
+    if (!btn) return;
+    var input = document.querySelector(btn.dataset.copy);
+    if (!input) return;
+    input.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.reject()).then(
+      function () { if (F1.toast) F1.toast("Link copied", "success"); },
+      function () { document.execCommand && document.execCommand("copy"); });
+  });
+
+  // Theme
+  var pick = document.getElementById("theme-pick");
+  if (pick) {
+    try { pick.value = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
+    pick.addEventListener("change", function () {
+      try { localStorage.setItem("f1-theme", pick.value); } catch (e) {}
+      var t = pick.value;
+      if (t === "auto") t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", t);
+    });
+  }
+
+  // Service worker (installable app + alerts). Needs HTTPS or localhost.
+  var swReady = null;
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+    swReady = navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(function () { return navigator.serviceWorker.ready; })
+      .catch(function () { return null; });
+  }
+
+  // Install prompt
+  var installBox = document.getElementById("install-box"), installBtn = document.getElementById("install-btn"), deferred = null;
+  var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (installBox && !standalone) {
+    if (ios) {
+      installBox.hidden = false;
+      document.getElementById("install-help").textContent = "On iPhone: tap the Share button in Safari, then “Add to Home Screen”. Alerts on iPhone only work from the installed app.";
+    }
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault(); deferred = e; installBox.hidden = false; installBtn.hidden = false;
+    });
+    installBtn.addEventListener("click", function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.finally(function () { deferred = null; installBox.hidden = true; });
+    });
+  }
+
+  // Phone & desktop alerts
+  var keyMeta = document.querySelector('meta[name="push-key"]');
+  var on = document.getElementById("push-on"), off = document.getElementById("push-off"), test = document.getElementById("push-test");
+  var status = document.getElementById("push-status");
+  function b64ToBytes(b64) {
+    var pad = "=".repeat((4 - b64.length % 4) % 4);
+    var raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
+  }
+  function post(url, body) {
+    return fetch(url, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json(); });
+  }
+  function show(sub) { on.hidden = !!sub; off.hidden = !sub; test.hidden = !sub; }
+  if (on && status) {
+    if (!keyMeta || !swReady || !("PushManager" in window)) {
+      status.textContent = ios && !standalone ? "Install the app to your home screen first, then turn alerts on from there."
+        : "Alerts aren't available here (they need the website's https address and a modern browser).";
+    } else {
+      swReady.then(function (reg) {
+        if (!reg) return;
+        reg.pushManager.getSubscription().then(show);
+        on.addEventListener("click", function () {
+          Notification.requestPermission().then(function (perm) {
+            if (perm !== "granted") { status.textContent = "Notifications are blocked for this site in your browser settings."; return; }
+            reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(keyMeta.content) })
+              .then(function (sub) { return post("/push/subscribe", sub.toJSON()).then(function (res) {
+                if (!res.ok) throw new Error(res.error);
+                show(sub); status.textContent = "Alerts are on for this device.";
+              }); })
+              .catch(function (err) { status.textContent = "Couldn't turn alerts on: " + (err.message || err); });
+          });
+        });
+        off.addEventListener("click", function () {
+          reg.pushManager.getSubscription().then(function (sub) {
+            if (!sub) return show(null);
+            return post("/push/unsubscribe", { endpoint: sub.endpoint }).then(function () { return sub.unsubscribe(); })
+              .then(function () { show(null); status.textContent = "Alerts are off for this device."; });
+          });
+        });
+        test.addEventListener("click", function () {
+          post("/push/test").then(function (res) { status.textContent = res.ok ? "Test sent. It should pop up in a few seconds." : res.error; });
+        });
+      });
+    }
+  }
+})();
