@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import driver_link, pattrs, delta, battle_row with context %}
+{% from "_macros.html" import driver_link, pattrs, delta, battle_row, seat_badge with context %}
 {% block title %}{{ team.name }}{% endblock %}
 {% block content %}
 <div class="profile-head" style="--team: {{ team.color }}">
@@ -24,7 +24,7 @@
       {% for c in details.current %}
       <tr {{ pattrs(c.driver, href=url_for('driver_profile', token=ctx.token, driver_id=c.driver.id) if c.driver else '') }}>
         <td>{{ c.seat }}</td>
-        <td>{% if c.driver %}{{ driver_link(ctx, c.driver, badge=True) }}{% else %}<span class="muted">Vacant</span>{% endif %}</td>
+        <td>{% if c.driver %}{{ driver_link(ctx, c.driver, badge=True) }}{% if c.driver.is_player %}<br>{{ seat_badge(seat_states[c.driver.id], detail=False) }}{% endif %}{% else %}<span class="muted">Vacant seat</span>{% endif %}</td>
         <td class="num"><strong>{{ c.row.points if c.row else 0 }}</strong></td><td class="num">{{ 'P' ~ c.row.position if c.row else '—' }}</td>
         <td class="num">{{ c.row.wins if c.row else 0 }}</td><td class="num">{{ c.row.podiums if c.row else 0 }}</td><td class="num">{{ c.row.dnfs if c.row else 0 }}</td>
       </tr>

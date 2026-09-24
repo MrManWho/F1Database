@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Start {{ year }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('seasons_page', token=ctx.token) }}">Calendar &amp; Seasons</a> <span aria-hidden="true">›</span> <span aria-current="page">Start {{ year }}</span></nav>
+<div class="page-head"><div><div class="kicker">Manage · Season rollover</div><h1>Start the {{ year }} season</h1>
+  <p class="page-purpose">Check what happens to every player driver's seat and contract before anything changes. A backup is saved first.</p></div></div>
+
+{% if unfinished %}
+<div class="banner banner-warn" role="note"><b>{{ unfinished|length }} round{{ 's' if unfinished|length != 1 }} of {{ latest.year }} {{ 'aren\'t' if unfinished|length != 1 else 'isn\'t' }} complete</b>
+  ({% for e in unfinished[:4] %}R{{ e.round_number }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if unfinished|length > 4 }}).
+  Starting {{ year }} marks {{ latest.year }} complete anyway and locks everyone's Reputation.</div>
+{% endif %}
+
+<section class="card">
+  <h2>Summary</h2>
+  <dl class="season-facts compact-facts">
+    <div><dt>Continuing (multi-year)</dt><dd>{{ review.counts.continuing }}</dd></div>
+    <div><dt>Renewed / signed</dt><dd>{{ review.counts.renewed + review.counts.moving }}</dd></div>
+    <div><dt>Contracts ending</dt><dd>{{ review.counts.expiring }}</dd></div>
+    <div><dt>Released by teams</dt><dd>{{ review.counts.released }}</dd></div>
+    <div><dt>Free agents</dt><dd>{{ review.counts.free_agent }}</dd></div>
+    <div><dt>No contract system</dt><dd>{{ review.counts.no_contract }}</dd></div>
+  </dl>
+  {% if review.conflicts %}
+  <div class="banner banner-danger" role="alert"><b>Can't start yet:</b>
+    {% for c in review.conflicts %}{{ c.team.name }} has {{ c.drivers|length }} drivers signed for {{ year }} ({{ c.drivers|map(attribute='name')|join(', ') }}).{% endfor %}
+    Fix this in <a href="{{ url_for('grid_page', token=ctx.token) }}">Grid &amp; Contracts</a> first.</div>
+  {% endif %}
+</section>
+
+<form method="post" action="{{ url_for('season_new', token=ctx.token) }}" class="card stack" data-confirm='{{ {"title": "Start the " ~ year ~ " season?", "what": "Marks " ~ latest.year ~ " complete, locks Reputation, copies the calendar and applies the seat decisions below.", "history": "Nothing from " ~ latest.year ~ " is deleted or recalculated.", "backup": "A backup is saved first and can be restored from League & Saves.", "undo": "Undo by restoring that backup.", "ok": "Start " ~ year}|tojson }}'>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="year" value="{{ year }}">
+  <h2>Player drivers</h2>
+  <div class="table-wrap">
+  <table class="data-table rollover-table">
+    <caption class="sr-only">What happens to each player driver in {{ year }}</caption>
+    <thead><tr><th scope="col">Driver</th><th scope="col">{{ latest.year }} seat</th><th scope="col">In {{ year }}</th></tr></thead>
+    <tbody>
+    {% for r in review.rows %}
+    <tr class="ro-{{ r.kind }}" {% if r.driver.player_color %}style="--player: {{ r.driver.player_color }}"{% endif %}>
+      <th scope="row" class="player-row"><b>{{ r.driver.name }}</b></th>
+      <td>{{ r.team.name if r.team else 'No seat' }}{% if r.last %}<small class="muted d-block">Contract to {{ r.last.end_year }}</small>{% endif %}</td>
+      <td>
+        {% if r.needs_decision %}
+        <label class="sr-only" for="dec-{{ r.driver.id }}">What happens to {{ r.driver.name }}</label>
+        <span class="ro-note">⚠️ {{ r.outcome }}. Choose:</span>
+        <select name="decision_{{ r.driver.id }}" id="dec-{{ r.driver.id }}" required>
+          <option value="">— choose —</option>
+          {% for key, label in actions.items() %}<option value="{{ key }}" {{ 'selected' if key == default }}>{{ label }}</option>{% endfor %}
+        </select>
+        {% else %}{{ r.outcome }}{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">No player drivers in this league. Only the grid and calendar are copied.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <ul class="muted small">
+    <li><b>Renew</b> records a new one-year contract with the same team (the old one stays in history).</li>
+    <li><b>Provisional</b> keeps the seat marked "Awaiting contract" everywhere until a contract is signed or recorded.</li>
+    <li><b>Release</b> makes them a free agent. An AI driver takes the seat. Their stats, Reputation and history are kept, and they can return later as the same driver.</li>
+    <li>AI drivers keep their seats unless a player's signing moves them.</li>
+  </ul>
+  <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('seasons_page', token=ctx.token) }}">Cancel</a>
+    <button class="btn btn-primary" {{ 'disabled' if review.conflicts }}>Start {{ year }}</button></div>
+</form>
+{% endblock %}

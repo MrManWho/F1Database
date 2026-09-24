@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><div class="kicker">Seasons &amp; Calendar</div><h1>Season archive</h1></div>
-  {% if ctx.is_master %}<button class="btn btn-primary" data-dialog="season-dialog">Create next season</button>{% endif %}
+  {% if ctx.is_master %}<a class="btn btn-primary" href="{{ url_for('season_rollover', token=ctx.token, year=next_year) }}">Start the {{ next_year }} season…</a>{% endif %}
 </div>
 <div class="season-grid">
   {% for s in seasons_list %}
@@ -87,20 +87,5 @@
   {% endif %}
 </section>
 
-{% if ctx.is_master %}
-<dialog id="season-dialog" class="dialog">
-  <div class="dialog-head"><h2>Create the {{ next_year }} season</h2><button class="icon-btn" data-close>✕</button></div>
-  {% if not all_complete %}<div class="banner banner-warn">The {{ latest.year }} season still has unfinished rounds. Creating the next season marks it Complete anyway.</div>{% endif %}
-  <ul class="plain-list small">
-    <li>Locks every driver's {{ latest.year }} Reputation and carries it forward.</li>
-    <li>Copies the grid and calendar. Difficulty values start blank, but the recommender keeps its career-long history.</li>
-    <li>Applies contracts signed through the transfer market for {{ next_year }}.</li>
-  </ul>
-  <form method="post" action="{{ url_for('season_new', token=ctx.token) }}" class="stack">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Year<input type="number" name="year" value="{{ next_year }}" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" required></label>
-    <button class="btn btn-primary">Create season</button>
-  </form>
-</dialog>
-{% endif %}
+
 {% endblock %}

@@ -35,6 +35,10 @@
     <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Post-race press questions answered (they stay open until answered)</label>
     <label class="check"><input type="checkbox" name="gate_targets" value="1" {{ 'checked' if life.gate_targets }}> Weekend target accepted</label>
   </div>
+  <h2 id="rollover">Season rollover</h2>
+  <label>When a player's contract ends, the rollover review suggests
+    <select name="rollover_default">{% for key, label in rollover_actions.items() %}<option value="{{ key }}" {{ 'selected' if key == rollover_default }}>{{ label }}</option>{% endfor %}</select></label>
+  <p class="muted small">It's only a suggestion: you confirm each driver on the review screen before a new season starts, and a backup is saved first.</p>
   <h2>Time zone</h2>
   <label>Race times, notifications and dates are shown in
     <select name="timezone">

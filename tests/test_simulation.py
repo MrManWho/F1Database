@@ -5,7 +5,7 @@ import random
 import re
 
 from conftest import login
-from f1tracker import auth, community, market, relations, services as S, storage, teamlife
+from f1tracker import auth, community, market, relations, services as S, storage, seats, teamlife
 from f1tracker import constants as C
 
 LINK = re.compile(r'href="(/(?:career|public)/[^"#]*)"')
@@ -159,8 +159,15 @@ def test_two_season_simulation_and_crawl(app, master_client):
                 teamlife.after_race(conn, ev["id"])
                 market.maybe_open_silly_season(conn, sid)
         negotiate()
-        r = master_client.post(f"/career/{token}/seasons/new", data={"year": season + 1, "csrf_token": "tok"})
+        with storage.session(token) as conn:
+            pids = [p["id"] for p in S.player_drivers(conn)]
+        # v2.0: every expiring contract needs a decision at the rollover review (here: keep provisionally).
+        r = master_client.post(f"/career/{token}/seasons/new", data={"year": season + 1, "csrf_token": "tok",
+                                                                    **{f"decision_{p}": "provisional" for p in pids}})
         assert r.status_code == 302
+        with storage.session(token) as conn:
+            assert S.get_season(conn, S.current_season_id(conn))["year"] == season + 1
+            assert seats.problems(conn, S.current_season_id(conn)) == []
         negotiate()
 
     with storage.session(token) as conn:

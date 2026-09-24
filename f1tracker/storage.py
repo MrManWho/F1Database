@@ -284,6 +284,9 @@ def auto_backup_path(token, name):
     return path
 
 
+SAFETY_BACKUPS_KEPT = 30
+
+
 def auto_backup(token, reason="daily", force=False):
     """Keep a rolling set of automatic backups: daily, and after every completed race weekend."""
     source = career_path(token)
@@ -310,7 +313,11 @@ def auto_backup(token, reason="daily", force=False):
         src.close()
         dst.close()
     existing.append(target)
-    for old in existing[:-AUTO_BACKUPS_KEPT]:
+    # Safety copies taken before a risky operation ("before-…") are kept apart from the rolling daily/after-race
+    # set, so a busy week of race nights can't rotate away the copy from just before a season rollover.
+    routine = [p for p in existing if "-before-" not in p.name]
+    safety = [p for p in existing if "-before-" in p.name]
+    for old in routine[:-AUTO_BACKUPS_KEPT] + safety[:-SAFETY_BACKUPS_KEPT]:
         old.unlink(missing_ok=True)
     return target
 

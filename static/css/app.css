@@ -1185,3 +1185,26 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
 .goal-list .target-hit em { color: var(--green); }
 .goal-list .target-missed em { color: var(--red); }
 .order-cancelled { opacity: .6; }
+
+/* v2.0: seat & contract state */
+.seat-state { display: inline-block; font-size: .78rem; font-weight: 600; padding: .08rem .5rem; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); white-space: nowrap; }
+.seat-state.tone-good { color: var(--green); border-color: rgba(43, 213, 118, .35); }
+.seat-state.tone-warn { color: var(--amber); border-color: rgba(255, 176, 32, .4); }
+.seat-state.tone-bad { color: #ff6b66; border-color: rgba(225, 6, 0, .5); background: rgba(225, 6, 0, .1); }
+.seat-state.tone-info { color: var(--blue); }
+.seat-state.tone-muted { color: var(--muted); }
+.row-problem { background: rgba(225, 6, 0, .06); }
+.text-bad { color: #ff6b66; font-weight: 600; }
+.seat-fix summary { list-style: none; display: inline-block; }
+.seat-fix[open] form { margin-top: .5rem; min-width: min(22rem, 80vw); }
+.banner-danger { border-left-color: var(--red); }
+.breadcrumbs { font-size: .82rem; color: var(--muted); margin-bottom: .4rem; display: flex; gap: .4rem; flex-wrap: wrap; }
+.breadcrumbs a { color: var(--muted); }
+.page-purpose { color: var(--muted); margin: .25rem 0 0; font-size: .92rem; max-width: 60ch; }
+.d-block { display: block; }
+.preset-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .6rem; }
+.preset-btn { text-align: left; display: grid; gap: .2rem; padding: .7rem .8rem; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font: inherit; }
+.preset-btn:hover, .preset-btn:focus-visible { border-color: var(--red); }
+.league-prefs { list-style: none; padding: 0; margin: .4rem 0; display: grid; gap: .35rem; }
+.league-prefs li { display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .4rem .6rem; background: var(--panel-2); border-radius: 8px; }
+.empty-state { text-align: center; padding: 1.4rem 1rem; color: var(--muted); }

@@ -342,6 +342,16 @@ CREATE TABLE IF NOT EXISTS weekend_targets (
     PRIMARY KEY (event_id, driver_id)
 );
 
+CREATE TABLE IF NOT EXISTS seat_flags (
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    set_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (season_id, driver_id)
+);
+
 CREATE TABLE IF NOT EXISTS member_notify (
     username TEXT PRIMARY KEY,
     muted INTEGER NOT NULL DEFAULT 0,
@@ -471,6 +481,7 @@ def migrate(conn):
     v17 -> v18: notification preferences per league membership (member_notify) and a delivery log (deliveries:
                category, channel, count and outcome only). Existing memberships are marked legacy so they keep
                exactly what they had; notifications.category and notifications.username (who a notice is for).
+               seat_flags: a seat deliberately kept provisionally (awaiting contract) or held by a temporary driver.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, avatar, trend_chart, delta, stat_change, battle_row with context %}
+{% from "_macros.html" import team_dot, avatar, trend_chart, delta, stat_change, battle_row, seat_badge with context %}
 {% block title %}{{ driver.name }}{% endblock %}
 {% block content %}
 {% set latest = timeline[-1] if timeline else none %}
@@ -13,7 +13,7 @@
     <div class="hero-meta">
       <span>{{ latest.team.name if latest and latest.team else 'No team yet' }}</span>
       <span>{{ totals.seasons }} active season{{ 's' if totals.seasons != 1 }}</span>
-      {% if contract %}<span>Contract: {{ contract.team.name }} through {{ contract.end_year }}</span>{% endif %}
+      {% if seat_state and driver.is_player %}<span>{{ ctx.season.year }}: {{ seat_badge(seat_state) }}</span>{% endif %}
     </div>
     {% if profile.bio %}<p class="bio">{{ profile.bio }}</p>{% endif %}
   </div>

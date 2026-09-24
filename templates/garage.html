@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, tier, trend_chart, delta, stat_change with context %}
+{% from "_macros.html" import team_dot, tier, trend_chart, delta, stat_change, seat_badge with context %}
 {% block title %}{{ driver.name }} · Garage{% endblock %}
 {% block content %}
 <div class="profile-head player-head" style="--team: {{ team.color if team else '#e10600' }}; --player: {{ driver.player_color or 'var(--blue)' }};">
@@ -9,7 +9,7 @@
     <div class="hero-meta">
       <span>{% if team %}{{ team_dot(team) }}{{ team.name }}{% else %}No race seat{% endif %}</span>
       {% if teammate %}<span>Teammate: {{ teammate.name }}</span>{% endif %}
-      {% if contract %}<span>Contract: {{ contract.team.name }} {{ contract.target_year }}{{ '–' ~ contract.end_year if contract.end_year != contract.target_year }} · {{ contract.role }}</span>{% endif %}
+      <span>{{ seat_badge(seat_state) }}{% if seat_state.kind == 'confirmed' and seat_state.contract %} · {{ seat_state.contract.role }}{% endif %}</span>
       {% if rookie %}<span class="pill pill-hot">Rookie</span>{% endif %}
     </div>
   </div>

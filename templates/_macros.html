@@ -188,3 +188,8 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
   </select></label>
 <p class="muted small">Only for this league. You can change it any time on the league's Notifications page.</p>
 {%- endmacro %}
+
+{# The one seat/contract state (seats.state) as a badge. Text always says it; colour only reinforces. #}
+{% macro seat_badge(st, detail=True) -%}
+<span class="seat-state tone-{{ st.tone }}">{% if st.problem %}<span aria-hidden="true">⚠️ </span>{% endif %}{{ st.label }}</span>{% if detail and st.detail %} <small class="muted">{{ st.detail }}</small>{% endif %}
+{%- endmacro %}

@@ -16,7 +16,7 @@ import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
-from . import battle, circuits, delivery, gates, notices
+from . import battle, circuits, delivery, gates, notices, seats
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -53,7 +53,7 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
     "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
-    "target_excuse": "Changed a weekend target ruling", "notify_prefs": "Changed their notifications",
+    "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract", "notify_prefs": "Changed their notifications",
 }
 QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
@@ -1027,6 +1027,7 @@ def register_routes(app):
                     can_edit=_may_edit_profile(ctx, driver_id), nationalities=community.NATIONALITIES,
                     owner=auth.get_user(owner) if owner else None,
                     battles=battle.pairings(conn, ctx["season"]["id"], driver_id),
+                    seat_state=seats.state(conn, ctx["season"]["id"], driver_id),
                     changes=insights.stat_changes(conn, ctx["season"]["id"], driver_id)
                     if any(t["season"]["id"] == ctx["season"]["id"] for t in timeline) else None)
 
@@ -1046,15 +1047,52 @@ def register_routes(app):
         archive, totals = S.team_history(conn, team_id)
         return page("team_profile.html", ctx, team=team, archive=archive, totals=totals,
                     details=S.team_details(conn, team_id, ctx["season"]["id"]),
-                    battles=battle.team_battles(conn, ctx["season"]["id"], team_id))
+                    battles=battle.team_battles(conn, ctx["season"]["id"], team_id),
+                    seat_states={s["driver"]["id"]: s for s in seats.season_states(conn, ctx["season"]["id"])})
 
     @app.route("/career/<token>/grid")
     @career_page()
     def grid_page(conn, ctx):
         sid = ctx["season"]["id"]
-        seats = S.driver_seats(conn, sid)
-        return page("grid.html", ctx, grid=S.grid(conn, sid), players=S.player_drivers(conn), seats=seats,
-                    all_drivers=S.drivers(conn, active_only=True))
+        seats_ = S.driver_seats(conn, sid)
+        return page("grid.html", ctx, grid=S.grid(conn, sid), players=S.player_drivers(conn), seats=seats_,
+                    all_drivers=S.drivers(conn, active_only=True), states=seats.season_states(conn, sid))
+
+    @app.route("/career/<token>/seats/<int:driver_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def seat_resolve(conn, ctx, driver_id):
+        """The repair tool: settle one driver's seat/contract state for the selected season without touching history."""
+        sid = ctx["season"]["id"]
+        st = seats.state(conn, sid, driver_id)
+        if not st["driver"] or not st["driver"]["is_player"]:
+            abort(404)
+        if S.get_season(conn, sid)["status"] == C.SEASON_COMPLETE:
+            raise ValidationError("That season is archived. Switch to the current season to change seats.")
+        action, note = request.form.get("action"), (request.form.get("note") or "").strip()
+        name, year = st["driver"]["name"], st["year"]
+        if action == "renew":
+            if not st["seat"]:
+                raise ValidationError(f"{name} has no seat to record a contract for")
+            years = request.form.get("years", type=int) or 1
+            seats.record_contract(conn, driver_id, st["seat"][0], year, years, request.form.get("role") or "Equal Status",
+                                  note=note)
+            seats.clear_flag(conn, sid, driver_id)
+            summary = f"recorded a {years}-year contract for {name} with {st['team']['name']} from {year}"
+        elif action in seats.FLAGS:
+            if not st["seat"]:
+                raise ValidationError(f"{name} has no seat")
+            seats.set_flag(conn, sid, driver_id, action, note, g.user["username"])
+            summary = f"marked {name}'s {year} seat at {st['team']['name']} as {seats.KINDS[action][0].lower()}"
+        elif action == "release":
+            S.place_players(conn, sid, {driver_id: None})
+            seats.clear_flag(conn, sid, driver_id)
+            summary = f"changed {name}'s {year} seat from {st['team']['name'] if st['team'] else 'none'} to Free Agent"
+        else:
+            raise ValidationError("Choose what should happen")
+        g.audit_summary, g.audit_link = summary, "grid#contracts"
+        after = seats.state(conn, sid, driver_id)
+        flash(f"{name}: {after['label']}.", "success")
+        return redirect(url_for("grid_page", token=ctx["token"]) + "#contracts")
 
     @app.route("/career/<token>/grid/players", methods=["POST"])
     @career_page(master_only=True)
@@ -1141,24 +1179,61 @@ def register_routes(app):
         flash("Current season changed.", "success")
         return redirect(url_for("seasons_page", token=ctx["token"]))
 
+    @app.route("/career/<token>/seasons/rollover")
+    @career_page(master_only=True)
+    def season_rollover(conn, ctx):
+        """Step 1 of starting a new season: what happens to every player driver's seat and contract."""
+        latest = S.list_seasons(conn)[-1]
+        year = request.args.get("year", type=int) or latest["year"] + 1
+        evs = S.events(conn, latest["id"])
+        return page("rollover.html", ctx, latest=latest, year=year, review=seats.rollover_review(conn, latest["id"], year),
+                    actions=seats.ACTIONS, default=seats.carry_mode(conn),
+                    unfinished=[e for e in evs if e["status"] != C.EVENT_COMPLETE])
+
     @app.route("/career/<token>/seasons/new", methods=["POST"])
     @career_page(master_only=True)
     def season_new(conn, ctx):
         latest = S.list_seasons(conn)[-1]
+        year = request.form.get("year", type=int) or latest["year"] + 1
+        review = seats.rollover_review(conn, latest["id"], year)
+        if review["conflicts"]:
+            raise ValidationError("Some teams have more signed drivers than seats for " + str(year) + ". Resolve them "
+                                  "in Grid & Transfers first: " + "; ".join(c["team"]["name"] for c in review["conflicts"]))
+        decisions = {}
+        for r in review["rows"]:
+            if r["needs_decision"]:
+                action = request.form.get(f"decision_{r['driver']['id']}")
+                if action not in seats.ACTIONS:
+                    raise ValidationError(f"Choose what happens to {r['driver']['name']}'s seat (their contract ends) "
+                                          "before starting the new season.")
+                decisions[r["driver"]["id"]] = action
+        try:  # a safety copy before the season changes; failing to write it stops the rollover
+            storage.auto_backup(ctx["token"], f"before-{year}-season", force=True)
+        except Exception:
+            app.logger.exception("backup before rollover failed")
+            raise ValidationError("Couldn't make a backup first, so nothing was changed. Try again.")
         released = relations.decide_releases(conn, latest["id"], final=True)
         relations.settle(conn, latest["id"])
-        new_id = S.create_next_season(conn, latest["id"], request.form.get("year"))
+        new_id = S.create_next_season(conn, latest["id"], year)
         rewarded = relations.apply_rewards(conn, latest["id"], new_id)
         changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
         feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
+        seats.apply_rollover_decisions(conn, latest["id"], new_id, decisions, g.user["username"])
+        dmap = S.driver_map(conn)
+        g.audit_summary = (f"started the {year} season" + (": " + "; ".join(
+            f"{dmap[d]['name']} {({'renew': 'renewed', 'provisional': 'kept provisionally', 'release': 'released'})[a]}"
+            for d, a in decisions.items()) if decisions else ""))
+        left = seats.problems(conn, new_id)
+        if left:
+            flash(f"{len(left)} seat/contract problem(s) still need attention: see Grid & Contracts.", "error")
         if rewarded:
             flash(f"{len(rewarded)} player driver(s) kept their pledge and start the new season with extra Reputation.",
                   "success")
         if released:
             flash(f"{len(released)} player driver(s) were released by their team at the end of the season.", "success")
         session[f"season_{ctx['token']}"] = new_id
-        flash("New season created. Signed contracts have been applied; review the grid.", "success")
+        flash("New season created. A backup of the previous state was saved first. Review the grid.", "success")
         return redirect(url_for("grid_page", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/save", methods=["POST"])
@@ -1209,6 +1284,7 @@ def register_routes(app):
             "SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
             (window["id"], driver["id"], C.OFFER_ACCEPTED)).fetchone())
         return page("garage.html", ctx, driver=driver, me=me, interest=interest, row=row,
+                    seat_state=seats.state(conn, sid, driver["id"]),
                     team=S.team_map(conn).get(seat[0]) if seat else None, teammate=teammate,
                     rivals=rivals, recent=recent, players=players,
                     offers=market.offers(conn, driver_id=driver["id"]), can_respond=own or ctx["is_master"],
@@ -2276,6 +2352,8 @@ def register_routes(app):
                                        bool(request.form.get("gate_targets")))
             if request.form.get("join_mode") in storage.JOIN_MODES:
                 storage.set_join_mode(conn, request.form.get("join_mode"))
+            if request.form.get("rollover_default") in seats.ACTIONS:
+                storage.set_meta(conn, "rollover_default", request.form.get("rollover_default"))
             discord.save_settings(conn, request.form.get("discord_webhook"), request.form.get("discord_results"),
                                   request.form.get("discord_news"))
             window = request.form.get("race_window", type=int)
@@ -2293,7 +2371,7 @@ def register_routes(app):
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
-                    life=teamlife.settings(conn),
+                    life=teamlife.settings(conn), rollover_actions=seats.ACTIONS, rollover_default=seats.carry_mode(conn),
                     zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
                     join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES)
 
