@@ -339,7 +339,25 @@ CREATE TABLE IF NOT EXISTS weekend_targets (
     acknowledged_at TEXT,
     judged_at TEXT,
     created_at TEXT NOT NULL,
+    tier TEXT,
+    hit REAL,
+    miss REAL,
     PRIMARY KEY (event_id, driver_id)
+);
+
+CREATE TABLE IF NOT EXISTS target_options (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    tier TEXT NOT NULL,
+    team_id INTEGER,
+    kind TEXT NOT NULL,
+    target INTEGER,
+    rival_team_id INTEGER,
+    label TEXT NOT NULL,
+    hit REAL NOT NULL,
+    miss REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, driver_id, tier)
 );
 
 CREATE TABLE IF NOT EXISTS seat_flags (
@@ -485,6 +503,9 @@ def migrate(conn):
     v18 -> v19: race weekends (v2.3): events.paddock_at / paddock_by (when and by whom the paddock opened; "auto"
                when it opened itself an hour before the race) and events.lights_at / lights_by (when the race
                was started). Rounds already played are unaffected: a round with results counts as started.
+    v19 -> v20: weekend targets are chosen (v2.4): target_options (three per driver per round: safe, standard,
+               stretch) and weekend_targets.tier / hit / miss (the choice and its reward and penalty). Targets set
+               before this version have no tier and keep the old +2 / -1.5.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -581,6 +602,10 @@ def migrate(conn):
     for col in ("paddock_at", "paddock_by", "lights_at", "lights_by"):
         if col not in event_cols:
             conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")   # v2.3: race weekends
+    target_cols = _columns(conn, "weekend_targets")
+    for col, ddl in (("tier", "TEXT"), ("hit", "REAL"), ("miss", "REAL")):
+        if col not in target_cols:
+            conn.execute(f"ALTER TABLE weekend_targets ADD COLUMN {col} {ddl}")   # v2.4: chosen targets
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

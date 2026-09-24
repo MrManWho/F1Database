@@ -1,7 +1,35 @@
 # Changelog
 
-Every version of Paddock Legacy, newest first. The same list is in the app under
-**account menu → What's new**.
+Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
+**account menu → What's new**. Hosting and admin notes are in the admin guide.
+
+## 2.4 · Choose your target, reset a weekend, and a tidier league
+_Released September 24, 2026_
+> Weekend targets are now a choice, the Race Master can reset a round as if it never happened, each round has its own
+> page with tabs, League settings is split into clear pages, and the AI recommendation judges the driver, not the car.
+
+### Highlights
+- **Choose your weekend target.** Before each race your team offers three: **Safe** (+1 / −0.5), **Standard** (+2 / −1.5) or **Stretch** (+3.5 / −2.5). Pick one and lock it in. If you don't choose by lights out, you race for the Standard one.
+- **The AI recommendation judges the driver, not the car.** Finishing where your car should is now "about right" in any car. Before, a slow car made you look like you were struggling and a fast one made you look too good.
+- **Each round is its own page.** A round header with its number, stage and previous/next, and three tabs: Weekend, Results, and Incidents & chat.
+- **Reset a weekend** (Race Master). Puts the latest round back to Upcoming, as if it never started: results, press answers, targets, predictions and headlines are removed, and any effect on team relationships is undone. You see everything it will remove first.
+- **Every player driver needs a login.** A round can't open while a player driver has no login linked, unless the Race Master marks them **No account**.
+
+### Added
+- **Team management** (Race Master, Manage menu): pledges, season goals, team goals and weekend targets for every driver in one place. Re-issue goals, ask for a new pledge, let a driver choose their target again, offer new targets, remove a target, re-push or reset a team goal. These buttons no longer sit on the pages drivers use.
+- **Recalculate everything** (Race Master, League settings → Data & tools): works every stored number out again with the current formulas. It shows exactly what would change for each driver before anything is saved, and each driver affected gets a change notice.
+- **Automatic recalculation after updates.** When an update changes how something is worked out, each league recalculates itself the first time it's opened, and everyone sees a short note at the top of the league.
+
+### Changed
+- **League settings is split into pages**: League, Race weekends, Career & team, Joining & roles, Privacy & sharing, Notifications, and Data & tools. The front page shows each one's current settings at a glance.
+- The home page is called **Control Room** everywhere, and "team relationship" is the one name for how your team rates you.
+- **Formula changes (approved):** AI difficulty compares each result with the car's expected finish and points; weekend targets use the reward and penalty of the level you chose.
+
+### Fixed
+- **A car with no AI driver** (for example two players in the same team) counted as the slowest car after three rounds. It now keeps its place from the car ratings, which also corrects weekend targets, pledges and Driver Value for that team.
+- **Reputation carried between seasons**, when worked out again, now always includes the pledge and team-goal rewards.
+- **Pre-race questions** no longer change after you choose your weekend target.
+- **Team relationship extras add up the same every time.** Press answers, weekend targets and team orders are added together and kept within ±15. Before, the total could come out differently depending on the order things happened in. Drivers whose number moves see a change notice.
 
 ## 2.3 · Race weekends
 _Released September 24, 2026_
@@ -27,12 +55,6 @@ _Released September 24, 2026_
 - **Formula (approved): pre-race press answers** nudge the team relationship like post-race answers (between −3 and +3 each), within the same overall limit on extras.
 - Rounds submitted before 2.3 keep the post-race questions they already had, so nothing half-answered changes.
 
-### Database
-- League files move to schema 19: four new columns on each round (`paddock_at`, `paddock_by`, `lights_at`, `lights_by`). Each league is backed up automatically before it upgrades (`before-v19-upgrade`). A round that already has results counts as started, so nothing already played is affected.
-
-### Tested
-- A full simulated 24-round season plus a rollover through the real website with race weekends on: the paddock opened by itself before scheduled races and by hand otherwise; results were refused before the paddock and before lights out on every round; drivers, Spectators and members without a driver could never open the paddock or start a race; a Scorekeeper couldn't start a round while a driver's pre-race press was outstanding, and the Race Master could with a note.
-
 ## 2.2.1 · Sign-up fix from a full-season test
 _Released September 24, 2026_
 > A full simulated season (every role, real settings) found one small sign-up problem, fixed here.
@@ -42,9 +64,6 @@ _Released September 24, 2026_
 
 ### Fixed
 - **Refused sign-ups used up the hourly limit**: a sign-up turned down for a weak password, a bad username or a taken name still counted toward the 5-an-hour limit for that connection, so a household on one Wi-Fi could be locked out by a few mistakes. Now only successful sign-ups count.
-
-### Tested
-- A full simulated 24-round season plus a rollover through the real website, as a site owner, two drivers, a Scorekeeper, a Spectator, a member without a driver and an outsider with her own league: no server errors, no role able to reach anything it shouldn't, and no league able to see another. Plus a new automated test for this fix.
 
 ## 2.2 · Audit fixes, fairer team goals and a quicker AI recommendation
 _Released September 24, 2026_
@@ -76,9 +95,6 @@ _Released September 24, 2026_
 - **Full career simulation preset** now turns on selectable team goals, and each preset lists its systems in the setup review.
 - **Privacy and Terms** no longer carry placeholder text for hosts. They say who runs the site, how to contact them, how long things are kept and when the pages took effect.
 
-### Tested
-- 302 automated tests, including the rollover loop (provisional seat, team goals, pledge and change notices together), multi-account recovery, the password rules, team goals that count points already scored, and the faster AI with its bands and evidence line.
-
 ## 2.1.3 · Fixes, a role audit and a fresh start for logins
 _Released September 24, 2026_
 > Race Master buttons no longer show in a driver's view, choices you have to make now come first, weekend
@@ -98,14 +114,10 @@ _Released September 24, 2026_
 - **Must choose first**: while your team's goal choice is open and not made, every page takes you to Team goals until you choose; then you're back on the Control Room. The Race Master and players without a login are never held up.
 - **Re-pushed team goal targets** are shown to each driver of that team (before and after) to agree to before they carry on.
 - **Weekend targets per round** (Race Master, on the round page): re-issue one driver's or every target before the race, or remove a target on any round. Removing one on a completed round undoes its effect on the team relationship, and each driver affected sees a change notice. A removed target stays removed (it isn't handed out again or brought back by a results correction).
-- **Permission audit**: every league page and action declares who may use it (Race Master, results entry or any member), and an automated test tries every one as a driver, a member without a driver, a Scorekeeper and a Spectator.
 
 ### Changed
 - **Logins reset again (once, on the first start of 2.1.3)**: every login and every reserved username is removed, and each league's links to those logins (members, pending invitations and join requests, notification choices) are cleared so nobody can sign up with an old name and walk into a league. Drivers, results, seasons, contracts and settings are untouched. Every league and the accounts file are backed up first. The site owner is Race Master of every league and re-links people to their drivers on Members & roles.
 - **Everyone sees the changelog**: new accounts get the current version's What's New to agree to as well.
-
-### Tested
-- 294 automated tests, including the view-mode fix, choices that must be made first, per-round target reset (effects undone, not re-issued, notices), the full role audit (every league route as four roles), and the reset leaving drivers, results, seasons, contracts and teams exactly as they were.
 
 ## 2.1.2 · One site owner, and everyone signs up themselves
 _Released September 24, 2026_
@@ -114,19 +126,14 @@ _Released September 24, 2026_
 
 ### Highlights
 - **Every login was reset once.** Leagues, drivers, results and memberships are exactly as they were. Sign up again with your old username (and the same email) to get your leagues straight back.
-- **The site owner** is made on first start with the setup code from the host's settings, and is the only one who can help with a lost account.
 - **No more list of accounts.** The owner looks up one account by exact username or email; league pages ask for a username instead of listing everyone.
 
 ### Changed
 - **Accounts reset (once, on the first start of 2.1.2)**: every login, signed-in device, pending sign-up, password-reset link and account preference is removed. A copy of the accounts file is saved in the backups folder first. League files are not opened or changed; site settings (email, sign-ups, league creation) are kept.
 - **Old usernames are reserved**: nobody else can sign up with a name that's still a member of a league. The person who had it reclaims it by signing up with the same email (verified by a code), and their memberships come straight back. The owner can release a reserved name. Members & roles marks reserved members as "Not signed up yet".
-- **Site owner**: created on first start with `F1_TRACKER_SETUP_CODE` from the host's environment settings (required on a hosted site, so nobody else can claim it). The owner may take back their old username at setup.
 - **Sign-up**: always open to everyone (unless the owner turns it off). With email set up it confirms your address with a code; without it, the account is made straight away.
 - **Account recovery** (owner only) replaces the list of logins: find one account by exact username or email, then set a new password (signs them out everywhere), change their email, turn off two-step sign-in, sign them out everywhere, or delete the login (their leagues stay; the name is reserved for them).
 - **No account lists**: "Add a login", "All logins" and changing someone's site role are gone. Members & roles, the new-league form and invitations ask for a username.
-
-### Tested
-- 287 automated tests, including the reset leaving league files byte-for-byte identical, running only once, owner setup needing the code on a hosted site, reclaiming a name only with the same verified email, account recovery finding exact matches only, and no page listing accounts. A copy of real-shaped data was reset the way the server does it: 2 logins removed, both league files identical, backup written.
 
 ## 2.1.1 · Predictions fix
 _Released September 24, 2026_
@@ -169,13 +176,6 @@ _Released September 24, 2026_
 - View-mode descriptions no longer describe a role with its own name.
 - Old page names ("Players & Logins", "Team Standing", "Paddock Admin", "League Library", "League Settings") replaced with the names in the menu.
 
-### Preserved
-- Results, standings, contracts, pledges, Reputation and settings are unchanged, except the team-order effects removed where orders are off (each affected driver gets a change notice).
-- No database format change: new tables (change notices, ultimatums) are added when first needed.
-
-### Tested
-- 279 automated tests, including change notices (explicit changes, formula changes, stale numbers never blamed on an update), removing team orders (advisory orders undo nothing), future-round gates, the agreement dialog in a real browser, team talks (themes, negation, a good pitch tips a team on the edge but not a hopeless case), interviews, final warnings (met, void, missed, dismissed, overruled), goal controls and My settings. Accessibility scan: 0 issues on the new pages.
-
 ## 2.0 · Paddock Legacy 2.0
 _Released September 24, 2026_
 > A new interface, notifications that stay in their own league, a safer season rollover and admin tools, and a
@@ -206,7 +206,6 @@ _Released September 24, 2026_
 - **Results entry**: session tabs (Qualifying, Sprint, Race), driver search, copy the order from another session, and undo (Alt+Z).
 - **Backups & data page** with an integrity check, safety backups kept separately from the scheduled ones, and a **standings CSV** export.
 - **Account**: signed-in devices (end one or all others), optional **two-step sign-in** with any authenticator app (site admins can reset it), **download my data**, **delete my account**, **leave a league** and **hand a league over**. Privacy and Terms pages.
-- **Import preview**: a .f1career file is checked and summarised before anything is added, and always becomes a new league.
 
 ### Improved
 - **League settings** are grouped into sections with a search box, each saying whether it affects this league or the whole site.
@@ -220,42 +219,10 @@ _Released September 24, 2026_
 
 ### Fixed
 - **League emails no longer cross leagues.** Before 2.0, choosing results emails applied to every league you were in; a Test league could email people about another league's results. Choices are now stored per league.
-- **Site admins who aren't members of a league** no longer get its alerts. Join requests now go to that league's Race Masters only.
 - **Season rollover** no longer leaves a player driver with an expired contract in a seat without asking, or with a seat and a contract at different teams.
 - **Completed rounds** can no longer be renumbered by accident when the calendar is saved.
 - **Search palette**: pressing Enter straight after typing no longer opens a result from the previous search.
 - The Activity Log no longer fails on a handover submitted from the form.
-
-### Security
-- Every league route re-checked by automated tests: an outsider can open or change nothing in another league, Spectators can make no changes, and Scorekeepers can't reach Race Master tools, in the pages and the API.
-- Rate limits on sign-in codes, invitations (20 an hour), join requests (5 an hour), reports, directory search and demo starts.
-- Downloaded backups and JSON exports leave out the Discord webhook and the public-link key. The Activity Log and exports never contain passwords, hashes, sessions, codes, OCR text or webhook URLs.
-- Changing your password signs out your other devices.
-
-### Migration notes
-- Save files move from schema 17 to 18: new tables for notification preferences, deliveries, seat flags, weekend targets and gate bypasses, and new columns on events, notifications, join requests and invitations. Nothing existing is changed or removed. Every league is backed up automatically before it's upgraded.
-- **Existing members keep the results emails they had**: each membership starts with the old account-wide choice, now applied to that league only. Everything else uses the Important-only preset.
-- The **AI difficulty recommendation still counts Sprint points**, as before. A league can now turn that off ("Count Sprint points", League settings) so only the Grand Prix counts. Recorded difficulties and past recommendations aren't changed.
-- **Team goals, announcements and statistics** don't change any stored result or rating. Team goals are off until a league turns them on.
-- New leagues are private. Creating leagues is limited to site admins unless the site setting allows everyone. The person who creates a league becomes its Race Master.
-
-### Known limitations
-- The league list reads every league file when it loads; very large sites (hundreds of leagues) will notice.
-- A race can be Postponed but not Cancelled; a cancelled round has to be removed from the calendar.
-- Calendars can be exported as .ics but not imported.
-- Two-step sign-in shows a setup key and an authenticator link, not a QR code.
-- League logos can't be uploaded yet (an accent colour is used instead).
-- Scheduled announcements go out the next time anyone opens the league after their time, not at the exact minute.
-
-### Preserved
-- Every account, league, role, season, result, contract, driver, team, record, setting, backup, activity entry, transfer, pledge and relationship. Scoring, Sprint scoring, Form, Reputation, Driver Value, market tiers, contracts, pledges and relationships are calculated exactly as before.
-- Manual entry for every automated step, and the free in-browser screenshot importer (images never leave the browser).
-- Existing links, save files (.f1career), backups and installed apps keep working.
-
-### Tested
-- 261 automated tests, including cross-league isolation for every league route, rollover edge cases, notification scoping and dedupe, public pages never showing drafts, two-step sign-in, device sign-out, account export and deletion, rate limits, redaction, import preview, team goals, announcements and statistics, plus in-browser tests for the shell, palette and offline recovery.
-- A three-season league built with 1.20 (1,584 results) was upgraded on a copy: standings, results, records, members, events and players came out identical, and a pre-upgrade backup was written.
-- axe-core accessibility scan (WCAG 2.2 AA) on every main page, and screenshots at phone, tablet and desktop sizes.
 
 ### Action needed
 - Open **Notifications** in each league you're in and check the choices; mute any test league you don't want to hear from.
@@ -270,12 +237,6 @@ _Released September 24, 2026_
 ### Changed
 - **Team orders are now a League Settings choice** and are **off** by default: Off (none issued; any waiting order is cancelled with no penalty), Advisory (shown, no effect, no headlines) or On (as before). Past orders stay in history.
 - With press gates on, unanswered press questions no longer lapse when the next race is completed.
-
-### Preserved
-- No results, contracts, relationships or past orders were changed. Rounds completed before this version never become a requirement, and a round that already has results is never gated, so corrections are never blocked.
-
-### Tested
-- Team-order modes; target planning for fast and slow cars; judging including void, excused DNF and corrections; streak headlines; teammate battle counts with DNFs and a mid-season seat change; linked vs unlinked players; Scorekeepers blocked in the page and the API; the Race Master's bypass needs a note and is logged; late answers after a bypass still count; Spectators see the checklist read-only; migration keeps every result.
 
 ## 1.19 · Fixes, safer admin and free screenshot import
 ### Fixed
@@ -296,15 +257,6 @@ _Released September 24, 2026_
 - **Race Master sidebar tools** are a separate, collapsible, scrollable section that remembers whether you left it open.
 - **Confirmations** for high-impact actions explain what changes, whether history is affected, whether a backup is made and whether it can be undone. Deleting a driver's race results needs their name typed. Paddock Admin uses one delete dialog instead of one per driver.
 - **Autosave states:** Saving…, Saved, Offline — changes stored on this device, Couldn't save — retry, Restored unsaved changes, Conflict detected.
-
-### Preserved
-- Scoring, Sprint scoring, DNF/DNS/DSQ rules, Form, Reputation, Driver Value, market tiers, car-adjusted ratings, contracts, pledges, relationships, the transfer market and the difficulty formula are unchanged.
-- Completed rounds stay locked for Scorekeepers; only a Race Master can correct or reopen them.
-- Every human driver keeps their own colour and Player badge, however many there are. Provisional awards, empty states and early-season trends work as before.
-
-### Tested
-- 165 automated tests, including real in-browser OCR on generated screenshots, OCR failing to load, and a check that no screenshot or request leaves the page.
-- A three-season league built with v1.18 was upgraded on a copy: standings, Form, Reputation, market tiers, constructors, all 1,584 results, records, roles and the difficulty recommendation came out identical.
 
 ## 1.18 · Usability and data safety
 - **Submitted rounds stay locked.** Scorekeepers edit only the open round; once it's submitted only the Race Master can correct it, or **reopen** it for a Scorekeeper. A reopened round doesn't repeat its headlines, team reactions or emails when it's submitted again.
@@ -420,7 +372,6 @@ _Released September 24, 2026_
 ## 1.7 · Racecraft and website hosting
 - **Racecraft:** places gained from the grid, weighted by where you finish, now count toward Form and Reputation. The Drivers table has a **Gained** column.
 - **Recalculate Reputation history** replays past seasons with the current formula.
-- **Hosting on Render,** with a persistent disk, auto-deploy on every update, and a setup code for the first Race Master.
 
 ## 1.6 · Results-entry role
 - A role that can enter results without seeing other players' garages or admin pages. It became *Scorekeeper* in 1.10.

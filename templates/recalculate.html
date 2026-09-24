@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Recalculate everything{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('league_settings_section', token=ctx.token, section='data') }}">League settings › Data &amp; tools</a> <span aria-hidden="true">›</span> <span aria-current="page">Recalculate everything</span></nav>
+<div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }}</div><h1>Recalculate everything</h1>
+  <p class="page-purpose">Works out every stored number again with the current formulas and settings: weekend targets of completed rounds,
+    team relationships, and the Reputation carried from season to season (including pledge and team-goal rewards).
+    Results are never changed.</p></div></div>
+
+<form method="get" class="card inline-form">
+  <label class="check"><input type="checkbox" name="history" value="1" {{ 'checked' if history }} onchange="this.form.submit()"> Include finished seasons (the Reputation chain)</label>
+  <noscript><button class="btn btn-sm">Update</button></noscript>
+</form>
+
+<section class="card">
+  <h2>What would change</h2>
+  {% if moved %}
+  {% for did, rows in moved.items() %}
+  <h3 class="mini-head">{{ dmap[did].name if dmap.get(did) else 'Driver' }}</h3>
+  <div class="table-wrap"><table class="data-table compact">
+    <thead><tr><th scope="col">What</th><th scope="col" class="num">Now</th><th scope="col" class="num">After</th><th scope="col" class="num">Change</th></tr></thead>
+    <tbody>{% for c in rows %}<tr><th scope="row">{{ c.label }}</th><td class="num">{{ c.before }}</td><td class="num"><b>{{ c.after }}</b></td><td class="num">{{ '%+g'|format(c.change) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endfor %}
+  <p class="small">Each of these drivers gets a change notice showing this, and agrees to it before carrying on.</p>
+  {% else %}<p>Nothing would change for any player driver: every number already matches the current formulas.</p>{% endif %}
+</section>
+<form method="post" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="history" value="{{ '1' if history else '0' }}">
+  <p class="small"><b>A backup is saved first</b>, so this can be undone from Backups &amp; data. Everyone in the league sees a short note next time they open it.</p>
+  <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('league_settings_section', token=ctx.token, section='data') }}">Cancel</a>
+    <button class="btn btn-primary">Recalculate everything</button></div>
+</form>
+{% endblock %}

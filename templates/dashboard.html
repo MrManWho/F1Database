@@ -142,21 +142,7 @@
 {% if my_target or press_pens %}
 <div id="todo"></div>
 {% endif %}
-{% if my_target and next_event %}
-<section class="card target-card" id="target">
-  <div class="card-head"><h2>🎯 Weekend target · R{{ next_event.round_number }} {{ next_event.name }}</h2>{{ target_state(my_target) }}</div>
-  <p class="target-text">{{ my_target.label }}</p>
-  <p class="muted small">Set by your team from the car's pace, your recent form and your contract. Hit it: <b>+{{ C.TARGET_HIT|int }}</b> team standing.
-    Miss it: <b>{{ C.TARGET_MISSED }}</b>. It doesn't count if you don't take part, or if the Race Master rules a DNF wasn't your fault.</p>
-  {% if not my_target.acknowledged_at and my_target.status == 'Set' %}
-  <form method="post" action="{{ url_for('target_ack', token=ctx.token, event_id=next_event.id) }}" class="inline-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-primary btn-sm">Got it</button>
-    {% if ctx.team_life.gates and ctx.team_life.gate_targets %}<span class="muted small">Results for this round can't go in until you accept.</span>{% endif %}
-  </form>
-  {% endif %}
-</section>
-{% endif %}
+{% set mt = my_target %}{% include "_target_choice.html" with context %}
 
 {% include "_press_pens.html" with context %}
 

@@ -502,16 +502,20 @@ def team_strength_ranks(conn, season_id):
     develop over each winter (and which the Race Master can edit to match the game).
     """
     default = [t["id"] for t in teams(conn)]
+    ratings = car_ratings(conn, season_id)
+    by_rating = sorted(default, key=lambda t: (-ratings.get(t, {"rating": 0})["rating"], default.index(t)))
     done = _row(conn, "SELECT COUNT(*) AS n FROM events WHERE season_id = ? AND status = ?",
                 (season_id, C.EVENT_COMPLETE))["n"]
     if done >= 3:
         strength = _ai_points_per_entry(conn, season_id)
         if any(strength.values()):
-            order = sorted(default, key=lambda t: (-strength.get(t, -1), default.index(t)))
+            order = sorted([t for t in default if t in strength], key=lambda t: (-strength[t], default.index(t)))
+            # v2.3.1: a team with no AI driver (e.g. two players in one car) has no AI read. It keeps its place from
+            # the car ratings instead of dropping to last.
+            for t in sorted((t for t in default if t not in strength), key=by_rating.index):
+                order.insert(min(by_rating.index(t), len(order)), t)
             return {tid: pos for pos, tid in enumerate(order, start=1)}
-    ratings = car_ratings(conn, season_id)
-    order = sorted(default, key=lambda t: (-ratings.get(t, {"rating": 0})["rating"], default.index(t)))
-    return {tid: pos for pos, tid in enumerate(order, start=1)}
+    return {tid: pos for pos, tid in enumerate(by_rating, start=1)}
 
 
 # --------------------------------------------------------------------------- car ratings & development
@@ -846,21 +850,28 @@ def player_event_score(conn, event, ranks=None):
         if not r["is_player"] or r["result_status"] != C.STATUS_FINISHED or not r["race_position"]:
             continue
         pos = r["race_position"]
-        finish = (11.5 - pos) / 10.5
-        quali = (11.5 - r["qualifying_position"]) / 10.5 if r["qualifying_position"] else 0.0
+        # v2.3.1: everything is judged against what this car should manage, not against the middle of the grid,
+        # so a driver doing exactly what their car allows is "about right" in the fastest car and the slowest.
+        expected = 2 * ranks[r["team_id"]] - 0.5 if ranks and r["team_id"] in ranks else 11.5
+        finish = _signal((expected - pos) / C.DIFF_PLACES)
+        quali = _signal((expected - r["qualifying_position"]) / C.DIFF_PLACES) if r["qualifying_position"] else 0.0
+        par = max(1, round(expected))
         pts = gp_points(pos, r["result_status"]) + (sprint_points(r["sprint_position"], r["sprint_status"],
                                                                   bool(event["is_sprint"])) if with_sprint else 0)
-        points = _signal((pts - 5) / 20)
+        par_pts = gp_points(par, C.STATUS_FINISHED) + (sprint_points(par, C.STATUS_FINISHED, bool(event["is_sprint"]))
+                                                       if with_sprint else 0)
+        points = _signal((pts - par_pts) / C.DIFF_POINTS_SCALE)
         mate = next((m for m in by_team.get(r["team_id"], []) if not m["is_player"] and m["race_position"]
                      and m["result_status"] == C.STATUS_FINISHED), None)
-        teammate = _signal((mate["race_position"] - pos) / 10) if mate else 0.0
-        car = 0.0
-        if ranks and r["team_id"] in ranks:
-            expected = 2 * ranks[r["team_id"]] - 0.5
-            car = _signal((expected - pos) / 10)
-        score = 0.35 * finish + 0.15 * quali + 0.15 * points + 0.15 * teammate + 0.20 * car
+        teammate = _signal((mate["race_position"] - pos) / 10) if mate else None
+        if teammate is None:
+            # No AI teammate to compare with (two players in one car): the other parts share its weight.
+            score = (0.40 * finish + 0.20 * quali + 0.15 * points) / 0.75
+        else:
+            score = 0.40 * finish + 0.20 * quali + 0.15 * points + 0.25 * teammate
         scores.append(score)
-        details.append({"driver_id": r["driver_id"], "position": pos, "score": round(score, 3)})
+        details.append({"driver_id": r["driver_id"], "position": pos, "score": round(score, 3),
+                        "expected": round(expected, 1)})
     if not scores:
         return None, details
     return sum(scores) / len(scores), details
@@ -1485,27 +1496,8 @@ def recalculate_reputation_history(conn):
         return {}
     current = seasons[-1]["id"]
     before = {r["driver_id"]: r["reputation"] for r in driver_standings(conn, current)}
-    prev_final = None
-    for idx, season in enumerate(seasons):
-        sid = season["id"]
-        if prev_final is not None:
-            for did, rep in prev_final.items():
-                conn.execute("""INSERT INTO season_driver_state(season_id, driver_id, starting_reputation)
-                                VALUES(?,?,?) ON CONFLICT(season_id, driver_id)
-                                DO UPDATE SET starting_reputation = excluded.starting_reputation""", (sid, did, rep))
-        else:
-            for d in drivers(conn):
-                conn.execute("""INSERT INTO season_driver_state(season_id, driver_id, starting_reputation)
-                                VALUES(?,?,?) ON CONFLICT(season_id, driver_id)
-                                DO UPDATE SET starting_reputation = excluded.starting_reputation""",
-                             (sid, d["id"], d["baseline_reputation"]))
-        conn.execute("UPDATE season_driver_state SET locked_reputation = NULL WHERE season_id = ?", (sid,))
-        final = season_final_reputation(conn, sid)
-        if idx < len(seasons) - 1:
-            for did, rep in final.items():
-                conn.execute("UPDATE season_driver_state SET locked_reputation = ? WHERE season_id = ? AND driver_id = ?",
-                             (rep, sid, did))
-        prev_final = final
+    from . import recalc   # v2.4: one chain for everything, including pledge and team-goal rewards
+    recalc.reputation_chain(conn)
     after = {r["driver_id"]: r["reputation"] for r in driver_standings(conn, current)}
     return {did: (before.get(did), after[did]) for did in after}
 

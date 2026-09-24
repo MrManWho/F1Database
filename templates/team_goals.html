@@ -9,7 +9,7 @@
 {% endif %}
 {% if not enabled %}
 <section class="card empty-state"><h2>Team goals are off in this league</h2>
-  <p class="muted">{% if ctx.is_master %}Turn on <em>Selectable team goals</em> in <a href="{{ url_for('league_settings', token=ctx.token) }}#team-goals">League settings</a>.{% else %}The Race Master can turn them on in League settings.{% endif %}</p>
+  <p class="muted">{% if ctx.is_master %}Turn on <em>Selectable team goals</em> in <a href="{{ url_for('league_settings_section', token=ctx.token, section='career') }}">League settings → Career &amp; team</a>.{% else %}The Race Master can turn them on in League settings.{% endif %}</p>
   {% if teams|selectattr('goal')|list %}<p class="muted small">Goals chosen earlier are still shown below.</p>{% endif %}
 </section>
 {% endif %}
@@ -48,13 +48,7 @@
   {% elif not t.goal %}
   <p class="muted small">{% if t.reopened %}The Race Master reopened this choice.{% elif locked %}No goal was chosen, so no reward or penalty this season.{% else %}No goal chosen yet.{% endif %}</p>
   {% endif %}
-  {% if ctx.is_master and enabled and ctx.season.id == ctx.current_season_id and not (t.goal and t.goal.outcome) %}
-  <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="button-row tight rm-goal-tools">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if t.goal %}<button class="btn btn-sm btn-ghost" name="action" value="repush" title="Work the targets out again from the latest car strength, lineup and calendar, keeping the level">Re-push targets</button>{% endif %}
-    {% if t.goal or locked %}<button class="btn btn-sm btn-ghost" name="action" value="reopen" title="Clear the goal and let the team choose again, even mid-season">{{ 'Reset and let them choose again' if t.goal else 'Reopen the choice' }}</button>{% endif %}
-  </form>
-  {% endif %}
+
 </section>
 {% else %}
 <section class="card empty-state"><h2>No player teams this season</h2><p class="muted">Goals appear once a player driver has a seat.</p></section>

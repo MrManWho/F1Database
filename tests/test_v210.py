@@ -128,7 +128,7 @@ def test_switching_orders_off_removes_them_undoes_the_penalty_and_asks_the_drive
 
 
 def test_updating_to_2_1_removes_old_orders_in_leagues_where_they_are_off(app, master_client):
-    from f1tracker import impacts
+    from f1tracker import constants as C, impacts
     token, a, b = _orders_league(master_client)
     with storage.session(token) as conn:
         storage.set_meta(conn, "team_orders", "off")            # an old league: orders off, but old ones still there
@@ -140,7 +140,7 @@ def test_updating_to_2_1_removes_old_orders_in_leagues_where_they_are_off(app, m
     with storage.session(token) as conn:
         assert conn.execute("SELECT COUNT(*) FROM team_orders").fetchone()[0] == 0
         assert [n["title"] for n in impacts.pending(conn, a, "ana")] == ["Team orders removed"]
-        assert storage.get_meta(conn, "calc_version") == "1"
+        assert storage.get_meta(conn, "calc_version") == str(C.CALC_VERSION)
 
 
 def test_formula_changes_are_explained_only_when_the_old_numbers_are_trustworthy(app, master_client, monkeypatch):
@@ -154,8 +154,9 @@ def test_formula_changes_are_explained_only_when_the_old_numbers_are_trustworthy
         S.place_players(conn, sid, {a: (1, 1)})
         run_event(conn, S.events(conn, sid)[0])
     master_client.get(f"/career/{token}/dashboard")                  # kept numbers are fresh now
-    monkeypatch.setattr(C, "CALC_VERSION", 2)
-    monkeypatch.setitem(impacts.CALC_NOTES, 2, ("Test", "Reputation is now worked out differently."))
+    base = C.CALC_VERSION
+    monkeypatch.setattr(C, "CALC_VERSION", base + 1)
+    monkeypatch.setitem(impacts.CALC_NOTES, base + 1, ("Test", "Reputation is now worked out differently."))
     with storage.session(token) as conn:
         kept = json.loads(storage.get_meta(conn, "calc_snapshot"))
         kept[str(a)]["reputation"] = kept[str(a)]["reputation"] - 3         # what the old version said
@@ -166,8 +167,8 @@ def test_formula_changes_are_explained_only_when_the_old_numbers_are_trustworthy
         assert n and n[0]["why"] == "Reputation is now worked out differently."
         assert [c["stat"] for c in n[0]["changes"]] == ["reputation"] and n[0]["changes"][0]["change"] == 3
     # Stale numbers (something was saved after they were taken) are never blamed on an update.
-    monkeypatch.setattr(C, "CALC_VERSION", 3)
-    monkeypatch.setitem(impacts.CALC_NOTES, 3, ("Test", "Another change."))
+    monkeypatch.setattr(C, "CALC_VERSION", base + 2)
+    monkeypatch.setitem(impacts.CALC_NOTES, base + 2, ("Test", "Another change."))
     with storage.session(token) as conn:
         kept = json.loads(storage.get_meta(conn, "calc_snapshot"))
         kept[str(a)]["form"] = kept[str(a)]["form"] - 5
@@ -283,7 +284,7 @@ def test_race_master_can_reissue_season_goals_and_the_next_target(app, master_cl
         conn.execute("UPDATE team_goals SET label = 'old goal', target = 99 WHERE driver_id = ?", (a,))
         ev = S.next_incomplete_event(conn, sid)
         teamlife.issue_targets(conn, ev["id"])
-        teamlife.acknowledge(conn, ev["id"], a)
+        teamlife.choose_target(conn, ev["id"], a, "standard")
     pledge_all(token)
     ana = _client(app, "ana")
     assert ana.post(f"/career/{token}/team-standing/{a}/goals", data={"csrf_token": "tok", "action": "reissue"}).status_code == 403
@@ -296,10 +297,10 @@ def test_race_master_can_reissue_season_goals_and_the_next_target(app, master_cl
         assert not impacts.pending(conn, b, "anyone")                      # only the driver it was for
     master_client.post(f"/career/{token}/team-standing/{a}/goals", data={"csrf_token": "tok", "action": "retarget"})
     with storage.session(token) as conn:
-        t = teamlife.target_for(conn, ev["id"], a)
-        assert t and t["acknowledged_at"] is None                          # has to be accepted again
-    page = master_client.get(f"/career/{token}/team-standing?driver={a}").get_data(as_text=True)
-    assert "Re-issue season goals" in page and "Re-issue for everyone" in page
+        assert teamlife.target_for(conn, ev["id"], a) is None               # v2.4: chooses again
+        assert len(teamlife.options_for(conn, ev["id"], a)) == 3
+    page = master_client.get(f"/career/{token}/team-management").get_data(as_text=True)
+    assert "Re-issue season goals" in page and "Re-issue goals for everyone" in page
 
 
 # --------------------------------------------------------------------------- team talks

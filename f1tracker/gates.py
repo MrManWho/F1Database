@@ -2,7 +2,8 @@
 
 A round that hasn't started yet (Not Run) stays locked for result entry until every linked player driver has
   - answered their post-race press questions from the previous completed round (if that round required them), and
-  - accepted their weekend target for this round (if targets and that gate are on).
+  - chosen their weekend target for this round (if targets and that gate are on), and
+  - answered their pre-race press (v2.3, with race weekends on).
 Only player drivers controlled by a league login count; a driver with no login never blocks anything, and
 nor does anyone not seated this season. The server enforces this (the results API refuses to save), not just
 the page. Scorekeepers can't get past it; the Race Master can open the round with a note, which is kept on
@@ -85,9 +86,12 @@ def status(conn, event_id, issue=True):
                                         if weekend.phase(event) == "paddock" else "Pre-race press (opens with the paddock)")})
         if check_targets:
             t = teamlife.target_for(conn, event_id, driver_id)
-            if t:
-                items.append({"kind": "target", "done": bool(t["acknowledged_at"]),
-                              "label": "Weekend target accepted" if t["acknowledged_at"] else "Weekend target not accepted yet"})
+            offered = bool(t) or bool(teamlife.options_for(conn, event_id, driver_id))
+            if offered:
+                done = bool(t and (t["acknowledged_at"] or t["tier"]))
+                items.append({"kind": "target", "done": done,
+                              "label": ("Weekend target chosen" if t and t["tier"] else "Weekend target accepted") if done
+                              else "Weekend target not chosen yet"})
         if not items:
             continue
         done = all(i["done"] for i in items)
@@ -104,7 +108,7 @@ def blocking(conn, event_id):
 
 _WORDS = {"press": ("press questions", "answer your post-race press questions"),
           "prerace": ("pre-race press", "answer your pre-race press questions"),
-          "target": ("weekend target", "accept your weekend target")}
+          "target": ("weekend target", "choose your weekend target")}
 
 
 def waiting_text(gate):

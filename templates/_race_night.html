@@ -79,33 +79,13 @@
       {% for t in hub.targets %}
       <li {% if t.driver and t.driver.player_color %}style="--player: {{ t.driver.player_color }}"{% endif %}>
         <span class="tl-who"><b>{{ t.driver.name if t.driver else '?' }}</b>{% if t.team %} <small class="muted">{{ t.team.name }}</small>{% endif %}</span>
-        <span class="tl-what">{{ t.label }}</span>
+        <span class="tl-what">{% if t.tier %}<span class="pill tier-{{ t.tier }}">{{ C.TARGET_TIERS[t.tier].label }}</span> {% endif %}{{ t.label }}</span>
         {{ target_state(t) }}
-        {% if full and ctx.is_master and hub.complete and (t.excused or (t.status == 'Missed' and t.result_status in ('DNF', 'DSQ'))) %}
-        <form method="post" action="{{ url_for('target_excuse', token=ctx.token, event_id=ev.id, driver_id=t.driver_id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          {% if t.excused %}<button class="btn btn-sm btn-ghost" name="excused" value="0">Count the DNF again</button>
-          {% else %}<button class="btn btn-sm btn-ghost" name="excused" value="1" title="Only for a DNF or DSQ">Not the driver's fault</button>{% endif %}
-        </form>
-        {% endif %}
-        {% if full and ctx.is_master %}
-        <form method="post" action="{{ url_for('targets_reset', token=ctx.token, event_id=ev.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="driver_id" value="{{ t.driver_id }}">
-          {% if ev.status == 'Not Run' %}<button class="btn btn-sm btn-ghost" name="action" value="reissue">Re-issue</button>{% endif %}
-          <button class="btn btn-sm btn-ghost" name="action" value="remove" title="{{ 'Undoes its effect on the team relationship' if hub.complete else 'No target for this driver this round' }}">Remove</button>
-        </form>
-        {% endif %}
       </li>
       {% endfor %}
     </ul>
-    {% if full and ctx.is_master %}
-    <form method="post" action="{{ url_for('targets_reset', token=ctx.token, event_id=ev.id) }}" class="button-row tight">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% if ev.status == 'Not Run' %}<button class="btn btn-sm btn-ghost" name="action" value="reissue">Re-issue every target for this round</button>{% endif %}
-      <button class="btn btn-sm btn-ghost" name="action" value="remove">Remove every target for this round</button>
-    </form>
-    {% endif %}
-    {% if not hub.complete %}<p class="muted small">Set by each team before the race and judged from the results. Hit: +{{ C.TARGET_HIT|int }} team standing, missed: {{ C.TARGET_MISSED }}.</p>{% endif %}
+    {% if full and ctx.is_master %}<p class="small"><a href="{{ url_for('team_admin', token=ctx.token) }}#targets">Manage weekend targets in Team management →</a></p>{% endif %}
+    {% if not hub.complete %}<p class="muted small">Each driver chooses Safe, Standard or Stretch before the race; judged from the results.</p>{% endif %}
   </div>
   {% endif %}
 

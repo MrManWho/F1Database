@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% from "_macros.html" import target_state with context %}
+{% block title %}Team management{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">Team management</span></nav>
+<div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Team management</h1>
+  <p class="page-purpose">Pledges, season goals, team goals and weekend targets for every player driver. Anything you change here is
+    explained to the drivers it affects, and they agree to it before carrying on. Everything is recorded in the Activity Log.</p></div></div>
+
+{% macro back(anchor) %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="admin"><input type="hidden" name="anchor" value="{{ anchor }}">{% endmacro %}
+
+{% if awaiting %}
+<section class="card" id="dismissals">
+  <h2>Dismissals waiting for you</h2>
+  <p class="small">{{ awaiting|length }} team{{ 's' if awaiting|length != 1 }} asked to drop a player driver. Decide on <a href="{{ url_for('grid_page', token=ctx.token) }}#dismissals">Grid &amp; contracts</a>.</p>
+</section>
+{% endif %}
+
+<section class="card" id="drivers">
+  <div class="card-head"><h2>Pledges and season goals</h2>
+    <form method="post" action="{{ url_for('goals_reissue', token=ctx.token, driver_id=drivers[0].driver.id if drivers else 0) }}" class="inline"
+          onsubmit="return confirm('Set every player driver\'s season goals again from the latest car strength and role?');">
+      {{ back('#drivers') }}<button class="btn btn-sm btn-ghost" name="action" value="reissue_all" {{ 'disabled' if not drivers }}>Re-issue goals for everyone</button></form>
+    <form method="post" action="{{ url_for('request_pledge', token=ctx.token, driver_id=drivers[0].driver.id if drivers else 0) }}" class="inline"
+          onsubmit="return confirm('Ask every seated player driver to choose their growth pledge again? Their pledge targets reset.');">
+      {{ back('#drivers') }}<input type="hidden" name="all" value="1"><button class="btn btn-sm btn-ghost" {{ 'disabled' if not drivers }}>Ask everyone for a new pledge</button></form>
+  </div>
+  {% for d in drivers %}
+  <div class="admin-row" style="--player: {{ d.driver.player_color or 'var(--blue)' }}">
+    <div class="admin-who"><b>{{ d.driver.name }}</b> <small class="muted">{{ d.team.name if d.team }}</small>
+      {% if d.rel %}<span class="pill">{{ d.rel.status }} · {{ d.rel.score }}</span>{% endif %}</div>
+    <div class="admin-what small">
+      {% if d.needs_pledge %}<span class="pill pill-hot">Pledge not chosen yet</span>{% elif d.rel %}Pledge: {{ d.rel.level.name }} (average P{{ '%.1f'|format(d.rel.finish_target) if d.rel.finish_target is not none else '—' }} or better){% endif %}
+      {% if d.rel and d.rel.goals %}<ul class="plain-list">{% for g in d.rel.goals %}<li>{{ g.label }}: <b>{{ g.state }}</b></li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div class="admin-actions">
+      <form method="post" action="{{ url_for('goals_reissue', token=ctx.token, driver_id=d.driver.id) }}" class="inline">{{ back('#drivers') }}
+        <button class="btn btn-sm btn-ghost" name="action" value="reissue" title="From the latest car strength and role">Re-issue season goals</button></form>
+      <form method="post" action="{{ url_for('request_pledge', token=ctx.token, driver_id=d.driver.id) }}" class="inline"
+            onsubmit="return confirm('Ask {{ d.driver.name }} to choose their growth pledge again? Their pledge targets reset.');">{{ back('#drivers') }}
+        <button class="btn btn-sm btn-ghost">Ask for a new pledge</button></form>
+    </div>
+  </div>
+  {% else %}<p class="muted">No player drivers have a seat this season.</p>{% endfor %}
+</section>
+
+<section class="card" id="targets">
+  <div class="card-head"><h2>Weekend targets{% if next_event %} · R{{ next_event.round_number }} {{ next_event.name }}{% endif %}</h2>
+    {% if next_event and targets_open and ctx.team_life.targets %}
+    <form method="post" action="{{ url_for('targets_reset', token=ctx.token, event_id=next_event.id) }}" class="inline">{{ back('#targets') }}
+      <button class="btn btn-sm btn-ghost" name="action" value="reopen">Everyone chooses again</button>
+      <button class="btn btn-sm btn-ghost" name="action" value="reissue">New targets for everyone</button></form>
+    {% endif %}</div>
+  {% if not ctx.team_life.targets %}<p class="muted">Weekend targets are off. Turn them on in <a href="{{ url_for('league_settings_section', token=ctx.token, section='weekends') }}">League settings → Race weekends</a>.</p>
+  {% elif not next_event %}<p class="muted">There's no upcoming round this season.</p>
+  {% else %}
+  {% if not targets_open %}<p class="small muted">R{{ next_event.round_number }} has started, so its targets are locked. Reset the round from its page if it needs to run again.</p>{% endif %}
+  {% for d in drivers %}
+  <div class="admin-row" style="--player: {{ d.driver.player_color or 'var(--blue)' }}">
+    <div class="admin-who"><b>{{ d.driver.name }}</b></div>
+    <div class="admin-what small">
+      {% if d.chosen %}{% if d.chosen.tier %}<span class="pill tier-{{ d.chosen.tier }}">{{ C.TARGET_TIERS[d.chosen.tier].label }}</span>{% endif %} {{ d.chosen.label }} {{ target_state(d.chosen) }}
+      {% elif d.options %}Choosing between: {% for tier, o in d.options.items() %}<b>{{ o.tier_label }}</b> ({{ o.label }}){{ ', ' if not loop.last }}{% endfor %}
+      {% else %}<span class="muted">Targets are offered when the paddock opens.</span>{% endif %}
+    </div>
+    {% if targets_open and (d.chosen or d.options) %}
+    <form method="post" action="{{ url_for('targets_reset', token=ctx.token, event_id=next_event.id) }}" class="admin-actions">{{ back('#targets') }}
+      <input type="hidden" name="driver_id" value="{{ d.driver.id }}">
+      {% if d.chosen %}<button class="btn btn-sm btn-ghost" name="action" value="reopen">Let them choose again</button>{% endif %}
+      <button class="btn btn-sm btn-ghost" name="action" value="reissue" title="Three fresh targets from the latest numbers">New targets</button>
+      <button class="btn btn-sm btn-ghost" name="action" value="remove" title="No target this round">Remove</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% if last_event and ctx.team_life.targets %}
+  <h3 class="mini-head">Last round · R{{ last_event.round_number }} {{ last_event.name }}</h3>
+  {% for d in drivers if d.last_target %}{% set t = d.last_target %}{% set res = last_rows.get(d.driver.id) %}
+  <div class="admin-row">
+    <div class="admin-who"><b>{{ d.driver.name }}</b></div>
+    <div class="admin-what small">{{ t.label }} {{ target_state(t) }}</div>
+    <div class="admin-actions">
+      {% if t.excused or (t.status == 'Missed' and res and res.result_status in ('DNF', 'DSQ')) %}
+      <form method="post" action="{{ url_for('target_excuse', token=ctx.token, event_id=last_event.id, driver_id=d.driver.id) }}" class="inline">{{ back('#targets') }}
+        {% if t.excused %}<button class="btn btn-sm btn-ghost" name="excused" value="0">Count the DNF again</button>
+        {% else %}<button class="btn btn-sm btn-ghost" name="excused" value="1">Not the driver's fault</button>{% endif %}</form>
+      {% endif %}
+      <form method="post" action="{{ url_for('targets_reset', token=ctx.token, event_id=last_event.id) }}" class="inline"
+            onsubmit="return confirm('Remove {{ d.driver.name }}\'s R{{ last_event.round_number }} target? Its effect on the team relationship is undone.');">{{ back('#targets') }}
+        <input type="hidden" name="driver_id" value="{{ d.driver.id }}"><button class="btn btn-sm btn-ghost" name="action" value="remove">Remove</button></form>
+    </div>
+  </div>
+  {% else %}<p class="muted small">No targets were set at the last round.</p>{% endfor %}
+  {% endif %}
+</section>
+
+<section class="card" id="team-goals">
+  <h2>Team goals</h2>
+  {% if not goals_on %}<p class="muted">Selectable team goals are off. Turn them on in <a href="{{ url_for('league_settings_section', token=ctx.token, section='career') }}">League settings → Career &amp; team</a>.</p>
+  {% else %}
+  {% for t in teams %}
+  <div class="admin-row" style="--team: {{ t.team.color }}">
+    <div class="admin-who"><b>{{ t.team.name }}</b> <small class="muted">{{ t.drivers|join(', ') }}</small></div>
+    <div class="admin-what small">{% if t.goal %}<b>{{ t.goal.label }}</b>: {{ t.goal.text }} · {{ t.goal.state }}{% elif t.reopened %}Reopened: the team chooses again.{% elif goals_locked %}No goal chosen (locked).{% else %}Not chosen yet.{% endif %}</div>
+    {% if not (t.goal and t.goal.outcome) %}
+    <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="admin-actions">{{ back('#team-goals') }}
+      {% if t.goal %}<button class="btn btn-sm btn-ghost" name="action" value="repush" title="Work the targets out again from the latest numbers, keeping the level">Re-push targets</button>{% endif %}
+      {% if t.goal or goals_locked %}<button class="btn btn-sm btn-ghost" name="action" value="reopen"
+        onclick="return confirm('Clear {{ t.team.name }}\'s goal and have their drivers choose again before anything else?');">{{ 'Reset: choose again' if t.goal else 'Reopen the choice' }}</button>{% endif %}
+    </form>
+    {% endif %}
+  </div>
+  {% else %}<p class="muted">No team has a player driver this season.</p>{% endfor %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Recalculate everything</h2>
+  <p class="small">Changed a setting and want every number worked out again with the current formulas? <a href="{{ url_for('recalculate_page', token=ctx.token) }}">Check what would change →</a></p>
+</section>
+{% endblock %}

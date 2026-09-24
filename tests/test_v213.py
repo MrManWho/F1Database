@@ -41,7 +41,9 @@ def test_race_master_tools_follow_the_view_mode(app, master_client):
     with storage.session(token) as conn:
         teamgoals.set_enabled(conn, True)
         run_event(conn, S.events(conn, S.current_season_id(conn))[0])
-    assert "Reopen the choice" in master_client.get(f"/career/{token}/team-goals").get_data(as_text=True)
+    # v2.4: the tools live on Team management (Race Master only); the team goals page just links there.
+    assert "Reopen the choice" in master_client.get(f"/career/{token}/team-management").get_data(as_text=True)
+    assert "Reopen the choice" not in master_client.get(f"/career/{token}/team-goals").get_data(as_text=True)
     master_client.post(f"/career/{token}/mode", data={"mode": "spectator", "csrf_token": "tok"})
     page = master_client.get(f"/career/{token}/team-goals").get_data(as_text=True)
     assert "Reopen the choice" not in page and "Re-push" not in page
@@ -95,15 +97,15 @@ def test_race_master_resets_targets_on_a_chosen_round(app, master_client):
         relations.ensure(conn, sid)
         evs = S.events(conn, sid)
         teamlife.issue_targets(conn, evs[0]["id"])
-        t = teamlife.target_for(conn, evs[0]["id"], a)
+        t = teamlife.options_for(conn, evs[0]["id"], a)        # v2.4: three to choose from
         ids = [r["driver_id"] for r in S.weekend_rows(conn, evs[0]["id"])]
         run_event(conn, evs[0], order=[a] + [d for d in ids if d != a])
         teamlife.judge_targets(conn, evs[0]["id"])
         assert teamlife.target_for(conn, evs[0]["id"], a)["status"] == "Hit"
         bonus_before = relations.assess(conn, sid, a)["bonus"]
         teamlife.issue_targets(conn, evs[1]["id"])
-    page = master_client.get(f"/career/{token}/weekend/{evs[0]['id']}").get_data(as_text=True)
-    assert "Remove every target for this round" in page
+    page = master_client.get(f"/career/{token}/team-management").get_data(as_text=True)   # v2.4: its own page
+    assert f"Last round · R{evs[0]['round_number']}" in page and "Remove" in page
     ana = _client(app, "ana")
     assert ana.post(f"/career/{token}/weekend/{evs[0]['id']}/targets",
                     data={"csrf_token": "tok", "action": "remove", "driver_id": a}).status_code == 403
@@ -120,9 +122,10 @@ def test_race_master_resets_targets_on_a_chosen_round(app, master_client):
     with storage.session(token) as conn:
         teamlife.issue_targets(conn, evs[1]["id"])
         assert teamlife.targets_for_event(conn, evs[1]["id"]) == []
+        assert not teamlife.options_for(conn, evs[1]["id"], a)
     master_client.post(f"/career/{token}/weekend/{evs[1]['id']}/targets", data={"csrf_token": "tok", "action": "reissue"})
     with storage.session(token) as conn:
-        assert {t["driver_id"] for t in teamlife.targets_for_event(conn, evs[1]["id"])} == {a, b}
+        assert all(len(teamlife.options_for(conn, evs[1]["id"], d)) == 3 for d in (a, b))
     assert t
 
 

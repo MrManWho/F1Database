@@ -122,8 +122,8 @@ def test_league_settings_change_team_life_and_log_it(app, master_client):
                                            "gate_targets": False}
         log = community.audit_entries(conn)[0]["summary"]
     assert "changed team orders from Off to Advisory" in log and "turned the weekend-target gate off" in log
-    page = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
-    assert "Career systems" in page and 'value="advisory" selected' in page
+    page = master_client.get(f"/career/{token}/settings/career").get_data(as_text=True)
+    assert "Team life" in page and 'value="advisory" selected' in page
 
 
 # --------------------------------------------------------------------------- weekend targets
@@ -159,8 +159,9 @@ def test_targets_judged_with_void_and_excused_dnf_and_rejudged_on_correction(db)
     ev = evs[0]
     assert teamlife.issue_targets(db, ev["id"]) == [david, carson]
     assert teamlife.issue_targets(db, ev["id"]) == []                 # never twice
-    db.execute("UPDATE weekend_targets SET kind = 'finish', target = 5, label = 'Finish P5 or better' WHERE event_id = ?",
-               (ev["id"],))
+    # v2.4: targets are offered as three options; nobody chooses here, so both race for the Standard one.
+    db.execute("UPDATE target_options SET kind = 'finish', target = 5, label = 'Finish P5 or better' WHERE event_id = ? "
+               "AND tier = 'standard'", (ev["id"],))
     ids = [r["driver_id"] for r in S.weekend_rows(db, ev["id"])]
     order = [david] + [d for d in ids if d not in (david, carson)] + [carson]
     run_event(db, ev, order=order, overrides={carson: "DNF"})
@@ -194,7 +195,8 @@ def test_three_targets_in_a_row_make_one_headline(db):
     relations.ensure(db, sid)
     for ev in S.events(db, sid)[:3]:
         teamlife.issue_targets(db, ev["id"])
-        db.execute("UPDATE weekend_targets SET kind = 'classified', target = 22 WHERE event_id = ?", (ev["id"],))
+        db.execute("UPDATE target_options SET kind = 'classified', target = 22 WHERE event_id = ? AND tier = 'standard'",
+                   (ev["id"],))
         run_event(db, ev)
         teamlife.judge_targets(db, ev["id"])
         teamlife.judge_targets(db, ev["id"])
@@ -272,7 +274,7 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
     r1 = _events(token)[0]
     # Round 1: no press gate (nothing before it), only the weekend-target gate.
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Weekend target" in dash and "Got it" in dash and "is waiting on you" in dash
+    assert "Weekend target" in dash and "Lock in Standard" in dash and "is waiting on you" in dash
     res = _api_save(kim, token, r1["id"])
     assert res.status_code == 423 and res.get_json()["gated"]
     assert "Ana Silva" in res.get_json()["error"] and "Only the Race Master" in res.get_json()["error"]
@@ -289,9 +291,9 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
         assert gates.reminded(conn, r1["id"])
         with pytest.raises(S.ValidationError):
             gates.remind(conn, r1["id"])
-    ana.post(f"/career/{token}/target/{r1['id']}/accept", data={"csrf_token": "tok"})
+    ana.post(f"/career/{token}/target/{r1['id']}/accept", data={"csrf_token": "tok", "tier": "standard"})
     assert _api_save(kim, token, r1["id"]).status_code == 423          # still waiting on Ben
-    ben.post(f"/career/{token}/target/{r1['id']}/accept", data={"csrf_token": "tok"})
+    ben.post(f"/career/{token}/target/{r1['id']}/accept", data={"csrf_token": "tok", "tier": "standard"})
     assert _api_save(kim, token, r1["id"], complete=True).status_code == 200
     # Round 2 now needs both press answers from round 1 and the round 2 target.
     r2 = _events(token)[1]
@@ -305,7 +307,7 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
     for q in pens[-1]["questions"]:
         ana.post(f"/career/{token}/press/{r1['id']}", data={"csrf_token": "tok", "question": q["key"],
                                                               "answer": q["answers"][0]["key"]})
-    ana.post(f"/career/{token}/target/{r2['id']}/accept", data={"csrf_token": "tok"})
+    ana.post(f"/career/{token}/target/{r2['id']}/accept", data={"csrf_token": "tok", "tier": "standard"})
     with storage.session(token) as conn:
         assert gates.my_todo(conn, S.current_season_id(conn), a) is None
         assert gates.my_todo(conn, S.current_season_id(conn), b)["press"] == 2

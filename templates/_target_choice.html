@@ -1,0 +1,36 @@
+{# v2.4 weekend target: choose one of three and lock it in. Needs: ctx, mt (from _my_target). #}
+{% from "_macros.html" import target_state with context %}
+{% if mt %}{% set ev = mt.event %}
+<section class="card target-card" id="target">
+  <div class="card-head"><h2>🎯 Weekend target · R{{ ev.round_number }} {{ ev.name }}</h2>
+    {% if mt.chosen %}{{ target_state(mt.chosen) }}{% endif %}</div>
+  {% if mt.chosen %}
+    <p class="target-text">{% if mt.chosen.tier %}<span class="pill tier-{{ mt.chosen.tier }}">{{ C.TARGET_TIERS[mt.chosen.tier].label }}</span> {% endif %}{{ mt.chosen.label }}</p>
+    {% set hit = mt.chosen.hit if mt.chosen.hit is not none else C.TARGET_HIT %}{% set miss = mt.chosen.miss if mt.chosen.miss is not none else C.TARGET_MISSED %}
+    <p class="muted small">Hit it: <b>{{ '%+g'|format(hit) }}</b> team relationship. Miss it: <b>{{ '%+g'|format(miss) }}</b>.
+      It doesn't count if you don't take part, or if the Race Master rules a DNF wasn't your fault.
+      {% if mt.chosen.tier and not mt.chosen.acknowledged_at %}You didn't choose before lights out, so you raced for the Standard target.{% endif %}</p>
+    {% if not mt.chosen.tier and not mt.chosen.acknowledged_at and mt.open %}
+    <form method="post" action="{{ url_for('target_ack', token=ctx.token, event_id=ev.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Got it</button></form>
+    {% endif %}
+  {% elif mt.open %}
+    <p class="muted small">Your team offers three targets for this race. Choose one and lock it in: the harder the target, the bigger the reward and the bigger the cost of missing it. You can't change it afterwards.
+      {% if ctx.team_life.gates and ctx.team_life.gate_targets %}The race can't start until you've chosen.{% endif %}</p>
+    <div class="target-options">
+      {% for tier, o in mt.options.items() %}
+      <form method="post" action="{{ url_for('target_ack', token=ctx.token, event_id=ev.id) }}" class="target-option tier-{{ tier }}"
+            onsubmit="return confirm('Lock in {{ o.tier_label }}: {{ o.label|e }}? You can\'t change it afterwards.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="tier" value="{{ tier }}">
+        <div class="to-head"><b>{{ o.tier_label }}</b><span class="to-stakes"><span class="up">{{ '%+g'|format(o.hit) }}</span> / <span class="down">{{ '%+g'|format(o.miss) }}</span></span></div>
+        <p class="to-label">{{ o.label }}</p>
+        <p class="muted small">{{ o.blurb }}</p>
+        <button class="btn btn-sm {{ 'btn-primary' if tier == 'standard' else '' }}">Lock in {{ o.tier_label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted small">The race has started. You didn't choose a target this time.</p>
+  {% endif %}
+</section>
+{% endif %}

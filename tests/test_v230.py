@@ -92,7 +92,7 @@ def test_a_full_race_weekend_through_the_website(app, master_client):
     for client, did in ((ana, a), (ben, b)):
         pen = _do_prerace(client, token, token, ev, did)
         assert len(pen["questions"]) == 2
-        client.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok"})
+        client.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "standard"})
     # Answering twice doesn't count twice.
     with storage.session(token) as conn:
         before = conn.execute("SELECT COUNT(*) FROM press_answers WHERE question LIKE 'pre_%'").fetchone()[0]
@@ -103,6 +103,9 @@ def test_a_full_race_weekend_through_the_website(app, master_client):
         assert conn.execute("SELECT COUNT(*) FROM press_answers WHERE question LIKE 'pre_%'").fetchone()[0] == before == 4
     ana.post(f"/career/{token}/weekend/{ev['id']}/predict", data={"csrf_token": "tok", "pole": a, "winner": a})
     # Lights out.
+    with storage.session(token) as conn:
+        gate = gates.status(conn, ev["id"])
+        assert not gate["blocking"], gates.waiting_text(gate)
     kim.post(f"/career/{token}/weekend/{ev['id']}/start", data={"csrf_token": "tok"})
     with storage.session(token) as conn:
         e = S.get_event(conn, ev["id"])
@@ -191,7 +194,7 @@ def test_race_weekends_are_on_by_default_and_can_be_turned_off(app, master_clien
     token, a, b = _league(master_client)
     with storage.session(token) as conn:
         assert weekend.enabled(conn)
-    assert 'name="race_weekends"' in master_client.get(f"/career/{token}/settings").get_data(as_text=True)
+    assert 'name="race_weekends"' in master_client.get(f"/career/{token}/settings/weekends").get_data(as_text=True)
     master_client.post(f"/career/{token}/settings", data={"csrf_token": "tok", "team_life": "1", "difficulty_recs": "1"})
     with storage.session(token) as conn:
         assert not weekend.enabled(conn)
@@ -274,9 +277,9 @@ def test_pre_race_questions_fit_the_driver(app, master_client):
                [q["key"] for q in pen["questions"]]
 
 
-def test_schema_19_adds_the_weekend_columns(app, master_client):
+def test_schema_adds_the_weekend_columns(app, master_client):
     token, a, b = _league(master_client)
     with storage.session(token) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(events)")}
         assert {"paddock_at", "paddock_by", "lights_at", "lights_by"} <= cols
-        assert storage.get_meta(conn, "schema_version") == "19" == str(C.SCHEMA_VERSION)
+        assert storage.get_meta(conn, "schema_version") == str(C.SCHEMA_VERSION)

@@ -24,18 +24,10 @@
 </section>
 
 <section class="card">
-  <div class="card-head"><h2>Recalculate Reputation history</h2></div>
-  <p class="muted small">Form is always worked out fresh from results, so formula changes in an update apply to every season straight away.
-    Reputation from finished seasons is locked when a new season starts. Press this after an update that changes the maths
-    (for example v1.7's qualifying-vs-finish racecraft) to replay every season with the current formula. A backup is made first.</p>
-  <form method="post" action="{{ url_for('paddock_recalculate', token=ctx.token) }}"
-        data-confirm='{{ {"title": "Recalculate Reputation history?", "target": "Every driver, every finished season",
-          "what": "Replays every season with the current Reputation formula and replaces each season's locked Reputation.",
-          "history": "Race results don't change, but Reputation, Driver Value, market tiers and team interest can.",
-          "backup": "Yes: a backup is made first.", "undo": "Yes: restore that backup from Backups & data.", "ok": "Recalculate"}|tojson }}'>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn">Recalculate Reputation history</button>
-  </form>
+  <div class="card-head"><h2>Recalculate everything</h2></div>
+  <p class="muted small">Reputation from finished seasons, team relationships and weekend targets can all be worked out again with the
+    current formulas, in one go. You see what would change first, and a backup is saved.</p>
+  <a class="btn btn-sm" href="{{ url_for('recalculate_page', token=ctx.token) }}">Recalculate everything →</a>
 </section>
 
 <div class="grid-2">

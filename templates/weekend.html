@@ -6,21 +6,30 @@
 {% set gated = gate and gate.blocking %}
 {% set not_started = wk and wk.on and wk.phase in ('upcoming', 'paddock') %}
 {% set ro = not ctx.can_run or locked or gated or not_started %}
-<div class="weekend-head">
-  <div>
-    <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>
+{% set stage = wk.phase if wk and wk.on else ('complete' if event.status == 'Complete' else 'live' if event.status == 'In Progress' else 'upcoming') %}
+{% set default_tab = 'results' if stage == 'complete' or (ctx.can_run and (stage == 'live' or not (wk and wk.on))) else 'weekend' %}
+<header class="round-hero stage-{{ stage }}">
+  <div class="round-badge" aria-hidden="true"><small>Round</small><b>{{ event.round_number }}</b></div>
+  <div class="round-title">
+    <div class="kicker">{{ ctx.season.year }} · round {{ index }} of {{ total }}</div>
     <h1>{{ event.name }}</h1>
     <div class="hero-meta">
       <span>{{ event.location }}</span>
-      <span class="pill {{ 'pill-sprint' if event.is_sprint }}">{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</span>
-      <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ event.status }}</span>
+      {% if event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
+      <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ wk.label if wk and wk.on else event.status }}</span>
     </div>
   </div>
-  <div class="button-row">
-    {% if event.status == 'Complete' %}<a class="btn" href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">📋 Race summary</a>{% endif %}
-    {% if prev_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}">← R{{ prev_event.round_number }}</a>{% endif %}
-    {% if next_event %}<a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">R{{ next_event.round_number }} →</a>{% endif %}
-  </div>
+  <nav class="round-nav" aria-label="Rounds">
+    {% if prev_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}" title="{{ prev_event.name }}">← R{{ prev_event.round_number }}</a>{% endif %}
+    {% if next_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}" title="{{ next_event.name }}">R{{ next_event.round_number }} →</a>{% endif %}
+    {% if event.status == 'Complete' %}<a class="btn btn-sm" href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">📋 Race summary</a>{% endif %}
+    {% if ctx.is_master and can_reset %}<a class="btn btn-sm btn-ghost danger-text" href="{{ url_for('weekend_reset', token=ctx.token, event_id=event.id) }}">↺ Reset weekend</a>{% endif %}
+  </nav>
+</header>
+<div class="round-tabs" role="tablist" aria-label="This round">
+  <button type="button" role="tab" data-tab="weekend" aria-selected="{{ 'true' if default_tab == 'weekend' else 'false' }}">🏁 Weekend</button>
+  <button type="button" role="tab" data-tab="results" aria-selected="{{ 'true' if default_tab == 'results' else 'false' }}">📊 Results</button>
+  {% if event.status != 'Not Run' or hub.comments is defined %}<button type="button" role="tab" data-tab="talk" aria-selected="false">💬 Incidents &amp; chat</button>{% endif %}
 </div>
 
 {% if event.status == 'Complete' and not ctx.is_master %}
@@ -34,10 +43,15 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
 {% endif %}
 
+<div class="round-panel" data-panel="weekend" role="tabpanel">
 {% include "_paddock.html" with context %}
+{% if my_target %}{% set mt = my_target %}{% include "_target_choice.html" with context %}{% endif %}
 {% if not (wk and wk.on) %}{% set full = True %}{% include "_gate.html" with context %}{% endif %}
 {% include "_race_night.html" with context %}
 
+</div>
+
+<div class="round-panel" data-panel="results" role="tabpanel">
 <section class="card diff-strip">
   {{ difficulty(rec, compact=True) }}
   <div class="diff-input">
@@ -221,6 +235,9 @@
 </dialog>
 {% endif %}
 
+</div>
+
+<div class="round-panel" data-panel="talk" role="tabpanel">
 {% if event.status != 'Not Run' %}
 <section class="card" id="incidents">
   <div class="card-head"><h2>Incidents</h2>
@@ -251,6 +268,7 @@
   {{ comment_thread(ctx, hub.target, hub.comments) }}
 </section>
 {% endif %}
+</div>
 {% if not ro %}
 {% if not ro %}
 <div class="banner recovery-banner" id="recovery-banner" role="status" aria-live="polite" hidden></div>
@@ -379,7 +397,25 @@
 </dialog>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
+{% block scripts %}<script>
+(function () {   // v2.4: round tabs. Without JavaScript every panel simply shows.
+  var tabs = document.querySelectorAll(".round-tabs [data-tab]"), panels = document.querySelectorAll(".round-panel");
+  if (!tabs.length) return;
+  function show(name, focus) {
+    tabs.forEach(function (t) { t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"); });
+    panels.forEach(function (p) { p.hidden = p.dataset.panel !== name; });
+    try { sessionStorage.setItem("round-tab-{{ event.id }}", name); } catch (e) {}
+    if (focus) window.scrollTo({ top: document.querySelector(".round-tabs").offsetTop - 70 });
+  }
+  tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab, true); }); });
+  var start = document.querySelector('.round-tabs [aria-selected="true"]').dataset.tab, target = location.hash && document.querySelector(location.hash);
+  if (target && target.closest(".round-panel")) start = target.closest(".round-panel").dataset.panel;
+  else { try { start = sessionStorage.getItem("round-tab-{{ event.id }}") || start; } catch (e) {} }
+  show(start, false);
+  if (target) target.scrollIntoView();
+})();
+</script>
+<script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
 {% if ctx.can_run and (ctx.is_master or event.status != 'Complete') %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
 <script src="{{ url_for('static', filename='js/importer.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/share.js') }}"></script>{% endblock %}

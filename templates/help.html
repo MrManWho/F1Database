@@ -11,7 +11,7 @@
   <label class="help-jump"><span class="sr-only">Jump to a topic</span><select id="help-jump">
     <option value="">Jump to a topic…</option>
     <optgroup label="Getting started"><option value="roles">Who can do what</option><option value="scorekeeper">Scorekeepers</option><option value="race-master">Race Masters</option><option value="drivers">Player drivers</option><option value="joining">Joining a league</option><option value="my-settings">My settings</option><option value="modes">View modes</option><option value="updates">Updates and change notices</option></optgroup>
-    <optgroup label="Race weekends"><option value="weekend">The race weekend</option><option value="results">Entering results</option><option value="statuses">Result statuses</option><option value="scoring">Scoring</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="gates">Round gates</option><option value="difficulty">AI difficulty</option><option value="press">Press</option><option value="incidents">Incidents</option></optgroup>
+    <optgroup label="Race weekends"><option value="weekend">The race weekend (and resetting one)</option><option value="results">Entering results</option><option value="statuses">Result statuses</option><option value="scoring">Scoring</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="gates">Round gates</option><option value="difficulty">AI difficulty</option><option value="press">Press</option><option value="incidents">Incidents</option></optgroup>
     <optgroup label="Your driver"><option value="form">Form</option><option value="reputation">Reputation</option><option value="racecraft">Racecraft</option><option value="driver-value">Driver Value</option><option value="car">Car strength</option><option value="statistics">Statistics</option><option value="rivalry">Rivalries</option><option value="battle">Teammate battle</option></optgroup>
     <optgroup label="Contracts and your team"><option value="market">Transfer market</option><option value="talks">Talking to teams</option><option value="pledges">Growth pledges</option><option value="contracts">Contracts and seats</option><option value="relationship">Team relationship</option><option value="dismissals">Final warnings and mid-season dismissals</option><option value="goals">Season goals</option><option value="targets">Weekend targets</option><option value="team-goals">Team goals (Safe, Competitive, Ambitious)</option><option value="orders">Team orders</option></optgroup>
     <optgroup label="League extras"><option value="extras">League features</option><option value="announcements">Announcements</option><option value="notifications">Notifications</option><option value="comments">Comments and reactions</option><option value="predictions">Predictions</option><option value="public">Public results</option><option value="visibility">Public visibility</option><option value="discord">Discord</option></optgroup>
@@ -32,7 +32,7 @@
   <h2>Who can do what</h2>
   <ul>
     <li><b>Race Master</b>: runs the league: results (including correcting submitted rounds), the grid, calendar, seasons, transfer market, members and roles, League settings, backups, incident rulings and the Activity log.</li>
-    <li><b>Scorekeeper</b>: enters and edits results and submits rounds. Nothing administrative.</li>
+    <li><b>Scorekeeper</b>: opens the paddock, starts the race, enters and edits results and submits rounds. Nothing administrative.</li>
     <li><b>Member</b>: sees the whole league. With a player driver, also their own garage, contracts, Relationships and press.</li>
     <li><b>Spectator</b>: read-only. Can't have a driver or change anything.</li>
   </ul>
@@ -41,7 +41,7 @@
 </section>
 <section class="card help" id="scorekeeper">
   <h2>Scorekeepers</h2>
-  <p>A Scorekeeper enters results for the open round: positions, statuses, Fastest Lap, Driver of the Day, notes and AI difficulty. Edits save automatically.
+  <p>A Scorekeeper runs race night: opens the paddock, starts the race once everyone's ready, then enters the results: positions, statuses, Fastest Lap, Driver of the Day, notes and AI difficulty. Edits save automatically.
     <b>Submit results</b> opens a review screen; after submitting, the round is locked for Scorekeepers and only a Race Master can reopen or correct it.
     Scorekeepers can't get past a <a href="#gates">round gate</a>, but can send one reminder per round.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
@@ -49,7 +49,8 @@
 <section class="card help" id="race-master">
   <h2>Race Masters</h2>
   <p>The site owner is Race Master of every league. A league always keeps at least one Race Master, and a Race Master can hand the league over to another member on <em>Members &amp; roles</em>.
-    Race Masters also confirm or overrule <a href="#dismissals">mid-season dismissals</a>, can <a href="#goals">re-issue goals</a>, and see every <a href="#updates">change notice</a> and who agreed to it.</p>
+    Race Masters also confirm or overrule <a href="#dismissals">mid-season dismissals</a>, <a href="#weekend">reset a weekend</a>, and see every <a href="#updates">change notice</a> and who agreed to it.
+    Pledges, season goals, team goals and weekend targets are managed on <em>Team management</em> (Manage menu); League settings is split into pages (League, Race weekends, Career &amp; team, Joining &amp; roles, Privacy &amp; sharing, Notifications, Data &amp; tools).</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="drivers">
@@ -60,7 +61,7 @@
 </section>
 <section class="card help" id="joining">
   <h2>Joining a league</h2>
-  <p>The Race Master chooses how people join, in League settings. Existing members are never affected.</p>
+  <p>The Race Master chooses how people join, in League settings → Joining &amp; roles. Existing members are never affected.</p>
   <ul>
     <li><b>Join requests</b>: anyone with a login can ask from their league list; the Race Master approves (with any role) or declines.</li>
     <li><b>Invite only</b>: the Race Master invites a login by name; they accept from their league list.</li>
@@ -84,6 +85,7 @@
   <h2>Updates and change notices</h2>
   <p>After an update, a summary of what's new appears on your first page. Tick <b>I've read these changes and I agree to them</b> to carry on.</p>
   <p>Separately, if an update or a Race Master action changes <b>your driver's numbers</b> (points, position, Reputation, Form, Driver Value or team relationship), you'll see exactly what changed, why and by how much, and agree to it before using that league again. Earlier notices stay on the <em>Changes to your driver</em> page, linked from My settings.</p>
+  <p>When an update changes <b>how something is worked out</b>, each league recalculates itself the first time it's opened after the update, and everyone sees a short note at the top of the league. The Race Master can also press <em>Recalculate everything</em> (League settings → Data &amp; tools) after changing settings; they see exactly what would change first.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <h2 class="help-group-title" id="group-race-weekends">Race weekends</h2>
@@ -118,24 +120,24 @@
 </section>
 <section class="card help" id="race-times">
   <h2>Race times</h2>
-  <p>The Race Master can set a time for each round, in the league's time zone. A round shows <b>Not scheduled</b>, <b>Scheduled</b>, <b>Starts in…</b>, <b>Starting soon</b>, <b>In progress</b> (for a few hours, set in League settings), <b>Results pending</b> and <b>Completed</b>, or <b>Postponed</b>. Nothing is completed automatically. The calendar can be added to your own calendar app (.ics).</p>
+  <p>The Race Master can set a time for each round, in the league's time zone. A round shows <b>Not scheduled</b>, <b>Scheduled</b>, <b>Starts in…</b>, <b>Starting soon</b>, <b>In progress</b> (for a few hours, set in League settings → Race weekends), <b>Results pending</b> and <b>Completed</b>, or <b>Postponed</b>. Nothing is completed automatically. The calendar can be added to your own calendar app (.ics).</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="gates">
   <h2>Round gates</h2>
-  <p>Results for the <b>next</b> round can't go in until every player with a login has answered their press questions from the round before and accepted their weekend target. A reminder banner shows what's waiting on you.
-    Rounds further ahead just say they aren't next yet.</p>
+  <p>The <b>next</b> race can't start until every player with a login has done their part: answered the post-race press from the round before, answered the pre-race press, and chosen their weekend target (whichever the Race Master switched on, in League settings → Race weekends). A reminder banner shows what's waiting on you.
+    Rounds further ahead just say they aren't next yet. (With race weekends off, the same checklist holds back results for the next round instead.)</p>
   <ul>
-    <li>Scorekeepers can't get past a gate; the Race Master can open a round early with a note (kept on the round and in the Activity log). Anything outstanding still counts when done later.</li>
+    <li>Scorekeepers can't get past a gate; the Race Master can start the race anyway with a note (kept on the round and in the Activity log). Anything outstanding still counts when done later, except the pre-race press, which closes at lights out.</li>
     <li>A round that already has results is never gated, so corrections are never blocked.</li>
   </ul>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="difficulty">
   <h2>AI difficulty</h2>
-  <p>Enter the AI level (0–110) you raced on each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level, with the latest counting most. Each player driver's finish, qualifying, points, teammate and car-adjusted result says roughly what level they'd be comfortable at.</p>
+  <p>Enter the AI level (0–110) you raced on each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level, with the latest counting most. Each player driver's result is measured against <b>what their car should manage</b>: where the car usually finishes, the points that finish is worth, and their AI teammate. Finishing exactly where your car should is "about right" in the fastest car and the slowest; beating it says you could handle more.</p>
   <ul>
-    <li><b>Everyone too good</b> or <b>everyone struggling</b>: it moves several levels. One clear round is enough to move it (2.2 reacts faster than 2.1).</li>
+    <li><b>Everyone too good</b> or <b>everyone struggling</b>: it moves several levels. One clear round is enough to move it.</li>
     <li><b>Mixed</b> (one struggling, another fine): it moves half as far, toward the one who's struggling.</li>
     <li>Never more than {{ C.DIFF_MAX_STEP }} at once.</li>
   </ul>
@@ -149,11 +151,12 @@
   <p>Every round goes through four stages (League settings → <em>Race weekends</em>, on unless the Race Master turns it off):</p>
   <ol>
     <li><b>Upcoming</b>: on the calendar. Predictions, check-ins and weekend targets as usual; results can't go in yet.</li>
-    <li><b>Paddock open</b>: opens by itself an hour before the scheduled race time (the next time anyone opens the league), or when a Scorekeeper or the Race Master presses <em>Open the paddock</em>. Drivers answer two <a href="#press">pre-race press</a> questions, accept their weekend target and check in. The round page shows who's ready.</li>
+    <li><b>Paddock open</b>: opens by itself an hour before the scheduled race time (the next time anyone opens the league), or when a Scorekeeper or the Race Master presses <em>Open the paddock</em>. Drivers answer two <a href="#press">pre-race press</a> questions, choose their <a href="#targets">weekend target</a> and check in. The round page shows who's ready.</li>
     <li><b>Lights out</b>: a Scorekeeper or the Race Master presses <em>Start the race</em>. With <a href="#gates">round gates</a> on, everyone has to be ready first; only the Race Master can start anyway, with a note. Predictions and pre-race press close. Results can go in from now on.</li>
     <li><b>Chequered flag</b>: the results are submitted. Post-race press, the race summary and headlines follow.</li>
   </ol>
-  <p>Only the next round can open. Alerts for the paddock opening and lights out are under <em>Race day</em> in your notification settings. Rounds already played, and corrections to them, work as before.</p>
+  <p>Only the next round can open, and only once every player driver has a login linked (or the Race Master ticked <em>No account</em> for them on Members &amp; roles). Alerts for the paddock opening and lights out are under <em>Race day</em> in your notification settings.</p>
+  <p><b>Reset weekend</b> (Race Master, on the round page): puts the latest round back to Upcoming, as if the weekend never started. Its results, pre- and post-race press, weekend targets, predictions, check-ins, incidents and headlines are removed and every effect on team relationships is undone. A confirmation page lists everything first, a backup is saved, and each driver affected sees a change notice.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="press">
@@ -216,7 +219,7 @@
 <section class="card help" id="battle">
   <h2>Teammate battle</h2>
   <p>A running head-to-head with whoever shares your car: qualifying, race (a finisher beats a DNF; skipped if neither finished) and the points gap, with a separate battle for each teammate if you change seat. Battles between two players are marked 👥.
-    Beating your teammate is never punished, and leading the race battle gives a small boost to your team standing.</p>
+    Beating your teammate is never punished, and leading the race battle gives a small boost to your team relationship.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <h2 class="help-group-title" id="group-contracts-and-your-team">Contracts and your team</h2>
@@ -268,18 +271,22 @@
     <li><b>DNF or DNS</b>: it doesn't count either way, and the same demand applies to the next race.</li>
     <li><b>Missed</b>: the Race Master confirms the dismissal or overrules it with a note. If you're dropped, the best available reserve takes the seat for the rest of the season; your results, points and Reputation stay yours and you're free to talk to other teams.</li>
   </ul>
-  <p>One decision per driver per season. The Race Master can switch this off in League settings.</p>
+  <p>One decision per driver per season. The Race Master can switch this off in League settings → Career &amp; team.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="goals">
   <h2>Season goals</h2>
-  <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers) beating your teammate. Each goal on track adds {{ '%.0f'|format(C.GOAL_WEIGHT) }} to the relationship and each one behind takes {{ '%.0f'|format(C.GOAL_WEIGHT) }} away. A Race Master can re-issue season goals for one driver or everyone; any change to your numbers is shown to you first.</p>
+  <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers) beating your teammate. Each goal on track adds {{ '%.0f'|format(C.GOAL_WEIGHT) }} to the relationship and each one behind takes {{ '%.0f'|format(C.GOAL_WEIGHT) }} away. A Race Master can re-issue season goals for one driver or everyone (Team management); any change to your numbers is shown to you first.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="targets">
   <h2>Weekend targets</h2>
-  <p>Before each race your team sets one target pitched at your car, recent results and role, for example <i>Finish P8 or better</i>, <i>Score points</i> or <i>Beat both Haas cars</i>. Accept it with <b>Got it</b> on the Control Room.
-    Hit: <b>{{ '%+.0f'|format(C.TARGET_HIT) }}</b> team standing; missed: <b>{{ C.TARGET_MISSED }}</b>; void if you didn't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault. A Race Master can re-issue a target before the race (you accept it again) or remove one on any round; removing one after the race undoes its effect, and you'll see a change notice.</p>
+  <p>Before each race your team offers you <b>three targets</b>, pitched at your car, your recent results and your role, and you choose one and lock it in (on the round page or the Control Room). You can't change it afterwards.</p>
+  <ul>
+    {% for key, t in C.TARGET_TIERS.items() %}<li><b>{{ t.label }}</b>: {{ t.blurb }} Hit it: {{ '%+g'|format(t.hit) }} team relationship; miss it: {{ '%+g'|format(t.miss) }}.</li>{% endfor %}
+  </ul>
+  <p>For example <i>Finish P12 or better</i>, <i>Finish P9 or better</i> or <i>Finish ahead of your teammate</i>. If you haven't chosen by lights out (or you don't have a login) you race for the Standard one.
+    It's void if you don't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault. The Race Master can let you choose again or offer new targets before the race, or remove a target on any round (removing one after the race undoes its effect, and you'll see a change notice).</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="team-goals">
@@ -287,20 +294,20 @@
   <p>When the league turns them on, each team with a player driver picks one Constructors' goal before round 1: <b>Safe</b> (+1 Reputation if met, nothing if missed), <b>Competitive</b> (+3 / −1) or <b>Ambitious</b> (+6 / −3).
     Targets come from car strength, last season's Constructors' position and scoring, the lineup, the number of rounds and Sprint weekends.
     A goal chosen after the season has started counts the points already scored and only predicts the rounds left, using how the team has actually been scoring (it counts more with every round). Safe always needs more than you have now, and each level asks for clearly more than the one below. Met means finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower place.
-    Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again.
+    Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again (Team management).
   While your team's choice is open you'll be asked to make it before anything else, and re-pushed targets are shown to you to agree to. The reward or penalty is added to next season's starting Reputation.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="orders">
   <h2>Team orders</h2>
-  <p>Off unless the Race Master turns them on in League settings. When <b>On</b>, a No. 2 driver can be told before a race to let their teammate through: finish ahead and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }} relationship and a headline), finish behind and you followed it ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). <b>Advisory</b> shows orders with no effect.</p>
+  <p>Off unless the Race Master turns them on in League settings → Career &amp; team. When <b>On</b>, a No. 2 driver can be told before a race to let their teammate through: finish ahead and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }} relationship and a headline), finish behind and you followed it ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). <b>Advisory</b> shows orders with no effect.</p>
   <p>Turning them <b>Off</b> removes every team order, including past ones, and undoes any effect they had; each driver affected sees a <a href="#updates">change notice</a>.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <h2 class="help-group-title" id="group-league-extras">League extras</h2>
 <section class="card help" id="extras">
   <h2>League features</h2>
-  <p>The Race Master switches these on or off in League settings: race-night check-in, comments and reactions, predictions, the public results page and Discord posts.</p>
+  <p>The Race Master switches these on or off in League settings → Career &amp; team (extras) and Privacy &amp; sharing: race-night check-in, comments and reactions, predictions, the public results page and Discord posts.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="announcements">
@@ -331,13 +338,13 @@
 </section>
 <section class="card help" id="visibility">
   <h2>Public visibility</h2>
-  <p>Leagues are <b>private</b> unless the Race Master changes it in League settings. <b>Public</b> gives a share link; <b>Listed</b> also shows the league in the public directory.
+  <p>Leagues are <b>private</b> unless the Race Master changes it in League settings → Privacy &amp; sharing. <b>Public</b> gives a share link; <b>Listed</b> also shows the league in the public directory.
     Public pages show submitted rounds, names, standings, records and news only: never emails, usernames, notes, garages, offers, drafts or rounds in progress. Listed leagues can be reported, and the site owner can remove one from the directory.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="discord">
   <h2>Discord</h2>
-  <p>Paste a Discord channel webhook in League settings to post race results and headlines to your server. The webhook is kept private: it never appears in the Activity log, exports or downloaded backups.</p>
+  <p>Paste a Discord channel webhook in League settings → Privacy &amp; sharing to post race results and headlines to your server. The webhook is kept private: it never appears in the Activity log, exports or downloaded backups.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <h2 class="help-group-title" id="group-admin-and-account">Admin and account</h2>

@@ -63,6 +63,36 @@ def _next(conn, event):
     return nxt and nxt["id"] == event["id"]
 
 
+def no_account_ids(conn):
+    """Player drivers the Race Master ticked "No account" for (they don't want a login)."""
+    return {int(x) for x in (get_meta(conn, "no_account_drivers") or "").split(",") if x}
+
+
+def set_no_account(conn, driver_id, on):
+    ids = no_account_ids(conn)
+    ids = ids | {int(driver_id)} if on else ids - {int(driver_id)}
+    set_meta(conn, "no_account_drivers", ",".join(str(i) for i in sorted(ids)))
+
+
+def unlinked_players(conn, season_id):
+    """v2.4: seated player drivers with no league login linked and no "No account" tick. While there are any,
+    the next round can't be opened."""
+    if not season_id:
+        return []
+    linked = {r["driver_id"] for r in conn.execute(
+        "SELECT driver_id FROM career_members WHERE driver_id IS NOT NULL AND role != 'spectator'")}
+    seats = S.driver_seats(conn, season_id)
+    skip = no_account_ids(conn)
+    return [p for p in S.player_drivers(conn) if p["active"] and p["id"] in seats and p["id"] not in linked
+            and p["id"] not in skip]
+
+
+def unlinked_text(players):
+    names = ", ".join(p["name"] for p in players)
+    return (f"{names} {'has' if len(players) == 1 else 'have'} no login linked. Link one on Members & roles, or tick "
+            "\"No account\" there if they don't want one")
+
+
 def can_open(conn, event):
     """(ok, reason) for opening this round's paddock now."""
     if not enabled(conn):
@@ -73,6 +103,9 @@ def can_open(conn, event):
         return False, "This round is postponed"
     if not _next(conn, event):
         return False, "Only the next round's paddock can open"
+    missing = unlinked_players(conn, event["season_id"])
+    if missing:
+        return False, unlinked_text(missing)
     return True, None
 
 
@@ -107,7 +140,7 @@ def tick(conn, season_id):
     if not nxt or phase(nxt) != "upcoming" or nxt.get("postponed"):
         return None
     start = opens_at(nxt)
-    if not start or datetime.now(timezone.utc) < start:
+    if not start or datetime.now(timezone.utc) < start or not can_open(conn, nxt)[0]:
         return None
     return open_paddock(conn, nxt["id"], "auto")
 
@@ -132,6 +165,8 @@ def start_race(conn, event_id, username, is_master, note=""):
                                     ". Only the Race Master can start it anyway.")
         gates.bypass(conn, event_id, username, note)
     conn.execute("UPDATE events SET lights_at = ?, lights_by = ? WHERE id = ?", (now_iso(), username, event_id))
+    from . import teamlife
+    teamlife.lock_unchosen(conn, event_id)          # anyone who didn't choose races for the Standard target
     label = f"R{event['round_number']} {event['name']}"
     feed.post(conn, event["season_id"], "paddock", f"Lights out at {label}!", "The race is under way.",
               f"weekend/{event_id}", ref=f"lights:{event_id}")
@@ -154,9 +189,111 @@ def summary(conn, event):
     key = phase(event)
     label, blurb = PHASES[key]
     out = {"phase": key, "label": label, "blurb": blurb, "on": enabled(conn), "opens_at": None,
-           "can_open": False, "why_not": None, "is_next": _next(conn, event)}
+           "can_open": False, "why_not": None, "is_next": _next(conn, event),
+           "unlinked": unlinked_players(conn, event["season_id"]) if key == "upcoming" else []}
     if key == "upcoming" and out["on"]:
         start = opens_at(event)
         out["opens_at"] = start.isoformat() if start else None
         out["can_open"], out["why_not"] = can_open(conn, event)
     return out
+
+
+# --------------------------------------------------------------------------- reset (v2.4)
+
+def reset_blocker(conn, event):
+    """Why this round can't be reset (None when it can). Only the latest round that has started can be reset."""
+    if not event:
+        return "Round not found"
+    if phase(event) == "upcoming" and not event.get("paddock_at"):
+        return "This round hasn't started, so there's nothing to reset"
+    if event["season_id"] != S.current_season_id(conn):
+        return "Only rounds in the current season can be reset"
+    later = conn.execute("""SELECT round_number FROM events WHERE season_id = ? AND round_number > ?
+                            AND (status != ? OR paddock_at IS NOT NULL) ORDER BY round_number LIMIT 1""",
+                         (event["season_id"], event["round_number"], C.EVENT_NOT_RUN)).fetchone()
+    if later:
+        return f"R{later['round_number']} is already under way (its paddock opened or it has results). Reset that round first"
+    decided = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'ultimatums'").fetchone() and conn.execute(
+        "SELECT 1 FROM ultimatums WHERE event_id = ? AND status IN ('Dismissed', 'Overruled')", (event["id"],)).fetchone()
+    if decided:
+        return "A dismissal decision was made after this round. It can't be reset"
+    return None
+
+
+def reset_preview(conn, event):
+    """What a reset would clear, for the confirmation page."""
+    eid = event["id"]
+    n = lambda sql, *a: conn.execute(sql, a).fetchone()[0]  # noqa: E731
+    return {
+        "results": n("SELECT COUNT(*) FROM results WHERE event_id = ? AND (race_position IS NOT NULL OR "
+                     "qualifying_position IS NOT NULL OR result_status != 'Not Run')", eid),
+        "pre_press": n("SELECT COUNT(*) FROM press_answers WHERE event_id = ? AND question LIKE 'pre_%'", eid),
+        "post_press": n("SELECT COUNT(*) FROM press_answers WHERE event_id = ? AND question NOT LIKE 'pre_%'", eid),
+        "targets": n("SELECT COUNT(*) FROM weekend_targets WHERE event_id = ?", eid),
+        "predictions": n("SELECT COUNT(*) FROM predictions WHERE event_id = ?", eid),
+        "checkins": n("SELECT COUNT(*) FROM checkins WHERE event_id = ?", eid),
+        "fan_votes": n("SELECT COUNT(*) FROM fan_votes WHERE event_id = ?", eid),
+        "incidents": n("SELECT COUNT(*) FROM incidents WHERE event_id = ?", eid),
+        "orders": n("SELECT COUNT(*) FROM team_orders WHERE event_id = ?", eid),
+        "headlines": len(_round_news(conn, event)),
+    }
+
+
+def _round_news(conn, event):
+    """News items this round created (results, headlines, press quotes, paddock and lights out)."""
+    eid, label = event["id"], f"R{event['round_number']} {event['name']}"
+    rows = conn.execute("""SELECT id FROM news WHERE season_id = ? AND (link = ? OR link LIKE ? OR ref IN (?, ?, ?)
+                           OR ref LIKE ? OR body LIKE ? OR body LIKE ?)""",
+                        (event["season_id"], f"weekend/{eid}", f"weekend/{eid}#%", f"paddock:{eid}", f"lights:{eid}",
+                         f"results:{eid}", f"target-streak:%:{eid}", f"% after {label}, %", f"% before {label}, %")).fetchall()
+    return [r["id"] for r in rows]
+
+
+def reset(conn, event_id, username):
+    """Race Master: put a round back to Upcoming, as if the weekend never started. Results, pre- and post-race
+    press, weekend targets (and their choices), team orders from this round, predictions, check-ins, fan votes,
+    incidents, the Race Master override and this round's headlines are removed; every effect they had on team
+    relationships is undone. Returns {driver_id: [what changed]} for change notices."""
+    from . import recalc, relations, teamlife
+    event = S.get_event(conn, event_id)
+    why = reset_blocker(conn, event)
+    if why:
+        raise S.ValidationError(why)
+    sid, eid = event["season_id"], event_id
+    touched = {}
+    for r in conn.execute("SELECT DISTINCT driver_id FROM press_answers WHERE event_id = ?", (eid,)):
+        touched.setdefault(r["driver_id"], []).append(f"R{event['round_number']} press answers removed")
+    for r in conn.execute("SELECT driver_id FROM weekend_targets WHERE event_id = ?", (eid,)):
+        touched.setdefault(r["driver_id"], []).append(f"R{event['round_number']} weekend target removed")
+    since = event.get("submitted_at") or event.get("lights_at") or event.get("paddock_at")
+    if since:
+        # Team messages this round caused (team orders judged, targets hit or missed) came after it was submitted.
+        conn.execute("""DELETE FROM team_notes WHERE season_id = ? AND created_at >= ? AND (text LIKE 'You ignored the team order%'
+                        OR text LIKE 'Thanks for following the team order%' OR text LIKE ?)""",
+                     (sid, since, f"R{event['round_number']} {event['name']} target %"))
+    for table in ("press_answers", "weekend_targets", "target_options", "predictions", "checkins", "fan_votes",
+                  "incidents", "gate_bypasses", "results"):
+        conn.execute(f"DELETE FROM {table} WHERE event_id = ?", (eid,))
+    conn.execute("UPDATE team_orders SET status = 'Issued' WHERE event_id = ?", (eid,))
+    nxt = conn.execute("SELECT id FROM events WHERE season_id = ? AND round_number > ? ORDER BY round_number LIMIT 1",
+                       (sid, event["round_number"])).fetchone()
+    if nxt:   # what this round handed out for the next one (targets offered, orders issued) goes too
+        for table in ("weekend_targets", "target_options", "team_orders"):
+            conn.execute(f"DELETE FROM {table} WHERE event_id = ?", (nxt["id"],))
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'ultimatums'").fetchone():
+        conn.execute("DELETE FROM ultimatums WHERE event_id = ? AND status IN ('Issued', 'Awaiting decision', 'Met', 'Void')",
+                     (eid,))
+    for nid in _round_news(conn, event):
+        conn.execute("DELETE FROM news WHERE id = ?", (nid,))
+    conn.execute("DELETE FROM notifications WHERE link LIKE ? OR ref IN (?, ?)",
+                 (f"weekend/{eid}%", f"results:{eid}", f"paddock:{eid}"))
+    for key in (f"gate_reminded_{eid}", f"targets_removed_{eid}"):
+        conn.execute("DELETE FROM meta WHERE key = ?", (key,))
+    conn.execute("""UPDATE events SET status = ?, ai_difficulty = NULL, ai_untracked = 0, submitted_at = NULL,
+                    press_required = 0, paddock_at = NULL, paddock_by = NULL, lights_at = NULL, lights_by = NULL,
+                    revision = revision + 1 WHERE id = ?""", (C.EVENT_NOT_RUN, eid))
+    S.weekend_rows(conn, eid)   # a fresh, empty entry list
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'team_relations'").fetchone():
+        recalc.rebuild_bonus(conn, sid)
+        relations.review(conn, sid)
+    return touched

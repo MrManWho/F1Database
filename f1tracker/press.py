@@ -113,8 +113,8 @@ PRE = {
         ("now", "Starting this weekend", 1, None),
         ("setup", "They've had the better setup. Let's see it equal", -2, "{driver} hints at unequal treatment at {team}"),
         ("learn", "They've done a great job. I'm learning", 1, None)]),
-    "pre_target": ("The team wants \"{target}\" from you this weekend. Fair?", [
-        ("deliver", "Fair, and I'll deliver", 2, None),
+    "pre_target": ("Your weekend target: \"{target}\". Can you deliver?", [
+        ("deliver", "Yes. I'll deliver it", 2, None),
         ("stretch", "It's a stretch with this car", -1, None),
         ("higher", "I'm aiming higher than that", 0, "{driver} aims beyond {team}'s target")]),
     "pre_sprint": ("It's a Sprint weekend. Do you like the format?", [
@@ -300,9 +300,10 @@ def pre_keys(conn, event, driver_id):
         ahead, behind = _mate_record(conn, event, driver_id, facts["mate_id"])
         if ahead + behind >= 2:
             pool.append("pre_mate_ahead" if ahead >= behind else "pre_mate_behind")
-    t = teamlife.target_for(conn, event["id"], driver_id)
-    if t:
-        facts["target"] = t["label"]
+    if teamlife.settings(conn)["targets"]:
+        # Whether it's asked depends only on targets being on, so choosing a target never changes the questions.
+        t = teamlife.target_for(conn, event["id"], driver_id) or teamlife.options_for(conn, event["id"], driver_id).get("standard")
+        facts["target"] = t["label"] if t else "a strong result"
         pool.append("pre_target")
     if event["is_sprint"]:
         pool.append("pre_sprint")

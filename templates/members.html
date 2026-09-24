@@ -124,9 +124,17 @@
 {% endif %}
 
 {% if free_drivers %}
-<section class="card">
+<section class="card" id="no-login">
   <h2>Player drivers without a login</h2>
+  <p class="muted small">Every player driver needs a login, so they can choose weekend targets, answer the press and agree to
+    changes. If someone doesn't want one, tick <b>No account</b>: you enter their results, they race for the Standard weekend
+    target and the press don't ask them. While a seated player driver has neither a login nor the tick, the next round can't open.</p>
   <ul class="plain-list">{% for p in free_drivers %}<li class="player-row" style="--player: {{ p.player_color or 'var(--blue)' }}">{{ p.name }}{% if not p.active %} <span class="pill">retired</span>{% endif %}
+    <form method="post" action="{{ url_for('members_no_account', token=ctx.token, driver_id=p.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if p.id in no_account %}<span class="pill">No account</span> <button class="btn btn-sm btn-ghost" name="on" value="0">Undo</button>
+      {% else %}<span class="pill pill-hot">Needs a login</span> <button class="btn btn-sm btn-ghost" name="on" value="1" title="They don't want a login">No account</button>{% endif %}
+    </form>
     <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button></li>{% endfor %}</ul>
 </section>
 {% endif %}
@@ -149,7 +157,7 @@
     <p class="small">{{ {'requests': 'Join requests are currently enabled: people can ask from their league list and you approve each one below.',
       'invite': 'The league is invite only: people join when they accept an invitation.',
       'closed': 'The league is closed to new members: no requests, and invitations can\'t be accepted.'}[join_mode] }}
-      <a href="{{ url_for('league_settings', token=ctx.token) }}#joining">Manage this in League settings →</a></p>
+      <a href="{{ url_for('league_settings_section', token=ctx.token, section='roles') }}">Manage this in League settings → Joining &amp; roles →</a></p>
     <h3>Invite someone</h3>
     <form method="post" action="{{ url_for('member_invite', token=ctx.token) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

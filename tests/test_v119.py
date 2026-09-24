@@ -120,17 +120,21 @@ def test_untracked_and_dnf_rounds(db):
 def test_three_rounds_and_one_offs_stay_gradual(db):
     sid = S.current_season_id(db)
     a, b = players(db)
-    cad = db.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
-    S.place_players(db, sid, {a: (cad, 1), b: (cad, 2)})
+    ranks = S.team_strength_ranks(db, sid)
+    fast = min(ranks, key=ranks.get)          # v2.3.1: in the fastest car, winning is what the car should do
+    S.place_players(db, sid, {a: (fast, 1), b: (fast, 2)})
     evs = S.events(db, sid)
-    for ev in evs[:3]:   # players win every time at AI 80
-        run_event(db, ev, order=_order_with(db, ev, first=a), difficulty=80)
+    for ev in evs[:3]:
+        order = _order_with(db, ev, first=a)
+        order = [a, b] + [d for d in order if d not in (a, b)]
+        run_event(db, ev, order=order, difficulty=80)
     rec = S.difficulty_recommendation(db, (2026, evs[3]["round_number"]))
-    assert len(rec["sample"]) == 3 and rec["recommended"] in (80, 81) and abs(rec["recommended"] - 80) <= 1
-    # One unusually bad round doesn't swing it.
-    run_event(db, evs[3], order=_order_with(db, evs[3], last=a), difficulty=80)
+    assert len(rec["sample"]) == 3 and abs(rec["recommended"] - 80) <= 1
+    # One unusually bad round moves it, but it's weighed against the rounds before and never by the full step.
+    order = [d for d in _order_with(db, evs[3]) if d not in (a, b)] + [b, a]
+    run_event(db, evs[3], order=order, difficulty=80)
     rec2 = S.difficulty_recommendation(db, (2026, evs[4]["round_number"]))
-    assert abs(rec2["recommended"] - 80) <= 1 and rec2["note"]
+    assert 80 - C.DIFF_MAX_STEP < rec2["recommended"] <= 80 and rec2["note"]
 
 
 def test_history_spans_seasons(db):
@@ -250,7 +254,7 @@ def test_members_page_shows_join_state_but_settings_owns_it(master_client):
     page = master_client.get(f"/career/{token}/members").get_data(as_text=True)
     assert "Join requests are currently enabled" in page and "Manage this in League settings" in page
     assert 'name="join_mode"' not in page
-    assert 'name="join_mode"' in master_client.get(f"/career/{token}/settings").get_data(as_text=True)
+    assert 'name="join_mode"' in master_client.get(f"/career/{token}/settings/roles").get_data(as_text=True)
 
 
 # --------------------------------------------------------------------------- 8-11. passwords, sidebar, confirmations
@@ -283,7 +287,7 @@ def test_high_impact_actions_explain_themselves(master_client):
     market = master_client.get(f"/career/{token}/market").get_data(as_text=True)
     assert market.count("data-confirm") >= 1 and "Open a transfer window" in market
     paddock = master_client.get(f"/career/{token}/paddock").get_data(as_text=True)
-    assert "Recalculate Reputation history?" in paddock
+    assert "Recalculate everything" in paddock        # v2.4: one tool, with a preview page
     assert paddock.count('<dialog id="del-driver"') == 1 and "del-driver-{{" not in paddock
     assert len(re.findall(r'<dialog id="del-driver-\d+"', paddock)) == 0 and "data-delete-driver" in paddock
     members = master_client.get(f"/career/{token}/members").get_data(as_text=True)

@@ -5,7 +5,7 @@ driver (career_members.driver_id):
 
     race_master  runs this league (results, grid, calendar, seasons, market, members, settings)
     scorekeeper  enters and edits results until a round is submitted; nothing administrative
-    member       views everything; with a driver, their own garage, contracts and team standing
+    member       views everything; with a driver, their own garage, contracts and team relationship
     spectator    view only; can't have a driver
 
 Site Race Masters (users.is_master, managed in Accounts) are Race Master of every league, as before.

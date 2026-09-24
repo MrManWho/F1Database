@@ -193,8 +193,9 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {% if t.status == 'Hit' %}<span class="target-pill tp-hit">✅ Hit</span>
 {% elif t.status == 'Missed' %}<span class="target-pill tp-miss">❌ Missed</span>
 {% elif t.status == 'Void' %}<span class="target-pill tp-void">— Void{{ ' (not their fault)' if t.excused }}</span>
+{% elif t.tier %}<span class="target-pill tp-ok">Locked in</span>
 {% elif t.acknowledged_at %}<span class="target-pill tp-ok">Accepted</span>
-{% else %}<span class="target-pill tp-wait">Not accepted yet</span>{% endif %}
+{% else %}<span class="target-pill tp-wait">Not chosen yet</span>{% endif %}
 {%- endmacro %}
 
 {# What a league may notify you about, asked when creating, joining or accepting (per league, never inherited). #}

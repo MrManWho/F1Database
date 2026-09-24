@@ -149,6 +149,9 @@ def ensure(conn, season_id):
                      (season_id, player["id"], seat[0], contract["id"] if contract else None, growth,
                       t["form_base"], t["form_target"], t["rep_start"], t["rep_target"], C.RELATION_START,
                       band(C.RELATION_START), now_iso(), int(pledged), t["finish_base"], t["finish_target"]))
+        # v2.4: the extras (press, targets, orders) start again from here; recalculating replays only what's after.
+        from .storage import set_meta as _set_meta
+        _set_meta(conn, f"bonus_since_{season_id}_{player['id']}", now_iso())
         set_goals(conn, season_id, player["id"], seat[0], contract["role"] if contract else "Equal Status", ranks,
                   replace=True)
     rebase(conn, season_id)  # leagues already past round 3 get their targets re-based straight away
@@ -360,9 +363,13 @@ def rebase(conn, season_id):
         set_goals(conn, season_id, rel["driver_id"], rel["team_id"], _role(conn, rel), ranks, replace=True)
 
 
-def add_bonus(conn, season_id, driver_id, delta):
-    conn.execute("UPDATE team_relations SET bonus = MAX(?, MIN(?, bonus + ?)) WHERE season_id = ? AND driver_id = ?",
-                 (-C.RELATION_EXTRA_CAP, C.RELATION_EXTRA_CAP, delta, season_id, driver_id))
+def add_bonus(conn, season_id, driver_id, delta=None):
+    """The relationship extras (press answers, weekend targets, team orders) changed for this driver: work the
+    total out again from the records (v2.4). It's the plain sum of every one since the relationship started, kept
+    within +/-RELATION_EXTRA_CAP, so it never depends on the order things happened and a recalculation always
+    agrees with it. Callers save the record first; `delta` is kept for readability only."""
+    from . import recalc
+    recalc.rebuild_bonus(conn, season_id, [driver_id])
 
 
 # --------------------------------------------------------------------------- season goals

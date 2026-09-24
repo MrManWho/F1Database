@@ -271,5 +271,5 @@ def test_standings_csv_backups_page_and_typed_delete(app, master_client):
 
 def test_permission_matrix_is_shown(app, master_client):
     token = _league(master_client)
-    page = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
+    page = master_client.get(f"/career/{token}/settings/roles").get_data(as_text=True)
     assert "What each role can do" in page and "Correct a completed round" in page

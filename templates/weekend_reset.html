@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Reset R{{ event.round_number }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('weekend', token=ctx.token, event_id=event.id) }}">R{{ event.round_number }} {{ event.name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Reset</span></nav>
+<div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }}</div><h1>Reset R{{ event.round_number }} {{ event.name }}?</h1>
+  <p class="page-purpose">Puts the round back to <b>Upcoming</b> with the paddock closed, as if the weekend never started.</p></div></div>
+
+{% if blocker %}
+<section class="card"><div class="banner banner-danger" role="alert"><b>This round can't be reset.</b> {{ blocker }}.</div>
+  <p><a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=event.id) }}">Back to the round</a></p></section>
+{% else %}
+<section class="card">
+  <h2>What will be removed</h2>
+  <ul class="reset-list">
+    <li>Results: <b>{{ clears.results }}</b> driver{{ 's' if clears.results != 1 }} (standings, Form and Reputation go back to how they were before this round)</li>
+    <li>Pre-race press answers: <b>{{ clears.pre_press }}</b> · post-race press answers: <b>{{ clears.post_press }}</b></li>
+    <li>Weekend targets chosen: <b>{{ clears.targets }}</b> (drivers choose again when the paddock reopens)</li>
+    <li>Predictions: <b>{{ clears.predictions }}</b> · check-ins: <b>{{ clears.checkins }}</b> · Driver of the Day votes: <b>{{ clears.fan_votes }}</b></li>
+    <li>Incidents reported for this round: <b>{{ clears.incidents }}</b></li>
+    <li>This round's headlines and news: <b>{{ clears.headlines }}</b></li>
+    <li>Team orders for this round go back to not judged ({{ clears.orders }}); targets and orders already handed out for the next round are removed.</li>
+    <li>The paddock and lights-out times, the AI difficulty entered and any Race Master override.</li>
+  </ul>
+  <p class="small">Every effect on team relationships (press, targets, team orders) is undone. Each driver affected sees a change notice explaining what moved. Comments stay.</p>
+  <p class="small"><b>A backup is saved first</b>, so this can be undone from Backups &amp; data.</p>
+</section>
+<form method="post" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Type <b>R{{ event.round_number }}</b> to confirm<input name="confirm" required autocomplete="off" pattern="R{{ event.round_number }}" placeholder="R{{ event.round_number }}"></label>
+  <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=event.id) }}">Cancel</a>
+    <button class="btn btn-danger">Reset R{{ event.round_number }}</button></div>
+</form>
+{% endif %}
+{% endblock %}

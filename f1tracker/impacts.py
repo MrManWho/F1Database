@@ -27,6 +27,10 @@ STATS = {"points": ("Championship points", 0), "position": ("Championship positi
 CALC_NOTES = {
     1: ("Paddock Legacy 2.1", "Team orders are removed while they're switched off, and the AI difficulty "
                               "recommendation now adapts from every round."),
+    2: ("Paddock Legacy 2.4", "Everything in this league was recalculated with the 2.4 formulas. A car with no AI "
+                              "driver (for example two players in the same team) no longer counts as the slowest car "
+                              "after three rounds, and the Reputation carried between seasons now includes the pledge "
+                              "and team-goal rewards every time it's worked out."),
 }
 
 
@@ -121,25 +125,52 @@ def refresh(conn):
 
 
 def on_open(conn, is_api=False):
-    """Called whenever a league is opened. Runs the update checks once per version, and keeps the numbers fresh."""
+    """Called whenever a league is opened. Runs the update checks once per version, and keeps the numbers fresh.
+    v2.4: when a version changes how things are worked out, the league is recalculated first (recalc.recalculate),
+    everyone is told once when they next open the league (announce), and each player driver whose numbers moved
+    gets a change notice to agree to."""
     version = int(get_meta(conn, "calc_version") or 0)
     if version < C.CALC_VERSION:
         stored = get_meta(conn, "calc_snapshot")
         fresh = get_meta(conn, "calc_snapshot_stale") != "1"
-        if stored and fresh:
-            notes = [CALC_NOTES[v] for v in range(version + 1, C.CALC_VERSION + 1) if v in CALC_NOTES]
-            if notes:
-                moved = diff(json.loads(stored), snapshot(conn))
-                for did, rows in moved.items():
-                    add_notice(conn, did, f"calc-{C.CALC_VERSION}", "How some numbers are worked out has changed",
-                               " ".join(why for _t, why in notes), rows)
         for v in range(version + 1, C.CALC_VERSION + 1):
             for step in MIGRATIONS.get(v, []):
                 step(conn)
+        notes = [CALC_NOTES[v] for v in range(version + 1, C.CALC_VERSION + 1) if v in CALC_NOTES]
+        if version and notes:
+            from . import recalc
+            recalc.recalculate(conn)
+            announce(conn, notes[-1][0], " ".join(why for _t, why in notes))
+        if stored and fresh and notes:
+            moved = diff(json.loads(stored), snapshot(conn))
+            for did, rows in moved.items():
+                add_notice(conn, did, f"calc-{C.CALC_VERSION}", "How some numbers are worked out has changed",
+                           " ".join(why for _t, why in notes), rows)
         set_meta(conn, "calc_version", str(C.CALC_VERSION))
         refresh(conn)
     elif not is_api and get_meta(conn, "calc_snapshot_stale") != "0":
         refresh(conn)
+
+
+def announce(conn, title, text):
+    """A one-off message everyone sees the next time they open this league (until they close it)."""
+    set_meta(conn, "calc_announce", json.dumps({"id": now_iso(), "title": title, "text": text}))
+
+
+def announcement_for(conn, username):
+    raw = get_meta(conn, "calc_announce")
+    if not raw:
+        return None
+    note = json.loads(raw)
+    if get_meta(conn, f"calc_seen_{username}") == note["id"]:
+        return None
+    return note
+
+
+def dismiss_announcement(conn, username):
+    raw = get_meta(conn, "calc_announce")
+    if raw:
+        set_meta(conn, f"calc_seen_{username}", json.loads(raw)["id"])
 
 
 # --------------------------------------------------------------------------- reading and agreeing

@@ -331,15 +331,13 @@ def void_all_orders(conn):
                              FROM team_notes GROUP BY season_id, driver_id""").fetchall():
         if not (r["ignored"] or r["obeyed"]):
             continue
-        undo = -C.TEAM_ORDER_IGNORED * r["ignored"] - C.TEAM_ORDER_OBEYED * r["obeyed"]
-        relations.add_bonus(conn, r["season_id"], r["driver_id"], undo)
         lines = touched.setdefault(r["driver_id"], [])
         if r["ignored"]:
             lines.append(f"Penalty for ignoring {r['ignored']} team order{'s' if r['ignored'] != 1 else ''} undone "
-                         f"({'%+g' % (-C.TEAM_ORDER_IGNORED * r['ignored'])} team standing)")
+                         f"({'%+g' % (-C.TEAM_ORDER_IGNORED * r['ignored'])} team relationship)")
         if r["obeyed"]:
             lines.append(f"Credit for following {r['obeyed']} team order{'s' if r['obeyed'] != 1 else ''} removed "
-                         f"({'%+g' % (-C.TEAM_ORDER_OBEYED * r['obeyed'])} team standing)")
+                         f"({'%+g' % (-C.TEAM_ORDER_OBEYED * r['obeyed'])} team relationship)")
     conn.execute("DELETE FROM team_orders")
     for pattern in ORDER_TEXT:
         for n in conn.execute("SELECT driver_id FROM team_notes WHERE text LIKE ?", (pattern,)).fetchall():
@@ -347,6 +345,9 @@ def void_all_orders(conn):
         conn.execute("DELETE FROM team_notes WHERE text LIKE ?", (pattern,))
         conn.execute("DELETE FROM notifications WHERE text LIKE ?", (pattern,))
     conn.execute("DELETE FROM news WHERE headline LIKE '% defies team orders'")
+    for sid_, did_ in {(r["season_id"], r["driver_id"]) for r in conn.execute("SELECT season_id, driver_id FROM team_relations")}:
+        if did_ in touched:
+            relations.add_bonus(conn, sid_, did_)     # the order messages are gone, so their effect is too
     for did, lines in touched.items():
         if not lines:
             lines.append("Team order messages removed from your Relationships page")
@@ -420,17 +421,17 @@ def resolve_orders(conn, event_id):
         if rel and status != "Void" and mode == "on":
             name = S.driver_map(conn)[o["beneficiary_id"]]["name"]
             if status == "Ignored":
-                relations.add_bonus(conn, event["season_id"], o["driver_id"], C.TEAM_ORDER_IGNORED)
                 relations.note(conn, event["season_id"], o["driver_id"], rel["team_id"], "warning",
                                f"You ignored the team order and finished ahead of {name}. The team won't forget it.")
+                relations.add_bonus(conn, event["season_id"], o["driver_id"], C.TEAM_ORDER_IGNORED)
                 driver = S.driver_map(conn)[o["driver_id"]]["name"]
                 feed.post(conn, event["season_id"], "paddock", f"{driver} defies team orders",
                           f"{driver} was told to let {name} through at {event['name']} and didn't.", "news",
                           driver_id=o["driver_id"], team_id=rel["team_id"])
             else:
-                relations.add_bonus(conn, event["season_id"], o["driver_id"], C.TEAM_ORDER_OBEYED)
                 relations.note(conn, event["season_id"], o["driver_id"], rel["team_id"], "good",
                                f"Thanks for following the team order with {name}. That's noted.", notify=False)
+                relations.add_bonus(conn, event["season_id"], o["driver_id"], C.TEAM_ORDER_OBEYED)
         out.append((o["driver_id"], status))
     return out
 
@@ -449,6 +450,7 @@ def after_race(conn, event_id):
     event = S.get_event(conn, event_id)
     conn.execute("UPDATE events SET press_required = 1 WHERE id = ?", (event_id,))
     resolve_orders(conn, event_id)
+    lock_unchosen(conn, event_id)
     judge_targets(conn, event_id)
     battle.after_race(conn, event_id)
     relations.review(conn, event["season_id"])
@@ -459,8 +461,8 @@ def after_race(conn, event_id):
     for rel in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (event["season_id"],)).fetchall():
         if questions_for(conn, event_id, rel["driver_id"]):
             feed.notify(conn, rel["driver_id"], f"The press want a word after R{event['round_number']} {event['name']}."
-                        + (" Answer both questions before the next round can start." if required else ""),
-                        "dashboard#press")
+                        + (" Answer both questions before the next race can start." if required else ""),
+                        "press")
     nxt = S.next_incomplete_event(conn, event["season_id"])
     if nxt:
         issue_targets(conn, nxt["id"], notify=True)
@@ -487,8 +489,8 @@ def _recent_finishes(conn, season_id, driver_id, before_round, field, count=3):
     return out
 
 
-def plan_target(conn, event, driver_id, team_id, ranks=None, rng=None):
-    """The team's target for one driver at one race: pitched at the car, recent form and contract role."""
+def _target_basis(conn, event, driver_id, team_id, ranks=None):
+    """What a target is pitched from: the car's expected finish, recent form and the contract role."""
     season_id = event["season_id"]
     ranks = ranks or S.team_strength_ranks(conn, season_id)
     field = max(2, conn.execute("SELECT COUNT(*) FROM results WHERE event_id = ?", (event["id"],)).fetchone()[0]
@@ -503,35 +505,95 @@ def plan_target(conn, event, driver_id, team_id, ranks=None, rng=None):
     role = relations._role(conn, rel) if rel else "Equal Status"
     base += {"No. 1": -1.0, "No. 2": 1.0}.get(role, 0.0)
     pos = int(max(1, min(field, math.ceil(base + 1.5))))
-    rng = rng or random.Random(event["id"] * 104729 + driver_id)
-    roll = rng.random()
     gmap = S.grid_map(conn, season_id)
     seat = S.driver_seats(conn, season_id).get(driver_id)
     mate = gmap.get((team_id, 2 if seat and seat[1] == 1 else 1)) if seat else None
-    if roll < 0.10 and mate:
-        return {"kind": "teammate", "target": None, "rival_team_id": None, "label": TARGET_KINDS["teammate"]}
     slower = next((t for t, r in ranks.items() if r == rank + 1), None)
-    if roll < 0.35 and slower and gmap.get((slower, 1)) and gmap.get((slower, 2)):
-        team = S.team_map(conn)[slower]["name"]
-        return {"kind": "beat_team", "target": None, "rival_team_id": slower,
-                "label": TARGET_KINDS["beat_team"].format(team=team)}
-    if pos >= field - 1:
+    has_slower = bool(slower and gmap.get((slower, 1)) and gmap.get((slower, 2)))
+    return {"pos": pos, "field": field, "mate": mate, "slower": slower if has_slower else None}
+
+
+def _finish_target(n, field):
+    n = int(max(1, min(field, n)))
+    if n >= field - 1:
         return {"kind": "classified", "target": field, "rival_team_id": None, "label": TARGET_KINDS["classified"]}
-    if pos == 10:
+    if n == 10:
         return {"kind": "points", "target": 10, "rival_team_id": None, "label": TARGET_KINDS["points"]}
-    return {"kind": "finish", "target": pos, "rival_team_id": None, "label": TARGET_KINDS["finish"].format(n=pos)}
+    if n == 1:
+        return {"kind": "finish", "target": 1, "rival_team_id": None, "label": "Win the race"}
+    return {"kind": "finish", "target": n, "rival_team_id": None, "label": TARGET_KINDS["finish"].format(n=n)}
+
+
+def plan_target(conn, event, driver_id, team_id, ranks=None, rng=None):
+    """The team's Standard target for one driver at one race: pitched at the car, recent form and contract role."""
+    b = _target_basis(conn, event, driver_id, team_id, ranks)
+    rng = rng or random.Random(event["id"] * 104729 + driver_id)
+    roll = rng.random()
+    if roll < 0.10 and b["mate"]:
+        return {"kind": "teammate", "target": None, "rival_team_id": None, "label": TARGET_KINDS["teammate"]}
+    if roll < 0.35 and b["slower"]:
+        team = S.team_map(conn)[b["slower"]]["name"]
+        return {"kind": "beat_team", "target": None, "rival_team_id": b["slower"],
+                "label": TARGET_KINDS["beat_team"].format(team=team)}
+    return _finish_target(b["pos"], b["field"])
+
+
+def target_options(conn, event, driver_id, team_id, ranks=None, rng=None):
+    """v2.4: the three targets a driver chooses from. Safe and Stretch are finishing positions TARGET_GAP places
+    either side of the Standard one (Stretch is sometimes beating your teammate instead); each is strictly harder
+    than the one before."""
+    b = _target_basis(conn, event, driver_id, team_id, ranks)
+    rng = rng or random.Random(event["id"] * 104729 + driver_id)
+    field, gap = b["field"], C.TARGET_GAP
+    std = plan_target(conn, event, driver_id, team_id, ranks, rng=random.Random(event["id"] * 104729 + driver_id))
+    p_std = max(2, min(b["pos"], field - 2))
+    if std["kind"] in ("finish", "points", "classified"):
+        std = _finish_target(p_std, field)
+    safe = _finish_target(min(field, p_std + gap), field)
+    if rng.random() < 0.3 and b["mate"] and std["kind"] != "teammate":
+        stretch = {"kind": "teammate", "target": None, "rival_team_id": None, "label": TARGET_KINDS["teammate"]}
+    else:
+        stretch = _finish_target(max(1, p_std - gap), field)
+    if safe["label"] == std["label"]:
+        safe = _finish_target(field, field)
+    out = {}
+    for tier, t in (("safe", safe), ("standard", std), ("stretch", stretch)):
+        info = C.TARGET_TIERS[tier]
+        out[tier] = {**t, "tier": tier, "tier_label": info["label"], "hit": info["hit"], "miss": info["miss"],
+                     "blurb": info["blurb"]}
+    return out
+
+
+def options_for(conn, event_id, driver_id):
+    """The three offered targets for this driver at this round ({} if none were offered)."""
+    rows = conn.execute("SELECT * FROM target_options WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+    out = {r["tier"]: {**dict(r), "tier_label": C.TARGET_TIERS[r["tier"]]["label"],
+                       "blurb": C.TARGET_TIERS[r["tier"]]["blurb"]} for r in rows}
+    return {k: out[k] for k in C.TARGET_TIERS if k in out}
+
+
+def _offer(conn, event, driver_id, team_id, ranks=None, rng=None):
+    opts = target_options(conn, event, driver_id, team_id, ranks, rng)
+    conn.execute("DELETE FROM target_options WHERE event_id = ? AND driver_id = ?", (event["id"], driver_id))
+    for tier, t in opts.items():
+        conn.execute("""INSERT INTO target_options(event_id, driver_id, tier, team_id, kind, target, rival_team_id, label,
+                        hit, miss, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                     (event["id"], driver_id, tier, team_id, t["kind"], t["target"], t["rival_team_id"], t["label"],
+                      t["hit"], t["miss"], now_iso()))
+    return opts
 
 
 def issue_targets(conn, event_id, notify=False):
-    """Set the weekend target for every seated player driver who doesn't have one yet (only before the round
-    has results, so a round already under way when targets were switched on is never given one)."""
+    """Offer every seated player driver their three weekend targets for this round, if they haven't been offered
+    (only before the round has results, so a round already under way when targets were switched on gets none)."""
     if not settings(conn)["targets"]:
         return []
     event = S.get_event(conn, event_id)
-    if not event or event["status"] != C.EVENT_NOT_RUN:
+    if not event or event["status"] != C.EVENT_NOT_RUN or event.get("lights_at"):
         return []
     seats = S.driver_seats(conn, event["season_id"])
     have = {r["driver_id"] for r in conn.execute("SELECT driver_id FROM weekend_targets WHERE event_id = ?", (event_id,))}
+    have |= {r["driver_id"] for r in conn.execute("SELECT DISTINCT driver_id FROM target_options WHERE event_id = ?", (event_id,))}
     from .storage import get_meta
     have |= {int(x) for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x}
     todo = [p for p in S.player_drivers(conn) if p["active"] and p["id"] in seats and p["id"] not in have]
@@ -542,25 +604,59 @@ def issue_targets(conn, event_id, notify=False):
     linked = {d for d in community_linked(conn)}
     out = []
     for p in todo:
-        team_id = seats[p["id"]][0]
-        t = plan_target(conn, event, p["id"], team_id, ranks)
-        conn.execute("""INSERT INTO weekend_targets(event_id, driver_id, team_id, kind, target, rival_team_id, label,
-                        created_at) VALUES(?,?,?,?,?,?,?,?)""",
-                     (event_id, p["id"], team_id, t["kind"], t["target"], t["rival_team_id"], t["label"], now_iso()))
+        _offer(conn, event, p["id"], seats[p["id"]][0], ranks)
         if notify and p["id"] in linked:
-            feed.notify(conn, p["id"], f"Your weekend target for R{event['round_number']} {event['name']}: "
-                        f"{t['label']}. Accept it on the Control Room"
-                        + (" before results can go in." if gate_targets_on(conn) else "."), "dashboard#target")
+            feed.notify(conn, p["id"], f"Choose your weekend target for R{event['round_number']} {event['name']}.",
+                        f"weekend/{event_id}#target", category="career")
         out.append(p["id"])
     return out
 
 
-def reissue_target(conn, event_id, driver_id):
-    """Race Master: set this driver's weekend target for an upcoming round again (a fresh pick from the latest
-    numbers). Only before the round has results; an accepted target has to be accepted again."""
+def choose_target(conn, event_id, driver_id, tier, auto=False):
+    """Lock in one of the three offered targets. Once chosen it can't be changed (a Race Master can reopen it)."""
     event = S.get_event(conn, event_id)
-    if not event or event["status"] != C.EVENT_NOT_RUN:
-        raise S.ValidationError("Targets can only be re-issued before the round has results")
+    if not event or (not auto and (event["status"] != C.EVENT_NOT_RUN or event.get("lights_at"))):
+        raise S.ValidationError("Targets are chosen before the race starts")
+    if target_for(conn, event_id, driver_id):
+        raise S.ValidationError("Your target for this round is already locked in")
+    opts = options_for(conn, event_id, driver_id)
+    if not opts:
+        issue_targets(conn, event_id)
+        opts = options_for(conn, event_id, driver_id)
+    pick = opts.get(tier)
+    if not pick:
+        raise S.ValidationError("Choose Safe, Standard or Stretch")
+    conn.execute("""INSERT INTO weekend_targets(event_id, driver_id, team_id, kind, target, rival_team_id, label,
+                    created_at, tier, hit, miss, acknowledged_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 (event_id, driver_id, pick["team_id"], pick["kind"], pick["target"], pick["rival_team_id"],
+                  pick["label"], now_iso(), tier, pick["hit"], pick["miss"], None if auto else now_iso()))
+    return target_for(conn, event_id, driver_id)
+
+
+def lock_unchosen(conn, event_id):
+    """At lights out: anyone offered targets who didn't choose (or has no login) gets the Standard one."""
+    rows = conn.execute("""SELECT DISTINCT o.driver_id FROM target_options o WHERE o.event_id = ? AND NOT EXISTS (
+                           SELECT 1 FROM weekend_targets t WHERE t.event_id = o.event_id AND t.driver_id = o.driver_id)""",
+                        (event_id,)).fetchall()
+    for r in rows:
+        choose_target(conn, event_id, r["driver_id"], "standard", auto=True)
+    return [r["driver_id"] for r in rows]
+
+
+def reopen_choice(conn, event_id, driver_id):
+    """Race Master: let a driver choose their target again (same three options). Only before the race."""
+    event = S.get_event(conn, event_id)
+    if not event or event["status"] != C.EVENT_NOT_RUN or event.get("lights_at"):
+        raise S.ValidationError("Targets can only be changed before the race starts")
+    conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+
+
+def reissue_target(conn, event_id, driver_id):
+    """Race Master: offer this driver three fresh targets for an upcoming round (from the latest numbers). Their
+    choice is cleared, so they choose again. Only before the race starts."""
+    event = S.get_event(conn, event_id)
+    if not event or event["status"] != C.EVENT_NOT_RUN or event.get("lights_at"):
+        raise S.ValidationError("Targets can only be re-issued before the race starts")
     seat = S.driver_seats(conn, event["season_id"]).get(driver_id)
     if not seat:
         raise S.ValidationError("That driver doesn't have a seat")
@@ -569,13 +665,10 @@ def reissue_target(conn, event_id, driver_id):
     from .storage import get_meta, set_meta
     removed = {x for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x} - {str(driver_id)}
     set_meta(conn, f"targets_removed_{event_id}", ",".join(sorted(removed)))
-    t = plan_target(conn, event, driver_id, seat[0], rng=random.Random())
-    conn.execute("""INSERT INTO weekend_targets(event_id, driver_id, team_id, kind, target, rival_team_id, label,
-                    created_at) VALUES(?,?,?,?,?,?,?,?)""",
-                 (event_id, driver_id, seat[0], t["kind"], t["target"], t["rival_team_id"], t["label"], now_iso()))
-    feed.notify(conn, driver_id, f"New weekend target for R{event['round_number']} {event['name']}: {t['label']}. "
-                "Accept it on the Control Room.", "dashboard#target", category="career")
-    return old, t
+    opts = _offer(conn, event, driver_id, seat[0], rng=random.Random())
+    feed.notify(conn, driver_id, f"New weekend targets for R{event['round_number']} {event['name']}: choose one "
+                "before the race.", f"weekend/{event_id}#target", category="career")
+    return old, opts["standard"]
 
 
 def remove_target(conn, event_id, driver_id):
@@ -583,12 +676,14 @@ def remove_target(conn, event_id, driver_id):
     relationship is undone. Nothing is re-issued (use reissue_target before the race for a new one)."""
     event = S.get_event(conn, event_id)
     t = target_for(conn, event_id, driver_id)
-    if not event or not t:
+    if not event or not (t or options_for(conn, event_id, driver_id)):
         raise S.ValidationError("That driver has no target at this round")
+    t = t or {"effect": 0, "label": "the targets on offer"}
+    conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+    conn.execute("DELETE FROM target_options WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
     if t["effect"] and conn.execute("SELECT 1 FROM team_relations WHERE season_id = ? AND driver_id = ?",
                                     (event["season_id"], driver_id)).fetchone():
         relations.add_bonus(conn, event["season_id"], driver_id, -t["effect"])
-    conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
     from .storage import get_meta, set_meta
     removed = {x for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x} | {str(driver_id)}
     set_meta(conn, f"targets_removed_{event_id}", ",".join(sorted(removed)))
@@ -673,26 +768,36 @@ def _judge(conn, event, t):
     return ("Hit" if mine < theirs else "Missed"), f"P{mine}"
 
 
+def target_effect(t, status):
+    """The relationship effect of a judged target: the chosen tier's reward or penalty (the old +2 / -1.5 for
+    targets set before 2.4)."""
+    hit = t.get("hit") if t.get("hit") is not None else C.TARGET_HIT
+    miss = t.get("miss") if t.get("miss") is not None else C.TARGET_MISSED
+    return {"Hit": hit, "Missed": miss}.get(status, 0.0)
+
+
 def judge_targets(conn, event_id):
     """Judge (or re-judge after a correction) every weekend target for a completed round. Only the change in
     effect is applied to the relationship, so re-judging never counts a target twice."""
     event = S.get_event(conn, event_id)
     if not event or event["status"] != C.EVENT_COMPLETE:
         return []
+    lock_unchosen(conn, event_id)      # anyone offered targets who didn't choose raced for the Standard one
     enabled = settings(conn)["targets"]
     out = []
     for t in conn.execute("SELECT * FROM weekend_targets WHERE event_id = ?", (event_id,)).fetchall():
         t = dict(t)
         status, why = _judge(conn, event, t) if enabled else ("Void", "targets switched off")
-        effect = {"Hit": C.TARGET_HIT, "Missed": C.TARGET_MISSED}.get(status, 0.0)
+        effect = target_effect(t, status)
         delta = effect - (t["effect"] or 0)
-        if delta and conn.execute("SELECT 1 FROM team_relations WHERE season_id = ? AND driver_id = ?",
-                                  (event["season_id"], t["driver_id"])).fetchone():
-            relations.add_bonus(conn, event["season_id"], t["driver_id"], delta)
-        elif delta:
+        has_rel = conn.execute("SELECT 1 FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                               (event["season_id"], t["driver_id"])).fetchone()
+        if delta and not has_rel:
             effect = t["effect"] or 0   # no relationship to move (no seat); keep what was recorded
         conn.execute("UPDATE weekend_targets SET status = ?, effect = ?, judged_at = ? WHERE event_id = ? AND driver_id = ?",
                      (status, effect, now_iso(), event_id, t["driver_id"]))
+        if delta and has_rel:
+            relations.add_bonus(conn, event["season_id"], t["driver_id"], delta)
         if not t["judged_at"] and status in ("Hit", "Missed") and t["team_id"]:
             label = t["label"][:1].lower() + t["label"][1:]
             relations.note(conn, event["season_id"], t["driver_id"], t["team_id"], "good" if status == "Hit" else "concerned",

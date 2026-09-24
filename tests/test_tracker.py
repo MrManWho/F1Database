@@ -13,6 +13,14 @@ def cadillac(conn):
     return conn.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
 
 
+def seat_players_in(conn, team_name):
+    sid = S.current_season_id(conn)
+    david, carson = players(conn)
+    team = conn.execute("SELECT id FROM teams WHERE name = ?", (team_name,)).fetchone()["id"]
+    S.place_players(conn, sid, {david: (team, 1), carson: (team, 2)})
+    return sid, david, carson, team
+
+
 def seat_players_at_cadillac(conn):
     sid = S.current_season_id(conn)
     david, carson = players(conn)
@@ -184,16 +192,23 @@ def test_difficulty_moves_after_one_round_but_only_a_little(db):
     assert "every player driver is on top of AI 90" in more["reason"]
 
 
+def _fastest(conn):
+    ranks = S.team_strength_ranks(conn, S.current_season_id(conn))
+    fast = min(ranks, key=ranks.get)
+    return conn.execute("SELECT name FROM teams WHERE id = ?", (fast,)).fetchone()["name"]
+
+
 def test_both_struggling_moves_further_than_one_struggling(db):
+    # v2.3.1: struggling means doing worse than the car should. In the fastest car P1-P2 is par.
     def fresh():
         token = storage.new_token()
         with storage.session(token, create=True) as conn:
             S.seed_career(conn, token, "Other", 2026, ["David Conley", "Carson Hayes"])
         return token
     recs = {}
-    for label, finishes in (("one", [(22, 16), (22, 16), (21, 16)]), ("both", [(22, 21), (22, 21), (21, 22)])):
+    for label, finishes in (("one", [(1, 16), (2, 16), (1, 17)]), ("both", [(15, 16), (16, 15), (17, 16)])):
         with storage.session(fresh()) as conn:
-            seat_players_at_cadillac(conn)
+            seat_players_in(conn, _fastest(conn))
             _player_rounds(conn, finishes, 90)
             recs[label] = S.difficulty_recommendation(conn)
     assert recs["one"]["recommended"] <= 90
@@ -202,11 +217,31 @@ def test_both_struggling_moves_further_than_one_struggling(db):
 
 
 def test_one_player_struggling_while_the_other_flies_is_a_small_move(db):
-    seat_players_at_cadillac(db)
+    # In a midfield car: one player wins (flying), the other finishes near the back (struggling).
+    seat_players_in(db, "Williams")
     _player_rounds(db, [(1, 22), (1, 22), (2, 21)], 90)
     rec = S.difficulty_recommendation(db)
-    assert abs(rec["recommended"] - 90) <= 2
     assert {p["verdict"] for p in rec["players"]} == {"struggling", "comfortable"}
+    assert abs(rec["recommended"] - 90) <= C.DIFF_MAX_STEP // 2
+
+
+def test_the_car_is_taken_into_account(db):
+    """v2.3.1: finishing where the car should is "about right" in any car; beating it is "comfortable"."""
+    def rec_for(team_name, finishes):
+        token = storage.new_token()
+        with storage.session(token, create=True) as conn:
+            S.seed_career(conn, token, "Car", 2026, ["David Conley", "Carson Hayes"])
+            seat_players_in(conn, team_name)
+            _player_rounds(conn, finishes, 82)
+            return S.difficulty_recommendation(conn)
+    with storage.session(storage.new_token(), create=True) as conn:
+        S.seed_career(conn, "x", "Car", 2026, ["A B", "C D"])
+        fastest = _fastest(conn)
+    fast = rec_for(fastest, [(1, 2), (2, 1), (1, 2), (2, 1)])          # the best car, winning: its par
+    slow = rec_for("Cadillac", [(21, 22), (22, 21), (21, 22), (22, 21)])  # the slowest car, at the back: its par
+    assert abs(fast["recommended"] - 82) <= 1 and abs(slow["recommended"] - 82) <= 1
+    flying = rec_for("Cadillac", [(12, 13), (13, 12), (12, 13), (13, 12)])  # the slowest car in the midfield
+    assert flying["recommended"] >= 82 + 4 and flying["direction"] == "up"
 
 
 def test_double_dnf_rounds_do_not_force_reduction(db):
@@ -1183,3 +1218,15 @@ def test_join_requests_carry_a_role_the_race_master_can_change(app, master_clien
         rid = conn.execute("SELECT id FROM join_requests WHERE username = 'viv'").fetchone()[0]
     master_client.post(f"/career/{token}/members/request/{rid}/decline", data={"csrf_token": "tok"})
     assert viv.get(f"/career/{token}/dashboard").status_code == 403
+
+
+def test_a_car_with_no_ai_driver_keeps_its_strength(db):
+    """v2.3.1: two players in the fastest car used to make it the slowest after three rounds (no AI driver to read)."""
+    sid = S.current_season_id(db)
+    ranks = S.team_strength_ranks(db, sid)
+    fast = min(ranks, key=ranks.get)
+    name = db.execute("SELECT name FROM teams WHERE id = ?", (fast,)).fetchone()["name"]
+    seat_players_in(db, name)
+    _player_rounds(db, [(15, 16)] * 3, 85)
+    after = S.team_strength_ranks(db, sid)
+    assert after[fast] == 1 and sorted(after.values()) == list(range(1, len(after) + 1))

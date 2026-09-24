@@ -88,6 +88,33 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## New in 2.4
+
+- **Upgrade**: leagues move to schema 20 on first open (a `before-v20-upgrade` backup first). New table
+  `target_options` (three offered targets per driver per round) and `weekend_targets.tier / hit / miss` (the choice and
+  its reward/penalty; older targets have no tier and keep +2 / −1.5). `CALC_VERSION` is 2, so each league also runs
+  **Recalculate everything** once on first open and everyone sees a one-off note (meta `calc_announce`,
+  `calc_seen_<username>`).
+- **Recalculate everything** (League settings → Data & tools, or `/career/<token>/recalculate`): re-judges weekend targets
+  of completed rounds, replays each team relationship's extras (press, targets, team orders) from `bonus_since_*`
+  (set whenever a relationship starts again) and rebuilds the Reputation chain across seasons including pledge and
+  team-goal rewards. It previews the difference, saves a `before-recalculate` backup, and writes change notices.
+- **Reset weekend** (round page → Reset weekend, Race Master): only the latest started round of the current season, and
+  not after a dismissal decision on that round. Saves a `before-reset-r<n>` backup, then removes results, press
+  answers, targets and their options, predictions, check-ins, fan votes, incidents, gate overrides, this round's news
+  and the targets/orders handed out for the next round; relationship extras are replayed. Comments stay.
+- **Login requirement**: with race weekends on, the paddock can't open (by hand or automatically) while a seated player
+  driver has no league login linked. *Members & roles → No account* marks a driver as deliberately login-free
+  (meta `no_account_drivers`).
+- **Car strength fix**: a team with no AI driver keeps its place from the car ratings instead of dropping to last after
+  three rounds.
+- **AI difficulty**: each round is scored against the car's expected finish (2 × car rank − 0.5), its points at that
+  finish (`DIFF_PLACES` = 8 places, `DIFF_POINTS_SCALE` = 15 points for a full ±1) and the AI teammate.
+- **Settings**: `/career/<token>/settings` is a hub; each page (`/settings/<section>`) posts `section=` and saves only
+  its own fields. Posting without `section` still saves the whole form as before.
+- **Team management** (`/career/<token>/team-management`): all Race Master goal/target tools; the old POST routes are
+  unchanged and return there when posted with `back=admin`.
+
 ## New in 2.3: race weekends
 
 - **Upgrade**: leagues move to schema 19 the first time they're opened (a `before-v19-upgrade` backup is written

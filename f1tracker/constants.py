@@ -1,11 +1,11 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.3"
+APP_VERSION = "2.4"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
-CALC_VERSION = 1
-SCHEMA_VERSION = 19
+CALC_VERSION = 2
+SCHEMA_VERSION = 20
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -142,6 +142,8 @@ DIFF_RECENT_ROUNDS = 10      # usable rounds looked at
 DIFF_MAX_STEP = 8            # never recommend a bigger jump than this in one go
 DIFF_MIXED = 0.5             # players disagree (one struggling, one fine): move half as far
 DIFF_CONFIDENCE_K = 0.75     # evidence weight w gives confidence w / (w + K): one round already moves over half way
+DIFF_PLACES = 8              # v2.3.1: places better (or worse) than the car's expected finish for a full +1 (or -1)
+DIFF_POINTS_SCALE = 15       # points above (or below) what the car's expected finish would score for a full +1
 DIFF_VERDICT = 1.0           # levels away from the current one before a player counts as struggling / comfortable
 # Where a level sits for a typical player (the game's own bands; most players are comfortable around 82).
 DIFF_BANDS = [(1, 40, "Beginner"), (41, 65, "Casual"), (66, 99, "Intermediate / Advanced"), (100, 110, "Expert")]
@@ -217,8 +219,15 @@ TEAM_ORDER_OBEYED = 2.0
 # Team orders: "off" (never issued; the default), "advisory" (shown, but no effect or headlines), "on" (judged).
 TEAM_ORDER_MODES = {"off": "Off", "advisory": "Advisory (shown, no effect)", "on": "On (judged, affects your standing)"}
 # Weekend targets: one per player driver per round, judged from the results.
-TARGET_HIT = 2.0
+TARGET_HIT = 2.0          # a Standard target (and every target set before 2.4)
 TARGET_MISSED = -1.5
+# v2.4: before each weekend a driver chooses one of three targets and locks it in.
+TARGET_TIERS = {
+    "safe": {"label": "Safe", "hit": 1.0, "miss": -0.5, "blurb": "An easier finish. Small reward, small risk."},
+    "standard": {"label": "Standard", "hit": TARGET_HIT, "miss": TARGET_MISSED, "blurb": "What the team expects."},
+    "stretch": {"label": "Stretch", "hit": 3.5, "miss": -2.5, "blurb": "A big ask. Big reward if you pull it off."},
+}
+TARGET_GAP = 3             # places between Safe, Standard and Stretch finishing targets
 TARGET_STREAKS = (3, 5, 8, 10)   # consecutive targets hit that make a headline
 GATE_NOTE_MIN = 10               # characters a Race Master's gate bypass note needs
 GOAL_WEIGHT = 4.0   # each season goal adds or removes this much (scaled by how far into the season)
@@ -242,7 +251,7 @@ ACCESS_HELP = {
     "race_master": "Runs this league: results, grid, calendar, seasons, market, members and settings.",
     "scorekeeper": "Enters and edits qualifying, Sprint and race results, statuses, fastest lap, Driver of the Day, "
                    "notes and AI difficulty. Can't change a race after submitting it, or any league settings.",
-    "member": "Views the whole league. With an assigned driver: their own garage, contracts and team standing.",
+    "member": "Views the whole league. With an assigned driver: their own garage, contracts and team relationship.",
     "spectator": "View only. Can't be assigned a driver.",
 }
 RESULT_ROLES = {"race_master", "scorekeeper"}

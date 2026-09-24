@@ -3,214 +3,26 @@
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">League settings</span></nav>
 <div class="page-head"><div><div class="kicker">Manage · {{ ctx.career_name }}</div><h1>League settings</h1>
-  <p class="page-purpose">Everything that applies to this whole league. Your own account and notification choices are kept separately.</p></div>
-  <label class="settings-search"><span class="sr-only">Search settings</span><input type="search" id="settings-q" placeholder="Search settings" data-no-dirty></label>
-</div>
+  <p class="page-purpose">Everything that applies to this whole league, one area at a time. Your own account and notification choices are kept separately.</p></div></div>
 
-{% macro scope(text) %}<span class="scope-tag" title="Who this setting affects">{{ text }}</span>{% endmacro %}
-
-<div class="settings-layout">
-<nav class="settings-nav" aria-label="Settings sections">
-  {% for id, label in [('general', 'General'), ('branding', 'Branding'), ('season', 'Season rules'), ('scoring', 'Scoring'), ('career', 'Career systems'),
-     ('roles', 'Roles & permissions'), ('notifications', 'Notifications'), ('privacy', 'Privacy & visibility'), ('integrations', 'Integrations'),
-     ('data', 'Data & backups'), ('danger', 'Danger zone')] %}<a href="#{{ id }}">{{ label }}</a>{% endfor %}
-</nav>
-
-<form method="post" class="settings-form stack" id="settings-form">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="team_life" value="1">
-
-  <section class="card settings-section" id="general" data-keywords="name description region platform game rules assists schedule links social time zone">
-    <div class="card-head"><h2>General</h2>{{ scope('This league') }}</div>
-    <label>League name<input name="career_name" value="{{ ctx.career_name }}" maxlength="80" required></label>
-    <label>Description <small class="muted">(shown on the public page if the league is public)</small>
-      <textarea name="league_description" rows="2" maxlength="600">{{ profile.league_description }}</textarea></label>
-    <div class="grid-2">
-      <label>Region<input name="league_region" value="{{ profile.league_region }}" maxlength="60" placeholder="e.g. Europe, North America"></label>
-      <label>Platform / game<input name="league_platform" value="{{ profile.league_platform }}" maxlength="80" placeholder="e.g. F1 25 on PC"></label>
-    </div>
-    <label>Assists and rules summary<textarea name="league_rules" rows="3" maxlength="1200" placeholder="e.g. 50% races, no traction control, dynamic weather">{{ profile.league_rules }}</textarea></label>
-    <label>Racing schedule<input name="league_schedule" value="{{ profile.league_schedule }}" maxlength="200" placeholder="e.g. Thursdays at 8 pm"></label>
-    <fieldset><legend>Links (optional, https only)</legend>
-      {% for i in range(3) %}<input name="league_links" type="url" value="{{ profile.links[i] if profile.links|length > i else '' }}" placeholder="https://discord.gg/…" aria-label="Link {{ i + 1 }}">{% endfor %}
-    </fieldset>
-    <label>Time zone <small class="muted">(race times, notifications and dates; each person can also see times in their own zone)</small>
-      <select name="timezone">
-        {% if ctx.timezone not in zones %}<option value="{{ ctx.timezone }}" selected>{{ ctx.timezone.replace('_', ' ') }}</option>{% endif %}
-        {% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == ctx.timezone }}>{{ z.replace('_', ' ') }}</option>{% endfor %}
-      </select></label>
-  </section>
-
-  <section class="card settings-section" id="branding" data-keywords="accent colour color brand logo">
-    <div class="card-head"><h2>Branding</h2>{{ scope('This league') }}</div>
-    <div class="brand-row">
-      <label>Accent colour<input type="color" name="accent_color" value="{{ profile.accent or '#e10600' }}"></label>
-      <span class="league-mark" style="--accent: {{ profile.accent or '#e10600' }}" aria-hidden="true">{{ ctx.this_league.initials if ctx.this_league else ctx.career_name[:2]|upper }}</span>
-      <p class="muted small">Used for buttons, the active menu item and this league's badge. Status colours (green, amber, blue) and red for destructive actions don't change.</p>
-    </div>
-  </section>
-
-  <section class="card settings-section" id="season" data-keywords="race window in progress rollover contract season">
-    <div class="card-head"><h2>Season rules</h2>{{ scope('This league · every season') }}</div>
-    <label>How long a race shows "In progress" after its scheduled start
-      <select name="race_window">
-        {% for w in windows %}<option value="{{ w }}" {{ 'selected' if w == ctx.race_window }}>{{ (w // 60) }} hour{{ 's' if w != 60 }}</option>{% endfor %}
-      </select></label>
-    <p class="muted small">After that, an unfinished round shows "Results pending" until it's submitted. Rounds are never completed automatically.</p>
-    <label id="rollover">When a player's contract ends, the season rollover review suggests
-      <select name="rollover_default">{% for key, label in rollover_actions.items() %}<option value="{{ key }}" {{ 'selected' if key == rollover_default }}>{{ label }}</option>{% endfor %}</select></label>
-    <p class="muted small">Only a suggestion: you confirm each driver before a new season starts, and a backup is saved first.</p>
-  </section>
-
-  <section class="card settings-section" id="scoring" data-keywords="points scoring sprint fastest lap formula">
-    <div class="card-head"><h2>Scoring</h2>{{ scope('Read only') }}</div>
-    <p class="small">Grand Prix: {% for pos, pts in C.GP_POINTS.items() %}P{{ pos }} {{ pts }}{{ ', ' if not loop.last }}{% endfor %}.
-      Sprint: {% for pos, pts in C.SPRINT_POINTS.items() %}P{{ pos }} {{ pts }}{{ ', ' if not loop.last }}{% endfor %}.
-      A DNF, DNS or DSQ scores nothing in that session. A Sprint DNF doesn't affect Grand Prix points.</p>
-    <p class="muted small">Scoring and the career formulas (Form, Reputation, Driver Value) can't be changed here, so every season stays comparable. <a href="{{ url_for('help_page') }}#scoring">How scoring works</a>.</p>
-  </section>
-
-  <section class="card settings-section" id="career" data-keywords="features check-in comments predictions team orders weekend targets round gates difficulty recommendation">
-    <div class="card-head"><h2>Career systems</h2>{{ scope('This league') }}</div>
-    {% for key, (label, desc, default) in C.FEATURES.items() %}
-    <label class="toggle-row">
-      <input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if feats[key] }}>
-      <span class="switch"></span>
-      <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span>
-    </label>
-    {% endfor %}
-    <label class="toggle-row">
-      <input type="checkbox" name="difficulty_recs" value="1" {{ 'checked' if difficulty_recs }}>
-      <span class="switch"></span>
-      <span><b>AI difficulty recommendations</b><small class="muted">Suggest the next AI level from your results. Off still records the difficulty used each round.</small></span>
-    </label>
-    <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprint points in the AI recommendation (on by default; off: only the Grand Prix counts)</label>
-    <label>Team orders
-      <select name="team_orders">{% for key, label in C.TEAM_ORDER_MODES.items() %}<option value="{{ key }}" {{ 'selected' if life.orders == key }}>{{ label }}</option>{% endfor %}</select></label>
-    <p class="muted small">Off: nobody is told to let a teammate through (waiting orders are cancelled, no penalty). Advisory: shown, no effect. On: judged from the result. Past orders stay in history.</p>
-    <label class="toggle-row" id="dismissals">
-      <input type="checkbox" name="midseason_sackings" value="1" {{ 'checked' if midseason_sackings }}>
-      <span class="switch"></span>
-      <span><b>Mid-season dismissals</b><small class="muted">A team whose relationship with a player driver sits at "Seat at risk" can give a final warning with one race's target. Miss it and the team asks to drop them; you confirm or overrule.</small></span>
-    </label>
-    <label class="toggle-row" id="team-goals">
-      <input type="checkbox" name="team_goal_choice" value="1" {{ 'checked' if team_goal_choice }}>
-      <span class="switch"></span>
-      <span><b>Selectable team goals</b><small class="muted">Each team with a player driver picks Safe, Competitive or Ambitious at the start of the season. Met or missed changes next season's starting Reputation (Safe +1/0, Competitive +3/−1, Ambitious +6/−3).</small></span>
-    </label>
-    <label class="toggle-row" id="team-life">
-      <input type="checkbox" name="weekend_targets" value="1" {{ 'checked' if life.targets }}>
-      <span class="switch"></span>
-      <span><b>Weekend targets</b><small class="muted">One realistic target per player driver per race. Hit: +{{ C.TARGET_HIT|int }} team standing, missed: {{ C.TARGET_MISSED }}.</small></span>
-    </label>
-    <label class="toggle-row" id="race-weekends">
-      <input type="checkbox" name="race_weekends" value="1" {{ 'checked' if ctx.race_weekends }}>
-      <span class="switch"></span>
-      <span><b>Race weekends</b><small class="muted">Each round opens its paddock an hour before the race (or when a Scorekeeper opens it) for pre-race press, then a Scorekeeper starts the race. Results can only go in after lights out. Off: results can go in at any time.</small></span>
-    </label>
-    <label class="toggle-row">
-      <input type="checkbox" name="round_gates" value="1" {{ 'checked' if life.gates }}>
-      <span class="switch"></span>
-      <span><b>Round gates</b><small class="muted">{% if ctx.race_weekends %}The race can't start{% else %}Results for the next round wait{% endif %} until every player with a login has done the things below. You can open a round early with a note.</small></span>
-    </label>
-    <div class="gate-options">
-      <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Press questions answered (post-race{% if ctx.race_weekends %}, and pre-race before lights out{% endif %})</label>
-      <label class="check"><input type="checkbox" name="gate_targets" value="1" {{ 'checked' if life.gate_targets }}> Weekend target accepted</label>
-    </div>
-    {% if active_season %}<p class="banner small" role="note">A season is in progress: these changes apply from the next round. Nothing already completed is recalculated.</p>{% endif %}
-  </section>
-
-  <section class="card settings-section" id="roles" data-keywords="roles permissions join requests invite closed members ownership">
-    <div class="card-head"><h2>Roles &amp; permissions</h2>{{ scope('This league') }}</div>
-    <label id="joining">How people join
-      <select name="join_mode">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == join_mode }}>{{ label }}</option>{% endfor %}</select></label>
-    <p class="muted small">This is the one place to change joining. Members &amp; roles shows it and links here. Closing the league never removes existing members.</p>
-    <details class="perm-details"><summary>What each role can do</summary>
-      <div class="table-wrap"><table class="data-table compact perm-table">
-        <caption class="sr-only">Permissions by role</caption>
-        <thead><tr><th scope="col">Can…</th>{% for key, label in C.ACCESS_ROLES.items() %}<th scope="col" class="center">{{ label }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in permissions %}<tr><th scope="row">{{ row[0] }}</th>{% for v in row[1:] %}<td class="center">{% if v == True %}<span aria-label="Yes">✓</span>{% elif v %}<small>{{ v }}</small>{% else %}<span class="muted" aria-label="No">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
-      </table></div>
-      <p class="muted small">The server checks every one of these; hiding a button is never the only protection. A league always keeps at least one Race Master.</p>
-    </details>
-    <p><a href="{{ url_for('members', token=ctx.token) }}">Members &amp; roles →</a></p>
-  </section>
-
-  <section class="card settings-section" id="notifications" data-keywords="notifications email alerts delivery">
-    <div class="card-head"><h2>Notifications</h2>{{ scope('Each member chooses for themselves') }}</div>
-    <p class="small">Members choose what this league emails or alerts them about on their own Notifications page. Nobody is subscribed by being added, and nothing is inherited from another league.</p>
-    <div class="button-row"><a class="btn btn-sm btn-ghost" href="{{ url_for('notify_prefs', token=ctx.token) }}">My notifications here</a>
-      <a class="btn btn-sm btn-ghost" href="{{ url_for('delivery_log_page', token=ctx.token) }}">Delivery log</a></div>
-  </section>
-
-  <section class="card settings-section" id="privacy" data-keywords="public private visibility directory discoverable link incidents preview">
-    <div class="card-head"><h2>Privacy &amp; visibility</h2>{{ scope('This league') }}</div>
-    <label>Who can see this league
-      <select name="visibility">{% for key, (label, desc) in visibility_opts.items() %}<option value="{{ key }}" {{ 'selected' if key == profile.visibility }}>{{ label }}: {{ desc }}</option>{% endfor %}</select></label>
-    <label class="check"><input type="checkbox" name="public_incidents" value="1" {{ 'checked' if profile.public_incidents }}> Show decided incident rulings on the public page</label>
-    <p class="small">Right now: <b>{{ named_level }}</b>.</p>
-    <p class="muted small">Never public, at any setting: draft or in-progress results, private notes, email addresses, roles, backups, settings and every Race Master page.
-      "Publicly discoverable" lists the league in the directory; nothing is listed without this choice.</p>
-    {% if public_link %}
-    <div class="copy-row"><input readonly value="{{ public_link }}" id="public-link" onclick="this.select()" aria-label="Public link" data-no-dirty>
-      <button type="button" class="btn btn-sm" data-copy="#public-link">Copy</button>
-      <a class="btn btn-sm btn-ghost" href="{{ public_link }}" target="_blank" rel="noopener">Preview what the public sees</a></div>
-    {% endif %}
-  </section>
-
-  <section class="card settings-section" id="integrations" data-keywords="discord webhook integration">
-    <div class="card-head"><h2>Integrations</h2>{{ scope('This league') }}</div>
-    <p class="muted small">Post race results and paddock headlines to a Discord channel. In Discord: channel settings → Integrations → Webhooks →
-      New Webhook → Copy Webhook URL, then paste it here. Leave it empty to turn Discord off. Garages, offers and team messages are never posted.
-      The webhook address is private and never shown in the Activity Log.</p>
-    <label>Webhook URL<input name="discord_webhook" value="{{ discord.url }}" placeholder="https://discord.com/api/webhooks/…" autocomplete="off"></label>
-    <label class="check"><input type="checkbox" name="discord_results" value="1" {{ 'checked' if discord.results }}> Post race results (podium, player results, top 5)</label>
-    <label class="check"><input type="checkbox" name="discord_news" value="1" {{ 'checked' if discord.news }}> Post paddock headlines (signings, drops, press quotes, rulings)</label>
-  </section>
-
-  <div class="settings-save"><button class="btn btn-primary">Save settings</button> <span class="muted small">Changes are recorded in the Activity Log.</span></div>
-</form>
-</div>
-
-<div class="settings-extra">
-{% if discord.url %}
-<form method="post" action="{{ url_for('discord_test', token=ctx.token) }}" class="card inline-form">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <span class="muted small grow">Discord is connected.</span>
-  <button class="btn btn-sm">Send a test message</button>
-</form>
-{% endif %}
-{% if public_link %}
-<form method="post" action="{{ url_for('public_rotate', token=ctx.token) }}" class="card inline-form"
-      data-confirm='{{ {"title": "Make a new public link?", "what": "The old link stops working for everyone who has it.", "ok": "Make a new link"}|tojson }}'>
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <span class="muted small grow">Shared the public link somewhere you regret? Replace it.</span>
-  <button class="btn btn-sm btn-ghost">Make a new public link</button>
-</form>
-{% endif %}
-<section class="card settings-section" id="data" data-keywords="backup restore export data import integrity">
-  <div class="card-head"><h2>Data &amp; backups</h2>{{ scope('This league') }}</div>
-  <p class="small">Automatic backups, restore, full download, JSON and CSV export, and an integrity check.</p>
-  <a class="btn btn-sm btn-ghost" href="{{ url_for('backups_page', token=ctx.token) }}">Backups &amp; data →</a>
-</section>
-<section class="card settings-section danger-card" id="danger" data-keywords="delete league ownership transfer danger">
-  <div class="card-head"><h2>Danger zone</h2>{{ scope('This league') }}</div>
-  <p class="small">Transfer ownership by making someone else a Race Master in <a href="{{ url_for('members', token=ctx.token) }}">Members &amp; roles</a>. Delete the league from <a href="{{ url_for('backups_page', token=ctx.token) }}#danger">Backups &amp; data</a> (you type its name to confirm).</p>
-</section>
-<p class="muted small filter-empty" id="settings-empty" hidden>No settings match your search.</p>
+{% set summary = {
+  'general': ctx.career_name ~ ' · ' ~ ctx.timezone.replace('_', ' '),
+  'weekends': 'Race weekends ' ~ ('on' if ctx.race_weekends else 'off') ~ ' · round gates ' ~ ('on' if life.gates else 'off') ~ ' · weekend targets ' ~ ('on' if life.targets else 'off') ~ ' · AI recommendations ' ~ ('on' if difficulty_recs else 'off'),
+  'career': 'Team orders ' ~ C.TEAM_ORDER_MODES[life.orders]|lower ~ ' · team goals ' ~ ('on' if team_goal_choice else 'off') ~ ' · dismissals ' ~ ('on' if midseason_sackings else 'off'),
+  'roles': join_modes[join_mode],
+  'privacy': named_level ~ (' · Discord connected' if discord.url else ''),
+  'notifications': 'Each member chooses their own',
+  'data': 'Backups, exports and Recalculate everything',
+} %}
+<div class="settings-hub">
+  {% for key, (title, desc) in sections.items() %}
+  <a class="card settings-tile" href="{{ url_for('league_settings_section', token=ctx.token, section=key) }}">
+    <h2>{{ title }}</h2>
+    <p class="small">{{ desc }}</p>
+    <p class="muted small tile-now">{{ summary[key] }}</p>
+  </a>
+  {% endfor %}
+  <a class="card settings-tile" href="{{ url_for('members', token=ctx.token) }}"><h2>Members &amp; roles</h2><p class="small">Who's in the league, their role and their driver.</p></a>
+  <a class="card settings-tile" href="{{ url_for('team_admin', token=ctx.token) }}"><h2>Team management</h2><p class="small">Season goals, team goals and weekend targets: re-issue, reset or ask drivers to choose again.</p></a>
 </div>
 {% endblock %}
-{% block scripts %}<script>
-(function () {
-  var q = document.getElementById("settings-q");
-  if (!q) return;
-  q.addEventListener("input", function () {
-    var term = q.value.trim().toLowerCase(), shown = 0;
-    document.querySelectorAll(".settings-section").forEach(function (s) {
-      var ok = !term || (s.textContent + " " + (s.dataset.keywords || "")).toLowerCase().indexOf(term) !== -1;
-      s.hidden = !ok; if (ok) shown++;
-    });
-    document.getElementById("settings-empty").hidden = shown > 0;
-  });
-})();
-</script>{% endblock %}

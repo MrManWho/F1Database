@@ -44,8 +44,9 @@ def test_features_are_chosen_at_setup_and_toggled_in_settings(app, master_client
     assert ana.get(f"/career/{token}/settings").status_code == 403
     assert ana.get(f"/career/{token}/predictions").status_code == 404
     assert "Predictions" not in ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    page = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
-    assert "Race-night check-in" in page and "Public results" in page   # v2.0: visibility is its own setting
+    page = master_client.get(f"/career/{token}/settings/career").get_data(as_text=True)     # v2.4: settings sub-pages
+    assert "Race-night check-in" in page and "Public results" not in page   # v2.0: visibility is its own setting
+    assert "Who can see the league" in master_client.get(f"/career/{token}/settings/privacy").get_data(as_text=True)
     master_client.post(f"/career/{token}/settings", data={"feature_checkin": "1", "feature_predictions": "1",
                                                           "csrf_token": "tok"})
     with storage.session(token) as conn:
@@ -236,7 +237,7 @@ def test_public_page_needs_the_feature_and_the_key(app, master_client):
     anon = app.test_client()
     assert anon.get(f"/public/{token}/{key}").status_code == 404
     master_client.post(f"/career/{token}/settings", data={"visibility": "public", "csrf_token": "tok"})
-    settings = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
+    settings = master_client.get(f"/career/{token}/settings/privacy").get_data(as_text=True)
     assert f"/public/{token}/{key}" in settings
     page = anon.get(f"/public/{token}/{key}").get_data(as_text=True)
     assert "Club League" in page and "Constructors" in page and "Latest: " in page and "Garage" not in page

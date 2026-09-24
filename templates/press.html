@@ -18,7 +18,7 @@
     {% for h in history %}
     <li><small class="muted">{{ h.label }} · {{ 'before the race' if h.pre else 'after the race' }}</small>
       <p class="press-question">“{{ h.question }}”</p>
-      <p>“{{ h.answer }}” <span class="{{ 'up' if h.effect > 0 else 'down' if h.effect < 0 else 'muted' }} small">{{ 'The team liked that' if h.effect > 0 else 'The team didn\'t love that' if h.effect < 0 else 'Nobody read much into it' }} ({{ '%+g'|format(h.effect) }} team standing)</span></p></li>
+      <p>“{{ h.answer }}” <span class="{{ 'up' if h.effect > 0 else 'down' if h.effect < 0 else 'muted' }} small">{{ 'The team liked that' if h.effect > 0 else 'The team didn\'t love that' if h.effect < 0 else 'Nobody read much into it' }} ({{ '%+g'|format(h.effect) }} team relationship)</span></p></li>
     {% endfor %}
   </ul>
   {% else %}<p class="muted">You haven't answered any press questions yet.</p>{% endif %}

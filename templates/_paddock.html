@@ -33,7 +33,7 @@
     {% elif ctx.can_run and wk.why_not and wk.is_next %}<p class="muted small">{{ wk.why_not }}.</p>{% endif %}
 
   {% elif wk.phase == 'paddock' %}
-    <p class="small">Drivers: answer your pre-race press{% if ctx.team_life.targets %}, accept your weekend target{% endif %} and check in. {{ 'You start' if ctx.can_run else 'A Scorekeeper or the Race Master starts' }} the race when everyone's ready; results can go in after lights out.</p>
+    <p class="small">Drivers: answer your pre-race press{% if ctx.team_life.targets %}, choose your weekend target{% endif %} and check in. {{ 'You start' if ctx.can_run else 'A Scorekeeper or the Race Master starts' }} the race when everyone's ready; results can go in after lights out.</p>
     {% if gate.players %}
     <ul class="gate-list ready-board" aria-label="Who's ready">
       {% for p in gate.players %}

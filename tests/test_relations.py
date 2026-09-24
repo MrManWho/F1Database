@@ -113,7 +113,7 @@ def test_team_standing_page_and_admin_menu(app, master_client):
     assert "Relationships" in page and "My Garage" in page
     # The Race Master isn't a driver here: admin menu, no "My career".
     dash = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Player garages" in dash and "Team standings" in dash and "My Garage" not in dash
+    assert "Player garages" in dash and "Relationships" in dash and "Team management" in dash and "My Garage" not in dash
     assert "Race Master</span>" in dash
     page = master_client.get(f"/career/{token}/team-standing").get_data(as_text=True)
     assert "David Conley" in page and "Carson Hayes" in page
