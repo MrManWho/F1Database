@@ -202,3 +202,35 @@ def test_a_round_further_ahead_is_never_shown_as_ready(app, master_client):
     page = master_client.get(f"/career/{token}/weekend/{evs[3]['id']}").get_data(as_text=True)
     assert "isn&#39;t next yet" in page or "isn't next yet" in page
     assert "is ready to start" not in page
+
+
+# --------------------------------------------------------------------------- changelog agreement
+
+def test_whats_new_must_be_agreed_to_in_the_browser(app, master_client, live_server):
+    from conftest import open_browser
+    from f1tracker import whatsnew
+    from f1tracker import constants as C
+    with auth.accounts() as conn:                        # an account from before the update
+        conn.execute("DELETE FROM whats_new_seen WHERE username = 'david'")
+    pw, browser = open_browser()
+    try:
+        page = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+        page.goto(live_server + "/login")
+        page.fill("input[name=username]", "david")
+        page.fill("input[name=password]", "password1")
+        page.press("input[name=password]", "Enter")
+        page.wait_for_load_state()
+        dialog = page.locator("#whats-new")
+        assert dialog.is_visible()
+        go = page.locator("[data-wn-continue]")
+        assert go.is_disabled()
+        page.keyboard.press("Escape")
+        assert dialog.is_visible()                      # can't be dismissed without agreeing
+        page.check("[data-wn-agree]")
+        assert go.is_enabled()
+        go.click()
+        page.wait_for_function("!document.getElementById('whats-new').open")
+        assert whatsnew.acknowledged("david", C.APP_VERSION)
+    finally:
+        browser.close()
+        pw.stop()

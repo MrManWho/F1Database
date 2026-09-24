@@ -207,7 +207,7 @@ def register_hooks(app):
         """This version's highlights, once per account, on ordinary page views only."""
         user = g.get("user")
         if not user or user.get("is_demo") or request.method != "GET" or request.path.startswith("/api/") \
-                or session.get("whats_new_later") == C.APP_VERSION or request.endpoint in ("changelog_page", "whats_new_ack"):
+                or request.endpoint in ("changelog_page", "whats_new_ack"):
             return None
         from . import changelog, whatsnew
         entry = changelog.entry(_base_dir(), C.APP_VERSION)
@@ -3690,10 +3690,13 @@ def register_routes(app):
     @app.route("/whats-new", methods=["POST"])
     def whats_new_ack():
         from . import whatsnew
-        if request.form.get("choice") == "later":
-            session["whats_new_later"] = C.APP_VERSION
-        else:
-            whatsnew.acknowledge(g.user["username"], C.APP_VERSION)
+        if not request.form.get("agree"):
+            # v2.1: an update has to be agreed to; there's no "later".
+            if request.headers.get("X-Requested-With") == "fetch":
+                return jsonify(ok=False, error="Tick the box to agree to the changes"), 400
+            flash("Tick the box to agree to the changes.", "error")
+            return redirect(request.referrer or url_for("home"))
+        whatsnew.acknowledge(g.user["username"], C.APP_VERSION)
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify(ok=True)
         return redirect(request.referrer or url_for("home"))

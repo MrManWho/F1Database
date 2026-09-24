@@ -306,27 +306,29 @@
   {% if whats_new.overview %}<p>{{ whats_new.overview }}</p>{% endif %}
   <ul class="wn-list">{% for item in whats_new.highlights %}<li>{{ item.text }}</li>{% endfor %}</ul>
   {% if whats_new.action %}<div class="banner banner-warn"><b>Action needed:</b><ul>{% for item in whats_new.action %}<li>{{ item.text }}</li>{% endfor %}</ul></div>{% endif %}
-  <form method="post" action="{{ url_for('whats_new_ack') }}" class="button-row" data-wn-form>
+  <form method="post" action="{{ url_for('whats_new_ack') }}" class="stack" data-wn-form>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <a class="btn btn-ghost btn-sm" href="{{ url_for('changelog_page') }}#v{{ whats_new.version }}">Full changelog</a>
-    <button class="btn btn-ghost btn-sm" name="choice" value="later">Later</button>
-    <button class="btn btn-ghost btn-sm" name="choice" value="never">Don't show this version again</button>
-    <button class="btn btn-primary" name="choice" value="got_it" autofocus>Got it</button>
+    <label class="check wn-agree"><input type="checkbox" name="agree" value="1" required data-wn-agree> I've read these changes and I agree to them</label>
+    <div class="button-row">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('changelog_page') }}#v{{ whats_new.version }}">Read the full changelog</a>
+      <button class="btn btn-primary" name="choice" value="agree" data-wn-continue disabled>Continue</button>
+    </div>
+    <p class="muted small">Changes to your own driver's numbers, if any, are shown separately in each league.</p>
   </form>
 </dialog>
 <script>
 (function () {
   var d = document.getElementById("whats-new"); if (!d || !d.showModal) return;
+  var form = d.querySelector("[data-wn-form]"), box = d.querySelector("[data-wn-agree]"), go = d.querySelector("[data-wn-continue]");
   d.showModal();
-  d.querySelector("[data-wn-form]").addEventListener("submit", function (e) {
+  box.addEventListener("change", function () { go.disabled = !box.checked; });
+  d.addEventListener("cancel", function (e) { e.preventDefault(); });   // it has to be agreed to
+  form.addEventListener("submit", function (e) {
     e.preventDefault();
-    var data = new FormData(this); data.set("choice", (e.submitter || {}).value || "got_it");
-    fetch(this.action, { method: "POST", body: data, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
-    d.close();
-  });
-  d.addEventListener("cancel", function () {
-    var data = new FormData(d.querySelector("form")); data.set("choice", "later");
-    fetch(d.querySelector("form").action, { method: "POST", body: data, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+    if (!box.checked) return;
+    fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin",
+                         headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { if (r.ok) d.close(); });
   });
 })();
 </script>

@@ -209,10 +209,11 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
     from_before_the_update("david")
     page = master_client.get("/").get_data(as_text=True)
     assert 'id="whats-new"' in page and "New interface" in page
-    master_client.post("/whats-new", data={"choice": "later", "csrf_token": "tok"})
-    assert 'id="whats-new"' not in master_client.get("/").get_data(as_text=True)   # later: not this session
+    assert "I agree to them" in page and "Later" not in page.split('id="whats-new"')[1].split("</dialog>")[0]
+    master_client.post("/whats-new", data={"choice": "agree", "csrf_token": "tok"})     # v2.1: box not ticked
+    assert 'id="whats-new"' in master_client.get("/").get_data(as_text=True)            # still has to agree
     assert not whatsnew.acknowledged("david", C.APP_VERSION)
-    master_client.post("/whats-new", data={"choice": "got_it", "csrf_token": "tok"})
+    master_client.post("/whats-new", data={"choice": "agree", "agree": "1", "csrf_token": "tok"})
     assert whatsnew.acknowledged("david", C.APP_VERSION)
     fresh = app.test_client()
     login(fresh, "david")
