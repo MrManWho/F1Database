@@ -2,6 +2,8 @@
 
 APP_NAME = "Paddock Legacy"
 APP_VERSION = "2.0"
+# Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
+CALC_VERSION = 1
 SCHEMA_VERSION = 18
 
 GRID_SIZE = 22

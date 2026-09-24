@@ -1578,3 +1578,9 @@ tr.contract-historical { opacity: .75; }
 .h2h-bar { height: 8px; border-radius: 4px; background: #e5484d55; overflow: hidden; }
 .h2h-bar > span { display: block; height: 100%; background: var(--accent); }
 @media (max-width: 560px) { .dist-row { grid-template-columns: 1fr; gap: .15rem; } }
+
+/* v2.1 change notices */
+.impact { border-left: 4px solid var(--amber, #ffb020); }
+.impact-agree { border: 1px solid var(--accent); }
+.impact-history summary { cursor: pointer; list-style: none; }
+.impact-history summary .inline-h { display: inline; }

@@ -53,10 +53,14 @@ def status(conn, event_id, issue=True):
     s = teamlife.settings(conn)
     if not s["gates"] or event["status"] != C.EVENT_NOT_RUN:
         return out
+    nxt = S.next_incomplete_event(conn, event["season_id"])
+    if nxt and nxt["id"] != event_id:
+        # A round further ahead: its checklist is the press from the round before it (not run yet) and its own
+        # weekend target (not set yet). Nothing is due, and it is certainly not "ready".
+        out["future"] = {"next": nxt}
+        return out
     if issue and s["targets"]:
-        nxt = S.next_incomplete_event(conn, event["season_id"])
-        if nxt and nxt["id"] == event_id:
-            teamlife.issue_targets(conn, event_id)
+        teamlife.issue_targets(conn, event_id)
     press_event = press_event_for(conn, event) if s["gate_press"] else None
     out["press_event"] = press_event
     check_targets = teamlife.gate_targets_on(conn)

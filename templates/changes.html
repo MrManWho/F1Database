@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Changes to your driver{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>Changes to your driver</h1>
+  <p class="page-purpose">Something changed how your numbers are worked out, or changed them directly. Here's what moved, why, and by how much.</p></div></div>
+
+{% macro notice(n) -%}
+<article class="impact card">
+  <div class="card-head"><h2>{{ n.title }}</h2><small class="muted">{{ dmap[n.driver_id].name if dmap.get(n.driver_id) else '' }} · {{ n.created_at|stamp }}</small></div>
+  <p>{{ n.why }}</p>
+  {% if n.changes %}
+  <div class="table-wrap"><table class="data-table compact impact-table">
+    <caption class="sr-only">What changed</caption>
+    <thead><tr><th scope="col">What</th><th scope="col" class="num">Before</th><th scope="col" class="num">Now</th><th scope="col" class="num">Change</th></tr></thead>
+    <tbody>{% for c in n.changes %}
+      {% set better = (c.change < 0) if c.stat == 'position' else (c.change > 0) %}
+      <tr><th scope="row">{{ c.label }}</th>
+        <td class="num">{{ ('P%d'|format(c.before)) if c.stat == 'position' else c.before }}</td>
+        <td class="num"><b>{{ ('P%d'|format(c.after)) if c.stat == 'position' else c.after }}</b></td>
+        <td class="num {{ 'up' if better else 'down' }}">{{ '%+g'|format(c.change) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted small">None of your numbers moved.</p>{% endif %}
+  {% if n.details %}<ul class="small">{% for d in n.details %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+</article>
+{%- endmacro %}
+
+{% if waiting %}
+{% for n in waiting %}{{ notice(n) }}{% endfor %}
+<form method="post" class="card stack impact-agree">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="check"><input type="checkbox" name="agree" value="1" required> I've read these changes to {{ ctx.real.my_driver.name }} and I agree to them</label>
+  <div><button class="btn btn-primary">Continue</button></div>
+  <p class="muted small">You can use the league again once you've agreed. Questions? Ask your Race Master; everything here is also in the Activity Log.</p>
+</form>
+{% else %}
+<section class="card empty-state"><h2>You're all caught up</h2><p class="muted">Nothing new has changed for your driver.</p></section>
+{% endif %}
+
+{% if history %}
+<details class="card impact-history" {{ 'open' if not waiting }}>
+  <summary><h2 class="inline-h">Earlier changes</h2></summary>
+  {% set waiting_ids = waiting|map(attribute='id')|list %}
+  {% for n in history if n.id not in waiting_ids %}
+    {{ notice(n) }}
+    {% if ctx.real.is_master %}<p class="muted small">Agreed by: {{ n.acked|map(attribute='username')|join(', ') or 'nobody yet' }}</p>{% endif %}
+  {% endfor %}
+</details>
+{% endif %}
+{% endblock %}

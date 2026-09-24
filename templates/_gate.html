@@ -1,6 +1,11 @@
 {# Round gate checklist. Needs: ctx, gate (gates.status), reminded; full=True on the round page. #}
 {% set ev = gate.event %}
-{% if gate.active or gate.bypass %}
+{% if gate.future and full %}
+<section class="card gate-card gate-future" id="gate" aria-labelledby="gate-title">
+  <div class="card-head"><h2 id="gate-title">⏭ R{{ ev.round_number }} isn't next yet</h2></div>
+  <p class="small">R{{ gate.future.next.round_number }} {{ gate.future.next.name }} comes first. This round's checklist (press questions from the round before it{% if ctx.team_life.targets %} and each player's weekend target{% endif %}) starts once that round is complete.</p>
+</section>
+{% elif gate.active or gate.bypass %}
 <section class="card gate-card {{ 'gate-blocked' if gate.blocking else 'gate-open' }}" id="gate" aria-labelledby="gate-title">
   <div class="card-head">
     <h2 id="gate-title">{% if gate.blocking %}⏳ R{{ ev.round_number }} can't start yet{% elif gate.bypass %}🔓 R{{ ev.round_number }} opened early{% else %}✅ R{{ ev.round_number }} is ready to start{% endif %}</h2>

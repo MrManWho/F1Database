@@ -207,6 +207,11 @@ def save_settings(conn, orders, targets, gates, gate_press, gate_targets):
         set_meta(conn, key, "1" if on else "0")
     if settings(conn)["orders"] == "off":
         cancel_open_orders(conn)
+        if conn.execute("SELECT 1 FROM team_orders").fetchone():
+            from . import impacts
+            impacts.record_change(conn, f"orders-removed-{now_iso()}", "Team orders removed",
+                                  "The Race Master switched team orders off, so every team order has been removed "
+                                  "and any effect it had on your team relationship has been undone.", void_all_orders)
 
 
 def press_stays_open(conn):
@@ -220,6 +225,50 @@ def press_stays_open(conn):
 def cancel_open_orders(conn):
     """Team orders switched off: orders still waiting are cancelled, with no effect on anyone."""
     conn.execute("UPDATE team_orders SET status = 'Cancelled' WHERE status = 'Issued'")
+
+
+ORDER_TEXT = ("Team order for %", "Team suggestion for %", "You ignored the team order%",
+              "Thanks for following the team order%")
+
+
+def void_all_orders(conn):
+    """Team orders are off: remove every order (past ones too), the team messages, headlines and alerts about
+    them, and undo the relationship effect of any order that was judged. Returns {driver_id: [what changed]}
+    for change notices."""
+    touched = {}
+    rows = conn.execute("""SELECT o.*, e.season_id, e.round_number, e.name AS event_name FROM team_orders o
+                           JOIN events e ON e.id = o.event_id ORDER BY e.round_number""").fetchall()
+    for o in rows:
+        touched.setdefault(o["driver_id"], []).append(f"R{o['round_number']} {o['event_name']}: team order removed")
+    # Only orders judged while team orders were On changed anything, and each of those left a team message
+    # ("You ignored the team order…" / "Thanks for following the team order…"). Advisory ones had no effect,
+    # so only those messages are counted when undoing.
+    for r in conn.execute("""SELECT season_id, driver_id,
+                             SUM(text LIKE 'You ignored the team order%') AS ignored,
+                             SUM(text LIKE 'Thanks for following the team order%') AS obeyed
+                             FROM team_notes GROUP BY season_id, driver_id""").fetchall():
+        if not (r["ignored"] or r["obeyed"]):
+            continue
+        undo = -C.TEAM_ORDER_IGNORED * r["ignored"] - C.TEAM_ORDER_OBEYED * r["obeyed"]
+        relations.add_bonus(conn, r["season_id"], r["driver_id"], undo)
+        lines = touched.setdefault(r["driver_id"], [])
+        if r["ignored"]:
+            lines.append(f"Penalty for ignoring {r['ignored']} team order{'s' if r['ignored'] != 1 else ''} undone "
+                         f"({'%+g' % (-C.TEAM_ORDER_IGNORED * r['ignored'])} team standing)")
+        if r["obeyed"]:
+            lines.append(f"Credit for following {r['obeyed']} team order{'s' if r['obeyed'] != 1 else ''} removed "
+                         f"({'%+g' % (-C.TEAM_ORDER_OBEYED * r['obeyed'])} team standing)")
+    conn.execute("DELETE FROM team_orders")
+    for pattern in ORDER_TEXT:
+        for n in conn.execute("SELECT driver_id FROM team_notes WHERE text LIKE ?", (pattern,)).fetchall():
+            touched.setdefault(n["driver_id"], [])
+        conn.execute("DELETE FROM team_notes WHERE text LIKE ?", (pattern,))
+        conn.execute("DELETE FROM notifications WHERE text LIKE ?", (pattern,))
+    conn.execute("DELETE FROM news WHERE headline LIKE '% defies team orders'")
+    for did, lines in touched.items():
+        if not lines:
+            lines.append("Team order messages removed from your Relationships page")
+    return touched
 
 def _teammate(conn, season_id, driver_id):
     seat = S.driver_seats(conn, season_id).get(driver_id)

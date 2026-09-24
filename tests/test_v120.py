@@ -99,10 +99,12 @@ def test_team_orders_off_by_default_advisory_and_on(db):
 
     storage.set_meta(db, "team_orders", "on")
     assert teamlife.issue_orders(db, sid, rng=Low()) == [carson]
-    # Switching Off cancels the waiting order with no penalty; its history stays.
+    # v2.1: switching Off removes every order, past ones too. The advisory one had no effect, so nothing is undone.
     teamlife.save_settings(db, "off", True, True, True, True)
-    orders = teamlife.orders_for(db, sid, carson)
-    assert [o["status"] for o in orders] == ["Cancelled", "Ignored"]
+    assert teamlife.orders_for(db, sid, carson) == []
+    assert relations.assess(db, sid, carson)["bonus"] == 0
+    from f1tracker import impacts
+    assert [n["title"] for n in impacts.pending(db, carson, "anyone")] == ["Team orders removed"]
     ev2 = S.next_incomplete_event(db, sid)
     run_event(db, ev2, order=[carson, david] + [d for d in ids if d not in (carson, david)])
     assert teamlife.resolve_orders(db, ev2["id"]) == []

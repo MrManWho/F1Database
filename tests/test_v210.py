@@ -63,3 +63,142 @@ def test_view_mode_descriptions_do_not_define_a_role_by_itself(app, master_clien
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "like a Scorekeeper" not in page and "what a spectator sees" not in page
     assert "Enter and edit race results; no administration" in page
+
+
+# --------------------------------------------------------------------------- team orders removed + change notices
+
+def _orders_league(master_client):
+    import random
+    from f1tracker import market, relations, teamlife
+    from f1tracker import constants as C
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a, b = players(conn)
+        cad = conn.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
+        S.place_players(conn, sid, {a: (cad, 2), b: (cad, 1)})
+        market.open_window(conn, sid, rng=random.Random(1))
+        for did, role in ((a, "No. 2"), (b, "No. 1")):
+            offer = [o for o in market.offers(conn, driver_id=did) if o["status"] == C.OFFER_PENDING][0]
+            conn.execute("UPDATE offers SET team_id = ?, role = ? WHERE id = ?", (cad, role, offer["id"]))
+            market.accept_offer(conn, offer["id"])
+        S.place_players(conn, sid, {a: (cad, 2), b: (cad, 1)})
+        relations.ensure(conn, sid)
+        storage.set_meta(conn, "team_orders", "on")
+
+        class Low(random.Random):
+            def random(self):
+                return 0.0
+        assert teamlife.issue_orders(conn, sid, rng=Low()) == [a]
+        ev = S.next_incomplete_event(conn, sid)
+        ids = [r["driver_id"] for r in S.weekend_rows(conn, ev["id"])]
+        run_event(conn, ev, order=[a, b] + [d for d in ids if d not in (a, b)])
+        assert teamlife.resolve_orders(conn, ev["id"]) == [(a, "Ignored")]
+        assert relations.assess(conn, sid, a)["bonus"] == C.TEAM_ORDER_IGNORED
+    pledge_all(token)
+    return token, a, b
+
+
+def test_switching_orders_off_removes_them_undoes_the_penalty_and_asks_the_driver(app, master_client):
+    from f1tracker import impacts, relations, teamlife
+    token, a, b = _orders_league(master_client)
+    ana = _client(app, "ana")
+    assert ana.get(f"/career/{token}/dashboard").status_code == 200          # nothing to agree to yet
+    master_client.post(f"/career/{token}/settings", data={"csrf_token": "tok", "team_life": "1", "team_orders": "off",
+                                                          "weekend_targets": "1", "difficulty_recs": "1"})
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        assert teamlife.orders_for(conn, sid, a) == [] and relations.assess(conn, sid, a)["bonus"] == 0
+        assert not conn.execute("SELECT 1 FROM team_notes WHERE text LIKE '%team order%'").fetchone()
+        notice = impacts.pending(conn, a, "ana")[0]
+        rel = next(c for c in notice["changes"] if c["stat"] == "relationship")
+        assert rel["change"] > 0 and any("Penalty for ignoring 1 team order undone" in d for d in notice["details"])
+    # The driver can't use the league until they agree; the Race Master isn't held up.
+    res = ana.get(f"/career/{token}/dashboard")
+    assert res.status_code == 302 and res.headers["Location"].endswith(f"/career/{token}/changes")
+    page = ana.get(f"/career/{token}/changes").get_data(as_text=True)
+    assert "Team orders removed" in page and "Team relationship" in page and "I agree" in page
+    assert master_client.get(f"/career/{token}/dashboard").status_code == 200
+    ana.post(f"/career/{token}/changes", data={"csrf_token": "tok"})              # box not ticked
+    assert ana.get(f"/career/{token}/dashboard").status_code == 302
+    ana.post(f"/career/{token}/changes", data={"csrf_token": "tok", "agree": "1"})
+    assert ana.get(f"/career/{token}/dashboard").status_code == 200
+    assert "Agreed by: ana" in master_client.get(f"/career/{token}/changes").get_data(as_text=True)
+
+
+def test_updating_to_2_1_removes_old_orders_in_leagues_where_they_are_off(app, master_client):
+    from f1tracker import impacts
+    token, a, b = _orders_league(master_client)
+    with storage.session(token) as conn:
+        storage.set_meta(conn, "team_orders", "off")            # an old league: orders off, but old ones still there
+        storage.set_meta(conn, "calc_version", "0")
+        conn.execute("DELETE FROM impact_notices") if conn.execute(
+            "SELECT name FROM sqlite_master WHERE name = 'impact_notices'").fetchone() else None
+        assert conn.execute("SELECT COUNT(*) FROM team_orders").fetchone()[0] == 1
+    master_client.get(f"/career/{token}/dashboard")                  # the first visit after the update
+    with storage.session(token) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM team_orders").fetchone()[0] == 0
+        assert [n["title"] for n in impacts.pending(conn, a, "ana")] == ["Team orders removed"]
+        assert storage.get_meta(conn, "calc_version") == "1"
+
+
+def test_formula_changes_are_explained_only_when_the_old_numbers_are_trustworthy(app, master_client, monkeypatch):
+    import json
+    from f1tracker import impacts
+    from f1tracker import constants as C
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        run_event(conn, S.events(conn, sid)[0])
+    master_client.get(f"/career/{token}/dashboard")                  # kept numbers are fresh now
+    monkeypatch.setattr(C, "CALC_VERSION", 2)
+    monkeypatch.setitem(impacts.CALC_NOTES, 2, ("Test", "Reputation is now worked out differently."))
+    with storage.session(token) as conn:
+        kept = json.loads(storage.get_meta(conn, "calc_snapshot"))
+        kept[str(a)]["reputation"] = kept[str(a)]["reputation"] - 3         # what the old version said
+        storage.set_meta(conn, "calc_snapshot", json.dumps(kept))
+    master_client.get(f"/career/{token}/dashboard")
+    with storage.session(token) as conn:
+        n = impacts.pending(conn, a, "ana")
+        assert n and n[0]["why"] == "Reputation is now worked out differently."
+        assert [c["stat"] for c in n[0]["changes"]] == ["reputation"] and n[0]["changes"][0]["change"] == 3
+    # Stale numbers (something was saved after they were taken) are never blamed on an update.
+    monkeypatch.setattr(C, "CALC_VERSION", 3)
+    monkeypatch.setitem(impacts.CALC_NOTES, 3, ("Test", "Another change."))
+    with storage.session(token) as conn:
+        kept = json.loads(storage.get_meta(conn, "calc_snapshot"))
+        kept[str(a)]["form"] = kept[str(a)]["form"] - 5
+        storage.set_meta(conn, "calc_snapshot", json.dumps(kept))
+        impacts.mark_stale(conn)
+    master_client.get(f"/career/{token}/dashboard")
+    with storage.session(token) as conn:
+        assert len(impacts.pending(conn, a, "ana")) == 1
+
+
+# --------------------------------------------------------------------------- round gates on later rounds
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.gates
+def test_a_round_further_ahead_is_never_shown_as_ready(app, master_client):
+    from f1tracker import gates, teamlife
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        evs = S.events(conn, sid)
+        run_event(conn, evs[0])
+        for q in teamlife.questions_for(conn, evs[0]["id"], a):          # R1 press answered
+            teamlife.answer(conn, evs[0]["id"], a, q["key"], q["answers"][0]["key"])
+        later = gates.status(conn, evs[3]["id"])
+        assert later.get("future") and not later["active"] and not later["blocking"]
+        assert later["future"]["next"]["id"] == evs[1]["id"]
+    page = master_client.get(f"/career/{token}/weekend/{evs[3]['id']}").get_data(as_text=True)
+    assert "isn&#39;t next yet" in page or "isn't next yet" in page
+    assert "is ready to start" not in page

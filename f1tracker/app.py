@@ -21,7 +21,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import announcements, stats
+from . import announcements, impacts, stats
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -357,11 +357,14 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
                         if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
-                    gate = _pledge_gate(conn, g.ctx, master_only)
+                    impacts.on_open(conn, is_api=request.path.startswith("/api/"))
+                    gate = _impact_gate(conn, g.ctx) or _pledge_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
                     result = fn(conn, g.ctx, *args, **kwargs)
+                    if request.method == "POST":
+                        impacts.mark_stale(conn)   # numbers may have moved: take a fresh copy on the next page
                     if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS:
                         label = AUDIT_LABELS.get(request.endpoint, request.endpoint.replace("_", " ").capitalize())
                         what, link = described
@@ -447,6 +450,20 @@ SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_dete
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
                  "help_page"}
+
+
+IMPACT_EXEMPT = {"impact_page", "api_notifications", "notifications_read", "notifications_clear", "help_page",
+                 "timezone_detect", "view_mode", "whats_new_ack"}
+
+
+def _impact_gate(conn, ctx):
+    """A driver whose numbers were changed by an update or an admin change must see and agree to it first."""
+    mine = ctx.get("real", ctx).get("my_driver")
+    if not mine or request.endpoint in IMPACT_EXEMPT or request.path.startswith("/api/"):
+        return None
+    if not impacts.pending(conn, mine["id"], g.user["username"]):
+        return None
+    return redirect(url_for("impact_page", token=ctx["token"]))
 
 
 def _pledge_gate(conn, ctx, master_only):
@@ -2013,6 +2030,24 @@ def register_routes(app):
             out[team["id"]] = [relations.targets_for(conn, season_id, driver_id, team["id"], i, ranks)
                                for i in range(len(C.GROWTH_LEVELS))]
         return out
+
+    @app.route("/career/<token>/changes", methods=["GET", "POST"])
+    @career_page()
+    def impact_page(conn, ctx):
+        """What changed for your driver, why and by how much; you agree before carrying on."""
+        mine = ctx.get("real", ctx).get("my_driver")
+        waiting = impacts.pending(conn, mine["id"], g.user["username"]) if mine else []
+        if request.method == "POST":
+            if not mine or not request.form.get("agree"):
+                raise ValidationError("Tick the box to say you've read and agree to these changes")
+            ids = [n["id"] for n in waiting]
+            impacts.acknowledge(conn, mine["id"], g.user["username"], ids)
+            g.audit_summary = f"agreed to {len(ids)} change notice{'s' if len(ids) != 1 else ''} for {mine['name']}"
+            flash("Thanks. You're all caught up.", "success")
+            return redirect(url_for("dashboard", token=ctx["token"]))
+        return page("changes.html", ctx, waiting=waiting, stats=impacts.STATS,
+                    history=impacts.history(conn, None if ctx.get("real", ctx)["is_master"] else (mine["id"] if mine else -1)),
+                    dmap=S.driver_map(conn))
 
     @app.route("/career/<token>/press")
     @career_page()
