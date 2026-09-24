@@ -384,7 +384,7 @@ def test_players_only_see_their_own_career_and_offers(app, master_client):
 
     carson_client = app.test_client()
     login(carson_client, "carson")
-    page = carson_client.get(f"/career/{token}/garage").get_data(as_text=True)
+    page = carson_client.get(f"/career/{token}/offers").get_data(as_text=True)
     assert "Carson Hayes" in page and str(escape(carson_offer["reason"])) in page
     assert carson_client.get(f"/career/{token}/garage?driver={david}").get_data(as_text=True).count("David Conley") <= 1
     assert carson_client.post(f"/career/{token}/offers/{david_offer['id']}/accept",
@@ -522,7 +522,7 @@ def test_garage_negotiation_routes(app, master_client):
         david, _ = players(conn)
         offer = market.offers(conn, driver_id=david)[0]
         window = offer["window_id"]
-    page = master_client.get(f"/career/{token}/garage").get_data(as_text=True)
+    page = master_client.get(f"/career/{token}/offers").get_data(as_text=True)
     assert "Counter-offer" in page and "Approach a team" in page
     res = master_client.post(f"/career/{token}/offers/{offer['id']}/counter",
                              data={"role": "No. 2", "years": "1", "growth": "3", "csrf_token": "tok"})
@@ -533,7 +533,7 @@ def test_garage_negotiation_routes(app, master_client):
                              data={"driver_id": david, "window_id": window, "team_id": 1, "terms": "talks",
                                    "csrf_token": "tok"})
     assert res.status_code == 302
-    assert "Conversation" in master_client.get(f"/career/{token}/garage").get_data(as_text=True)
+    assert "Conversation" in master_client.get(f"/career/{token}/offers").get_data(as_text=True)
 
 
 # --------------------------------------------------------------------------- v1.5
@@ -1019,7 +1019,7 @@ def test_anyone_can_ask_to_join_and_the_race_master_approves(app, master_client)
         mine = [o for o in market.offers(conn, driver_id=nia) if o["status"] == C.OFFER_PENDING]
         assert mine and len(market.windows(conn)) == 1  # added to the already-open Rookie Draft
         assert len({o["driver_id"] for o in market.offers(conn)}) == 2
-    garage = newbie.get(f"/career/{token}/garage").get_data(as_text=True)
+    garage = newbie.get(f"/career/{token}/offers").get_data(as_text=True)
     assert "Nia Newbie" in garage and "Counter-offer" in garage
     # Closing the league hides it from people who aren't in it.
     master_client.post(f"/career/{token}/members/settings", data={"csrf_token": "tok"})

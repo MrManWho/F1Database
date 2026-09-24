@@ -240,7 +240,7 @@ def open_window(conn, season_id, kind=None, rng=None):
         if not player["active"]:
             continue
         _generate_for(conn, window_id, season_id, player, standings, ranks, seats, signed, rng)
-    feed.on_window_opened(conn, window_id, "garage")
+    feed.on_window_opened(conn, window_id, "offers")
     return window_id
 
 
@@ -276,7 +276,7 @@ def offers_for_player(conn, driver_id, rng=None):
                   signed_team_ids(conn, year), rng)
     n = conn.execute("SELECT COUNT(*) FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
                      (window_id, driver_id, C.OFFER_PENDING)).fetchone()[0]
-    feed.notify(conn, driver_id, f"{n} team{'s' if n != 1 else ''} made you an offer for {year}", "garage",
+    feed.notify(conn, driver_id, f"{n} team{'s' if n != 1 else ''} made you an offer for {year}", "offers",
                 ref=f"window:{window_id}")
     return window_id
 
@@ -729,7 +729,7 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
                              terms=("No. 2", 1, 1))
     o = get_offer(conn, offer_id)
     _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["growth"])
-    feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "garage",
+    feed.notify(conn, driver_id, f"Last-chance offer: {team} have a seat if you want it", "offers",
                 ref=f"window:{window_id}")
     return offer_id
 

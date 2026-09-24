@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Press{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.my_driver.name }} · {{ ctx.season.year }}</div><h1>Press</h1>
+  <p class="page-purpose">After every race the press ask you two questions. What you say gets back to your team, and some answers make headlines.</p></div></div>
+
+{% if press_pens|selectattr('questions')|list %}
+{% include "_press_pens.html" with context %}
+{% else %}
+<section class="card empty-state"><h2>No questions waiting</h2>
+  <p class="muted">The press pen opens after each race you start. Your next questions appear here once the next round is submitted.</p></section>
+{% endif %}
+
+<section class="card">
+  <h2>What you've said</h2>
+  {% if history %}
+  <ul class="plain-list press-history">
+    {% for h in history %}
+    <li><small class="muted">{{ h.label }}</small>
+      <p class="press-question">“{{ h.question }}”</p>
+      <p>“{{ h.answer }}” <span class="{{ 'up' if h.effect > 0 else 'down' if h.effect < 0 else 'muted' }} small">{{ 'The team liked that' if h.effect > 0 else 'The team didn\'t love that' if h.effect < 0 else 'Nobody read much into it' }} ({{ '%+g'|format(h.effect) }} team standing)</span></p></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">You haven't answered any press questions yet.</p>{% endif %}
+</section>
+{% endblock %}

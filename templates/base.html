@@ -49,7 +49,7 @@
         {{ item(url_for('seasons_page', token=t), 'Calendar', 'calendar', ep in ('seasons_page', 'season_review', 'season_rollover')) }}
         {{ item(url_for('results_index', token=t), 'Results', 'flag', ep in ('results_index', 'race_summary') or (ep in ('weekend', 'weekend_next') and not ctx.can_run)) }}
         {{ item(url_for('standings_page', token=t), 'Standings', 'standings', ep == 'standings_page') }}
-        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep in ('drivers_page', 'driver_profile')) }}
+        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep == 'drivers_page' or (ep == 'driver_profile' and not (ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id))) }}
         {{ item(url_for('teams_page', token=t), 'Teams', 'teams', ep in ('teams_page', 'team_profile')) }}
         {{ item(url_for('records', token=t), 'Records', 'records', ep == 'records') }}
         {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
@@ -63,12 +63,12 @@
       <div class="nav-group" role="group" aria-labelledby="nav-career">
         <div class="nav-title" id="nav-career">Career · {{ ctx.my_driver.name }}</div>
         {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
-        {{ item(url_for('garage', token=t) ~ '#offers', 'Contracts & offers', 'contracts', false) }}
+        {{ item(url_for('offers_page', token=t), 'Contracts & offers', 'contracts', ep == 'offers_page') }}
         {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}
         {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
         {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
-        {{ item(url_for('dashboard', token=t) ~ '#press', 'Press', 'press', false) }}
-        {{ item(url_for('driver_profile', token=t, driver_id=ctx.my_driver.id), 'Progression', 'progress', false) }}
+        {{ item(url_for('press_page', token=t), 'Press', 'press', ep == 'press_page') }}
+        {{ item(url_for('driver_profile', token=t, driver_id=ctx.my_driver.id), 'Progression', 'progress', ep == 'driver_profile' and request.view_args.get('driver_id') == ctx.my_driver.id) }}
       </div>
       {% else %}
       <div class="nav-group" role="group" aria-labelledby="nav-paddock">
@@ -161,7 +161,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else '' }}">
             {% for key, label in ctx.modes %}
             <button class="mode-opt {{ 'current' if key == ctx.mode }}" name="mode" value="{{ key }}" role="menuitemradio" aria-checked="{{ 'true' if key == ctx.mode else 'false' }}">
-              <b>{{ label }}</b><small class="muted">{{ {'race_master': 'Every tool, including administration', 'scorekeeper': 'Result entry only, like a Scorekeeper', 'driver': 'Your garage, races, standings and career', 'spectator': 'Read-only, what a spectator sees'}[key] }}</small></button>
+              <b>{{ label }}</b><small class="muted">{{ {'race_master': 'Every tool, including league administration', 'scorekeeper': 'Enter and edit race results; no administration', 'driver': 'Your garage, contracts, races and career', 'spectator': 'Read-only: standings, results and news, no actions'}[key] }}</small></button>
             {% endfor %}
           </form>
           <p class="muted small">Only changes what's shown on this device. Your real permissions never change.</p>

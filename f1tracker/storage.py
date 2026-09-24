@@ -168,10 +168,13 @@ def _summary(path):
         try:
             meta = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM meta")}
             season = conn.execute(
-                "SELECT year FROM seasons WHERE id = ?", (meta.get("current_season_id"),)
-            ).fetchone()
-            done = conn.execute("SELECT COUNT(*) FROM events WHERE status = 'Complete'").fetchone()[0]
-            total = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+                "SELECT id, year FROM seasons WHERE id = ?", (meta.get("current_season_id"),)
+            ).fetchone() or conn.execute("SELECT id, year FROM seasons ORDER BY year DESC LIMIT 1").fetchone()
+            # This season's rounds only (counting every season showed e.g. "24/48" after a rollover).
+            sid = season["id"] if season else -1
+            done = conn.execute("SELECT COUNT(*) FROM events WHERE season_id = ? AND status = 'Complete'",
+                                (sid,)).fetchone()[0]
+            total = conn.execute("SELECT COUNT(*) FROM events WHERE season_id = ?", (sid,)).fetchone()[0]
             members, requests, players, invited = [], [], 0, []
             try:
                 invited = [r[0] for r in conn.execute("SELECT username FROM invitations WHERE status = 'Pending'")]

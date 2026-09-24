@@ -226,7 +226,7 @@ def test_changelog_page_and_salary_era_saves(app, master_client, career, rng):
     raw.execute("UPDATE meta SET value = '10' WHERE key = 'schema_version'")
     raw.commit()
     raw.close()
-    garage = master_client.get(f"/career/{career}/garage").get_data(as_text=True)
+    garage = master_client.get(f"/career/{career}/offers").get_data(as_text=True)
     assert "Growth pledge" in garage and "$" not in garage.split("Negotiations")[1].split("Who's watching")[0]
     with storage.session(career) as conn:
         offer = [o for o in market.offers(conn, driver_id=david) if o["status"] == C.OFFER_PENDING][0]

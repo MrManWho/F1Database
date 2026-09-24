@@ -529,7 +529,7 @@ def pending_actions(conn, ctx):
     if me:
         if ctx.get("pending_offers"):
             n = ctx["pending_offers"]
-            out.append((f"{n} contract offer{'s' if n != 1 else ''} waiting for your answer", "garage#offers", "hot"))
+            out.append((f"{n} contract offer{'s' if n != 1 else ''} waiting for your answer", "offers", "hot"))
         if relations.needs_pledge(conn, sid, me["id"]):
             out.append(("Choose your growth pledge for this season", "pledge", "hot"))
         todo = gates.my_todo(conn, sid, me["id"])

@@ -1,0 +1,20 @@
+{% set press_required = ctx.team_life.gates and ctx.team_life.gate_press %}
+{% for press in press_pens if press.questions %}
+<section class="card press-pen" {% if loop.last %}id="press"{% endif %}>
+  <div class="card-head"><h2>🎙️ Press pen · R{{ press.event.round_number }} {{ press.event.name }}</h2>
+    <span class="muted small">{{ press.open }} question{{ 's' if press.open != 1 }} waiting · {{ 'required' if press_required and press.event.press_required else 'optional' }}</span></div>
+  <p class="muted small">What you say gets back to your team, and some answers make headlines.
+    {% if press_required and press.event.press_required %}Answer both before the next round can start. They stay open until you do.{% else %}Questions close when the next race is completed.{% endif %}</p>
+  <div class="press-grid">
+  {% for q in press.questions %}
+    <form method="post" action="{{ url_for('press_answer', token=ctx.token, event_id=press.event.id) }}" class="press-q">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="question" value="{{ q.key }}">{% if request.endpoint == 'press_page' %}<input type="hidden" name="back" value="press">{% endif %}
+      <p class="press-question">“{{ q.text }}”</p>
+      {% for a in q.answers %}
+      <button class="btn btn-sm press-answer {{ 'chosen' if q.answered == a.key }}" name="answer" value="{{ a.key }}" {{ 'disabled' if q.answered }}>{{ a.text }}</button>
+      {% endfor %}
+    </form>
+  {% endfor %}
+  </div>
+</section>
+{% endfor %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_dot, tier, trend_chart, delta, stat_change, seat_badge with context %}
-{% block title %}{{ driver.name }} · Garage{% endblock %}
+{% block title %}{{ driver.name }} · {{ 'Contracts & offers' if view == 'offers' else 'Garage' }}{% endblock %}
 {% block content %}
 <div class="profile-head player-head" style="--team: {{ team.color if team else '#e10600' }}; --player: {{ driver.player_color or 'var(--blue)' }};">
   <div>
-    <div class="kicker">{{ 'My Garage' if own else 'Garage' }} · {{ ctx.season.year }}</div>
+    <div class="kicker">{{ ('Contracts & offers' if view == 'offers' else 'My Garage' if own else 'Garage') }} · {{ ctx.season.year }}</div>
     <h1>{{ driver.name }}</h1>
     <div class="hero-meta">
       <span>{% if team %}{{ team_dot(team) }}{{ team.name }}{% else %}No race seat{% endif %}</span>
@@ -20,6 +20,7 @@
   {% endif %}
 </div>
 
+{% if view != 'offers' %}
 <div class="stat-grid">
   {% set h = url_for('help_page') %}
   {{ stat_change('Driver value', changes.value, changes.since, feature=True, href=h ~ '#driver-value') }}
@@ -43,6 +44,7 @@
   <p class="muted small">You clear the entry bar of <b>{{ value_parts.cleared }}</b> other team{{ 's' if value_parts.cleared != 1 }}.
     {% if value_parts.next %}Next team up: <b>{{ value_parts.next.team.name }}</b> (bar {{ value_parts.next.bar }}), <b>{{ value_parts.gap }}</b> away.{% else %}Every team's bar is within reach.{% endif %}</p>
 </section>
+{% endif %}
 
 {% macro pledge_text(team_id, growth) -%}
 {%- set t = pledges[team_id][growth or 0] -%}
@@ -73,6 +75,7 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
 </ol>
 {%- endmacro %}
 
+{% if view == 'offers' %}
 <section class="card">
   <div class="card-head">
     <h2>Negotiations</h2>
@@ -167,6 +170,15 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
   </div>
   {% endif %}
 </section>
+{% else %}
+{% set pending_n = offers|selectattr('status', 'equalto', 'Pending')|list|length %}
+<section class="card garage-offers">
+  <div class="card-head"><h2>Contracts &amp; offers</h2><a class="btn btn-sm {{ 'btn-primary' if pending_n else 'btn-ghost' }}" href="{{ url_for('offers_page', token=ctx.token, driver=driver.id if ctx.is_master and not own else none) }}">{{ 'Answer ' ~ pending_n ~ ' offer' ~ ('s' if pending_n != 1) if pending_n else 'Open' }} →</a></div>
+  <p class="muted small">{% if contract %}Current deal: <b>{{ contract.team.name if contract.team else '' }}</b>{% if contract.role %} · {{ contract.role }}{% endif %}{% if contract.end_year %} through {{ contract.end_year }}{% endif %}. {% endif %}
+    {% if window %}The {{ window.kind }} window for {{ window.target_year }} is open{% if approaches %}: {{ approaches }} approach{{ 'es' if approaches != 1 }} left{% endif %}.{% else %}The transfer market is closed.{% endif %}</p>
+</section>
+
+{% endif %}
 
 <div class="grid-2">
   <section class="card">
@@ -202,13 +214,15 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
   </section>
 </div>
 
+{% if view != 'offers' %}
 <section class="card">
   <div class="card-head"><h2>Your trend</h2><span class="muted small">Reputation is what teams remember; Form is this season</span></div>
   {{ trend_chart(trend) }}
 </section>
+{% endif %}
 
 {% set past = offers|rejectattr('status', 'equalto', 'Pending')|list %}
-{% if past %}
+{% if past and view == 'offers' %}
 <section class="card table-card">
   <h2>Offer history</h2>
   <div class="table-wrap">

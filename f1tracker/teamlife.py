@@ -136,6 +136,20 @@ def _pen(conn, event, driver_id):
     return {"event": event, "questions": questions, "open": sum(1 for q in questions if not q["answered"])}
 
 
+def press_history(conn, driver_id, limit=40):
+    """Everything this driver has said to the press, newest first, with how the team took it."""
+    out = []
+    for r in conn.execute("""SELECT p.*, e.round_number, e.name AS event_name, s.year FROM press_answers p
+                             JOIN events e ON e.id = p.event_id JOIN seasons s ON s.id = e.season_id
+                             WHERE p.driver_id = ? ORDER BY s.year DESC, e.round_number DESC LIMIT ?""",
+                          (driver_id, limit)):
+        q = QUESTIONS.get(r["question"])
+        said = next((t for k, t, _e, _h in q[1] if k == r["answer"]), r["answer"]) if q else r["answer"]
+        out.append({"label": f"{r['year']} R{r['round_number']} {r['event_name']}", "question": q[0] if q else r["question"],
+                    "answer": said, "effect": r["effect"]})
+    return out
+
+
 def answer(conn, event_id, driver_id, question, choice):
     event = S.get_event(conn, event_id)
     if not event or event["status"] != C.EVENT_COMPLETE:

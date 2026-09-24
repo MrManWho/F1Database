@@ -1939,6 +1939,15 @@ def register_routes(app):
     @app.route("/career/<token>/garage")
     @career_page()
     def garage(conn, ctx):
+        return _garage_view(conn, ctx, "garage")
+
+    @app.route("/career/<token>/offers")
+    @career_page()
+    def offers_page(conn, ctx):
+        """Contracts & offers: negotiations, approaching teams and offer history, on their own page."""
+        return _garage_view(conn, ctx, "offers")
+
+    def _garage_view(conn, ctx, view):
         players = S.player_drivers(conn)
         wanted = request.args.get("driver", type=int)
         driver = None
@@ -1968,7 +1977,7 @@ def register_routes(app):
         signed_in_window = bool(window and conn.execute(
             "SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
             (window["id"], driver["id"], C.OFFER_ACCEPTED)).fetchone())
-        return page("garage.html", ctx, driver=driver, me=me, interest=interest, row=row,
+        return page("garage.html", ctx, view=view, driver=driver, me=me, interest=interest, row=row,
                     seat_state=seats.state(conn, sid, driver["id"]),
                     team=S.team_map(conn).get(seat[0]) if seat else None, teammate=teammate,
                     rivals=rivals, recent=recent, players=players,
@@ -2005,6 +2014,14 @@ def register_routes(app):
                                for i in range(len(C.GROWTH_LEVELS))]
         return out
 
+    @app.route("/career/<token>/press")
+    @career_page()
+    def press_page(conn, ctx):
+        if not ctx["my_driver"]:
+            return redirect(url_for("dashboard", token=ctx["token"]))
+        return page("press.html", ctx, press_pens=teamlife.press_pens(conn, ctx["current_season_id"], ctx["my_driver"]["id"]),
+                    history=teamlife.press_history(conn, ctx["my_driver"]["id"]))
+
     @app.route("/career/<token>/press/<int:event_id>", methods=["POST"])
     @career_page()
     def press_answer(conn, ctx, event_id):
@@ -2016,6 +2033,8 @@ def register_routes(app):
         g.audit_summary = f"answered the Round {ev['round_number']} post-race press questions"
         flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
                                   if effect < 0 else "Nobody reads much into it."), "success")
+        if request.form.get("back") == "press":
+            return redirect(url_for("press_page", token=ctx["token"]))
         return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
 
     @app.route("/career/<token>/target/<int:event_id>/accept", methods=["POST"])
@@ -2302,7 +2321,7 @@ def register_routes(app):
     @career_page()
     def market_page(conn, ctx):
         if not ctx["is_master"]:
-            return redirect(url_for("garage", token=ctx["token"]))
+            return redirect(url_for("offers_page", token=ctx["token"]))
         offers = market.offers(conn)
         return page("market.html", ctx, windows=market.windows(conn), offers=offers,
                     target=market.target_year(conn, ctx["current_season_id"]))
@@ -2360,7 +2379,7 @@ def register_routes(app):
         market.accept_offer(conn, offer_id)
         team = S.team_map(conn)[offer["team_id"]]
         flash(f"Signed with {team['name']} for {offer['target_year']}!", "success")
-        return redirect(url_for("garage", token=ctx["token"], driver=offer["driver_id"]))
+        return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
 
     @app.route("/career/<token>/offers/<int:offer_id>/decline", methods=["POST"])
     @career_page()
@@ -2368,7 +2387,7 @@ def register_routes(app):
         offer = _offer_for_user(conn, ctx, offer_id)
         market.decline_offer(conn, offer_id)
         flash("Offer declined.", "success")
-        return redirect(url_for("garage", token=ctx["token"], driver=offer["driver_id"]))
+        return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
 
     @app.route("/career/<token>/offers/<int:offer_id>/counter", methods=["POST"])
     @career_page()
@@ -2382,7 +2401,7 @@ def register_routes(app):
                "final": f"{team} have made their final offer.",
                "collapsed": f"{team} walked away from the table."}[result],
               "error" if result == "collapsed" else "success")
-        return redirect(url_for("garage", token=ctx["token"], driver=offer["driver_id"]) + f"#offer-{offer_id}")
+        return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]) + f"#offer-{offer_id}")
 
     @app.route("/career/<token>/market/approach", methods=["POST"])
     @career_page()
@@ -2406,7 +2425,7 @@ def register_routes(app):
                "final": f"{team} made a take-it-or-leave-it offer.",
                "collapsed": f"{team} weren't impressed by your demands and ended talks."}[result],
               "error" if result in ("rejected", "collapsed") else "success")
-        return redirect(url_for("garage", token=ctx["token"], driver=driver_id) + f"#offer-{offer_id}")
+        return redirect(url_for("offers_page", token=ctx["token"], driver=driver_id) + f"#offer-{offer_id}")
 
     @app.route("/career/<token>/news")
     @career_page()
