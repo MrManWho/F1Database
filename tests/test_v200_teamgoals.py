@@ -39,7 +39,10 @@ def test_options_scale_with_car_strength_and_calendar(app, master_client):
             assert s["reward"] < c["reward"] < x["reward"] and s["penalty"] >= c["penalty"] >= x["penalty"]
         # The fastest car can't aim above P1, so its Ambitious goal is judged on points only (no free position route).
         assert fo["options"]["ambitious"]["target_position"] == 0 or fo["expected"] >= 3
-        assert so["options"]["safe"]["target_position"] == 0 or so["expected"] <= len(S.teams(conn)) - 2
+        n = len(S.teams(conn))
+        assert so["options"]["safe"]["target_position"] == 0 or so["expected"] <= n - 3
+        # No tier is ever "finish last or better" (always true).
+        assert all(o["target_position"] < n for info in (fo, so) for o in info["options"].values())
         # A longer calendar asks for more points.
         before = fo["options"]["competitive"]["target_points"]
         evs = S.events(conn, sid)

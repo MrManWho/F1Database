@@ -32,7 +32,7 @@
         data-confirm='{{ {"title": "Recalculate Reputation history?", "target": "Every driver, every finished season",
           "what": "Replays every season with the current Reputation formula and replaces each season's locked Reputation.",
           "history": "Race results don't change, but Reputation, Driver Value, market tiers and team interest can.",
-          "backup": "Yes: a backup is made first.", "undo": "Yes: restore that backup from League & Saves.", "ok": "Recalculate"}|tojson }}'>
+          "backup": "Yes: a backup is made first.", "undo": "Yes: restore that backup from Backups & data.", "ok": "Recalculate"}|tojson }}'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn">Recalculate Reputation history</button>
   </form>
@@ -164,7 +164,7 @@
         <div><dt>Driver</dt><dd id="del-driver-name"></dd></div>
         <div><dt>Seat</dt><dd id="del-driver-seat"></dd></div>
         <div><dt>Historical results</dt><dd id="del-driver-races"></dd></div>
-        <div><dt>Undo</dt><dd>No. Download a backup first (League &amp; Saves) if you might want this driver back.</dd></div>
+        <div><dt>Undo</dt><dd>No. Download a backup first (Backups &amp; data) if you might want this driver back.</dd></div>
       </dl>
       <p class="muted small" id="del-driver-note"></p>
       <div id="del-driver-history" hidden>

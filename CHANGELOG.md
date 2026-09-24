@@ -3,6 +3,91 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.0 · Paddock Legacy 2.0
+_Released September 24, 2026_
+> A new interface, notifications that stay in their own league, a safer season rollover and admin tools, and a
+> lot of polish for phones, keyboards and screen readers. Every league, result, contract and setting carries over unchanged.
+
+### Highlights
+- **A new interface.** Grouped sidebar, a league switcher and season picker in the top bar, search (Ctrl+K), a bottom bar on phones and clearer pages throughout.
+- **Notifications per league.** Choose email and phone alerts separately in every league, or mute one. Nothing you choose in one league affects another, and every email names its league.
+- **View as another role.** Race Masters and Scorekeepers can preview the league as a Scorekeeper, Driver or Spectator without losing their own permissions.
+- **Getting started.** A welcome page, a step-by-step league wizard with presets, a try-it demo league and this What's New screen.
+- **Safer season rollover.** A review of every player driver's seat and contract before the new season starts, a backup first, and a repair tool for seat problems.
+- **Works better everywhere.** Phone layouts, keyboard navigation, screen-reader labels and contrast checked against WCAG 2.2 AA on every main page.
+- **Safer admin tools.** Backups page, typed confirmations, rate limits, signed-in devices, optional two-step sign-in and a data export.
+
+### Added
+- **Per-league notification settings** (Notifications in each league): quick presets (Everything, Important only, In-app only), email and phone alert per category, mute. A delivery log for Race Masters shows what was sent, when and to how many (never to whom). Dedupe keys stop a retry from sending twice, and loop protection holds a league that suddenly sends too much. Every email has a one-click, league-only unsubscribe link.
+- **View modes**: Race Master, Scorekeeper, Driver and Spectator preview. The mode only changes the display; the server always checks the real role.
+- **League switcher, pinned and reordered leagues, hidden leagues** (per account), a season picker, and a **command palette** (Ctrl+K / the search button) that searches only the current league.
+- **Onboarding**: a welcome page for people who aren't signed in, an 8-step new-league wizard (basics, calendar, scoring preset, players, roles, notifications, visibility, review) with the old quick form still available, and a **demo league** that is private to each visitor, sends nothing and is cleaned up automatically.
+- **League visibility**: Private (default), Public (share link) or Listed (also in the new public directory), with a league profile (description, region, platform, schedule, rules, links, accent colour). Public pages for home, calendar (with .ics), standings, rounds, drivers, teams, records, news and incidents, showing submitted rounds only. Anyone can report a listed league; site admins can remove it from the directory.
+- **Season rollover review**: every player driver's seat and contract state (confirmed, provisional, temporary, no contract, expired, seated elsewhere, unseated) with a decision for each ending contract (renew, keep provisionally, release), a backup before anything changes, and a seat repair tool.
+- **Grid & contracts** lists every contract as current, upcoming, expiring, expired, historical or seated elsewhere.
+- **Selectable team goals** (optional, League settings): each team with a player driver picks Safe (+1 / 0 Reputation), Competitive (+3 / −1) or Ambitious (+6 / −3) at the start of the season. Targets come from car strength, last season's Constructors' position, the lineup, calendar length and Sprint weekends, and each option explains itself. Met = target position or target points; teams level on points count as the lower place; a target that would be automatic (last place) or can't move (P1) is judged on points only. Locked after round 1 and settled once when the next season starts.
+- **Announcements**: pinned, aimed at roles, scheduled, with an expiry; a live count of who will see it, get a phone alert and get an email; email only to members who want Announcements email from that league.
+- **Statistics page**: points progression, finish distribution, qualifying vs race, Sprint results, teammate head-to-heads, reliability and player drivers season over season, with a player-drivers-only filter. Submitted rounds only.
+- **"Waiting for you"** on the Control Room: each person's own to-dos (offers, pledge, press, weekend target, team goal, join requests, incidents, seat problems, results pending).
+- **Calendar**: month view, warnings for clashes and out-of-order dates, a subscribable .ics file, and locked round numbers for rounds with results (a Race Master can use historical correction mode, which is logged).
+- **Results entry**: session tabs (Qualifying, Sprint, Race), driver search, copy the order from another session, and undo (Alt+Z).
+- **Backups & data page** with an integrity check, safety backups kept separately from the scheduled ones, and a **standings CSV** export.
+- **Account**: signed-in devices (end one or all others), optional **two-step sign-in** with any authenticator app (site admins can reset it), **download my data**, **delete my account**, **leave a league** and **hand a league over**. Privacy and Terms pages.
+- **Import preview**: a .f1career file is checked and summarised before anything is added, and always becomes a new league.
+
+### Improved
+- **League settings** are grouped into sections with a search box, each saying whether it affects this league or the whole site.
+- **Accessibility**: skip link, landmarks, labelled controls, visible focus, larger touch targets on key controls, reduced-motion support and sufficient contrast for every league accent colour (axe WCAG 2.2 AA: 0 violations on every main page).
+- **Mobile**: bottom navigation, a drawer sidebar, tables that scroll inside their card and forms that fit a 360 px screen.
+- **Offline and unsaved work**: an offline banner, and a warning before leaving a page with unsaved results.
+- **Help** gains sections for statuses, scoring, statistics, rivalries, view modes, contracts, team goals, announcements, visibility, backups, account security and your data; every search link now opens a real section.
+- **Activity Log** records the new actions (visibility, announcements, team goals, handovers, leaving, historical corrections) as sentences.
+- **What's New** shows once to each account that existed before an update; accounts created afterwards get the welcome and onboarding instead.
+- Flask 3.1.3 (a dependency audit found a published advisory for 3.1.2).
+
+### Fixed
+- **League emails no longer cross leagues.** Before 2.0, choosing results emails applied to every league you were in; a Test league could email people about another league's results. Choices are now stored per league.
+- **Site admins who aren't members of a league** no longer get its alerts. Join requests now go to that league's Race Masters only.
+- **Season rollover** no longer leaves a player driver with an expired contract in a seat without asking, or with a seat and a contract at different teams.
+- **Completed rounds** can no longer be renumbered by accident when the calendar is saved.
+- **Search palette**: pressing Enter straight after typing no longer opens a result from the previous search.
+- The Activity Log no longer fails on a handover submitted from the form.
+
+### Security
+- Every league route re-checked by automated tests: an outsider can open or change nothing in another league, Spectators can make no changes, and Scorekeepers can't reach Race Master tools, in the pages and the API.
+- Rate limits on sign-in codes, invitations (20 an hour), join requests (5 an hour), reports, directory search and demo starts.
+- Downloaded backups and JSON exports leave out the Discord webhook and the public-link key. The Activity Log and exports never contain passwords, hashes, sessions, codes, OCR text or webhook URLs.
+- Changing your password signs out your other devices.
+
+### Migration notes
+- Save files move from schema 17 to 18: new tables for notification preferences, deliveries, seat flags, weekend targets and gate bypasses, and new columns on events, notifications, join requests and invitations. Nothing existing is changed or removed. Every league is backed up automatically before it's upgraded.
+- **Existing members keep the results emails they had**: each membership starts with the old account-wide choice, now applied to that league only. Everything else uses the Important-only preset.
+- The **AI difficulty recommendation now ignores Sprint points** unless the league turns "Count Sprint points" on (League settings). Recorded difficulties and past recommendations aren't changed.
+- **Team goals, announcements and statistics** don't change any stored result or rating. Team goals are off until a league turns them on.
+- New leagues are private. Creating leagues is limited to site admins unless the site setting allows everyone. The person who creates a league becomes its Race Master.
+
+### Known limitations
+- The league list reads every league file when it loads; very large sites (hundreds of leagues) will notice.
+- A race can be Postponed but not Cancelled; a cancelled round has to be removed from the calendar.
+- Calendars can be exported as .ics but not imported.
+- Two-step sign-in shows a setup key and an authenticator link, not a QR code.
+- League logos can't be uploaded yet (an accent colour is used instead).
+- Scheduled announcements go out the next time anyone opens the league after their time, not at the exact minute.
+
+### Preserved
+- Every account, league, role, season, result, contract, driver, team, record, setting, backup, activity entry, transfer, pledge and relationship. Scoring, Sprint scoring, Form, Reputation, Driver Value, market tiers, contracts, pledges and relationships are calculated exactly as before.
+- Manual entry for every automated step, and the free in-browser screenshot importer (images never leave the browser).
+- Existing links, save files (.f1career), backups and installed apps keep working.
+
+### Tested
+- 261 automated tests, including cross-league isolation for every league route, rollover edge cases, notification scoping and dedupe, public pages never showing drafts, two-step sign-in, device sign-out, account export and deletion, rate limits, redaction, import preview, team goals, announcements and statistics, plus in-browser tests for the shell, palette and offline recovery.
+- A three-season league built with 1.20 (1,584 results) was upgraded on a copy: standings, results, records, members, events and players came out identical, and a pre-upgrade backup was written.
+- axe-core accessibility scan (WCAG 2.2 AA) on every main page, and screenshots at phone, tablet and desktop sizes.
+
+### Action needed
+- Open **Notifications** in each league you're in and check the choices; mute any test league you don't want to hear from.
+- Race Masters: review **League settings → Visibility** (leagues start private) and consider turning on **two-step sign-in** in your account.
+
 ## 1.20 · Weekend targets, teammate battles and round gates
 ### New
 - **Weekend targets.** Before each race every player driver gets one realistic target from their team (e.g. "Finish P8 or better", "Score points", "Beat both Haas cars", now and then "Finish ahead of your teammate"), pitched from the car's pace, recent form and contract role, so a backmarker is never asked for a podium. Accept it with **Got it** on the Control Room. It's judged from the results: hit +2 team standing, missed -1.5, void if you didn't take part. The Race Master can rule a DNF/DSQ "not the driver's fault". Corrections re-judge it. Three, five, eight or ten in a row makes the news. Switch it off in League Settings.

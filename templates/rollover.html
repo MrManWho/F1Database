@@ -28,7 +28,7 @@
   {% endif %}
 </section>
 
-<form method="post" action="{{ url_for('season_new', token=ctx.token) }}" class="card stack" data-confirm='{{ {"title": "Start the " ~ year ~ " season?", "what": "Marks " ~ latest.year ~ " complete, locks Reputation, copies the calendar and applies the seat decisions below.", "history": "Nothing from " ~ latest.year ~ " is deleted or recalculated.", "backup": "A backup is saved first and can be restored from League & Saves.", "undo": "Undo by restoring that backup.", "ok": "Start " ~ year}|tojson }}'>
+<form method="post" action="{{ url_for('season_new', token=ctx.token) }}" class="card stack" data-confirm='{{ {"title": "Start the " ~ year ~ " season?", "what": "Marks " ~ latest.year ~ " complete, locks Reputation, copies the calendar and applies the seat decisions below.", "history": "Nothing from " ~ latest.year ~ " is deleted or recalculated.", "backup": "A backup is saved first and can be restored from Backups & data.", "undo": "Undo by restoring that backup.", "ok": "Start " ~ year}|tojson }}'>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="year" value="{{ year }}">
   <h2>Player drivers</h2>

@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .constants import LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILURES
+from .constants import APP_VERSION, LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILURES
 from .storage import data_dir, now_iso
 
 IP_MAX_FAILURES = 20          # a single address guessing across many usernames
@@ -163,6 +163,15 @@ def clean_email(email, required=False):
     return email
 
 
+def _whats_new_seen(conn, username):
+    """A new account has nothing to catch up on: the current version's What's New counts as seen (they get the
+    welcome and onboarding instead). Accounts that existed before an update still see it once."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS whats_new_seen (
+        username TEXT NOT NULL, version TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY (username, version))""")
+    conn.execute("INSERT OR IGNORE INTO whats_new_seen(username, version, seen_at) VALUES(?,?,?)",
+                 (username, APP_VERSION, now_iso()))
+
+
 def create_user(username, display_name, password, is_master=False, is_steward=False, email=None):
     username = normalise(username)
     email = clean_email(email)
@@ -178,6 +187,7 @@ def create_user(username, display_name, password, is_master=False, is_steward=Fa
                      "VALUES(?,?,?,?,?,?,?)", (username, display_name, generate_password_hash(password),
                                                int(bool(is_master)), int(bool(is_steward) and not is_master), email,
                                                now_iso()))
+        _whats_new_seen(conn, username)
     return username
 
 
@@ -369,6 +379,7 @@ def finish_signup(pending_id, code):
                         VALUES(?,?,?,0,0,?,?)""", (pending["username"], pending["display_name"],
                                                    pending["password_hash"], pending["email"], now_iso()))
         conn.execute("DELETE FROM pending_signups WHERE id = ?", (pending_id,))
+        _whats_new_seen(conn, pending["username"])
     return pending["username"]
 
 

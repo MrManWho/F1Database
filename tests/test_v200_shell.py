@@ -31,10 +31,11 @@ def test_race_master_can_view_as_other_roles_without_losing_permissions(app, mas
         roles.set_member(conn, "rm", "race_master", players(conn)[0])
     rita = _client(app, "rm")
     dash = rita.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "League settings" in dash and "Spectator preview" in dash
+    nav = f'href="/career/{token}/settings"'     # the League settings item in the sidebar
+    assert nav in dash and "Spectator preview" in dash
     rita.post(f"/career/{token}/mode", data={"mode": "scorekeeper", "csrf_token": "tok"})
     dash = rita.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Viewing <b>Shell League</b> as <b>Scorekeeper</b>" in dash and "League settings" not in dash
+    assert "Viewing <b>Shell League</b> as <b>Scorekeeper</b>" in dash and nav not in dash
     assert "Results entry" in dash and "Back to Race Master" in dash
     # Display only: the real permission still works, and the setting is per league.
     assert rita.get(f"/career/{token}/settings").status_code == 200
@@ -55,7 +56,7 @@ def test_lower_roles_cannot_pick_a_higher_mode(app, master_client):
     sam = _client(app, "sam")
     sam.post(f"/career/{token}/mode", data={"mode": "race_master", "csrf_token": "tok"})
     dash = sam.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "League settings" not in dash
+    assert f'href="/career/{token}/settings"' not in dash
     assert sam.get(f"/career/{token}/settings").status_code == 403
 
 
@@ -201,6 +202,11 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
     entry = {"version": C.APP_VERSION, "title": "Big update", "date": "today", "overview": "", "items": [], "sections": [],
              "highlights": [{"text": "New interface", "children": []}], "action": []}
     monkeypatch.setattr(changelog, "entry", lambda base, version: entry)
+    # Accounts created before the update see it; accounts created after it start with it seen.
+    def from_before_the_update(name):
+        with auth.accounts() as conn:
+            conn.execute("DELETE FROM whats_new_seen WHERE username = ?", (name,))
+    from_before_the_update("david")
     page = master_client.get("/").get_data(as_text=True)
     assert 'id="whats-new"' in page and "New interface" in page
     master_client.post("/whats-new", data={"choice": "later", "csrf_token": "tok"})
@@ -212,6 +218,8 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
     login(fresh, "david")
     assert 'id="whats-new"' not in fresh.get("/").get_data(as_text=True)          # remembered for the account
     auth.create_user("eve", "Eve", "password1")
+    assert 'id="whats-new"' not in _client(app, "eve").get("/").get_data(as_text=True)  # new account: nothing to catch up on
+    from_before_the_update("eve")
     assert 'id="whats-new"' in _client(app, "eve").get("/").get_data(as_text=True)  # per account, not global
 
 

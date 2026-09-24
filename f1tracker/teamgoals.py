@@ -108,12 +108,12 @@ def options(conn, season_id, team_id):
         wanted = expected + t["shift"]
         pos = max(1, min(n, wanted))
         pts = _points_for(pos, rounds, sprints, t["points"])
-        if pos != wanted:
-            # The position can't move any further (already P1, or already last): a position route would make this
-            # tier no harder (or no easier) than the next, so it's judged on points alone.
+        if pos != wanted or pos >= n:
+            # The position can't move any further (already P1, or already last), or it's last place, which every
+            # team reaches: a position route would be free or no harder than the next tier, so it's points alone.
             pos = 0
-        text = (f"Finish P{pos} or better in the Constructors' or score {pts} points" if pos
-                else f"Score {pts} points in the Constructors'")
+        text = (f"Finish P{pos} or better in the Constructors' Championship or score {pts} points" if pos
+                else f"Score {pts} points in the Constructors' Championship")
         out[key] = {"tier": key, "label": t["label"], "target_position": pos, "target_points": pts,
                     "reward": t["reward"], "penalty": t["penalty"], "text": text}
     return {"expected": expected, "why": "; ".join(why), "options": out}
@@ -173,8 +173,8 @@ def _by_position(goal, position):
 
 def describe(goal):
     pos, pts = goal["target_position"], goal["target_points"]
-    return (f"Finish P{pos} or better in the Constructors' or score {pts} points" if pos
-            else f"Score {pts} points in the Constructors'")
+    return (f"Finish P{pos} or better in the Constructors' Championship or score {pts} points" if pos
+            else f"Score {pts} points in the Constructors' Championship")
 
 
 def progress(conn, season_id, standings=None):

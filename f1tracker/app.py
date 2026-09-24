@@ -2498,7 +2498,7 @@ def register_routes(app):
         g.audit_link = f"driver/{dst}"
         flash(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
               f"{done['to']['name']}. Standings, Form and Reputation are recalculated. A backup was made first "
-              "(League & Saves → automatic backups).", "success")
+              "(Backups & data).", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/driver", methods=["POST"])
