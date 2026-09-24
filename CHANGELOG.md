@@ -3,6 +3,36 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.3 · Race weekends
+_Released September 24, 2026_
+> Every round is now a proper race weekend: the paddock opens, drivers face the press, the lights go out, and
+> the chequered flag falls when the results go in. The press also has far more to ask, before and after the race.
+
+### Highlights
+- **The paddock opens an hour before the race.** It opens by itself an hour before the scheduled race time, or when a Scorekeeper or the Race Master presses *Open the paddock*. Everyone gets an alert (Race day, in your notification settings) and a banner on every page.
+- **Pre-race press.** While the paddock is open each driver gets two questions picked from their situation: last result, teammate battle, weekend target, Sprint weekend, points drought, title fight, a rival close in the standings, the transfer window and more. Answers count toward your team relationship and some make headlines.
+- **Lights out.** A Scorekeeper or the Race Master presses *Start the race* once everyone's ready (pre-race press, weekend target, last race's press). Only the Race Master can start with someone outstanding, with a note. The round shows **LIVE** everywhere.
+- **Results only after lights out.** No results can go in for a round until its race has started. Submitting them waves the chequered flag.
+- **A much bigger post-race press room.** Questions now follow what happened: wins, podiums, places gained or lost from qualifying, pole, fastest lap, Driver of the Day, good or bad Sprints, first points, points droughts, repeated retirements, close teammate battles, hitting or missing your target, the title fight.
+
+### Added
+- **Race weekend panel** on each round page: the four stages (Upcoming, Paddock open, Lights out, Chequered flag), a countdown, a "who's ready" board, the Open and Start buttons, and your pre-race press.
+- **Race day alerts**: a new notification category for the paddock opening and lights out (phone alerts on, email off by default; change it in Notifications).
+- **League setting: Race weekends** (on by default). Off: results can go in at any time, as before.
+- Press page history says whether each answer was before or after the race.
+
+### Changed
+- **Round gates are checked at lights out** instead of when results are saved, and include the pre-race press when press is part of the gate.
+- **Predictions close at lights out** (or at the scheduled race time, whichever comes first).
+- **Formula (approved): pre-race press answers** nudge the team relationship like post-race answers (between −3 and +3 each), within the same overall limit on extras.
+- Rounds submitted before 2.3 keep the post-race questions they already had, so nothing half-answered changes.
+
+### Database
+- League files move to schema 19: four new columns on each round (`paddock_at`, `paddock_by`, `lights_at`, `lights_by`). Each league is backed up automatically before it upgrades (`before-v19-upgrade`). A round that already has results counts as started, so nothing already played is affected.
+
+### Tested
+- A full simulated 24-round season plus a rollover through the real website with race weekends on: the paddock opened by itself before scheduled races and by hand otherwise; results were refused before the paddock and before lights out on every round; drivers, Spectators and members without a driver could never open the paddock or start a race; a Scorekeeper couldn't start a round while a driver's pre-race press was outstanding, and the Race Master could with a note.
+
 ## 2.2.1 · Sign-up fix from a full-season test
 _Released September 24, 2026_
 > A full simulated season (every role, real settings) found one small sign-up problem, fixed here.

@@ -301,7 +301,7 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
         assert {i["kind"] for i in gate["players"][0]["checks"]} == {"press", "target"}
         pens = teamlife.press_pens(conn, S.current_season_id(conn), a)
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "2 press questions to answer from R1" in dash and "required" in dash
+    assert "2 post-race press questions from R1" in dash and "required" in dash
     for q in pens[-1]["questions"]:
         ana.post(f"/career/{token}/press/{r1['id']}", data={"csrf_token": "tok", "question": q["key"],
                                                               "answer": q["answers"][0]["key"]})

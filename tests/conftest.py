@@ -19,6 +19,7 @@ def data_dir(tmp_path, monkeypatch):
 def pytest_configure(config):
     config.addinivalue_line("markers", "gates: run with round gates at their real default (on)")
     config.addinivalue_line("markers", "whatsnew: show the real What's New popup (hidden in other tests)")
+    config.addinivalue_line("markers", "weekends: run with race weekends at their real default (on)")
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +37,14 @@ def round_gates_default(request, monkeypatch):
     from f1tracker import teamlife
     if not request.node.get_closest_marker("gates"):
         monkeypatch.setitem(teamlife.DEFAULTS, "round_gates", "0")
+
+
+@pytest.fixture(autouse=True)
+def race_weekends_default(request, monkeypatch):
+    """Tests written before race weekends (v2.3) enter results straight away; mark @pytest.mark.weekends for the real default."""
+    from f1tracker import weekend
+    if not request.node.get_closest_marker("weekends"):
+        monkeypatch.setitem(weekend.DEFAULTS, "race_weekends", "0")
 
 
 @pytest.fixture

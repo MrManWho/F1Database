@@ -88,6 +88,22 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## New in 2.3: race weekends
+
+- **Upgrade**: leagues move to schema 19 the first time they're opened (a `before-v19-upgrade` backup is written
+  first). New columns on `events`: `paddock_at`, `paddock_by` (a username, or `auto`), `lights_at`, `lights_by`.
+  New meta keys: `race_weekends` (default on) and `press_bank_since` (rounds submitted before it keep their old
+  post-race questions).
+- **How a round runs**: Open the paddock (Scorekeeper / Race Master, or automatically an hour before the scheduled
+  race time; there's no background timer, so it happens on the next page view) → drivers do pre-race press, target and
+  check-in → Start the race (the round gate is checked here; the Race Master can override with a note) → enter and
+  submit results.
+- **Strict**: the results API refuses a round that hasn't started (HTTP 423), for every role. Rounds with results
+  (In Progress or Complete) are never blocked, so corrections work as before.
+- **Turning it off**: League settings → Race weekends. Results then go in at any time, as in 2.2.
+- **Rolling back to 2.2.1**: works as is; 2.2.1 ignores the new columns. Pre-race answers stay in `press_answers`
+  (their keys start with `pre_`).
+
 ## New in 2.2
 
 - **Do-this-first steps** (change notices, then the growth pledge, then the team goal) come from one ordered list, so a

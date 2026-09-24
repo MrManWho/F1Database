@@ -194,11 +194,21 @@
         <button class="btn btn-sm" name="mode" value="{{ ctx.modes[0][0] }}">Back to {{ ctx.modes[0][1] }}</button></form></div>
     {% endif %}
     <main class="content" id="main" tabindex="-1">
+      {% if ctx.race_now and request.endpoint != 'weekend' %}{% set rn = ctx.race_now %}
+      <div class="banner race-now-banner phase-{{ rn.phase }}" role="status">
+        {% if rn.phase == 'live' %}<span class="live-badge">● LIVE</span> <b>Lights out at R{{ rn.event.round_number }} {{ rn.event.name }}.</b>
+        {% else %}<span aria-hidden="true">🏁</span> <b>The paddock is open for R{{ rn.event.round_number }} {{ rn.event.name }}.</b>{% endif %}
+        <a href="{{ url_for('weekend', token=ctx.token, event_id=rn.event.id) }}#paddock">{{ 'Follow the race' if rn.phase == 'live' else 'Go to the paddock' }} →</a></div>
+      {% endif %}
       {% if ctx.my_todo %}{% set td = ctx.my_todo %}
       <div class="banner banner-warn todo-banner" role="status"><span aria-hidden="true">⏳</span>
         <b>R{{ td.event.round_number }} {{ td.event.name }} is waiting on you.</b>
-        {% if td.press %}You have {{ td.press }} press question{{ 's' if td.press != 1 }} to answer{% if td.press_event %} from R{{ td.press_event.round_number }}{% endif %}{% endif %}{% if td.press and td.target %} and{% endif %}{% if td.target %} {{ 'you need to' if td.press else 'You need to' }} accept your weekend target{% endif %} before results can go in.
-        <a href="{{ url_for('dashboard', token=ctx.token) }}#todo">Do it now →</a></div>
+        {% set parts = [] %}
+        {% if td.press %}{% set _ = parts.append(td.press ~ ' post-race press question' ~ ('s' if td.press != 1 else '') ~ (' from R' ~ td.press_event.round_number if td.press_event else '')) %}{% endif %}
+        {% if td.prerace %}{% set _ = parts.append(td.prerace ~ ' pre-race press question' ~ ('s' if td.prerace != 1 else '')) %}{% endif %}
+        {% if td.target %}{% set _ = parts.append('your weekend target to accept') %}{% endif %}
+        Still to do: {{ parts|join(', ') }}. The race can't start until everyone's ready.
+        <a href="{{ url_for('weekend', token=ctx.token, event_id=td.event.id) }}#paddock">Do it now →</a></div>
       {% endif %}
       {% block content %}{% endblock %}
     </main>

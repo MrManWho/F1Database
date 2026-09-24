@@ -58,6 +58,10 @@ QUESTIONS = {
 }
 
 
+from . import press as _press  # noqa: E402
+QUESTIONS.update(_press.POST)
+
+
 def _result(conn, event_id, driver_id):
     return conn.execute("SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (event_id, driver_id)).fetchone()
 
@@ -67,8 +71,8 @@ def _teammate_result(conn, event_id, row):
                         (event_id, row["team_id"], row["driver_id"])).fetchone()
 
 
-def questions_for(conn, event_id, driver_id):
-    """The two questions for this driver after this race (always the same two for the same weekend)."""
+def legacy_keys(conn, event_id, driver_id):
+    """The two questions as picked before v2.3 (kept for rounds submitted before then)."""
     row = _result(conn, event_id, driver_id)
     if not row or row["result_status"] not in C.START_STATUSES:
         return []
@@ -91,8 +95,87 @@ def questions_for(conn, event_id, driver_id):
     for k in keys:
         if k not in seen:
             seen.append(k)
-    return [{"key": k, "text": QUESTIONS[k][0],
-             "answers": [{"key": a, "text": t, "effect": e} for a, t, e, _h in QUESTIONS[k][1]]} for k in seen[:2]]
+    return seen[:2]
+
+
+def _bank_since(conn):
+    """When this league started using the v2.3 question bank (set the first time it's needed)."""
+    from .storage import get_meta, set_meta
+    since = get_meta(conn, "press_bank_since")
+    if not since:
+        since = now_iso()
+        set_meta(conn, "press_bank_since", since)
+    return since
+
+
+def _post_questions(conn, event_id, driver_id):
+    """(questions, facts) for this driver after this race. Rounds submitted before v2.3 keep their old pair."""
+    from . import press
+    event = S.get_event(conn, event_id)
+    if not event:
+        return [], {}
+    submitted = event.get("submitted_at")
+    if not submitted or submitted < _bank_since(conn):
+        keys = legacy_keys(conn, event_id, driver_id)
+        facts = press._facts(conn, event, driver_id) if keys else {}
+    else:
+        keys, facts = press.post_keys(conn, event, driver_id)
+    return press.build(keys, facts, QUESTIONS), facts
+
+
+def questions_for(conn, event_id, driver_id):
+    """The two questions for this driver after this race (always the same two for the same weekend)."""
+    return _post_questions(conn, event_id, driver_id)[0]
+
+
+def prerace_pen(conn, event, driver_id):
+    """v2.3: the pre-race questions for this driver at this round, with what's been answered."""
+    from . import press
+    keys, facts = press.pre_keys(conn, event, driver_id)
+    questions = press.build(keys, facts, press.PRE)
+    answered = {r["question"]: r["answer"] for r in conn.execute(
+        "SELECT * FROM press_answers WHERE event_id = ? AND driver_id = ? AND question LIKE 'pre_%'",
+        (event["id"], driver_id))}
+    for q in questions:
+        q["answered"] = answered.get(q["key"])
+    return {"event": event, "questions": questions, "open": sum(1 for q in questions if not q["answered"]),
+            "facts": facts, "pre": True}
+
+
+def answer_prerace(conn, event_id, driver_id, question, choice):
+    """Answer a pre-race question. Only while the paddock is open (before lights out)."""
+    from . import press, weekend
+    event = S.get_event(conn, event_id)
+    if not event or weekend.phase(event) != "paddock":
+        raise S.ValidationError("Pre-race press is only open while the paddock is open")
+    if not S.driver_seats(conn, event["season_id"]).get(driver_id):
+        raise S.ValidationError("Only drivers racing this round are asked")
+    pen = prerace_pen(conn, event, driver_id)
+    q = next((q for q in pen["questions"] if q["key"] == question), None)
+    if not q:
+        raise S.ValidationError("That question wasn't asked")
+    if q["answered"]:
+        raise S.ValidationError("You've already answered that one")
+    pick = next((a for a in press.PRE[question][1] if a[0] == choice), None)
+    if not pick:
+        raise S.ValidationError("Pick one of the answers")
+    return _record(conn, event, driver_id, question, choice, pick, q["text"], pen["facts"], "before")
+
+
+def _record(conn, event, driver_id, question, choice, pick, asked, facts, when):
+    from . import press
+    _key, text, effect, template = pick
+    conn.execute("INSERT INTO press_answers(event_id, driver_id, question, answer, effect, created_at) VALUES(?,?,?,?,?,?)",
+                 (event["id"], driver_id, question, choice, effect, now_iso()))
+    relations.ensure(conn, event["season_id"])
+    relations.add_bonus(conn, event["season_id"], driver_id, effect)
+    line = press._fill(template, facts) if template else None
+    if line:
+        driver = S.driver_map(conn)[driver_id]
+        feed.post(conn, event["season_id"], "paddock", line,
+                  f"Asked \"{asked}\" {when} R{event['round_number']} {event['name']}, {driver['name']} said: "
+                  f"\"{press._fill(text, facts)}\"", "news", driver_id=driver_id, team_id=facts.get("team_id"))
+    return effect
 
 
 def latest_press_event(conn, season_id):
@@ -138,15 +221,26 @@ def _pen(conn, event, driver_id):
 
 def press_history(conn, driver_id, limit=40):
     """Everything this driver has said to the press, newest first, with how the team took it."""
-    out = []
+    from . import press
+    out, asked_cache = [], {}
     for r in conn.execute("""SELECT p.*, e.round_number, e.name AS event_name, s.year FROM press_answers p
                              JOIN events e ON e.id = p.event_id JOIN seasons s ON s.id = e.season_id
-                             WHERE p.driver_id = ? ORDER BY s.year DESC, e.round_number DESC LIMIT ?""",
+                             WHERE p.driver_id = ? ORDER BY s.year DESC, e.round_number DESC, p.created_at DESC LIMIT ?""",
                           (driver_id, limit)):
-        q = QUESTIONS.get(r["question"])
-        said = next((t for k, t, _e, _h in q[1] if k == r["answer"]), r["answer"]) if q else r["answer"]
-        out.append({"label": f"{r['year']} R{r['round_number']} {r['event_name']}", "question": q[0] if q else r["question"],
-                    "answer": said, "effect": r["effect"]})
+        pre = press.is_pre(r["question"])
+        key = (r["event_id"], pre)
+        if key not in asked_cache:
+            event = S.get_event(conn, r["event_id"])
+            qs = prerace_pen(conn, event, driver_id)["questions"] if pre else _post_questions(conn, r["event_id"], driver_id)[0]
+            asked_cache[key] = {q["key"]: q for q in qs}
+        q = asked_cache[key].get(r["question"])
+        bank = (press.PRE if pre else QUESTIONS).get(r["question"])
+        asked = q["text"] if q else (press._fill(bank[0], {"event": r["event_name"]}) if bank else r["question"])
+        said = next((a["text"] for a in q["answers"] if a["key"] == r["answer"]), None) if q else None
+        if said is None:
+            said = next((t for k, t, _e, _h in bank[1] if k == r["answer"]), r["answer"]) if bank else r["answer"]
+        out.append({"label": f"{r['year']} R{r['round_number']} {r['event_name']}", "question": asked,
+                    "answer": said, "effect": r["effect"], "pre": pre})
     return out
 
 
@@ -158,7 +252,8 @@ def answer(conn, event_id, driver_id, question, choice):
     still_open = event["press_required"] and press_stays_open(conn)
     if (not latest or latest["id"] != event_id) and not still_open:
         raise S.ValidationError("The press have moved on to the next race")
-    q = next((q for q in questions_for(conn, event_id, driver_id) if q["key"] == question), None)
+    questions, facts = _post_questions(conn, event_id, driver_id)
+    q = next((q for q in questions if q["key"] == question), None)
     if not q:
         raise S.ValidationError("That question wasn't asked")
     if conn.execute("SELECT 1 FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
@@ -167,20 +262,7 @@ def answer(conn, event_id, driver_id, question, choice):
     pick = next((a for a in QUESTIONS[question][1] if a[0] == choice), None)
     if not pick:
         raise S.ValidationError("Pick one of the answers")
-    _key, text, effect, headline = pick
-    conn.execute("INSERT INTO press_answers(event_id, driver_id, question, answer, effect, created_at) VALUES(?,?,?,?,?,?)",
-                 (event_id, driver_id, question, choice, effect, now_iso()))
-    relations.ensure(conn, event["season_id"])
-    relations.add_bonus(conn, event["season_id"], driver_id, effect)
-    if headline:
-        driver = S.driver_map(conn)[driver_id]
-        seat = S.driver_seats(conn, event["season_id"]).get(driver_id)
-        team = S.team_map(conn).get(seat[0]) if seat else None
-        feed.post(conn, event["season_id"], "paddock",
-                  headline.format(driver=driver["name"], team=team["name"] if team else "the team"),
-                  f"Asked \"{q['text']}\" after R{event['round_number']} {event['name']}, {driver['name']} said: \"{text}\"",
-                  "news", driver_id=driver_id, team_id=team["id"] if team else None)
-    return effect
+    return _record(conn, event, driver_id, question, choice, pick, q["text"], facts, "after")
 
 
 # --------------------------------------------------------------------------- league settings

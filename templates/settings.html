@@ -103,13 +103,18 @@
       <span class="switch"></span>
       <span><b>Weekend targets</b><small class="muted">One realistic target per player driver per race. Hit: +{{ C.TARGET_HIT|int }} team standing, missed: {{ C.TARGET_MISSED }}.</small></span>
     </label>
+    <label class="toggle-row" id="race-weekends">
+      <input type="checkbox" name="race_weekends" value="1" {{ 'checked' if ctx.race_weekends }}>
+      <span class="switch"></span>
+      <span><b>Race weekends</b><small class="muted">Each round opens its paddock an hour before the race (or when a Scorekeeper opens it) for pre-race press, then a Scorekeeper starts the race. Results can only go in after lights out. Off: results can go in at any time.</small></span>
+    </label>
     <label class="toggle-row">
       <input type="checkbox" name="round_gates" value="1" {{ 'checked' if life.gates }}>
       <span class="switch"></span>
-      <span><b>Round gates</b><small class="muted">Results for the next round wait until every player with a login has done the things below. You can open a round early with a note.</small></span>
+      <span><b>Round gates</b><small class="muted">{% if ctx.race_weekends %}The race can't start{% else %}Results for the next round wait{% endif %} until every player with a login has done the things below. You can open a round early with a note.</small></span>
     </label>
     <div class="gate-options">
-      <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Post-race press questions answered</label>
+      <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Press questions answered (post-race{% if ctx.race_weekends %}, and pre-race before lights out{% endif %})</label>
       <label class="check"><input type="checkbox" name="gate_targets" value="1" {{ 'checked' if life.gate_targets }}> Weekend target accepted</label>
     </div>
     {% if active_season %}<p class="banner small" role="note">A season is in progress: these changes apply from the next round. Nothing already completed is recalculated.</p>{% endif %}

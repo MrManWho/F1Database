@@ -104,6 +104,8 @@ def predictions_closed_reason(event):
         return "This round is complete."
     if event["status"] != C.EVENT_NOT_RUN:
         return "Results have started going in for this round, so picks are closed."
+    if event.get("lights_at"):
+        return "Picks closed at lights out."
     if race_started(event):
         return "Picks closed when the race started (the scheduled race time)."
     return None
@@ -284,7 +286,7 @@ PICKS = ["pole", "winner", "fastest_lap", "top_player"]
 
 
 def predictions_locked(event):
-    return event["status"] != C.EVENT_NOT_RUN or race_started(event)
+    return event["status"] != C.EVENT_NOT_RUN or bool(event.get("lights_at")) or race_started(event)
 
 
 def save_prediction(conn, event_id, username, picks):

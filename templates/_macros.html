@@ -107,7 +107,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
   {% if ev.race_at %}<span class="lights-out">{{ 'Lights out' if st[0] in ('scheduled', 'upcoming', 'soon') else 'Scheduled for' }}
     <time datetime="{{ ev.race_at }}">{{ ev.race_at|race_at }} {{ ev.race_at|zone_label }}</time></span>{% endif %}
   <span class="countdown race-state state-{{ st[0] }}" role="status" data-countdown="{{ ev.race_at or '' }}" data-event-status="{{ ev.status }}"
-        data-postponed="{{ 1 if ev.postponed else 0 }}" data-window="{{ g.race_window or 180 }}"><span class="state-ico" aria-hidden="true">{{ {'unscheduled': '📅', 'postponed': '⏸', 'scheduled': '📅', 'upcoming': '⏱', 'soon': '🔔', 'live': '🟢', 'pending': '⏳', 'complete': '🏁'}.get(st[0], '') }}</span> <span class="state-text">{{ st[1] }}</span></span>
+        data-postponed="{{ 1 if ev.postponed else 0 }}" data-phase="{{ 'live' if ev.lights_at else 'paddock' if ev.paddock_at else '' }}" data-window="{{ g.race_window or 180 }}"><span class="state-ico" aria-hidden="true">{{ {'unscheduled': '📅', 'postponed': '⏸', 'scheduled': '📅', 'upcoming': '⏱', 'soon': '🔔', 'live': '🟢', 'pending': '⏳', 'complete': '🏁', 'paddock': '🏁'}.get(st[0], '') }}</span> <span class="state-text">{{ st[1] }}</span></span>
 </div>
 {%- endmacro %}
 

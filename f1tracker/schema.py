@@ -482,6 +482,9 @@ def migrate(conn):
                category, channel, count and outcome only). Existing memberships are marked legacy so they keep
                exactly what they had; notifications.category and notifications.username (who a notice is for).
                seat_flags: a seat deliberately kept provisionally (awaiting contract) or held by a temporary driver.
+    v18 -> v19: race weekends (v2.3): events.paddock_at / paddock_by (when and by whom the paddock opened; "auto"
+               when it opened itself an hour before the race) and events.lights_at / lights_by (when the race
+               was started). Rounds already played are unaffected: a round with results counts as started.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -574,6 +577,10 @@ def migrate(conn):
     if "press_required" not in _columns(conn, "events"):
         # v1.20: round gates. Only rounds first submitted from now on can require press answers.
         conn.execute("ALTER TABLE events ADD COLUMN press_required INTEGER NOT NULL DEFAULT 0")
+    event_cols = _columns(conn, "events")
+    for col in ("paddock_at", "paddock_by", "lights_at", "lights_by"):
+        if col not in event_cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")   # v2.3: race weekends
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

@@ -250,11 +250,13 @@
   function parse(iso) { var d = new Date(iso); return isNaN(d) ? null : d; }
   var counters = document.querySelectorAll("[data-countdown]");
   // Same states as timefmt.race_status: countdown, race window open, awaiting results, completed.
-  var ICONS = { unscheduled: "📅", postponed: "⏸", scheduled: "📅", upcoming: "⏱", soon: "🔔", live: "🟢", pending: "⏳", complete: "🏁" };
+  var ICONS = { unscheduled: "📅", postponed: "⏸", scheduled: "📅", upcoming: "⏱", soon: "🔔", live: "🟢", pending: "⏳", complete: "🏁", paddock: "🏁" };
   function state(el, now) {
     if (el.dataset.eventStatus === "Complete") return ["complete", "Completed"];
     if (el.dataset.postponed === "1") return ["postponed", "Postponed"];
+    if (el.dataset.phase === "live") return ["live", "Lights out · Live"];     // v2.3: started by the Scorekeeper
     var d = parse(el.dataset.countdown);
+    if (el.dataset.phase === "paddock" && (!d || d <= now)) return ["paddock", "Paddock open"];
     if (!d || !el.dataset.countdown) return ["unscheduled", "Not scheduled"];
     var left = Math.floor((d - now) / 1000), mins = left / 60;
     if (mins > 7 * 24 * 60) return ["scheduled", "Scheduled"];

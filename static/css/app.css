@@ -1350,7 +1350,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .sticky-head thead th { position: sticky; top: 0; background: var(--panel-2); z-index: 2; }
 .res-mini { display: inline-block; min-width: 2.3em; text-align: center; font-size: .72rem; font-weight: 700; padding: .05rem .25rem; margin-right: 2px; border-radius: 4px; background: var(--panel-3); color: var(--muted); }
 .race-state { font-size: .78rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
-.rs-complete { color: var(--green); } .rs-live, .rs-soon { color: var(--amber); } .rs-pending { color: var(--amber); border-style: dashed; }
+.rs-complete { color: var(--green); } .rs-live, .rs-soon { color: var(--amber); } .rs-paddock { color: var(--green); } .rs-pending { color: var(--amber); border-style: dashed; }
 .rs-postponed { color: var(--danger); } .rs-unscheduled { color: var(--faint); } .rs-upcoming, .rs-scheduled { color: var(--blue); }
 .bar-col { width: 22%; min-width: 90px; }
 .bar { display: block; height: 6px; background: var(--panel-3); border-radius: 99px; overflow: hidden; }
@@ -1587,3 +1587,19 @@ tr.contract-historical { opacity: .75; }
 .iv-q { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin: 0; display: grid; gap: .3rem; }
 .iv-q legend { font-weight: 600; padding: 0 .3rem; }
 .recovery-card { border: 1px solid var(--line); border-radius: 10px; padding: .8rem 1rem; margin-top: .8rem; }
+
+/* v2.3 race weekends */
+.paddock-card .phase-track { display: flex; gap: .25rem; list-style: none; padding: 0; margin: .5rem 0 1rem; flex-wrap: wrap; }
+.paddock-card .phase-track li { flex: 1 1 6rem; text-align: center; font-size: .8rem; padding: .35rem .5rem; border-radius: 999px;
+  background: var(--surface-2, rgba(127,127,127,.12)); color: var(--muted, inherit); }
+.paddock-card .phase-track li.done { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--text, inherit); }
+.paddock-card .phase-track li.now { background: var(--accent, var(--blue)); color: var(--on-accent, #fff); font-weight: 600; }
+.paddock-card.phase-paddock { border-left: 4px solid var(--green); }
+.paddock-card.phase-live { border-left: 4px solid var(--danger); }
+.live-badge { color: var(--danger); font-weight: 700; letter-spacing: .05em; animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .45; } }
+.btn-go { font-size: 1.05rem; }
+.prerace { margin-top: 1rem; }
+@media (max-width: 520px) {
+  .paddock-card .phase-track li { flex: 1 1 0; min-width: 0; font-size: .68rem; padding: .3rem .2rem; }
+}

@@ -1,11 +1,11 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 1
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2

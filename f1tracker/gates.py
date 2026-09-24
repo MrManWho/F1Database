@@ -12,7 +12,7 @@ A round that already has results (In Progress or Complete) is never gated, so co
 
 from . import constants as C
 from . import services as S
-from . import teamlife
+from . import teamlife, weekend
 from .storage import get_meta, now_iso, set_meta
 
 
@@ -64,6 +64,8 @@ def status(conn, event_id, issue=True):
     press_event = press_event_for(conn, event) if s["gate_press"] else None
     out["press_event"] = press_event
     check_targets = teamlife.gate_targets_on(conn)
+    prerace = s["gate_press"] and weekend.enabled(conn)          # v2.3: pre-race press before lights out
+    out["weekend"] = weekend.enabled(conn)
     dmap = S.driver_map(conn)
     for driver_id, username in linked_players(conn, event["season_id"]).items():
         items = []
@@ -74,6 +76,13 @@ def status(conn, event_id, issue=True):
                 items.append({"kind": "press", "done": pen["open"] == 0, "open": pen["open"],
                               "label": f"Press questions from R{press_event['round_number']} "
                                        f"({answered}/{len(pen['questions'])} answered)"})
+        if prerace:
+            pen = teamlife.prerace_pen(conn, event, driver_id)
+            if pen["questions"]:
+                answered = len(pen["questions"]) - pen["open"]
+                items.append({"kind": "prerace", "done": pen["open"] == 0, "open": pen["open"],
+                              "label": (f"Pre-race press ({answered}/{len(pen['questions'])} answered)"
+                                        if weekend.phase(event) == "paddock" else "Pre-race press (opens with the paddock)")})
         if check_targets:
             t = teamlife.target_for(conn, event_id, driver_id)
             if t:
@@ -93,11 +102,16 @@ def blocking(conn, event_id):
     return status(conn, event_id)["blocking"]
 
 
+_WORDS = {"press": ("press questions", "answer your post-race press questions"),
+          "prerace": ("pre-race press", "answer your pre-race press questions"),
+          "target": ("weekend target", "accept your weekend target")}
+
+
 def waiting_text(gate):
     parts = []
     for p in gate["players"]:
         if not p["done"]:
-            todo = [("press questions" if i["kind"] == "press" else "weekend target") for i in p["checks"] if not i["done"]]
+            todo = [_WORDS[i["kind"]][0] for i in p["checks"] if not i["done"]]
             parts.append(f"{p['driver']['name']} ({', '.join(todo)})")
     return "; ".join(parts)
 
@@ -135,7 +149,11 @@ def my_todo(conn, season_id, driver_id):
         return None
     press = next((i["open"] for i in me["checks"] if i["kind"] == "press" and not i["done"]), 0)
     target = any(i["kind"] == "target" and not i["done"] for i in me["checks"])
-    return {"event": nxt, "press": press, "target": target, "press_event": gate["press_event"]}
+    prerace = next((i["open"] for i in me["checks"] if i["kind"] == "prerace" and not i["done"]), 0) \
+        if weekend.phase(nxt) == "paddock" else 0
+    if not (press or target or prerace):
+        return None
+    return {"event": nxt, "press": press, "target": target, "prerace": prerace, "press_event": gate["press_event"]}
 
 
 def remind(conn, event_id):
@@ -150,10 +168,9 @@ def remind(conn, event_id):
     for p in gate["players"]:
         if p["done"]:
             continue
-        todo = " and ".join(("answer your press questions" if i["kind"] == "press" else "accept your weekend target")
-                            for i in p["checks"] if not i["done"])
+        todo = " and ".join(_WORDS[i["kind"]][1] for i in p["checks"] if not i["done"])
         feed.notify(conn, p["driver"]["id"], f"Reminder: R{ev['round_number']} {ev['name']} is waiting on you. "
-                    f"Please {todo} so results can go in.", "dashboard#todo")
+                    f"Please {todo} so the race can start.", f"weekend/{ev['id']}")
         names.append(p["driver"]["name"])
     if not names:
         raise S.ValidationError("Nobody is holding this round up")

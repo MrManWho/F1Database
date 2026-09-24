@@ -23,6 +23,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
 from . import announcements, impacts, stats, ultimatums
+from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -60,7 +61,8 @@ AUDIT_LABELS = {
     "incident_delete": "Deleted an incident report", "paddock_move_results": "Moved results between drivers", "weekend_reopen": "Reopened a submitted round", "request_pledge": "Asked for a new growth pledge",
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
-    "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
+    "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "paddock_open": "Opened the paddock", "race_start": "Started the race",
+    "prerace_answer": "Answered pre-race press", "gate_remind": "Sent a round reminder",
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
@@ -195,7 +197,9 @@ def register_hooks(app):
     app.add_template_filter(lambda v: timefmt.countdown(v), "countdown")
     app.add_template_filter(lambda ev: timefmt.race_status(ev["race_at"], ev["status"],
                                                            g.get("race_window") or timefmt.DEFAULT_RACE_WINDOW,
-                                                           postponed=bool(ev["postponed"]) if "postponed" in ev.keys() else False),
+                                                           postponed=bool(ev["postponed"]) if "postponed" in ev.keys() else False,
+                                                           lights=ev["lights_at"] if "lights_at" in ev.keys() else None,
+                                                           paddock=ev["paddock_at"] if "paddock_at" in ev.keys() else None),
                             "race_status")
     app.add_template_filter(lambda v: timefmt.zone_label(v, _tz()), "zone_label")
     app.add_template_filter(lambda v: timefmt.input_value(v, _tz()), "time_input")
@@ -389,6 +393,13 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["team_goals_on"] = teamgoals.enabled(conn)
                     if not request.path.startswith("/api/"):
                         announcements.publish_due(conn)
+                        raceweek.tick(conn, g.ctx["current_season_id"])   # v2.3: the paddock opens an hour before
+                    g.ctx["race_weekends"] = raceweek.enabled(conn)
+                    g.ctx["race_now"] = None
+                    if g.ctx["race_weekends"] and not request.path.startswith("/api/"):
+                        nxt = S.next_incomplete_event(conn, g.ctx["current_season_id"])
+                        if nxt and raceweek.phase(nxt) in ("paddock", "live"):
+                            g.ctx["race_now"] = {"event": nxt, "phase": raceweek.phase(nxt)}
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
@@ -472,7 +483,7 @@ def _apply_view_mode(ctx, token):
         ctx.update(is_master=False, can_run=False, is_spectator=True, my_driver=None)
 
 
-HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results"), ("statuses", "Result statuses"),
+HELP_TOPICS = [("weekend", "The race weekend"), ("roles", "Roles and permissions"), ("results", "Entering results"), ("statuses", "Result statuses"),
                ("scoring", "Scoring and Sprint points"), ("form", "Form"), ("reputation", "Reputation"),
                ("driver-value", "Driver Value"), ("car", "Car strength"), ("market", "Transfer market"),
                ("pledges", "Growth pledges"), ("relationship", "Team relationship"), ("rivalry", "Rivalries"),
@@ -1521,7 +1532,18 @@ def register_routes(app):
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
-                    gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id))
+                    gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id),
+                    wk=_weekend_panel(conn, ctx, event))
+
+    def _weekend_panel(conn, ctx, event):
+        """v2.3: the race weekend stage, the ready board and this driver's pre-race press."""
+        wk = raceweek.summary(conn, event)
+        if not wk["on"]:
+            return wk
+        me = ctx["my_driver"]
+        if me and wk["phase"] in ("paddock", "live", "complete") and S.driver_seats(conn, event["season_id"]).get(me["id"]):
+            wk["pen"] = teamlife.prerace_pen(conn, event, me["id"])
+        return wk
 
     def _entrants(conn, event_id):
         """The drivers in this round, for the screenshot importer to match against (never anyone else)."""
@@ -1631,7 +1653,8 @@ def register_routes(app):
         rounds = []
         dmap = S.driver_map(conn)
         for e in S.events(conn, sid):
-            code, label = timefmt.race_status(e["race_at"], e["status"], ctx["race_window"], postponed=e["postponed"])
+            code, label = timefmt.race_status(e["race_at"], e["status"], ctx["race_window"], postponed=e["postponed"],
+                                              lights=e.get("lights_at"), paddock=e.get("paddock_at"))
             r = {"event": e, "state": code, "state_label": label, "winner": None, "pole": None, "players": []}
             if e["status"] != C.EVENT_NOT_RUN:
                 rows = S.weekend_rows(conn, e["id"])
@@ -2193,6 +2216,44 @@ def register_routes(app):
         g.audit_summary = f"accepted their Round {ev['round_number']} weekend target ({t['label']})"
         flash("Target accepted. Good luck out there.", "success")
         return _back(ctx, "#target")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/paddock", methods=["POST"])
+    @career_page(ops_only=True)
+    def paddock_open(conn, ctx, event_id):
+        """v2.3: a Scorekeeper or Race Master opens the paddock (it also opens by itself an hour before the race)."""
+        ev = raceweek.open_paddock(conn, event_id, g.user["username"])
+        g.audit_summary = f"opened the paddock for {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
+        g.audit_link = f"weekend/{event_id}"
+        flash("The paddock is open. Drivers can answer pre-race press, accept targets and check in.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#paddock")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/start", methods=["POST"])
+    @career_page(ops_only=True)
+    def race_start(conn, ctx, event_id):
+        """v2.3: lights out. The round gate is checked here; only the Race Master can start with players outstanding."""
+        real_master = ctx.get("real", ctx)["is_master"]
+        gate = raceweek.start_race(conn, event_id, g.user["username"], real_master, request.form.get("note"))
+        ev = S.get_event(conn, event_id)
+        label = event_label(ev, S.get_season(conn, ev["season_id"])["year"])
+        g.audit_summary = (f"started {label}" + (f" before everyone was ready (waiting on {gates.waiting_text(gate)}). "
+                                                  f"Note: {(request.form.get('note') or '').strip()[:200]}"
+                                                  if gate["blocking"] else ""))
+        g.audit_link = f"weekend/{event_id}"
+        flash("Lights out! Enter the results once the race is over.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+
+    @app.route("/career/<token>/weekend/<int:event_id>/prerace", methods=["POST"])
+    @career_page()
+    def prerace_answer(conn, ctx, event_id):
+        if not ctx["my_driver"]:
+            abort(403)
+        effect = teamlife.answer_prerace(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
+                                         request.form.get("answer"))
+        ev = S.get_event(conn, event_id)
+        g.audit_summary = f"answered the Round {ev['round_number']} pre-race press questions"
+        flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
+                                  if effect < 0 else "Nobody reads much into it."), "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#paddock")
 
     @app.route("/career/<token>/weekend/<int:event_id>/open-early", methods=["POST"])
     @career_page(master_only=True)
@@ -3253,7 +3314,10 @@ def register_routes(app):
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
                     return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
                                    "can reopen or change it now."), 403
-                gate = gates.status(conn, event_id)
+                blocked = raceweek.results_blocked(conn, before)
+                if blocked:
+                    return jsonify(ok=False, gated=True, not_started=True, error=blocked), 423
+                gate = gates.status(conn, event_id) if not before.get("lights_at") else {"blocking": False}
                 if gate["blocking"]:
                     why = ("This round can't start yet. Waiting on: " + gates.waiting_text(gate) +
                            (". Open it early from the round page with a note if you need to." if is_master()
@@ -3587,6 +3651,7 @@ def register_routes(app):
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
                 teamgoals.set_enabled(conn, bool(request.form.get("team_goal_choice")))
                 ultimatums.set_enabled(conn, bool(request.form.get("midseason_sackings")))
+                raceweek.set_enabled(conn, bool(request.form.get("race_weekends")))
             if league_profile.is_public(conn):
                 community.public_key(conn)
             if request.form.get("team_life") == "1":

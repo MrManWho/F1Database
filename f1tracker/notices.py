@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 # key: (label, description, audience) where audience is "all" (anyone in the league) or "masters".
 CATEGORIES = {
     "schedule": ("Race scheduled or rescheduled", "A race time is set, changed or postponed.", "all"),
+    "raceday": ("Race day", "The paddock opens and the lights go out for a round.", "all"),
     "results": ("Results submitted", "A round's results go in (the full results email).", "all"),
     "market": ("Market opened or closing", "Transfer windows opening and closing.", "all"),
     "contracts": ("Contracts and seats", "Offers for your driver, signings and seat changes.", "all"),

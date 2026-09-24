@@ -4,7 +4,8 @@
 {% block content %}
 {% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
 {% set gated = gate and gate.blocking %}
-{% set ro = not ctx.can_run or locked or gated %}
+{% set not_started = wk and wk.on and wk.phase in ('upcoming', 'paddock') %}
+{% set ro = not ctx.can_run or locked or gated or not_started %}
 <div class="weekend-head">
   <div>
     <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>
@@ -33,7 +34,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
 {% endif %}
 
-{% set full = True %}{% include "_gate.html" with context %}
+{% include "_paddock.html" with context %}
+{% if not (wk and wk.on) %}{% set full = True %}{% include "_gate.html" with context %}{% endif %}
 {% include "_race_night.html" with context %}
 
 <section class="card diff-strip">
@@ -61,7 +63,7 @@
 <section class="card table-card">
   <div class="card-head">
     <h2>Results</h2>
-    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Waiting for players' if gated else 'View only') }}</span>
+    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Opens at lights out' if not_started and ctx.can_run else 'Waiting for players' if gated else 'View only') }}</span>
     {% else %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>{% endif %}
   </div>
   <div class="session-tabs" role="group" aria-label="Show session">

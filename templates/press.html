@@ -2,7 +2,7 @@
 {% block title %}Press{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">{{ ctx.my_driver.name }} · {{ ctx.season.year }}</div><h1>Press</h1>
-  <p class="page-purpose">After every race the press ask you two questions. What you say gets back to your team, and some answers make headlines.</p></div></div>
+  <p class="page-purpose">Before each race (while the paddock is open) and after it, the press ask you two questions. What you say gets back to your team, and some answers make headlines. Pre-race questions are on the round page.</p></div></div>
 
 {% if press_pens|selectattr('questions')|list %}
 {% include "_press_pens.html" with context %}
@@ -16,7 +16,7 @@
   {% if history %}
   <ul class="plain-list press-history">
     {% for h in history %}
-    <li><small class="muted">{{ h.label }}</small>
+    <li><small class="muted">{{ h.label }} · {{ 'before the race' if h.pre else 'after the race' }}</small>
       <p class="press-question">“{{ h.question }}”</p>
       <p>“{{ h.answer }}” <span class="{{ 'up' if h.effect > 0 else 'down' if h.effect < 0 else 'muted' }} small">{{ 'The team liked that' if h.effect > 0 else 'The team didn\'t love that' if h.effect < 0 else 'Nobody read much into it' }} ({{ '%+g'|format(h.effect) }} team standing)</span></p></li>
     {% endfor %}

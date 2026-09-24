@@ -1,0 +1,108 @@
+{# v2.3 race weekend panel for the round page. Needs: ctx, event, wk (weekend summary), gate, reminded. #}
+{% from "_macros.html" import race_clock with context %}
+{% if wk and wk.on %}
+{% set ev = event %}
+{% set stages = [('upcoming', 'Upcoming'), ('paddock', 'Paddock open'), ('live', 'Lights out'), ('complete', 'Chequered flag')] %}
+{% set here = stages|map(attribute=0)|list %}{% set at = here.index(wk.phase) %}
+<section class="card paddock-card phase-{{ wk.phase }}" id="paddock" aria-labelledby="paddock-title">
+  <div class="card-head">
+    <h2 id="paddock-title">{{ {'upcoming': '📅', 'paddock': '🏁', 'live': '🚦', 'complete': '🏆'}[wk.phase] }} {{ wk.label }}</h2>
+    {% if wk.phase in ('upcoming', 'paddock') %}{{ race_clock(ev) }}{% elif wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% endif %}
+  </div>
+  <ol class="phase-track" aria-label="Race weekend stages">
+    {% for key, label in stages %}
+    <li class="{{ 'done' if loop.index0 < at else 'now' if loop.index0 == at else '' }}" {% if loop.index0 == at %}aria-current="step"{% endif %}>{{ label }}</li>
+    {% endfor %}
+  </ol>
+
+  {% if wk.phase == 'upcoming' %}
+    {% if not wk.is_next %}
+    <p class="small muted">This round's paddock opens once the round before it is complete.</p>
+    {% elif wk.opens_at %}
+    <p class="small">The paddock opens by itself at <b>{{ wk.opens_at|stamp }}</b>, an hour before lights out.
+      {% if ctx.can_run %}You can open it sooner.{% endif %}</p>
+    {% else %}
+    <p class="small">No race time is set, so {{ 'you open' if ctx.can_run else 'a Scorekeeper or the Race Master opens' }} the paddock when you're getting ready to race.</p>
+    {% endif %}
+    {% if ctx.can_run and wk.can_open %}
+    <form method="post" action="{{ url_for('paddock_open', token=ctx.token, event_id=ev.id) }}" class="button-row tight">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary">🏁 Open the paddock</button>
+      <span class="muted small">Opens pre-race press and tells everyone (by their notification settings).</span>
+    </form>
+    {% elif ctx.can_run and wk.why_not and wk.is_next %}<p class="muted small">{{ wk.why_not }}.</p>{% endif %}
+
+  {% elif wk.phase == 'paddock' %}
+    <p class="small">Drivers: answer your pre-race press{% if ctx.team_life.targets %}, accept your weekend target{% endif %} and check in. {{ 'You start' if ctx.can_run else 'A Scorekeeper or the Race Master starts' }} the race when everyone's ready; results can go in after lights out.</p>
+    {% if gate.players %}
+    <ul class="gate-list ready-board" aria-label="Who's ready">
+      {% for p in gate.players %}
+      <li class="{{ 'is-done' if p.done else 'is-waiting' }}" {% if p.driver.player_color %}style="--player: {{ p.driver.player_color }}"{% endif %}>
+        <span class="gate-who"><b>{{ p.driver.name }}</b> {{ '✅ Ready' if p.done else '⏳ Not ready' }}</span>
+        <span class="gate-items">{% for i in p.checks %}<span class="gate-item {{ 'ok' if i.done else 'no' }}">{{ '✓' if i.done else '✗' }} {{ i.label }}</span>{% endfor %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if ctx.can_run %}
+      {% if not gate.blocking %}
+      <form method="post" action="{{ url_for('race_start', token=ctx.token, event_id=ev.id) }}" class="button-row tight"
+            onsubmit="return confirm('Start R{{ ev.round_number }}? Predictions and pre-race press close at lights out.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary btn-go">🚦 Start the race</button>
+        {% if gate.bypass %}<span class="muted small">Opened early by the Race Master: “{{ gate.bypass.note }}”</span>{% endif %}
+      </form>
+      {% else %}
+      <p class="small"><b>Can't start yet.</b> Waiting on {{ gate.players|rejectattr('done')|map(attribute='driver.name')|join(', ') }}.</p>
+      <div class="button-row tight">
+        <form method="post" action="{{ url_for('gate_remind', token=ctx.token, event_id=ev.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm" {{ 'disabled' if reminded }}>{{ '✓ Reminder sent' if reminded else '🔔 Send a reminder' }}</button>
+        </form>
+      </div>
+      {% if ctx.is_master %}
+      <details class="gate-bypass">
+        <summary class="small">Start anyway…</summary>
+        <form method="post" action="{{ url_for('race_start', token=ctx.token, event_id=ev.id) }}" class="stack">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Why? <small class="muted">(required, kept on the round and in the Activity Log)</small>
+            <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. Carson's away, answering later"></label>
+          <p class="muted small">Race Master override. Anything still outstanding can be done later and still counts, except pre-race press, which closes at lights out.</p>
+          <div><button class="btn btn-sm btn-primary">🚦 Start the race anyway</button></div>
+        </form>
+      </details>
+      {% else %}<p class="muted small">Only the Race Master can start the race while someone isn't ready.</p>{% endif %}
+      {% endif %}
+    {% endif %}
+
+  {% elif wk.phase == 'live' %}
+    <p class="small">{% if ev.lights_at %}Lights out at <b>{{ ev.lights_at|stamp }}</b>.{% else %}The race is under way.{% endif %}
+      {% if ctx.can_run %}Enter the results below once it's over, then submit to wave the chequered flag.{% else %}Results appear here once they're in.{% endif %}</p>
+    {% if gate.bypass %}<p class="small gate-bypass-note"><b>Race Master override active.</b> “{{ gate.bypass.note }}”</p>{% endif %}
+  {% else %}
+    <p class="small muted">Chequered flag. {% if ev.lights_at %}Started {{ ev.lights_at|stamp }}.{% endif %}</p>
+  {% endif %}
+
+  {% if wk.pen and wk.pen.questions %}{% set pen = wk.pen %}
+  <div class="press-pen prerace" id="prerace">
+    <h3 class="mini-head">🎙️ Pre-race press{% if wk.phase == 'paddock' %} · {{ pen.open }} question{{ 's' if pen.open != 1 }} waiting{% endif %}</h3>
+    {% if wk.phase == 'paddock' %}<p class="muted small">What you say gets back to your team and some answers make headlines. {% if ctx.team_life.gates and ctx.team_life.gate_press %}Answer both before lights out.{% else %}Closes at lights out.{% endif %}</p>{% endif %}
+    <div class="press-grid">
+    {% for q in pen.questions %}
+      {% if wk.phase == 'paddock' or q.answered %}
+      <form method="post" action="{{ url_for('prerace_answer', token=ctx.token, event_id=ev.id) }}" class="press-q">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="question" value="{{ q.key }}">
+        <p class="press-question">“{{ q.text }}”</p>
+        {% for a in q.answers %}
+        {% if wk.phase == 'paddock' or q.answered == a.key %}
+        <button class="btn btn-sm press-answer {{ 'chosen' if q.answered == a.key }}" name="answer" value="{{ a.key }}" {{ 'disabled' if q.answered or wk.phase != 'paddock' }}>{{ a.text }}</button>
+        {% endif %}
+        {% endfor %}
+      </form>
+      {% endif %}
+    {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endif %}

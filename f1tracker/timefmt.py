@@ -132,7 +132,7 @@ STARTING_SOON = 30        # minutes before the start that count as "Starting soo
 SCHEDULED_AHEAD = 7 * 24 * 60   # further away than this is just "Scheduled"
 
 
-def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None, postponed=False):
+def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None, postponed=False, lights=None, paddock=None):
     """(code, label) for a round, from its scheduled time and real status. Never completes anything by itself.
 
     unscheduled "Not scheduled"      no race time yet
@@ -143,11 +143,17 @@ def race_status(value, event_status, window=DEFAULT_RACE_WINDOW, now=None, postp
     live        "In progress"        from the start until `window` minutes later
     pending     "Results pending"    after that, until the round is submitted
     complete    "Completed"          only once the round has been submitted
+    paddock     "Paddock open"       v2.3 race weekends: the paddock is open (lights= / paddock= given)
+    live        "Lights out · Live"  v2.3: the race was started
     """
     if event_status == "Complete":
         return "complete", "Completed"
     if postponed:
         return "postponed", "Postponed"
+    if lights or event_status == "In Progress" and paddock:
+        return "live", "Lights out · Live"      # v2.3: the race was started
+    if paddock:
+        return "paddock", "Paddock open"
     dt = parse(value)
     if not dt:
         return "unscheduled", "Not scheduled"
