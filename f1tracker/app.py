@@ -2258,7 +2258,53 @@ def register_routes(app):
                     needs_pledge=relations.needs_pledge(conn, sid, driver["id"]),
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
+                    next_event=S.next_incomplete_event(conn, ctx["current_season_id"]),
                     own=bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]))
+
+    @app.route("/career/<token>/team-standing/<int:driver_id>/goals", methods=["POST"])
+    @career_page(master_only=True)
+    def goals_reissue(conn, ctx, driver_id):
+        """Race Master: set season goals (one driver or everyone) or the next weekend target again."""
+        sid = ctx["current_season_id"]
+        action = request.form.get("action")
+        dmap = S.driver_map(conn)
+        if action == "retarget":
+            nxt = S.next_incomplete_event(conn, sid)
+            if not nxt:
+                raise ValidationError("There's no upcoming round")
+            old, t = teamlife.reissue_target(conn, nxt["id"], driver_id)
+            g.audit_summary = (f"re-issued {dmap[driver_id]['name']}'s R{nxt['round_number']} weekend target: {t['label']}"
+                               + (f" (was: {old['label']})" if old else ""))
+            flash(f"New R{nxt['round_number']} target: {t['label']}.", "success")
+        elif action in ("reissue", "reissue_all"):
+            relations.ensure(conn, sid)
+            rows = conn.execute("SELECT * FROM team_relations WHERE season_id = ?" +
+                                ("" if action == "reissue_all" else " AND driver_id = ?"),
+                                (sid,) if action == "reissue_all" else (sid, driver_id)).fetchall()
+            if not rows:
+                raise ValidationError("That driver doesn't have a team this season")
+
+            def redo(c):
+                touched = {}
+                for r in rows:
+                    relations.set_goals(c, sid, r["driver_id"], r["team_id"], relations._role(c, r), replace=True)
+                    touched[r["driver_id"]] = ["Season goals set again by the Race Master: " +
+                                               "; ".join(x["label"] for x in c.execute(
+                                                   "SELECT label FROM team_goals WHERE season_id = ? AND driver_id = ? "
+                                                   "ORDER BY id", (sid, r["driver_id"])))]
+                    feed.notify(c, r["driver_id"], "The Race Master re-issued your season goals. See Relationships.",
+                                "team-standing", category="career")
+                return touched
+            impacts.record_change(conn, f"goals-reissued-{storage.now_iso()}", "Season goals re-issued",
+                                  "The Race Master set your team's season goals again from the latest car strength "
+                                  "and your role. Goals on track add to your team relationship; goals behind take away.",
+                                  redo)
+            who = "every player driver" if action == "reissue_all" else dmap[driver_id]["name"]
+            g.audit_summary = f"re-issued season goals for {who}"
+            flash(f"Season goals re-issued for {who}.", "success")
+        else:
+            raise ValidationError("Choose what to re-issue")
+        return redirect(url_for("team_standing", token=ctx["token"], driver=driver_id))
 
     @app.route("/career/<token>/announcements", methods=["GET", "POST"])
     @career_page()
@@ -2328,9 +2374,10 @@ def register_routes(app):
         chosen = {g["team_id"]: g for g in teamgoals.progress(conn, sid)}
         teams = []
         for team_id, drivers in sorted(lineup.items(), key=lambda kv: tmap[kv[0]]["name"]):
-            teams.append({"team": tmap[team_id], "drivers": drivers, "goal": chosen.get(team_id),
-                          "info": teamgoals.options(conn, sid, team_id) if not locked else None,
-                          "can_choose": team_id in can and not locked and teamgoals.enabled(conn)})
+            open_ = not teamgoals.locked(conn, sid, team_id)
+            teams.append({"team": tmap[team_id], "drivers": drivers, "goal": chosen.get(team_id), "reopened": open_ and locked,
+                          "info": teamgoals.options(conn, sid, team_id) if open_ else None,
+                          "can_choose": team_id in can and open_ and teamgoals.enabled(conn)})
         return page("team_goals.html", ctx, teams=teams, locked=locked, enabled=teamgoals.enabled(conn),
                     tiers=teamgoals.TIERS)
 
@@ -2340,12 +2387,24 @@ def register_routes(app):
         sid = ctx["current_season_id"]
         if team_id not in _my_goal_teams(conn, ctx, sid):
             abort(403)
-        if request.form.get("action") == "clear":
+        action = request.form.get("action")
+        team_name = S.team_map(conn)[team_id]["name"]
+        if action in ("clear", "reopen", "repush"):
             if not ctx.get("real", ctx)["is_master"]:
                 abort(403)
-            teamgoals.clear(conn, sid, team_id)
-            g.audit_summary = f"cleared {S.team_map(conn)[team_id]['name']}'s team goal"
-            flash("Goal cleared. The team can choose again.", "success")
+            drivers = teamgoals.player_teams(conn, sid).get(team_id, [])
+            if action == "repush":
+                old, o = teamgoals.repush(conn, sid, team_id)
+                g.audit_summary = f"re-pushed {team_name}'s {o['label']} goal: now {o['text']}"
+                msg = f"{team_name}'s {o['label']} goal was updated from the latest numbers: {o['text']}."
+                flash(f"Targets re-pushed: {o['text']}.", "success")
+            else:
+                teamgoals.reopen(conn, sid, team_id)
+                g.audit_summary = f"reset {team_name}'s team goal and reopened the choice"
+                msg = f"The Race Master reset {team_name}'s team goal. Choose a new one on the Team goals page."
+                flash(f"{team_name}'s goal was reset. They can choose again.", "success")
+            for d in drivers:
+                feed.notify(conn, d["id"], msg, "team-goals", category="career")
         else:
             o = teamgoals.choose(conn, sid, team_id, request.form.get("tier"), g.user["username"])
             g.audit_summary = f"chose a {o['label']} goal for {S.team_map(conn)[team_id]['name']}: {o['text']}"

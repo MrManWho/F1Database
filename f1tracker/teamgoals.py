@@ -119,9 +119,41 @@ def options(conn, season_id, team_id):
     return {"expected": expected, "why": "; ".join(why), "options": out}
 
 
-def locked(conn, season_id):
+def locked(conn, season_id, team_id=None):
+    """Choices lock once the season's first round is complete, unless a Race Master reopened this team's."""
+    if team_id is not None and get_meta(conn, _reopen_key(season_id, team_id)) == "1":
+        return False
     return conn.execute("SELECT 1 FROM events WHERE season_id = ? AND status = ?",
                         (season_id, C.EVENT_COMPLETE)).fetchone() is not None
+
+
+def _reopen_key(season_id, team_id):
+    return f"team_goal_reopen_{season_id}_{team_id}"
+
+
+def reopen(conn, season_id, team_id):
+    """Race Master: clear this team's goal and let them choose again, even mid-season (until they choose)."""
+    _table(conn)
+    if conn.execute("SELECT 1 FROM team_goal_choices WHERE season_id = ? AND team_id = ? AND outcome IS NOT NULL",
+                    (season_id, team_id)).fetchone():
+        raise S.ValidationError("That season's goals are already settled")
+    conn.execute("DELETE FROM team_goal_choices WHERE season_id = ? AND team_id = ?", (season_id, team_id))
+    set_meta(conn, _reopen_key(season_id, team_id), "1")
+
+
+def repush(conn, season_id, team_id):
+    """Race Master: work the chosen goal's targets out again from the latest numbers, keeping its level."""
+    g = choice(conn, season_id, team_id)
+    if not g:
+        raise S.ValidationError("That team hasn't chosen a goal yet")
+    if g["outcome"]:
+        raise S.ValidationError("That season's goals are already settled")
+    info = options(conn, season_id, team_id)
+    o = info["options"][g["tier"]]
+    conn.execute("""UPDATE team_goal_choices SET target_position = ?, target_points = ?, reward = ?, penalty = ?, why = ?
+                    WHERE season_id = ? AND team_id = ?""",
+                 (o["target_position"], o["target_points"], o["reward"], o["penalty"], info["why"], season_id, team_id))
+    return g, o
 
 
 def choice(conn, season_id, team_id):
@@ -138,7 +170,7 @@ def choose(conn, season_id, team_id, tier, username):
         raise S.ValidationError("Choose Safe, Competitive or Ambitious")
     if team_id not in player_teams(conn, season_id):
         raise S.ValidationError("Only teams with a player driver choose a goal")
-    if locked(conn, season_id):
+    if locked(conn, season_id, team_id):
         raise S.ValidationError("Goals are locked once the season's first round is complete")
     _table(conn)
     info = options(conn, season_id, team_id)
@@ -151,6 +183,7 @@ def choose(conn, season_id, team_id, tier, username):
                     chosen_by = excluded.chosen_by, chosen_at = excluded.chosen_at""",
                  (season_id, team_id, tier, o["target_position"], o["target_points"], o["reward"], o["penalty"],
                   info["why"], username, now_iso()))
+    set_meta(conn, _reopen_key(season_id, team_id), "0")    # a reopened choice locks again once made
     return o
 
 

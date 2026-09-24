@@ -42,12 +42,15 @@
     {% endfor %}
   </form>
   <p class="muted small">Expected: P{{ t.info.expected }} · {{ t.info.why }}</p>
-  {% if t.goal and ctx.real.is_master %}
-  <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="inline-form tight">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" name="action" value="clear">Clear this goal</button></form>
-  {% endif %}
   {% elif not t.goal %}
-  <p class="muted small">{{ 'No goal was chosen, so no reward or penalty this season.' if locked else 'No goal chosen yet.' }}</p>
+  <p class="muted small">{% if t.reopened %}The Race Master reopened this choice.{% elif locked %}No goal was chosen, so no reward or penalty this season.{% else %}No goal chosen yet.{% endif %}</p>
+  {% endif %}
+  {% if ctx.real.is_master and enabled and ctx.season.id == ctx.current_season_id and not (t.goal and t.goal.outcome) %}
+  <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="button-row tight rm-goal-tools">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if t.goal %}<button class="btn btn-sm btn-ghost" name="action" value="repush" title="Work the targets out again from the latest car strength, lineup and calendar, keeping the level">Re-push targets</button>{% endif %}
+    {% if t.goal or locked %}<button class="btn btn-sm btn-ghost" name="action" value="reopen" title="Clear the goal and let the team choose again, even mid-season">{{ 'Reset and let them choose again' if t.goal else 'Reopen the choice' }}</button>{% endif %}
+  </form>
   {% endif %}
 </section>
 {% else %}

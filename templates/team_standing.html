@@ -91,6 +91,15 @@
       {% for g in rel.goals %}<li class="goal-{{ g.state|lower|replace(' ', '-') }}"><span>{{ g.label }}</span><b>{{ g.now }}</b><em>{{ g.state }}</em></li>
       {% else %}<li class="muted">No goals set.</li>{% endfor %}
     </ul>
+    {% if ctx.real.is_master and ctx.season.id == ctx.current_season_id %}
+    <form method="post" action="{{ url_for('goals_reissue', token=ctx.token, driver_id=driver.id) }}" class="button-row tight rm-goal-tools">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-ghost" name="action" value="reissue" title="Set {{ driver.name }}'s season goals again from the latest car strength and role">Re-issue season goals</button>
+      <button class="btn btn-sm btn-ghost" name="action" value="reissue_all" title="Every seated player driver">Re-issue for everyone</button>
+      {% if next_event and ctx.team_life.targets %}<button class="btn btn-sm btn-ghost" name="action" value="retarget" title="A fresh weekend target for R{{ next_event.round_number }}">Re-issue R{{ next_event.round_number }} target</button>{% endif %}
+    </form>
+    <p class="muted small">Race Master only. Drivers are told, and any change to their numbers is shown to them to agree to.</p>
+    {% endif %}
   </section>
   <section class="card">
     <h2>Weekend targets</h2>
@@ -98,8 +107,8 @@
     <ul class="goal-list">{% for t in targets %}<li class="target-{{ t.status|lower }}"><span>R{{ t.round_number }} {{ t.event_name }}: {{ t.label }}</span>
       <em>{{ {'Set': ('Accepted' if t.acknowledged_at else 'Waiting'), 'Hit': '✅ Hit', 'Missed': '❌ Missed', 'Void': 'Void'}[t.status] }}</em></li>{% endfor %}</ul>
     {% else %}<p class="muted small">{% if ctx.team_life.targets %}Your team sets one before each race.{% else %}Weekend targets are switched off in this league.{% endif %}</p>{% endif %}
-    {% if ctx.team_life.orders != 'off' or orders %}
-    <h3 class="mini-head">Team orders{% if ctx.team_life.orders == 'advisory' %} <small class="muted">(advisory)</small>{% elif ctx.team_life.orders == 'off' %} <small class="muted">(switched off)</small>{% endif %}</h3>
+    {% if ctx.team_life.orders != 'off' %}
+    <h3 class="mini-head">Team orders{% if ctx.team_life.orders == 'advisory' %} <small class="muted">(advisory)</small>{% endif %}</h3>
     {% if orders %}
     <ul class="goal-list">{% for o in orders %}<li class="order-{{ o.status|lower }}"><span>R{{ o.round_number }} {{ o.event_name }}: let {{ o.beneficiary.name }} through</span>
       <em>{{ {'Issued': 'Pending', 'Obeyed': 'Followed', 'Ignored': 'Ignored', 'Void': 'Void', 'Cancelled': 'Cancelled'}.get(o.status, o.status) }}</em></li>{% endfor %}</ul>

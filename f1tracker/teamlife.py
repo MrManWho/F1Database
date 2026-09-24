@@ -469,6 +469,26 @@ def issue_targets(conn, event_id, notify=False):
     return out
 
 
+def reissue_target(conn, event_id, driver_id):
+    """Race Master: set this driver's weekend target for an upcoming round again (a fresh pick from the latest
+    numbers). Only before the round has results; an accepted target has to be accepted again."""
+    event = S.get_event(conn, event_id)
+    if not event or event["status"] != C.EVENT_NOT_RUN:
+        raise S.ValidationError("Targets can only be re-issued before the round has results")
+    seat = S.driver_seats(conn, event["season_id"]).get(driver_id)
+    if not seat:
+        raise S.ValidationError("That driver doesn't have a seat")
+    old = target_for(conn, event_id, driver_id)
+    conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+    t = plan_target(conn, event, driver_id, seat[0], rng=random.Random())
+    conn.execute("""INSERT INTO weekend_targets(event_id, driver_id, team_id, kind, target, rival_team_id, label,
+                    created_at) VALUES(?,?,?,?,?,?,?,?)""",
+                 (event_id, driver_id, seat[0], t["kind"], t["target"], t["rival_team_id"], t["label"], now_iso()))
+    feed.notify(conn, driver_id, f"New weekend target for R{event['round_number']} {event['name']}: {t['label']}. "
+                "Accept it on the Control Room.", "dashboard#target", category="career")
+    return old, t
+
+
 def community_linked(conn):
     """Player drivers controlled by a league login."""
     return {r["driver_id"] for r in conn.execute(

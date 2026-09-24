@@ -234,3 +234,66 @@ def test_whats_new_must_be_agreed_to_in_the_browser(app, master_client, live_ser
     finally:
         browser.close()
         pw.stop()
+
+
+# --------------------------------------------------------------------------- Race Master goal controls
+
+def test_race_master_can_reset_reopen_and_repush_team_goals(app, master_client):
+    from f1tracker import teamgoals
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        teamgoals.set_enabled(conn, True)
+        team = S.driver_seats(conn, sid)[a][0]
+        teamgoals.choose(conn, sid, team, "competitive", "ana")
+        run_event(conn, S.events(conn, sid)[0])                           # now locked
+        conn.execute("UPDATE team_goal_choices SET target_points = 1")      # stale numbers
+    pledge_all(token)
+    ana = _client(app, "ana")
+    assert ana.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "action": "reopen"}).status_code == 403
+    master_client.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "action": "repush"})
+    with storage.session(token) as conn:
+        g = teamgoals.choice(conn, sid, team)
+        assert g["tier"] == "competitive" and g["target_points"] > 1
+    master_client.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "action": "reopen"})
+    with storage.session(token) as conn:
+        assert teamgoals.choice(conn, sid, team) is None and not teamgoals.locked(conn, sid, team)
+        assert conn.execute("SELECT 1 FROM notifications WHERE text LIKE '%reset%team goal%'").fetchone()
+    ana.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "tier": "safe"})   # mid-season, reopened
+    with storage.session(token) as conn:
+        assert teamgoals.choice(conn, sid, team)["tier"] == "safe"
+        assert teamgoals.locked(conn, sid, team)                            # locks again once chosen
+
+
+def test_race_master_can_reissue_season_goals_and_the_next_target(app, master_client):
+    from f1tracker import impacts, relations, teamlife
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a, b = players(conn)
+        S.place_players(conn, sid, {a: (1, 1), b: (2, 1)})
+        relations.ensure(conn, sid)
+        conn.execute("UPDATE team_goals SET label = 'old goal', target = 99 WHERE driver_id = ?", (a,))
+        ev = S.next_incomplete_event(conn, sid)
+        teamlife.issue_targets(conn, ev["id"])
+        teamlife.acknowledge(conn, ev["id"], a)
+    pledge_all(token)
+    ana = _client(app, "ana")
+    assert ana.post(f"/career/{token}/team-standing/{a}/goals", data={"csrf_token": "tok", "action": "reissue"}).status_code == 403
+    master_client.post(f"/career/{token}/team-standing/{a}/goals", data={"csrf_token": "tok", "action": "reissue"})
+    with storage.session(token) as conn:
+        labels = [r["label"] for r in conn.execute("SELECT label FROM team_goals WHERE driver_id = ?", (a,))]
+        assert "old goal" not in labels and labels
+        n = impacts.pending(conn, a, "ana")
+        assert n and n[0]["title"] == "Season goals re-issued"
+        assert not impacts.pending(conn, b, "anyone")                      # only the driver it was for
+    master_client.post(f"/career/{token}/team-standing/{a}/goals", data={"csrf_token": "tok", "action": "retarget"})
+    with storage.session(token) as conn:
+        t = teamlife.target_for(conn, ev["id"], a)
+        assert t and t["acknowledged_at"] is None                          # has to be accepted again
+    page = master_client.get(f"/career/{token}/team-standing?driver={a}").get_data(as_text=True)
+    assert "Re-issue season goals" in page and "Re-issue for everyone" in page
