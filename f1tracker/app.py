@@ -395,7 +395,7 @@ def career_page(master_only=False, ops_only=False):
                         if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
                     impacts.on_open(conn, is_api=request.path.startswith("/api/"))
-                    gate = _impact_gate(conn, g.ctx) or _choice_gate(conn, g.ctx) or _pledge_gate(conn, g.ctx, master_only)
+                    gate = _mandatory_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
@@ -490,58 +490,52 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
                      "league_pin", "league_order", "league_leave"}
 
-PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
-                 "help_page"}
-
 
 IMPACT_EXEMPT = {"impact_page", "api_notifications", "notifications_read", "notifications_clear", "help_page",
                  "timezone_detect", "view_mode", "whats_new_ack"}
 
 
-def _impact_gate(conn, ctx):
-    """A driver whose numbers were changed by an update or an admin change must see and agree to it first."""
+MANDATORY_ENDPOINTS = {"impact_page", "pledge_page", "pledge_save", "team_goals_page", "team_goal_choose"}
+
+
+def _mandatory_steps(conn, ctx, master_only=False):
+    """Everything this person must do before using the league, in the order they'll be asked (v2.2):
+    1. agree to changes to their driver, 2. choose a growth pledge, 3. choose their team's goal.
+    Returns [(endpoint, message)] for the steps still open."""
     mine = ctx.get("real", ctx).get("my_driver")
-    if not mine or request.endpoint in IMPACT_EXEMPT or request.path.startswith("/api/"):
-        return None
-    if not impacts.pending(conn, mine["id"], g.user["username"]):
-        return None
-    if request.method == "POST":
-        flash("Please read and agree to the changes to your driver first. Nothing else was saved.", "error")
-    return redirect(url_for("impact_page", token=ctx["token"]))
-
-
-CHOICE_EXEMPT = IMPACT_EXEMPT | {"team_goals_page", "team_goal_choose", "impact_page"}
-
-
-def _choice_gate(conn, ctx):
-    """A decision the driver has to make before anything else (v2.1.3): their team's goal, when the choice is open
-    and hasn't been made yet (at the start of a season, or reopened by the Race Master mid-season)."""
-    mine = ctx.get("real", ctx).get("my_driver")
-    if not mine or request.endpoint in CHOICE_EXEMPT or request.path.startswith("/api/") or not teamgoals.enabled(conn):
-        return None
+    if not mine:
+        return []
     sid = ctx["current_season_id"]
-    seat = S.driver_seats(conn, sid).get(mine["id"])
-    if not seat or teamgoals.choice(conn, sid, seat[0]) or teamgoals.locked(conn, sid, seat[0]):
-        return None
-    if request.method == "POST":
-        flash("Choose your team's goal first. Nothing else was saved.", "error")
-    return redirect(url_for("team_goals_page", token=ctx["token"]))
+    steps = []
+    if impacts.pending(conn, mine["id"], g.user["username"]):
+        steps.append(("impact_page", "Please read and agree to the changes to your driver first."))
+    if not (master_only and ctx.get("real", ctx)["is_master"]):
+        relations.ensure(conn, sid)
+        if relations.needs_pledge(conn, sid, mine["id"]):
+            steps.append(("pledge_page", "Choose your growth pledge for this season first."))
+    if teamgoals.enabled(conn):
+        seat = S.driver_seats(conn, sid).get(mine["id"])
+        if seat and not teamgoals.choice(conn, sid, seat[0]) and not teamgoals.locked(conn, sid, seat[0]):
+            steps.append(("team_goals_page", "Choose your team's goal first."))
+    return steps
 
 
-def _pledge_gate(conn, ctx, master_only):
-    """A seated player driver with no growth pledge must choose one before using the league."""
-    mine = ctx.get("my_driver")
-    if not mine or request.endpoint in PLEDGE_EXEMPT or (master_only and ctx["is_master"]):
+def _mandatory_gate(conn, ctx, master_only=False):
+    """One resolver for every "do this first" step, so they can never send people back and forth: the pages and
+    actions of every open step are always reachable, and anything else goes to the first open step."""
+    if request.endpoint in IMPACT_EXEMPT or request.endpoint in MANDATORY_ENDPOINTS:
         return None
-    sid = ctx["current_season_id"]
-    relations.ensure(conn, sid)
-    if not relations.needs_pledge(conn, sid, mine["id"]):
+    steps = _mandatory_steps(conn, ctx, master_only)
+    if not steps:
         return None
+    endpoint, message = steps[0]
     if request.path.startswith("/api/"):
-        return jsonify(ok=False, error="Choose your growth pledge first"), 409
+        if endpoint == "pledge_page":
+            return jsonify(ok=False, error="Choose your growth pledge first"), 409
+        return None
     if request.method == "POST":
-        flash("Choose your growth pledge for this season first.", "error")
-    return redirect(url_for("pledge_page", token=ctx["token"]))
+        flash(message + " Nothing else was saved.", "error")
+    return redirect(url_for(endpoint, token=ctx["token"]))
 
 
 def _settings_changes(conn, before):
@@ -698,6 +692,7 @@ def register_routes(app):
                 return redirect(url_for("setup"))
             try:
                 # The owner proved it with the setup code, so they may take back a reserved (pre-reset) username.
+                auth.check_password(request.form.get("password"))
                 auth.release_username(request.form.get("username"))
                 username = auth.create_user(request.form.get("username"), request.form.get("display_name"),
                                             request.form.get("password"), is_master=True,
@@ -913,6 +908,12 @@ def register_routes(app):
     def settings_save():
         auth.set_setting("allow_signups", "1" if request.form.get("allow_signups") else "0")
         auth.set_setting("league_creation", "everyone" if request.form.get("anyone_creates") else "admins")
+        if "contact_email" in request.form:
+            try:
+                auth.set_setting("contact_email", auth.clean_email(request.form.get("contact_email")))
+            except AuthError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("accounts_page"))
         for field in ("smtp_host", "smtp_port", "smtp_username", "smtp_from"):
             if field in request.form:
                 auth.set_setting(field, (request.form.get(field) or "").strip() or None)
@@ -957,14 +958,16 @@ def register_routes(app):
                                      "prefs": notices.summary(notices.prefs(conn, g.user["username"]))})
                 except storage.CareerNotFound:
                     continue
-        found, found_leagues, query = None, [], (request.args.get("find") or "").strip()
+        found, query = [], (request.args.get("find") or "").strip()
         if is_master() and query:
-            # Account recovery: one account, looked up by its exact username or email. There is no list of accounts.
-            found = auth.find_user(query)
-            if found:
-                found["two_step"] = security.totp_status(found["username"])["enabled"]
-                found["devices"] = len(security.sessions(found["username"]))
-                found_leagues = [c["name"] for c in storage.list_careers() if found["username"] in c["members"]]
+            # Account recovery: every account with that exact username or email (several can share an email).
+            # There is no list of all accounts.
+            found = auth.find_users(query)
+            careers = storage.list_careers() if found else []
+            for f in found:
+                f["two_step"] = security.totp_status(f["username"])["enabled"]
+                f["devices"] = len(security.sessions(f["username"]))
+                f["leagues"] = [c["name"] for c in careers if f["username"] in c["members"]]
         return render_template("accounts.html", my_leagues=mine,
                                anyone_creates=onboarding.creation_policy() == "everyone",
                                reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
@@ -973,7 +976,7 @@ def register_routes(app):
                                pw_min=auth.PASSWORD_MIN, devices=security.sessions(me),
                                current_sid=session.get("sid"), totp=totp,
                                otpauth=security.otpauth_uri(me, totp["secret"]) if totp["secret"] and not totp["enabled"] else None,
-                               query=query, found=found, found_leagues=found_leagues,
+                               query=query, found=found, contact_email=auth.get_setting("contact_email") or "",
                                reserved_count=auth.reserved_count() if is_master() else 0)
 
     @app.route("/accounts/release", methods=["POST"])
@@ -1150,11 +1153,13 @@ def register_routes(app):
 
     @app.route("/privacy")
     def privacy_page():
-        return render_template("legal.html", kind="privacy")
+        return render_template("legal.html", kind="privacy", contact=auth.get_setting("contact_email"),
+                               effective=C.POLICY_EFFECTIVE, version=C.APP_VERSION)
 
     @app.route("/terms")
     def terms_page():
-        return render_template("legal.html", kind="terms")
+        return render_template("legal.html", kind="terms", contact=auth.get_setting("contact_email"),
+                               effective=C.POLICY_EFFECTIVE, version=C.APP_VERSION)
 
     # ---------------------------------------------------------------- career library
     @app.route("/")
@@ -1343,10 +1348,14 @@ def register_routes(app):
                     market_on = bool(request.form.get("rookie_market"))
                     life = (request.form.get("team_orders") or "off", bool(request.form.get("weekend_targets")) or not wizard,
                             bool(request.form.get("round_gates")) or not wizard)
+                    goals_on = bool(request.form.get("team_goal_choice"))
                 else:
                     feats, market_on = set(preset["features"]), preset["market"]
                     life = (preset["orders"], preset["targets"], preset["gates"])
+                    goals_on = preset.get("team_goals", False)
                 community.set_features(conn, feats)
+                if goals_on:
+                    teamgoals.set_enabled(conn, True)
                 if wizard:   # the quick form leaves team-life settings at their defaults
                     teamlife.save_settings(conn, life[0], life[1], life[2], True, True)
                 league_profile.save(conn, request.form)

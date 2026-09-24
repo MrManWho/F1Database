@@ -13,12 +13,13 @@
 
 <section class="card">
   <h2>Summary</h2>
-  <dl class="season-facts compact-facts">
+  {# v2.2: the counts follow the choices below as you make them (base = decided already, + each choice). #}
+  <dl class="season-facts compact-facts" id="ro-summary">
     <div><dt>Continuing (multi-year)</dt><dd>{{ review.counts.continuing }}</dd></div>
-    <div><dt>Renewed / signed</dt><dd>{{ review.counts.renewed + review.counts.moving }}</dd></div>
-    <div><dt>Contracts ending</dt><dd>{{ review.counts.expiring }}</dd></div>
-    <div><dt>Released by teams</dt><dd>{{ review.counts.released }}</dd></div>
-    <div><dt>Free agents</dt><dd>{{ review.counts.free_agent }}</dd></div>
+    <div><dt>Renewed / signed</dt><dd data-ro-count="renew" data-base="{{ review.counts.renewed + review.counts.moving }}">{{ review.counts.renewed + review.counts.moving }}</dd></div>
+    <div><dt>Provisional (awaiting contract)</dt><dd data-ro-count="provisional" data-base="0">0</dd></div>
+    <div><dt>Released / free agents</dt><dd data-ro-count="release" data-base="{{ review.counts.released + review.counts.free_agent }}">{{ review.counts.released + review.counts.free_agent }}</dd></div>
+    <div><dt>Still to decide</dt><dd data-ro-count="" data-base="0">{{ review.counts.expiring }}</dd></div>
     <div><dt>No contract system</dt><dd>{{ review.counts.no_contract }}</dd></div>
   </dl>
   {% if review.conflicts %}
@@ -67,4 +68,16 @@
   <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('seasons_page', token=ctx.token) }}">Cancel</a>
     <button class="btn btn-primary" {{ 'disabled' if review.conflicts }}>Start {{ year }}</button></div>
 </form>
+<script>
+(function () {
+  var sels = document.querySelectorAll("select[name^=decision_]"), cells = document.querySelectorAll("[data-ro-count]");
+  function tally() {
+    var n = {};
+    sels.forEach(function (s) { n[s.value] = (n[s.value] || 0) + 1; });
+    cells.forEach(function (c) { c.textContent = (+c.dataset.base) + (n[c.dataset.roCount] || 0); });
+  }
+  sels.forEach(function (s) { s.addEventListener("change", tally); });
+  tally();
+})();
+</script>
 {% endblock %}

@@ -335,15 +335,15 @@ def test_existing_email_preferences_migrate_safely():
 def test_password_change_needs_current_and_matching_passwords(app, master_client):
     auth.create_user("pat", "Pat", "password1")
     pat = _client(app, "pat")
-    for form, message in (({"current_password": "wrong", "password": "newpass1", "confirm_password": "newpass1"}, "current password is wrong"),
-                          ({"current_password": "password1", "password": "newpass1", "confirm_password": "newpass2"}, "don&#39;t match"),
-                          ({"current_password": "password1", "password": "abc", "confirm_password": "abc"}, "at least 6")):
+    for form, message in (({"current_password": "wrong", "password": "Pit-Lane-42", "confirm_password": "Pit-Lane-42"}, "current password is wrong"),
+                          ({"current_password": "password1", "password": "Pit-Lane-42", "confirm_password": "Pit-Lane-43"}, "don&#39;t match"),
+                          ({"current_password": "password1", "password": "abc", "confirm_password": "abc"}, "at least 8")):
         page = pat.post("/account/password", data={**form, "csrf_token": "tok"}, follow_redirects=True).get_data(as_text=True)
         assert message in page
         assert auth.verify("pat", "password1")
-    page = pat.post("/account/password", data={"current_password": "password1", "password": "newpass1",
-                                               "confirm_password": "newpass1", "csrf_token": "tok"}, follow_redirects=True)
-    assert "Password changed" in page.get_data(as_text=True) and auth.verify("pat", "newpass1")
+    page = pat.post("/account/password", data={"current_password": "password1", "password": "Pit-Lane-42",
+                                               "confirm_password": "Pit-Lane-42", "csrf_token": "tok"}, follow_redirects=True)
+    assert "Password changed" in page.get_data(as_text=True) and auth.verify("pat", "Pit-Lane-42")
     accounts = pat.get("/accounts").get_data(as_text=True)
     assert "Confirm new password" in accounts and "data-pw-toggle" in accounts and "Caps Lock" in accounts
 

@@ -122,6 +122,7 @@
     <label class="check"><input type="checkbox" name="anyone_creates" value="1" {{ 'checked' if anyone_creates }}>
       Anyone with a login can create their own league (they become its Race Master). Off: only site admins can.</label>
     <p class="muted small">New leagues are private by default. Each account can create up to 5 leagues a day.</p>
+    <label>Contact email for the Privacy and Terms pages<input name="contact_email" type="email" value="{{ contact_email }}" autocomplete="off" placeholder="Optional: where people can reach the site owner"></label>
     <p class="muted small">Screenshot import is free and runs in each person's browser: no API key, account or upload needed.</p>
     <h3>Email (password resets and league notifications) · {{ 'ready' if mail_ready else 'not set up' }}</h3>
     <p class="muted small">Use any SMTP mail service. For Gmail: turn on 2-step verification, create an <em>App password</em>, then use
@@ -146,20 +147,21 @@
 
 <section class="card" id="recovery">
   <h2>Account recovery</h2>
-  <p class="muted small">For someone who's lost access. Look up one account by its exact username or email; there's no list of accounts.
+  <p class="muted small">For someone who's lost access. Look up accounts by an exact username or email. Every account using that email is shown; there's no list of all accounts.
     People can also reset a forgotten password themselves from the login page if they added an email.</p>
   <form method="get" action="{{ url_for('accounts_page') }}#recovery" class="inline-form">
     <label>Username or email<input name="find" value="{{ query }}" required autocomplete="off" spellcheck="false"></label>
     <button class="btn">Find</button>
   </form>
   {% if query and not found %}<p class="small">No account matches “{{ query }}”.</p>{% endif %}
-  {% if found %}
+  {% if found|length > 1 %}<p class="small">{{ found|length }} accounts match “{{ query }}” (they share that email). Check which one the person means before changing anything.</p>{% endif %}
+  {% for found in found %}
   <div class="recovery-card">
     <h3>{{ found.display_name }} <small class="muted">{{ found.username }}</small>{% if found.is_owner %} <span class="pill">Site owner</span>{% endif %}</h3>
     <dl class="kv">
       <dt>Email</dt><dd>{{ found.email or 'none' }}</dd>
       <dt>Joined</dt><dd>{{ found.created_at|stamp }}</dd>
-      <dt>Leagues</dt><dd>{{ found_leagues|join(', ') or 'none' }}</dd>
+      <dt>Leagues</dt><dd>{{ found.leagues|join(', ') or 'none' }}</dd>
       <dt>Two-step sign-in</dt><dd>{{ 'On' if found.two_step else 'Off' }}</dd>
       <dt>Signed-in devices</dt><dd>{{ found.devices }}</dd>
     </dl>
@@ -194,7 +196,7 @@
     </div>
     {% else %}<p class="muted small">That's you. Change your own details above.</p>{% endif %}
   </div>
-  {% endif %}
+  {% endfor %}
   {% if reserved_count %}
   <h3 class="mini-head">Reserved usernames</h3>
   <p class="muted small">{{ reserved_count }} username{{ 's are' if reserved_count != 1 else ' is' }} kept from before the account reset (or from deleted logins), because {{ 'they are' if reserved_count != 1 else 'it is' }} still linked to leagues.

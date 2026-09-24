@@ -75,14 +75,49 @@ def _previous_position(conn, season_id, team_id):
     return None
 
 
+def _previous_pace(conn, season_id, team_id):
+    """Last season's Constructors' points per weekend for this team (Sprints weighted as above), or None."""
+    season = S.get_season(conn, season_id)
+    prev = conn.execute("SELECT id FROM seasons WHERE year < ? ORDER BY year DESC LIMIT 1", (season["year"],)).fetchone()
+    if not prev:
+        return None
+    evs = [e for e in S.events(conn, prev["id"]) if e["status"] == C.EVENT_COMPLETE]
+    weekends = len(evs) + SPRINT_SHARE * sum(1 for e in evs if e["is_sprint"])
+    if not weekends:
+        return None
+    for row in S.constructor_standings(conn, prev["id"], completed_only=True):
+        if row["team"]["id"] == team_id:
+            return row["points"] / weekends
+    return None
+
+
 def _points_for(position, rounds, sprints, factor):
     idx = max(0, min(len(POINTS_PER_ROUND) - 1, round(position) - 1))
     per = POINTS_PER_ROUND[idx]
     return max(1, round((per * rounds + per * SPRINT_SHARE * sprints) * factor))
 
 
+PACE_ROUNDS = 4          # after this many completed rounds, observed pace counts as much as the car (v2.2)
+MIN_GAP = (3, 0.25)      # each tier asks for at least 3 more points, or 25% more still to score, than the one below
+
+
+def _season_so_far(conn, season_id, team_id, evs):
+    """(weekends done, weekends left, points scored, current position) for this team. A Sprint weekend counts as
+    1 + SPRINT_SHARE weekends, so a Sprint-heavy stretch doesn't look like extra pace."""
+    done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]
+    left = [e for e in evs if e["status"] != C.EVENT_COMPLETE]
+    weight = lambda es: len(es) + SPRINT_SHARE * sum(1 for e in es if e["is_sprint"])
+    pos, pts = _standings(conn, season_id).get(team_id, (None, 0)) if done else (None, 0)
+    return weight(done), weight(left), len(done), pts or 0, pos
+
+
 def options(conn, season_id, team_id):
-    """The three goals for this team, with the reasons behind the numbers."""
+    """The three goals for this team, with the reasons behind the numbers.
+
+    v2.2: goals are for the whole season but only what's still to come is predicted. Targets are the points
+    already scored plus a projection for the rounds left, blending the car's expected haul with the team's
+    observed pace (pace counts for done / (done + PACE_ROUNDS)). Each tier is at least MIN_GAP harder than the
+    one below, and Safe always needs more points than the team already has."""
     teams = S.teams(conn)
     n = len(teams) or 10
     ranks = S.team_strength_ranks(conn, season_id)
@@ -95,19 +130,41 @@ def options(conn, season_id, team_id):
     mine = [reps[d] for d, (t, _s) in seats.items() if t == team_id]
     field = sum(reps.values()) / len(reps) if reps else 50.0
     lineup = max(-1.0, min(1.0, -((sum(mine) / len(mine)) - field) / 15)) if mine else 0.0
-    expected = max(1, min(n, round(base + lineup)))
     evs = S.events(conn, season_id)
     rounds, sprints = len(evs), sum(1 for e in evs if e["is_sprint"])
+    w_done, w_left, n_done, earned, current = _season_so_far(conn, season_id, team_id, evs)
+    blend = n_done / (n_done + PACE_ROUNDS) if n_done else 0.0
+    pace = earned / w_done if w_done else 0.0
+    last_pace = _previous_pace(conn, season_id, team_id)
+    guess = base + lineup
+    if current is not None:
+        guess = (1 - blend) * guess + blend * current
+    expected = max(1, min(n, round(guess)))
     why = [f"car strength: #{rank} of {n}"]
     why.append(f"last season: P{prev} in the Constructors'" if prev else "no previous Constructors' result")
     if abs(lineup) >= 0.25:
         why.append("lineup " + ("stronger" if lineup < 0 else "weaker") + " than the grid average")
     why.append(f"{rounds} round{'s' if rounds != 1 else ''}" + (f", {sprints} Sprint{'s' if sprints != 1 else ''}" if sprints else ""))
-    out = {}
+    if last_pace is not None:
+        why.append(f"last season's pace: {last_pace:.1f} points a round")
+    if n_done:
+        why.append(f"{earned:g} point{'s' if earned != 1 else ''} already scored in {n_done} round{'s' if n_done != 1 else ''} "
+                   f"(pace {pace:.1f} a round, counted {round(blend * 100)}%) with {len(evs) - n_done} to go")
+    out, floor = {}, earned
     for key, t in TIERS.items():
         wanted = expected + t["shift"]
         pos = max(1, min(n, wanted))
-        pts = _points_for(pos, rounds, sprints, t["points"])
+        car = POINTS_PER_ROUND[max(0, min(len(POINTS_PER_ROUND) - 1, pos - 1))]
+        if last_pace is not None:    # what this team actually scored last season, scaled to this tier's position
+            car = 0.5 * car + 0.5 * last_pace * car / POINTS_PER_ROUND[max(0, min(len(POINTS_PER_ROUND) - 1, expected - 1))]
+        per = (1 - blend) * car + blend * pace
+        gain = per * w_left * t["points"]
+        if key == "safe":
+            gain = max(gain, 1.0, 0.25 * w_left)
+        else:
+            gain = max(gain, (floor - earned) + max(MIN_GAP[0], MIN_GAP[1] * (floor - earned)))
+        pts = max(1, round(earned + gain)) if w_left else max(1, round(earned))
+        floor = pts
         if pos != wanted or pos >= n:
             # The position can't move any further (already P1, or already last), or it's last place, which every
             # team reaches: a position route would be free or no harder than the next tier, so it's points alone.
@@ -116,7 +173,7 @@ def options(conn, season_id, team_id):
                 else f"Score {pts} points in the Constructors' Championship")
         out[key] = {"tier": key, "label": t["label"], "target_position": pos, "target_points": pts,
                     "reward": t["reward"], "penalty": t["penalty"], "text": text}
-    return {"expected": expected, "why": "; ".join(why), "options": out}
+    return {"expected": expected, "why": "; ".join(why), "options": out, "earned": earned, "rounds_done": n_done}
 
 
 def locked(conn, season_id, team_id=None):

@@ -168,6 +168,34 @@ def clean_email(email, required=False):
     return email
 
 
+PASSWORD_MIN = 8
+# The most common passwords from public breach lists (plus site words). Blocked wherever someone chooses a password.
+COMMON_PASSWORDS = frozenset("""
+password password1 password12 password123 passw0rd p@ssw0rd p@ssword 12345678 123456789 1234567890 11111111
+00000000 12341234 87654321 qwertyui qwertyuiop qwerty123 qwerty12 asdfghjk asdfasdf zxcvbnm1 1q2w3e4r 1qaz2wsx
+iloveyou abc12345 abcd1234 abcdefgh letmein1 welcome1 welcome123 sunshine princess football baseball starwars
+dragon12 monkey12 superman trustno1 whatever michael1 jennifer computer internet charlie1 shadow12 master12
+mustang1 freedom1 access12 changeme changeme1 default1 admin123 administrator formula1 formula1f1 ferrari1
+mercedes redbull1 mclaren1 paddock1 paddocklegacy racemaster f1tracker 88888888 12121212 123123123 666666666
+""".split())
+
+
+def password_problem(password):
+    """Why a new password isn't allowed, or None. Existing passwords keep working; this only applies to new ones."""
+    pw = password or ""
+    if len(pw) < PASSWORD_MIN:
+        return f"Passwords need at least {PASSWORD_MIN} characters"
+    if pw.lower() in COMMON_PASSWORDS or len(set(pw)) < 3:
+        return "That password is too common or too easy to guess. Choose another."
+    return None
+
+
+def check_password(password):
+    problem = password_problem(password)
+    if problem:
+        raise AuthError(problem)
+
+
 def create_user(username, display_name, password, is_master=False, is_steward=False, email=None):
     username = normalise(username)
     email = clean_email(email)
@@ -194,8 +222,7 @@ def verify(username, password):
 
 
 def set_password(username, password):
-    if len(password or "") < 6:
-        raise AuthError("Passwords need at least 6 characters")
+    check_password(password)
     with accounts() as conn:
         cur = conn.execute("UPDATE users SET password_hash = ? WHERE username = ?",
                            (generate_password_hash(password), normalise(username)))
@@ -312,8 +339,7 @@ def register(username, display_name, password, ip, email=None):
     username = normalise(username)
     if not USERNAME_RE.match(username):
         raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
-    if len(password or "") < 6:
-        raise AuthError("Passwords need at least 6 characters")
+    check_password(password)
     email = clean_email(email, required=True)
     display_name = (display_name or "").strip()[:60] or username
     key, now = f"signup:{ip or '?'}", time.time()
@@ -402,9 +428,6 @@ def set_email(username, email, email_results):
         conn.execute("UPDATE users SET email = ?, email_results = ? WHERE username = ?",
                      (email, int(bool(email_results) and bool(email)), normalise(username)))
     return email
-
-
-PASSWORD_MIN = 6
 
 
 def change_password(username, current, new, confirm):
@@ -544,15 +567,21 @@ def may_claim(username, email, verified):
     return bool(verified and r["email_hash"] and _email_hash(email) == r["email_hash"])
 
 
-def find_user(query):
-    """Owner's account recovery: one account by exact username or email (never a list)."""
+def find_users(query):
+    """Owner's account recovery: every account whose exact username or email matches (several accounts can share
+    an email). Never a list of all accounts."""
     q = (query or "").strip().lower()
     if not q:
-        return None
+        return []
     with accounts() as conn:
-        row = conn.execute("SELECT * FROM users WHERE (username = ? OR lower(email) = ?) AND is_demo = 0 LIMIT 1",
-                           (q, q)).fetchone()
-    return dict(row) if row else None
+        rows = conn.execute("SELECT * FROM users WHERE (username = ? OR lower(email) = ?) AND is_demo = 0 "
+                            "ORDER BY created_at, username LIMIT 50", (q, q)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def find_user(query):
+    found = find_users(query)
+    return found[0] if found else None
 
 
 def signup_direct(username, display_name, password, ip, email=None):
@@ -574,6 +603,7 @@ def signup_direct(username, display_name, password, ip, email=None):
         conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
+    check_password(password)
     return create_user(username, display_name, password, email=email)
 
 

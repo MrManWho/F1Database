@@ -258,13 +258,17 @@ def test_members_page_shows_join_state_but_settings_owns_it(master_client):
 def test_password_forms_confirm_and_match(app, master_client):
     page = master_client.get("/accounts").get_data(as_text=True)
     assert "data-password-form" in page and "Confirm new password" in page and "Caps Lock" in page
-    auth.create_user("newp", "N", "abcdef")
+    auth.create_user("newp", "N", "tyre-wall-9")
     found = master_client.get("/accounts?find=newp").get_data(as_text=True)     # v2.1.2: account recovery
     assert found.count("data-password-form") >= 2 and "Set password and sign them out" in found
-    master_client.post("/accounts/newp/password", data={"password": "zzzzzz", "confirm_password": "yyyyyy", "csrf_token": "tok"})
-    assert auth.verify("newp", "abcdef")
-    master_client.post("/accounts/newp/password", data={"password": "zzzzzz", "confirm_password": "zzzzzz", "csrf_token": "tok"})
-    assert auth.verify("newp", "zzzzzz")
+    master_client.post("/accounts/newp/password", data={"password": "kerb-strip-3", "confirm_password": "kerb-strip-4", "csrf_token": "tok"})
+    assert auth.verify("newp", "tyre-wall-9")
+    master_client.post("/accounts/newp/password", data={"password": "kerb-strip-3", "confirm_password": "kerb-strip-3", "csrf_token": "tok"})
+    assert auth.verify("newp", "kerb-strip-3")
+    # v2.2: at least 8 characters and not a common password.
+    for weak in ("short1", "password1", "aaaaaaaaaa"):
+        master_client.post("/accounts/newp/password", data={"password": weak, "confirm_password": weak, "csrf_token": "tok"})
+        assert auth.verify("newp", "kerb-strip-3")
 
 
 def test_race_master_sidebar_is_collapsible_for_race_masters_only(app, master_client):

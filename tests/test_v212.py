@@ -56,8 +56,8 @@ def test_owner_is_made_with_the_setup_code_and_gets_their_leagues_back(app, mast
     monkeypatch.setenv("F1_TRACKER_SETUP_CODE", "secret-code")
     with c.session_transaction() as s:
         s["csrf"] = "tok"
-    form = {"csrf_token": "tok", "username": "david", "display_name": "David", "password": "password1",
-            "confirm_password": "password1", "setup_code": "wrong"}
+    form = {"csrf_token": "tok", "username": "david", "display_name": "David", "password": "Pit-Lane-42",
+            "confirm_password": "Pit-Lane-42", "setup_code": "wrong"}
     c.post("/setup", data=form)
     assert auth.user_count() == 0
     c.post("/setup", data={**form, "setup_code": "secret-code"})
@@ -79,7 +79,7 @@ def test_old_members_reclaim_their_name_only_with_the_same_verified_email(app, m
         with c.session_transaction() as s:
             s["csrf"] = "tok"
         c.post("/register", data={"username": "carson", "display_name": "Carson", "email": email,
-                                  "password": "password1", "confirm": "password1", "csrf_token": "tok"})
+                                  "password": "Pit-Lane-42", "confirm": "Pit-Lane-42", "csrf_token": "tok"})
         return c
     sign_up("stranger@example.com")
     assert not sent                                                    # refused before any code is sent

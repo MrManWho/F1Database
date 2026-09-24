@@ -173,8 +173,10 @@ def test_difficulty_moves_after_one_round_but_only_a_little(db):
     assert S.difficulty_recommendation(db)["recommended"] is None
     nxt = _player_rounds(db, [(1, 2)], 90)                       # both players dominate at AI 90 in the slowest car
     first = S.difficulty_recommendation(db)
-    assert first["direction"] == "up" and 90 < first["recommended"] <= 90 + 4
-    assert "Still feeling it out" in first["reason"]
+    # v2.2: one clear round already moves it a real step (2.1 crept up by about 2), but never past the cap.
+    assert first["direction"] == "up" and 90 + 3 <= first["recommended"] <= 90 + C.DIFF_MAX_STEP
+    assert first["band"] == "Intermediate / Advanced" and "One usable round (R1)" in first["evidence"]
+    assert "Sprint points counted" in first["evidence"]
     _player_rounds(db, [(1, 2), (2, 1), (1, 3)], 90, start=nxt)
     more = S.difficulty_recommendation(db)
     assert more["recommended"] >= first["recommended"]            # more evidence, bigger (but capped) step
@@ -357,7 +359,7 @@ def test_login_is_required_and_setup_runs_first(app):
     client.get("/setup")
     with client.session_transaction() as sess:
         csrf = sess["csrf"]
-    client.post("/setup", data={"username": "david", "password": "password1", "csrf_token": csrf})
+    client.post("/setup", data={"username": "david", "password": "Pit-Lane-42", "csrf_token": csrf})
     assert auth.get_user("david")["is_master"] == 1
     other = app.test_client()
     # v2.0: a first-time visitor sees the welcome page; anything inside still needs a login.
@@ -596,8 +598,8 @@ def _sign_up(client, codes, username="carson", email="carson@example.com"):
     client.get("/register")
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
-    res = client.post("/register", data={"username": username, "display_name": username.title(), "password": "password1",
-                                         "confirm": "password1", "csrf_token": "tok", "email": email})
+    res = client.post("/register", data={"username": username, "display_name": username.title(), "password": "Pit-Lane-42",
+                                         "confirm": "Pit-Lane-42", "csrf_token": "tok", "email": email})
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
     return res
@@ -876,9 +878,9 @@ def test_hosted_setup_needs_the_setup_code(app, monkeypatch):
     assert "Setup code" in client.get("/setup").get_data(as_text=True)
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
-    client.post("/setup", data={"username": "intruder", "password": "password1", "csrf_token": "tok", "setup_code": "nope"})
+    client.post("/setup", data={"username": "intruder", "password": "Pit-Lane-42", "csrf_token": "tok", "setup_code": "nope"})
     assert auth.user_count() == 0
-    client.post("/setup", data={"username": "admin", "password": "password1", "csrf_token": "tok", "setup_code": "s3cret"})
+    client.post("/setup", data={"username": "admin", "password": "Pit-Lane-42", "csrf_token": "tok", "setup_code": "s3cret"})
     assert auth.get_user("admin")["is_master"] == 1
 
 
@@ -1106,7 +1108,7 @@ def test_sign_up_needs_the_emailed_code(app, codes):
     fresh = codes[-1][1].rsplit(" ", 1)[-1]
     client.post("/register/verify", data={"code": fresh, "csrf_token": "tok"})
     assert auth.get_user("nia")["email"] == "nia@example.com"
-    assert auth.verify("nia", "password1")
+    assert auth.verify("nia", "Pit-Lane-42")
 
 
 def test_sign_up_works_without_email_but_never_takes_a_reserved_name(app):
@@ -1117,14 +1119,14 @@ def test_sign_up_works_without_email_but_never_takes_a_reserved_name(app):
     assert "Create my account" in page
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
-    client.post("/register", data={"username": "x1", "password": "password1", "confirm": "password1", "csrf_token": "tok"})
+    client.post("/register", data={"username": "x1", "password": "Pit-Lane-42", "confirm": "Pit-Lane-42", "csrf_token": "tok"})
     assert auth.get_user("x1") is not None
     with auth.accounts() as conn:
         conn.execute("INSERT INTO reserved_usernames(username, email_hash, reserved_at) VALUES('oldname', NULL, 'x')")
     other = app.test_client()
     with other.session_transaction() as sess:
         sess["csrf"] = "tok"
-    res = other.post("/register", data={"username": "oldname", "password": "password1", "confirm": "password1",
+    res = other.post("/register", data={"username": "oldname", "password": "Pit-Lane-42", "confirm": "Pit-Lane-42",
                                         "csrf_token": "tok"}, follow_redirects=True)
     assert auth.get_user("oldname") is None and "belonged to someone" in res.get_data(as_text=True)
 

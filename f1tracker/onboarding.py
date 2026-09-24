@@ -14,25 +14,29 @@ PRESETS = {
         "blurb": "Results, standings, calendar, records and news. No contracts, market, targets or round gates.",
         "enables": ["Results & standings", "Records", "Comments"],
         "features": {"comments"}, "market": False, "targets": False, "gates": False, "orders": "off",
+        "team_goals": False,
     },
     "multiplayer": {
         "label": "Multiplayer career league",
         "blurb": "Results plus careers: contracts and the transfer market, weekend targets, teammate battles and round gates.",
         "enables": ["Everything in Simple", "Rookie Draft & transfer market", "Weekend targets", "Round gates", "Predictions"],
         "features": {"comments", "predictions"}, "market": True, "targets": True, "gates": True, "orders": "off",
+        "team_goals": False,
     },
     "full": {
         "label": "Full career simulation",
-        "blurb": "Every system: market, pledges, press, targets, round gates, race-night check-in and advisory team orders.",
-        "enables": ["Everything in Multiplayer", "Race-night check-in", "Advisory team orders"],
+        "blurb": "Every system: market, pledges, press, targets, round gates, selectable team goals, race-night check-in "
+                 "and advisory team orders.",
+        "enables": ["Everything in Multiplayer", "Selectable team goals", "Race-night check-in", "Advisory team orders"],
         "features": {"comments", "predictions", "checkin"}, "market": True, "targets": True, "gates": True,
-        "orders": "advisory",
+        "orders": "advisory", "team_goals": True,
     },
     "custom": {
         "label": "Custom",
         "blurb": "Start from Multiplayer and choose each system yourself on the next step.",
         "enables": ["Your choice"],
         "features": {"comments", "predictions"}, "market": True, "targets": True, "gates": True, "orders": "off",
+        "team_goals": False,
     },
 }
 LEAGUES_PER_DAY = 5

@@ -323,13 +323,19 @@
   var form = d.querySelector("[data-wn-form]"), box = d.querySelector("[data-wn-agree]"), go = d.querySelector("[data-wn-continue]");
   d.showModal();
   box.addEventListener("change", function () { go.disabled = !box.checked; });
-  d.addEventListener("cancel", function (e) { e.preventDefault(); });   // it has to be agreed to
+  // It has to be agreed to. Browsers close a modal on a second Escape even when "cancel" is cancelled, so block the
+  // key itself and re-open the dialog if it closes any other way before it's been agreed to.
+  var agreed = false;
+  d.addEventListener("cancel", function (e) { e.preventDefault(); });
+  d.addEventListener("keydown", function (e) { if (e.key === "Escape") e.preventDefault(); });
+  d.addEventListener("close", function () { if (!agreed) d.showModal(); });
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     if (!box.checked) return;
     fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin",
                          headers: { "X-Requested-With": "fetch" } })
-      .then(function (r) { if (r.ok) d.close(); });
+      .then(function (r) { if (r.ok) { agreed = true; d.close(); } else { form.submit(); } })
+      .catch(function () { form.submit(); });
   });
 })();
 </script>

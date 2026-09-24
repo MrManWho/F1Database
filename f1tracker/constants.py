@@ -1,7 +1,8 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.1.3"
+APP_VERSION = "2.2"
+POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 1
 SCHEMA_VERSION = 18
@@ -132,14 +133,18 @@ ROOKIE_OFFERS = 3
 # Difficulty recommender
 # v2.1 adaptive recommendation: no round minimum and no fixed one-point step. Each player's recent results are
 # turned into the level they'd be comfortable at; agreement between players decides how far it moves.
-DIFF_SPAN = 20               # levels a perfect weekend (score +1) says you could handle above the level used
-DIFF_ROUND_CAP = 12          # the most one round can say about a player's comfortable level
-DIFF_DEADBAND = 0.12         # scores this close to 0 mean "about right"
-DIFF_RECENT_HALF_LIFE = 4    # rounds; recent rounds matter most
+# v2.2: reacts faster than 2.1 (which moved about 2 levels a round even when a player was clearly on top).
+DIFF_SPAN = 25               # levels a perfect weekend (score +1) says you could handle above the level used
+DIFF_ROUND_CAP = 15          # the most one round can say about a player's comfortable level
+DIFF_DEADBAND = 0.08         # scores this close to 0 mean "about right"
+DIFF_RECENT_HALF_LIFE = 2.5  # rounds; recent rounds matter most
 DIFF_RECENT_ROUNDS = 10      # usable rounds looked at
-DIFF_MAX_STEP = 5            # never recommend a bigger jump than this in one go
+DIFF_MAX_STEP = 8            # never recommend a bigger jump than this in one go
 DIFF_MIXED = 0.5             # players disagree (one struggling, one fine): move half as far
-DIFF_CONFIDENCE_K = 2.0      # evidence weight w gives confidence w / (w + K): small steps while it's feeling it out
+DIFF_CONFIDENCE_K = 0.75     # evidence weight w gives confidence w / (w + K): one round already moves over half way
+DIFF_VERDICT = 1.0           # levels away from the current one before a player counts as struggling / comfortable
+# Where a level sits for a typical player (the game's own bands; most players are comfortable around 82).
+DIFF_BANDS = [(1, 40, "Beginner"), (41, 65, "Casual"), (66, 99, "Intermediate / Advanced"), (100, 110, "Expert")]
 DIFF_MIN_ROUNDS = 3
 DIFF_MAX_ROUNDS = 5
 DIFF_THRESHOLD = 0.35

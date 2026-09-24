@@ -25,11 +25,12 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
   <div class="diff-number">
     <svg class="diff-gauge" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5 16 9"/><circle cx="12" cy="13.5" r="1.2" fill="currentColor"/></svg>
     <strong>{{ rec.recommended if rec.recommended is not none else '—' }}</strong>
-    <small>{{ 'Recommended for next round' if rec.for_next else 'Recommended AI' }}</small>
+    <small>{{ 'Recommended for next round' if rec.for_next else 'Recommended AI' }}{% if rec.band %} · {{ rec.band }}{% endif %}</small>
     {% if rec.recommended is not none and rec.direction in ('up', 'down') %}<span class="diff-move">{{ '▲ Raise' if rec.direction == 'up' else '▼ Lower' }}</span>{% endif %}
   </div>
   <div class="diff-copy">
     <p>{{ rec.reason }}</p>
+    {% if rec.evidence %}<p class="small muted diff-evidence">{{ rec.evidence }}</p>{% endif %}
     {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
     {% if rec.this_round and rec.this_round != rec.reason %}<p class="diff-note">{{ rec.this_round }}</p>{% endif %}
     {% if rec.used or rec.excluded or rec.recent|length > 1 %}
@@ -151,7 +152,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {%- endmacro %}
 
 {# One password input with a show/hide button. kind: current | new | confirm (used by the form checks in app.js). #}
-{% macro pw_field(name, label, kind='new', autocomplete='new-password', minlength=6, fid=None, autofocus=False, placeholder='') -%}
+{% macro pw_field(name, label, kind='new', autocomplete='new-password', minlength=8, fid=None, autofocus=False, placeholder='') -%}
 {%- set fid = fid or ('pw-' ~ name ~ '-' ~ range(100000)|random) -%}
 <div class="pw-group">
   <label for="{{ fid }}">{{ label }}</label>
@@ -163,8 +164,8 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 </div>
 {%- endmacro %}
 
-{% macro pw_help(minlength=6, confirm=True) -%}
-<p class="muted small pw-rules">At least {{ minlength }} characters.{% if confirm %} Type the new password twice.{% endif %}</p>
+{% macro pw_help(minlength=8, confirm=True) -%}
+<p class="muted small pw-rules">At least {{ minlength }} characters, and not a common password.{% if confirm %} Type the new password twice.{% endif %}</p>
 <p class="pw-caps small" role="status" aria-live="polite" hidden>⚠️ Caps Lock is on</p>
 <p class="form-error small pw-error" role="alert" hidden></p>
 {%- endmacro %}

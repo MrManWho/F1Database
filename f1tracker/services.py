@@ -949,6 +949,34 @@ def _soft(score):
     return math.copysign(max(0.0, abs(score) - C.DIFF_DEADBAND), score)
 
 
+def difficulty_band(level):
+    """The game's own name for a level (Beginner 1-40, Casual 41-65, Intermediate / Advanced 66-99, Expert 100-110)."""
+    if level is None:
+        return None
+    for lo, hi, name in C.DIFF_BANDS:
+        if lo <= level <= hi:
+            return name
+    return C.DIFF_BANDS[-1][2] if level > C.DIFF_BANDS[-1][1] else C.DIFF_BANDS[0][2]
+
+
+_NUMBERS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
+
+
+def _evidence_line(conn, rec, usable):
+    """One readable line: how many rounds count, which don't and why, and whether Sprints were counted (v2.2)."""
+    n = len(usable)
+    parts = [f"{_NUMBERS[n] if n < len(_NUMBERS) else n} usable round{'s' if n != 1 else ''}"
+             + (" (" + ", ".join(f"R{h['round_number']}" for h in usable[-6:]) + ("…" if n > 6 else "") + ")" if n else "")]
+    if n > 1:
+        parts.append("latest weighted most")
+    for x in rec.get("excluded", []):
+        short = x["label"].split(" ")[1] if " " in x["label"] else x["label"]
+        parts.append(f"{short} " + ("untracked" if "track" in x["why"] else "excluded (no player finished)"))
+    sprints = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "1"})["value"] == "1"
+    parts.append("Sprint points counted" if sprints else "Sprint points not counted")
+    return ", ".join(parts) + "."
+
+
 def _adaptive(conn, rec, history, current):
     """v2.1: feel out the right level from every tracked round (at any AI level), player by player.
 
@@ -962,6 +990,8 @@ def _adaptive(conn, rec, history, current):
     rec["used"] = [{"label": f"{h['year']} R{h['round_number']} {h['name']}", "difficulty": h["ai_difficulty"],
                     "score": h["score"]} for h in usable]
     rec["recommended"], rec["direction"], rec["players"] = current, "hold", []
+    rec["band"] = difficulty_band(current)
+    rec["evidence"] = _evidence_line(conn, rec, usable)
     if not usable:
         rec["reason"] = (f"No usable rounds yet: a tracked round needs at least one player driver to finish. "
                          f"Holding at {current}.")
@@ -980,7 +1010,8 @@ def _adaptive(conn, rec, history, current):
     for did, p in per.items():
         level = p["sum"] / p["w"]
         delta = level - current
-        verdict = "struggling" if delta <= -1.5 else "comfortable" if delta >= 1.5 else "about right"
+        verdict = ("struggling" if delta <= -C.DIFF_VERDICT else "comfortable" if delta >= C.DIFF_VERDICT
+                   else "about right")
         players.append({"driver_id": did, "name": dmap[did]["name"] if did in dmap else "A player", "rounds": p["rounds"],
                         "level": round(level, 1), "delta": round(delta, 1), "verdict": verdict, "weight": p["w"]})
     players.sort(key=lambda x: x["delta"])
@@ -1000,6 +1031,7 @@ def _adaptive(conn, rec, history, current):
     rec["recommended"] = int(clamp(current + step, C.MIN_DIFFICULTY, C.MAX_DIFFICULTY))
     step = rec["recommended"] - current
     rec["direction"] = "up" if step > 0 else "down" if step < 0 else "hold"
+    rec["band"] = difficulty_band(rec["recommended"])
 
     def who(xs):
         return " and ".join(x["name"] for x in xs)
@@ -1028,6 +1060,8 @@ def _adaptive(conn, rec, history, current):
                          f"{'comfortable' if step > 0 else 'struggling'} at AI {current} ({evidence}).")
     if confidence < 0.5:
         rec["reason"] += " Still feeling it out, so the step is small."
+    if difficulty_band(current) != rec["band"]:
+        rec["reason"] += f" That moves it from {difficulty_band(current)} into {rec['band']}."
 
 
 # --------------------------------------------------------------------------- seasons & calendar

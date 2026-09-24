@@ -2,11 +2,14 @@
 {% block title %}{{ 'Privacy' if kind == 'privacy' else 'Terms' }}{% endblock %}
 {% block plain %}
 <article class="card legal">
+{% set who %}This site is run by its site owner, a private individual running a free, non-commercial league tracker.
+  {% if contact %}Contact: <a href="mailto:{{ contact }}">{{ contact }}</a>.{% else %}Contact them through your league's Race Master.{% endif %}{% endset %}
 {% if kind == 'privacy' %}
   <div class="kicker">Paddock Legacy</div>
   <h1>Privacy</h1>
-  <p class="muted small">A plain-language summary for the people who host and use this site. Whoever runs this copy of Paddock Legacy
-    should replace or extend it to suit where they are.</p>
+  <p class="muted small">Effective {{ effective }} (Paddock Legacy {{ version }}).</p>
+  <h2>Who runs this site</h2>
+  <p>{{ who }}</p>
   <h2>What's stored</h2>
   <ul>
     <li>Your username, display name, a salted password hash and, if you add one, your email address.</li>
@@ -19,27 +22,37 @@
     <li>No advertising, tracking or analytics services.</li>
     <li>Nobody else sees your email address. League emails are sent only for the categories you choose, per league.</li>
   </ul>
+  <h2>How long it's kept</h2>
+  <ul>
+    <li>Your login is kept until you delete it (My account) or ask the site owner to. Deleting it removes the login straight away.</li>
+    <li>League results, standings and activity logs stay with the league so everyone else's history stays correct. They're kept until
+      the league's Race Master deletes the league.</li>
+    <li>League backups (scheduled, and safety copies made before big changes) stay on the server until a Race Master or the site
+      owner deletes them.</li>
+    <li>Demo leagues and demo guest logins are removed automatically after a couple of hours.</li>
+  </ul>
   <h2>Public leagues</h2>
   <p>A league's Race Master can make it public. Public pages show completed results, standings and driver names only: never emails,
     usernames, private notes, drafts or rounds still in progress.</p>
   <h2>Your choices</h2>
   <p>From <a href="{{ url_for('accounts_page') if user else url_for('login') }}">your account</a> you can download everything your
-    account holds, sign out devices, pause every email, leave a league or delete your account. Deleting your account removes your
-    login; leagues keep their results so everyone else's standings stay correct.</p>
+    account holds, sign out devices, pause every email, leave a league or delete your account.</p>
 {% else %}
   <div class="kicker">Paddock Legacy</div>
   <h1>Terms</h1>
-  <p class="muted small">A plain-language summary. Whoever runs this copy of Paddock Legacy should replace or extend it.</p>
+  <p class="muted small">Effective {{ effective }} (Paddock Legacy {{ version }}).</p>
+  <h2>Who runs this site</h2>
+  <p>{{ who }}</p>
   <h2>Using the site</h2>
   <ul>
     <li>Paddock Legacy is a free tool for tracking fan-run racing game leagues. It isn't affiliated with Formula 1, the FIA or any game publisher.</li>
     <li>Be decent to the people in your league. Don't post anything hateful, harassing or illegal in league names, descriptions, news or comments.</li>
-    <li>Public leagues can be reported. Site admins may remove a league from the directory.</li>
+    <li>Public leagues can be reported. The site owner may remove a league from the directory, or remove logins that break these terms.</li>
     <li>Keep your password to yourself. Turn on two-step sign-in if you run a league.</li>
   </ul>
   <h2>Your league data</h2>
   <p>Race Masters are responsible for their league's data. Download a backup from the league's Backups page regularly.
-    The site is provided as-is, without guarantees.</p>
+    The site is provided as-is, free of charge and without guarantees; it may change or go offline.</p>
 {% endif %}
 </article>
 {% endblock %}

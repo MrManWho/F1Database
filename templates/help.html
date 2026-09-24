@@ -135,10 +135,12 @@
   <h2>AI difficulty</h2>
   <p>Enter the AI level (0–110) you raced on each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level, with the latest counting most. Each player driver's finish, qualifying, points, teammate and car-adjusted result says roughly what level they'd be comfortable at.</p>
   <ul>
-    <li><b>Everyone too good</b> or <b>everyone struggling</b>: it moves a few levels.</li>
-    <li><b>Mixed</b> (one struggling, another fine): it moves a little, toward the one who's struggling.</li>
-    <li><b>Early on</b> the steps are small while it feels out the level. Never more than {{ C.DIFF_MAX_STEP }} at once.</li>
+    <li><b>Everyone too good</b> or <b>everyone struggling</b>: it moves several levels. One clear round is enough to move it (2.2 reacts faster than 2.1).</li>
+    <li><b>Mixed</b> (one struggling, another fine): it moves half as far, toward the one who's struggling.</li>
+    <li>Never more than {{ C.DIFF_MAX_STEP }} at once.</li>
   </ul>
+  <p>Each recommendation shows the game's level band: {% for lo, hi, name in C.DIFF_BANDS %}<b>{{ name }}</b> {{ lo }}–{{ hi }}{{ ', ' if not loop.last else '' }}{% endfor %}. Most players are comfortable in the low 80s.
+    A one-line summary underneath says which rounds were used, which weren't and why, and whether Sprint points counted.</p>
   <p>DNFs and rounds marked <em>Don't track</em> don't count. Sprint points count unless the league turns that off. It's a suggestion: the Race Master picks the level.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
@@ -269,7 +271,8 @@
 <section class="card help" id="team-goals">
   <h2>Team goals (Safe, Competitive, Ambitious)</h2>
   <p>When the league turns them on, each team with a player driver picks one Constructors' goal before round 1: <b>Safe</b> (+1 Reputation if met, nothing if missed), <b>Competitive</b> (+3 / −1) or <b>Ambitious</b> (+6 / −3).
-    Targets come from car strength, last season's Constructors' position, the lineup, the number of rounds and Sprint weekends. Met means finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower place.
+    Targets come from car strength, last season's Constructors' position and scoring, the lineup, the number of rounds and Sprint weekends.
+    A goal chosen after the season has started counts the points already scored and only predicts the rounds left, using how the team has actually been scoring (it counts more with every round). Safe always needs more than you have now, and each level asks for clearly more than the one below. Met means finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower place.
     Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again.
   While your team's choice is open you'll be asked to make it before anything else, and re-pushed targets are shown to you to agree to. The reward or penalty is added to next season's starting Reputation.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
@@ -333,7 +336,8 @@
 <section class="card help" id="accounts">
   <h2>Accounts and the site owner</h2>
   <p>Everyone creates their own account from <b>Sign up</b> on the login page, then joins leagues by invitation or by asking. There's no list of accounts anywhere on the site.</p>
-  <p>The <b>site owner</b> is the one account that runs the site. It's made on first start with a setup code from the host's settings (on Render: your service → Environment → <code>F1_TRACKER_SETUP_CODE</code>). The owner is Race Master of every league, controls site settings, and is the only one who can help someone who's lost their account: look it up by exact username or email, then set a new password, turn off two-step sign-in, sign it out everywhere or delete it.</p>
+  <p>The <b>site owner</b> is the one account that runs the site. It's made on first start with a setup code from the host's settings (on Render: your service → Environment → <code>F1_TRACKER_SETUP_CODE</code>). The owner is Race Master of every league, controls site settings, and is the only one who can help someone who's lost their account: look it up by exact username or email (every account using that email is listed), then set a new password, turn off two-step sign-in, sign it out everywhere or delete it.</p>
+  <p>New passwords need at least 8 characters and can't be a common password. Length matters more than symbols; a password manager is fine.</p>
   <p>Forgot your password? Use <b>Forgot password?</b> on the login page if your account has an email; otherwise ask the site owner.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>

@@ -74,7 +74,8 @@ All of these affect one league only.
   is Race Master of every league.
 - **Everyone else** signs up from the login page. Then add them to a league on **Members & roles** (type their
   username, pick their role and their driver), or invite them, or let them ask to join.
-- **Account recovery** (owner only, My account): type an exact username or email to find one account; set a new password,
+- **Account recovery** (owner only, My account): type an exact username or email. Every account with that username or
+  email is listed (several accounts can share an email, from 2.2); for each one you can set a new password,
   change the email, turn off two-step sign-in, sign out everywhere, or delete the login.
 - **Rolling back**: with the site stopped, put `accounts-before-2.1.3-reset-*.db` back as `accounts.db` and restore
   each league's `before-213-login-reset` backup, then deploy the earlier version.
@@ -86,6 +87,20 @@ All of these affect one league only.
 - **Team goals**: reopening a team's choice sends that team's drivers to choose before anything else; re-pushing
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
+
+## New in 2.2
+
+- **Do-this-first steps** (change notices, then the growth pledge, then the team goal) come from one ordered list, so a
+  driver is walked through them in turn. This fixes the loop after a rollover with a provisional seat.
+- **Team goal targets** count points already scored and the rounds left, blend in observed pace (done ÷ (done + 4))
+  and last season's scoring, and keep each tier at least 3 points (or 25%) above the one below. Existing choices keep
+  their numbers; use *Re-push targets* on the Team goals page to recalculate one (the drivers see the change first).
+- **AI difficulty** reacts faster (see Help → AI difficulty for the numbers), shows the level band and a one-line
+  evidence summary, and says whether Sprint points counted (still on by default).
+- **Passwords**: new passwords need 8+ characters and can't be a common one. Existing passwords still work.
+- **Contact email** (Account → Settings) is shown on the Privacy and Terms pages, which now carry an effective date.
+- **Full career simulation** preset turns on selectable team goals.
+- New site setting: `contact_email`. No league schema change.
 
 ## Accounts and security
 

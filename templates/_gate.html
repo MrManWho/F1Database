@@ -12,7 +12,7 @@
     {% if gate.active %}<span class="muted small">{{ gate.players|length - gate.waiting }} of {{ gate.players|length }} ready</span>{% endif %}
   </div>
   {% if gate.active %}
-  <p class="small">{% if gate.blocking %}Results can go in once every player below has done their part.{% else %}Everyone's done their part.{% endif %}</p>
+  <p class="small">{% if gate.blocking %}Results can go in once every player below has done their part.{% elif gate.waiting %}Race Master override active. Outstanding player actions can still be completed later.{% else %}Everyone's done their part.{% endif %}</p>
   <ul class="gate-list">
     {% for p in gate.players %}
     <li class="{{ 'is-done' if p.done else 'is-waiting' }}" {% if p.driver.player_color %}style="--player: {{ p.driver.player_color }}"{% endif %}>

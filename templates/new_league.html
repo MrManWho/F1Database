@@ -72,7 +72,7 @@
     <legend><h2>5 · Career systems</h2></legend>
     <div class="choice-cards" role="radiogroup" aria-label="Setup preset">
       {% for key, p in presets.items() %}
-      <label class="choice"><input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'multiplayer' }} data-summary="Setup" data-summary-text="{{ p.label }}">
+      <label class="choice"><input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'multiplayer' }} data-summary="Setup" data-summary-text="{{ p.label }}{% if key != 'custom' %}: {{ p.enables|join(', ') }}{% endif %}">
         <span><b>{{ p.label }}</b><small class="muted">{{ p.blurb }}</small><small class="enables">{{ p.enables|join(' · ') }}</small></span></label>
       {% endfor %}
     </div>
@@ -84,6 +84,7 @@
       <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Contracts and the transfer market (starts with a Rookie Draft)</label>
       <label class="check"><input type="checkbox" name="weekend_targets" value="1" checked> Weekend targets</label>
       <label class="check"><input type="checkbox" name="round_gates" value="1" checked> Round gates</label>
+      <label class="check"><input type="checkbox" name="team_goal_choice" value="1"> Selectable team goals</label>
       <label>Team orders<select name="team_orders">{% for k, l in order_modes.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
     </div>
   </fieldset>

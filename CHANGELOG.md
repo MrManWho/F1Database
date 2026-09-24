@@ -3,6 +3,39 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.2 · Audit fixes, fairer team goals and a quicker AI recommendation
+_Released September 24, 2026_
+> Fixes from an outside audit (including a page loop after starting a new season), team goals that take the
+> season so far into account, an AI difficulty recommendation that reacts faster and names the game's level
+> bands, and account recovery that finds every account sharing an email.
+
+### Highlights
+- **No more page loop after a new season.** If you had several things to do first (agree to changes, choose a pledge, choose your team's goal), you're now taken through them one at a time, in order.
+- **Team goals are harder to game.** Goals count the points your team already has, the rounds left and how you've actually been scoring, and each level asks for clearly more than the one below. Safe is never already done.
+- **The AI recommendation reacts faster.** One clear round now moves it several levels (up to 8 at once) instead of creeping by 2, and it shows the level band: Beginner (1–40), Casual (41–65), Intermediate / Advanced (66–99) or Expert (100–110).
+- **A one-line summary of the evidence** under each AI recommendation, e.g. "Five usable rounds (R1, R2, R3, R5, R6), latest weighted most, R4 excluded (no player finished), R7 untracked, Sprint points counted."
+- **Stronger passwords for new passwords**: at least 8 characters and not a common one. Existing passwords keep working.
+
+### Fixed
+- **Redirect loop after a season rollover**: with a provisional seat, team goals on and a pledge still to choose, pages bounced between Team goals and the pledge page forever. All "do this first" steps now come from one ordered list, and the pages for those steps never send you elsewhere.
+- **What's New could be closed with Escape** in some browsers (a second press closed it). It now stays open until you agree.
+- **A round opened early by the Race Master** said "0 of 1 ready" and "Everyone's done their part" together. It now says "Race Master override active. Outstanding player actions can still be completed later."
+
+### Added
+- **Account recovery (site owner) finds every account** with that exact username or email. Several people can share an email, so every match is listed with its own controls.
+- **Contact email** (Account → Settings) for the Privacy and Terms pages.
+- **Rollover summary updates live** as you choose what happens to each ending contract, and counts provisional seats.
+- **Offers explained**: Contracts & offers says how many are concrete contracts you can sign now (by status, and how many are from a top-third car), shows each team's car rank, and points to the interest board for teams that are only interested.
+
+### Changed
+- **Team goal targets (formula change)**: points target = points already scored + a projection for the rounds left. The projection blends the car's expected haul (and last season's scoring, if any) with the team's pace so far, which counts for rounds done ÷ (rounds done + 4). Competitive needs at least 3 points (or 25% of what's still to score) more than Safe, and Ambitious the same again above Competitive. Goals already chosen are unchanged; a Race Master can re-push them.
+- **AI difficulty (formula change)**: a perfect weekend now suggests 25 levels of headroom (was 20), one round can say up to 15 (was 12), the "about right" band is ±0.08 (was ±0.12), recent rounds fade faster (half-life 2.5 rounds, was 4), confidence builds faster, and a step can be up to 8 (was 5). Sprint points still count by default; the recommendation now says whether they did.
+- **Full career simulation preset** now turns on selectable team goals, and each preset lists its systems in the setup review.
+- **Privacy and Terms** no longer carry placeholder text for hosts. They say who runs the site, how to contact them, how long things are kept and when the pages took effect.
+
+### Tested
+- 302 automated tests, including the rollover loop (provisional seat, team goals, pledge and change notices together), multi-account recovery, the password rules, team goals that count points already scored, and the faster AI with its bands and evidence line.
+
 ## 2.1.3 · Fixes, a role audit and a fresh start for logins
 _Released September 24, 2026_
 > Race Master buttons no longer show in a driver's view, choices you have to make now come first, weekend

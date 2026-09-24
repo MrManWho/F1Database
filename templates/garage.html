@@ -88,12 +88,19 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
   {% endif %}
   {% set pending = offers|selectattr('status', 'equalto', 'Pending')|list %}
   {% if pending %}
+  {# v2.2: say what the number means, so a bigger badge isn't read as better offers. #}
+  {% set ranks = {} %}{% for i in interest %}{% set _ = ranks.update({i.team.id: i.rank}) %}{% endfor %}
+  {% set n_teams = interest|length or 1 %}
+  {% set ns = namespace(top=0) %}{% for o in pending if ranks.get(o.team_id, 99) <= (n_teams / 3)|round(0, 'ceil') %}{% set ns.top = ns.top + 1 %}{% endfor %}
+  <p class="small offer-context"><b>{{ pending|length }} concrete offer{{ 's' if pending|length != 1 }}</b>: real contracts you can sign now
+    ({% for role in pending|map(attribute='role')|unique %}{{ pending|selectattr('role', 'equalto', role)|list|length }} × {{ role }}{{ ', ' if not loop.last }}{% endfor %}{% if ns.top %}; {{ ns.top }} from a top-third car{% endif %}).
+    Teams that are only interested aren't counted here; they're on the interest board below. More offers means more teams want you, not better terms: compare the car rank and status on each.</p>
   <div class="offer-grid">
     {% for o in pending %}
     <article class="offer-card" id="offer-{{ o.id }}" style="--team: {{ o.team.color }}">
       <div class="offer-top">{{ team_dot(o.team) }}<strong>{{ o.team.name }}</strong>
         <span class="pill mood mood-{{ o.mood|lower|replace(' ', '-') }}">{{ o.mood }}</span></div>
-      <div class="muted small">{{ o.stage }} · {{ o.kind }} for {{ o.target_year }}{{ ' · you approached them' if o.origin == 'driver' }}</div>
+      <div class="muted small">{{ o.stage }} · {{ o.kind }} for {{ o.target_year }}{% if ranks.get(o.team_id) %} · car rank {{ ranks[o.team_id] }} of {{ n_teams }}{% endif %}{{ ' · you approached them' if o.origin == 'driver' }}</div>
       <div class="offer-terms">{{ terms_line(o.role, o.years, o.growth, o.target_year, o.team_id) }}</div>
       <p class="muted small pledge-note">You'd be promising <b>{{ pledge_text(o.team_id, o.growth) }}</b> by season end
         ({{ C.GROWTH_LEVELS[o.growth or 0].blurb|lower }}). Fall short and {{ o.team.name }} lose patience.</p>
