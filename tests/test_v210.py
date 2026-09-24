@@ -206,11 +206,13 @@ def test_a_round_further_ahead_is_never_shown_as_ready(app, master_client):
 
 # --------------------------------------------------------------------------- changelog agreement
 
+@pytest.mark.whatsnew
 def test_whats_new_must_be_agreed_to_in_the_browser(app, master_client, live_server):
     from conftest import open_browser
     from f1tracker import whatsnew
     from f1tracker import constants as C
     with auth.accounts() as conn:                        # an account from before the update
+        whatsnew._table(conn)
         conn.execute("DELETE FROM whats_new_seen WHERE username = 'david'")
     pw, browser = open_browser()
     try:
@@ -262,6 +264,7 @@ def test_race_master_can_reset_reopen_and_repush_team_goals(app, master_client):
     with storage.session(token) as conn:
         assert teamgoals.choice(conn, sid, team) is None and not teamgoals.locked(conn, sid, team)
         assert conn.execute("SELECT 1 FROM notifications WHERE text LIKE '%reset%team goal%'").fetchone()
+    ana.post(f"/career/{token}/changes", data={"csrf_token": "tok", "agree": "1"})    # the re-push notice first (v2.1.3)
     ana.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "tier": "safe"})   # mid-season, reopened
     with storage.session(token) as conn:
         assert teamgoals.choice(conn, sid, team)["tier"] == "safe"

@@ -450,6 +450,8 @@ def issue_targets(conn, event_id, notify=False):
         return []
     seats = S.driver_seats(conn, event["season_id"])
     have = {r["driver_id"] for r in conn.execute("SELECT driver_id FROM weekend_targets WHERE event_id = ?", (event_id,))}
+    from .storage import get_meta
+    have |= {int(x) for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x}
     todo = [p for p in S.player_drivers(conn) if p["active"] and p["id"] in seats and p["id"] not in have]
     if not todo:
         return []
@@ -482,6 +484,9 @@ def reissue_target(conn, event_id, driver_id):
         raise S.ValidationError("That driver doesn't have a seat")
     old = target_for(conn, event_id, driver_id)
     conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+    from .storage import get_meta, set_meta
+    removed = {x for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x} - {str(driver_id)}
+    set_meta(conn, f"targets_removed_{event_id}", ",".join(sorted(removed)))
     t = plan_target(conn, event, driver_id, seat[0], rng=random.Random())
     conn.execute("""INSERT INTO weekend_targets(event_id, driver_id, team_id, kind, target, rival_team_id, label,
                     created_at) VALUES(?,?,?,?,?,?,?,?)""",
@@ -489,6 +494,23 @@ def reissue_target(conn, event_id, driver_id):
     feed.notify(conn, driver_id, f"New weekend target for R{event['round_number']} {event['name']}: {t['label']}. "
                 "Accept it on the Control Room.", "dashboard#target", category="career")
     return old, t
+
+
+def remove_target(conn, event_id, driver_id):
+    """Race Master: take a driver's target away for this round. On a completed round its effect on the team
+    relationship is undone. Nothing is re-issued (use reissue_target before the race for a new one)."""
+    event = S.get_event(conn, event_id)
+    t = target_for(conn, event_id, driver_id)
+    if not event or not t:
+        raise S.ValidationError("That driver has no target at this round")
+    if t["effect"] and conn.execute("SELECT 1 FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                                    (event["season_id"], driver_id)).fetchone():
+        relations.add_bonus(conn, event["season_id"], driver_id, -t["effect"])
+    conn.execute("DELETE FROM weekend_targets WHERE event_id = ? AND driver_id = ?", (event_id, driver_id))
+    from .storage import get_meta, set_meta
+    removed = {x for x in (get_meta(conn, f"targets_removed_{event_id}") or "").split(",") if x} | {str(driver_id)}
+    set_meta(conn, f"targets_removed_{event_id}", ",".join(sorted(removed)))
+    return t
 
 
 def community_linked(conn):

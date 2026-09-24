@@ -168,15 +168,6 @@ def clean_email(email, required=False):
     return email
 
 
-def _whats_new_seen(conn, username):
-    """A new account has nothing to catch up on: the current version's What's New counts as seen (they get the
-    welcome and onboarding instead). Accounts that existed before an update still see it once."""
-    conn.execute("""CREATE TABLE IF NOT EXISTS whats_new_seen (
-        username TEXT NOT NULL, version TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY (username, version))""")
-    conn.execute("INSERT OR IGNORE INTO whats_new_seen(username, version, seen_at) VALUES(?,?,?)",
-                 (username, APP_VERSION, now_iso()))
-
-
 def create_user(username, display_name, password, is_master=False, is_steward=False, email=None):
     username = normalise(username)
     email = clean_email(email)
@@ -192,7 +183,6 @@ def create_user(username, display_name, password, is_master=False, is_steward=Fa
                      "VALUES(?,?,?,?,?,?,?)", (username, display_name, generate_password_hash(password),
                                                int(bool(is_master)), int(bool(is_steward) and not is_master), email,
                                                now_iso()))
-        _whats_new_seen(conn, username)
     return username
 
 
@@ -394,7 +384,6 @@ def finish_signup(pending_id, code):
         # A verified email that matches a reserved (pre-reset) username: it's theirs again.
         conn.execute("DELETE FROM reserved_usernames WHERE username = ?", (pending["username"],))
         conn.execute("DELETE FROM pending_signups WHERE id = ?", (pending_id,))
-        _whats_new_seen(conn, pending["username"])
     return pending["username"]
 
 
@@ -586,3 +575,25 @@ def signup_direct(username, display_name, password, ip, email=None):
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
     return create_user(username, display_name, password, email=email)
+
+
+def reset_all_logins_213(backup_dir):
+    """v2.1.3, once per site: remove every login again, and this time the reserved usernames too (nobody reclaims
+    old names; everyone signs up fresh). A copy of accounts.db is written to backup_dir first. Returns True if it
+    ran. The caller removes the league login links (see app.reset_league_logins), never league data."""
+    import shutil
+    from datetime import datetime
+    with accounts() as conn:
+        if conn.execute("SELECT value FROM settings WHERE key = 'accounts_reset_213'").fetchone():
+            return False
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    shutil.copyfile(data_dir() / "accounts.db", backup_dir / f"accounts-before-2.1.3-reset-{stamp}.db")
+    with accounts() as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        for table in ACCOUNT_TABLES + ["reserved_usernames"]:
+            if table in tables:
+                conn.execute(f"DELETE FROM {table}")
+        conn.execute("INSERT INTO settings(key, value) VALUES('accounts_reset_212', ?) "
+                     "ON CONFLICT(key) DO NOTHING", (now_iso(),))
+        conn.execute("INSERT INTO settings(key, value) VALUES('accounts_reset_213', ?)", (now_iso(),))
+    return True

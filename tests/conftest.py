@@ -18,6 +18,16 @@ def data_dir(tmp_path, monkeypatch):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "gates: run with round gates at their real default (on)")
+    config.addinivalue_line("markers", "whatsnew: show the real What's New popup (hidden in other tests)")
+
+
+@pytest.fixture(autouse=True)
+def hide_whats_new(request, monkeypatch):
+    """Every account now sees the current version's What's New once (v2.1.3); tests about something else skip it."""
+    if request.node.get_closest_marker("whatsnew"):
+        return
+    from f1tracker import changelog
+    monkeypatch.setattr(changelog, "entry", lambda base, version: None)
 
 
 @pytest.fixture(autouse=True)

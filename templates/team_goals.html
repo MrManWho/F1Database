@@ -4,6 +4,9 @@
 <div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Team goals</h1>
   <p class="page-purpose">Each team with a player driver picks one goal for the Constructors' Championship. The bigger the goal, the bigger the Reputation reward, and the bigger the cost of missing it.</p></div></div>
 
+{% if must_choose %}
+<div class="banner banner-warn" role="alert"><b>Choose your team's goal to carry on.</b> Pick Safe, Competitive or Ambitious below; the rest of the league opens again as soon as you do.</div>
+{% endif %}
 {% if not enabled %}
 <section class="card empty-state"><h2>Team goals are off in this league</h2>
   <p class="muted">{% if ctx.is_master %}Turn on <em>Selectable team goals</em> in <a href="{{ url_for('league_settings', token=ctx.token) }}#team-goals">League settings</a>.{% else %}The Race Master can turn them on in League settings.{% endif %}</p>
@@ -45,7 +48,7 @@
   {% elif not t.goal %}
   <p class="muted small">{% if t.reopened %}The Race Master reopened this choice.{% elif locked %}No goal was chosen, so no reward or penalty this season.{% else %}No goal chosen yet.{% endif %}</p>
   {% endif %}
-  {% if ctx.real.is_master and enabled and ctx.season.id == ctx.current_season_id and not (t.goal and t.goal.outcome) %}
+  {% if ctx.is_master and enabled and ctx.season.id == ctx.current_season_id and not (t.goal and t.goal.outcome) %}
   <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="button-row tight rm-goal-tools">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if t.goal %}<button class="btn btn-sm btn-ghost" name="action" value="repush" title="Work the targets out again from the latest car strength, lineup and calendar, keeping the level">Re-push targets</button>{% endif %}

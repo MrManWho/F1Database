@@ -42,7 +42,7 @@
   {% set waiting_ids = waiting|map(attribute='id')|list %}
   {% for n in history if n.id not in waiting_ids %}
     {{ notice(n) }}
-    {% if ctx.real.is_master %}<p class="muted small">Agreed by: {{ n.acked|map(attribute='username')|join(', ') or 'nobody yet' }}</p>{% endif %}
+    {% if ctx.is_master %}<p class="muted small">Agreed by: {{ n.acked|map(attribute='username')|join(', ') or 'nobody yet' }}</p>{% endif %}
   {% endfor %}
 </details>
 {% endif %}

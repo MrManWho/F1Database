@@ -205,6 +205,7 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
     # Accounts created before the update see it; accounts created after it start with it seen.
     def from_before_the_update(name):
         with auth.accounts() as conn:
+            whatsnew._table(conn)
             conn.execute("DELETE FROM whats_new_seen WHERE username = ?", (name,))
     from_before_the_update("david")
     page = master_client.get("/").get_data(as_text=True)
@@ -219,9 +220,7 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
     login(fresh, "david")
     assert 'id="whats-new"' not in fresh.get("/").get_data(as_text=True)          # remembered for the account
     auth.create_user("eve", "Eve", "password1")
-    assert 'id="whats-new"' not in _client(app, "eve").get("/").get_data(as_text=True)  # new account: nothing to catch up on
-    from_before_the_update("eve")
-    assert 'id="whats-new"' in _client(app, "eve").get("/").get_data(as_text=True)  # per account, not global
+    assert 'id="whats-new"' in _client(app, "eve").get("/").get_data(as_text=True)  # v2.1.3: new accounts see it too
 
 
 # --------------------------------------------------------------------------- library, search, data

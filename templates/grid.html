@@ -14,7 +14,7 @@
     <li class="dismissal dismissal-{{ u.status|lower|replace(' ', '-') }}">
       <b>{{ dmap[u.driver_id].name }}</b> · {{ tmap[u.team_id].name }} · R{{ u.round_number }} {{ u.event_name }}: {{ u.label }}
       <span class="pill">{{ u.status }}</span>{% if u.note %} <small class="muted">“{{ u.note }}”</small>{% endif %}
-      {% if u.status == 'Awaiting decision' and ctx.real.is_master %}
+      {% if u.status == 'Awaiting decision' and ctx.is_master %}
       <form method="post" action="{{ url_for('dismissal_decide', token=ctx.token, ultimatum_id=u.id) }}" class="stack tight">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Note <small class="muted">(required to overrule)</small><input name="note" maxlength="500" placeholder="e.g. The car failed him, not the other way round"></label>

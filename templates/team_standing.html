@@ -95,7 +95,7 @@
       {% for g in rel.goals %}<li class="goal-{{ g.state|lower|replace(' ', '-') }}"><span>{{ g.label }}</span><b>{{ g.now }}</b><em>{{ g.state }}</em></li>
       {% else %}<li class="muted">No goals set.</li>{% endfor %}
     </ul>
-    {% if ctx.real.is_master and ctx.season.id == ctx.current_season_id %}
+    {% if ctx.is_master and ctx.season.id == ctx.current_season_id %}
     <form method="post" action="{{ url_for('goals_reissue', token=ctx.token, driver_id=driver.id) }}" class="button-row tight rm-goal-tools">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-sm btn-ghost" name="action" value="reissue" title="Set {{ driver.name }}'s season goals again from the latest car strength and role">Re-issue season goals</button>

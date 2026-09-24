@@ -72,7 +72,9 @@ def test_only_the_teams_players_choose_and_it_locks_after_round_one(app, master_
         assert teamgoals.enabled(conn)
         assert "turned selectable team goals on" in community.audit_entries(conn)[0]["summary"]
     pledge_all(token)
-    assert "Choose your team" in ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    res = ana.get(f"/career/{token}/dashboard")                    # v2.1.3: the choice comes first
+    assert res.headers["Location"].endswith("/team-goals")
+    assert "Choose your team" in ana.get(f"/career/{token}/team-goals").get_data(as_text=True)
     ana.post(f"/career/{token}/team-goals/{ana_team}", data={"csrf_token": "tok", "tier": "ambitious"})
     assert ana.post(f"/career/{token}/team-goals/{other}", data={"csrf_token": "tok", "tier": "safe"}).status_code == 403
     sam = _client(app, "sam")

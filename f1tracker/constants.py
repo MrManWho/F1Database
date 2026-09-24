@@ -1,7 +1,7 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.1.2"
+APP_VERSION = "2.1.3"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 1
 SCHEMA_VERSION = 18

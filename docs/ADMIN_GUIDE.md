@@ -63,20 +63,29 @@ All of these affect one league only.
 - New tables, created when first needed: `impact_notices`, `impact_acks`, `ultimatums`. New meta keys: `calc_version`,
   `calc_snapshot`, `calc_snapshot_stale`, `midseason_sackings`, `team_goal_reopen_*`. No schema version change.
 
-## Accounts (2.1.2): one owner, everyone signs up
+## Accounts: one owner, everyone signs up (2.1.2–2.1.3)
 
-- **First start after 2.1.2**: every login is removed once (a copy of `accounts.db` is saved in the backups folder as
-  `accounts-before-2.1.2-reset-*.db`). League files aren't touched. The site then shows **Create the site owner**.
+- **First start after 2.1.3**: every login and reserved username is removed once, and each league's links to those
+  logins (members, pending invitations/join requests, notification choices) are cleared. Drivers, results, seasons,
+  contracts and settings are untouched. Copies are saved first: `accounts-before-2.1.3-reset-*.db` in the backups
+  folder, and a `before-213-login-reset` backup of each league. The site then shows **Create the site owner**.
 - **Making the owner**: on Render open your service → **Environment**, copy `F1_TRACKER_SETUP_CODE`, and enter it on the
-  setup page with your username and password. You can reuse your old username. (If the variable is missing, add one
-  with any long random value.) The owner is Race Master of every league.
-- **Everyone else** signs up from the login page. Old usernames are reserved: the person who had one gets it (and their
-  leagues) back by signing up with the same email, verified by a code. If email isn't set up on the site, release their
-  name in *My account → Account recovery* and have them sign up with it straight away.
-- **Account recovery** (owner only): type an exact username or email to find one account; set a new password, change
-  the email, turn off two-step sign-in, sign out everywhere, or delete the login (the name stays reserved for them).
-- **Rolling back from 2.1.2**: restore `accounts-before-2.1.2-reset-*.db` as `accounts.db` in the data folder while the
-  site is stopped, then deploy the earlier version.
+  setup page with a username and password. (If the variable is missing, add one with any long random value.) The owner
+  is Race Master of every league.
+- **Everyone else** signs up from the login page. Then add them to a league on **Members & roles** (type their
+  username, pick their role and their driver), or invite them, or let them ask to join.
+- **Account recovery** (owner only, My account): type an exact username or email to find one account; set a new password,
+  change the email, turn off two-step sign-in, sign out everywhere, or delete the login.
+- **Rolling back**: with the site stopped, put `accounts-before-2.1.3-reset-*.db` back as `accounts.db` and restore
+  each league's `before-213-login-reset` backup, then deploy the earlier version.
+
+## Race Master tools added in 2.1.3
+
+- **Weekend targets on a round**: open the round → Weekend targets → *Re-issue* (before the race) or *Remove* (any
+  round; on a completed round its effect is undone and the driver sees a change notice).
+- **Team goals**: reopening a team's choice sends that team's drivers to choose before anything else; re-pushing
+  shows them the new targets to agree to.
+- Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
 ## Accounts and security
 

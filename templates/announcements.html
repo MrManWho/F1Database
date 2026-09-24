@@ -4,7 +4,7 @@
 <div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>Announcements</h1>
   <p class="page-purpose">Messages from the Race Master{{ 's' if ctx.is_master }} of {{ ctx.career_name }}. They show at the top of the Control Room.</p></div></div>
 
-{% if ctx.real.is_master %}
+{% if ctx.is_master %}
 <form method="post" class="card stack" id="announce-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>New announcement</h2>
@@ -25,7 +25,7 @@
 {% endif %}
 
 <section class="card">
-  <h2>{{ 'All announcements' if ctx.real.is_master else 'Current announcements' }}</h2>
+  <h2>{{ 'All announcements' if ctx.is_master else 'Current announcements' }}</h2>
   {% if items %}
   <ul class="plain-list announce-list">
     {% for a in items %}
@@ -33,7 +33,7 @@
       <h3>{% if a.pinned %}<span class="pill">Pinned</span> {% endif %}{{ a.title }}{% if a.state %} <span class="pill pill-muted">{{ a.state }}</span>{% endif %}</h3>
       {% if a.body %}<p class="pre-line">{{ a.body }}</p>{% endif %}
       <small class="muted">{% if a.state == 'Scheduled' %}Goes out {{ a.publish_at|stamp }}{% else %}{{ a.published_at|ago }}{% endif %}{% if a.audience_label %} · for {{ a.audience_label }}{% endif %}{% if a.expires_at %} · until {{ a.expires_at|stamp }}{% endif %}{% if a.email %} · emailed{% endif %}</small>
-      {% if ctx.real.is_master and a.state != 'Expired' %}
+      {% if ctx.is_master and a.state != 'Expired' %}
       <form method="post" class="button-row tight">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if a.state == 'Live' %}<button class="btn btn-sm btn-ghost" formaction="{{ url_for('announcement_action', token=ctx.token, ann_id=a.id, action='unpin' if a.pinned else 'pin') }}">{{ 'Unpin' if a.pinned else 'Pin' }}</button>{% endif %}
@@ -44,12 +44,12 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="muted">No announcements yet.{% if ctx.real.is_master %} Post one above: pin it, aim it at some roles or schedule it for later.{% endif %}</p>
+  <p class="muted">No announcements yet.{% if ctx.is_master %} Post one above: pin it, aim it at some roles or schedule it for later.{% endif %}</p>
   {% endif %}
 </section>
 {% endblock %}
 {% block scripts %}
-{% if ctx.real.is_master %}
+{% if ctx.is_master %}
 <script>
 (function () {
   var form = document.getElementById('announce-form'), out = document.getElementById('announce-preview');

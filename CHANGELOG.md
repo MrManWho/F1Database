@@ -3,6 +3,34 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.1.3 · Fixes, a role audit and a fresh start for logins
+_Released September 24, 2026_
+> Race Master buttons no longer show in a driver's view, choices you have to make now come first, weekend
+> targets can be reset on any round, every page and action was checked against each role, and all logins start
+> again from scratch.
+
+### Highlights
+- **Choices come first.** If your team's goal needs choosing (at the start of a season, or reopened mid-season), you choose it before anything else. Updated targets are shown to you to agree to first.
+- **Reset weekend targets on any round** (Race Master), from that round's page.
+- **Every page and action checked for every role**, with an automatic check that fails if a new page is ever left open to the wrong people.
+- **All logins erased again.** Everyone signs up fresh; nothing carries over from old usernames.
+
+### Fixed
+- **Race Master buttons in a driver's view**: in Driver or Spectator preview, Race Master tools (reopen or re-push a team goal, re-issue goals, announcements, dismissal decisions) were still shown. They now follow the view you've chosen. The server always checked the real role, so a real driver could never use them.
+
+### Added
+- **Must choose first**: while your team's goal choice is open and not made, every page takes you to Team goals until you choose; then you're back on the Control Room. The Race Master and players without a login are never held up.
+- **Re-pushed team goal targets** are shown to each driver of that team (before and after) to agree to before they carry on.
+- **Weekend targets per round** (Race Master, on the round page): re-issue one driver's or every target before the race, or remove a target on any round. Removing one on a completed round undoes its effect on the team relationship, and each driver affected sees a change notice. A removed target stays removed (it isn't handed out again or brought back by a results correction).
+- **Permission audit**: every league page and action declares who may use it (Race Master, results entry or any member), and an automated test tries every one as a driver, a member without a driver, a Scorekeeper and a Spectator.
+
+### Changed
+- **Logins reset again (once, on the first start of 2.1.3)**: every login and every reserved username is removed, and each league's links to those logins (members, pending invitations and join requests, notification choices) are cleared so nobody can sign up with an old name and walk into a league. Drivers, results, seasons, contracts and settings are untouched. Every league and the accounts file are backed up first. The site owner is Race Master of every league and re-links people to their drivers on Members & roles.
+- **Everyone sees the changelog**: new accounts get the current version's What's New to agree to as well.
+
+### Tested
+- 294 automated tests, including the view-mode fix, choices that must be made first, per-round target reset (effects undone, not re-issued, notices), the full role audit (every league route as four roles), and the reset leaving drivers, results, seasons, contracts and teams exactly as they were.
+
 ## 2.1.2 · One site owner, and everyone signs up themselves
 _Released September 24, 2026_
 > Accounts now work like a normal website: one owner account, made with the host's setup code, and everyone else

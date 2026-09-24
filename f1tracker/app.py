@@ -1,6 +1,7 @@
 """Flask application: pages, mutation routes, logins and access control."""
 
 import hmac
+import logging
 from datetime import timezone
 import io
 import os
@@ -84,12 +85,12 @@ def create_app(config=None):
     register_hooks(app)
     register_routes(app)
     if not app.config.get("TESTING"):
-        try:   # v2.1.2, once per site: logins start again (leagues untouched; a copy of accounts.db is kept)
-            removed = auth.reset_all_accounts(storage.backups_dir())
-            if removed:
-                app.logger.warning("2.1.2 account reset: removed %s login(s); leagues untouched", removed)
+        try:   # v2.1.3, once per site: every login removed, and the league links that pointed at them
+            if auth.reset_all_logins_213(storage.backups_dir()):
+                n = reset_league_logins("before-2.1.3-login-reset")
+                app.logger.warning("2.1.3 login reset: all logins removed; login links cleared in %s league(s)", n)
         except Exception:
-            app.logger.exception("account reset failed")
+            app.logger.exception("login reset failed")
     try:
         roles.unify_legacy_scorekeepers()
     except Exception:  # never block start-up; it is retried whenever a legacy Scorekeeper signs in
@@ -235,6 +236,34 @@ def register_hooks(app):
         return render_template("error.html", code=413, message="Uploads are limited to 100 MB."), 413
 
 
+def reset_league_logins(backup_label):
+    """After the logins are reset: remove each league's links to logins that no longer exist (members, pending
+    invitations and join requests, notification choices). Drivers, results, seasons, contracts and settings are not
+    touched, and every league is backed up first. Returns the number of leagues changed."""
+    existing = {r[0] for r in _account_names()}
+    changed = 0
+    for c in storage.list_careers():
+        stale = [u for u in c["members"] if u not in existing]
+        try:
+            storage.auto_backup(c["token"], backup_label, force=True)
+            with storage.session(c["token"]) as conn:
+                for table, extra in (("career_members", ""), ("invitations", " AND status = 'Pending'"),
+                                     ("join_requests", " AND status = 'Pending'"), ("member_notify", "")):
+                    if conn.execute("SELECT name FROM sqlite_master WHERE name = ?", (table,)).fetchone():
+                        rows = [r[0] for r in conn.execute(f"SELECT username FROM {table} WHERE 1=1{extra}")]
+                        for u in set(rows) - existing:
+                            conn.execute(f"DELETE FROM {table} WHERE username = ?{extra}", (u,))
+            changed += 1
+        except Exception:
+            logging.getLogger(__name__).exception("clearing login links failed for %s", c["token"])
+    return changed
+
+
+def _account_names():
+    with auth.accounts() as conn:
+        return conn.execute("SELECT username FROM users").fetchall()
+
+
 def _discord_news(items):
     by_token = {}
     for token, message in items:
@@ -280,6 +309,7 @@ def master_required(fn):
             if "token" not in kwargs or _load_league_role(kwargs["token"]) != "race_master":
                 abort(403)
         return fn(*args, **kwargs)
+    wrapper.access = "master"
     return wrapper
 
 
@@ -365,7 +395,7 @@ def career_page(master_only=False, ops_only=False):
                         if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
                     impacts.on_open(conn, is_api=request.path.startswith("/api/"))
-                    gate = _impact_gate(conn, g.ctx) or _pledge_gate(conn, g.ctx, master_only)
+                    gate = _impact_gate(conn, g.ctx) or _choice_gate(conn, g.ctx) or _pledge_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
@@ -388,6 +418,8 @@ def career_page(master_only=False, ops_only=False):
                     raise
                 flash(str(exc), "error")
                 return redirect(request.referrer or url_for("dashboard", token=token))
+        # Declared access level, checked by the permission audit test: "master", "ops" (results) or "member".
+        wrapper.access = "master" if master_only else "ops" if ops_only else "member"
         return wrapper
     return deco
 
@@ -476,6 +508,24 @@ def _impact_gate(conn, ctx):
     if request.method == "POST":
         flash("Please read and agree to the changes to your driver first. Nothing else was saved.", "error")
     return redirect(url_for("impact_page", token=ctx["token"]))
+
+
+CHOICE_EXEMPT = IMPACT_EXEMPT | {"team_goals_page", "team_goal_choose", "impact_page"}
+
+
+def _choice_gate(conn, ctx):
+    """A decision the driver has to make before anything else (v2.1.3): their team's goal, when the choice is open
+    and hasn't been made yet (at the start of a season, or reopened by the Race Master mid-season)."""
+    mine = ctx.get("real", ctx).get("my_driver")
+    if not mine or request.endpoint in CHOICE_EXEMPT or request.path.startswith("/api/") or not teamgoals.enabled(conn):
+        return None
+    sid = ctx["current_season_id"]
+    seat = S.driver_seats(conn, sid).get(mine["id"])
+    if not seat or teamgoals.choice(conn, sid, seat[0]) or teamgoals.locked(conn, sid, seat[0]):
+        return None
+    if request.method == "POST":
+        flash("Choose your team's goal first. Nothing else was saved.", "error")
+    return redirect(url_for("team_goals_page", token=ctx["token"]))
 
 
 def _pledge_gate(conn, ctx, master_only):
@@ -2169,6 +2219,50 @@ def register_routes(app):
         flash(f"{name}'s target is now {t['status'].lower()}.", "success")
         return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#targets")
 
+    @app.route("/career/<token>/weekend/<int:event_id>/targets", methods=["POST"])
+    @career_page(master_only=True)
+    def targets_reset(conn, ctx, event_id):
+        """Race Master: reset weekend targets on one round: re-issue (before the race) or remove (any time)."""
+        ev = S.get_event(conn, event_id)
+        if not ev:
+            abort(404)
+        action = request.form.get("action")
+        dmap = S.driver_map(conn)
+        who = request.form.get("driver_id", type=int)
+        ids = [t["driver_id"] for t in teamlife.targets_for_event(conn, event_id)] if who is None else [who]
+        if action == "reissue":
+            if ev["status"] != C.EVENT_NOT_RUN:
+                raise ValidationError("Targets can only be re-issued before the round has results")
+            if who is None:   # everyone seated, including anyone whose target was removed
+                ids = [p["id"] for p in S.player_drivers(conn) if p["id"] in S.driver_seats(conn, ev["season_id"])]
+            for did in ids:
+                teamlife.reissue_target(conn, event_id, did)
+            g.audit_summary = (f"re-issued the Round {ev['round_number']} weekend target for "
+                               + (dmap[who]["name"] if who else "every player driver"))
+            flash("New targets set. Drivers have to accept them again.", "success")
+        elif action == "remove":
+            if not ids:
+                raise ValidationError("There are no targets on this round")
+
+            def act(c):
+                touched = {}
+                for did in ids:
+                    t = teamlife.remove_target(c, event_id, did)
+                    touched[did] = [f"R{ev['round_number']} {ev['name']} target removed: {t['label']}"
+                                    + (f" (its {t['effect']:+g} team standing is undone)" if t["effect"] else "")]
+                    feed.notify(c, did, f"The Race Master removed your R{ev['round_number']} weekend target.",
+                                "team-standing", category="career")
+                return touched
+            impacts.record_change(conn, f"targets-removed-{event_id}-{storage.now_iso()}", "Weekend target removed",
+                                  "The Race Master reset the weekend targets for this round. Any effect a removed "
+                                  "target had on your team relationship has been undone.", act)
+            g.audit_summary = (f"removed the Round {ev['round_number']} weekend target for "
+                               + (dmap[who]["name"] if who else "every player driver"))
+            flash("Target removed." if who else "Targets removed for this round.", "success")
+        else:
+            raise ValidationError("Choose what to do with the targets")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#targets")
+
     @app.route("/career/<token>/weekend/<int:event_id>/incident", methods=["POST"])
     @career_page()
     def incident_report(conn, ctx, event_id):
@@ -2450,6 +2544,9 @@ def register_routes(app):
         lineup = teamgoals.player_teams(conn, sid)
         tmap = S.team_map(conn)
         can = _my_goal_teams(conn, ctx, sid) if sid == ctx["current_season_id"] else set()
+        if not ctx["is_master"]:   # in a Driver/Spectator view a Race Master only sees what that role would
+            mine = ctx.get("my_driver")
+            can = {t for t in can if mine and any(d["id"] == mine["id"] for d in lineup.get(t, []))}
         locked = teamgoals.locked(conn, sid)
         chosen = {g["team_id"]: g for g in teamgoals.progress(conn, sid)}
         teams = []
@@ -2458,7 +2555,11 @@ def register_routes(app):
             teams.append({"team": tmap[team_id], "drivers": drivers, "goal": chosen.get(team_id), "reopened": open_ and locked,
                           "info": teamgoals.options(conn, sid, team_id) if open_ else None,
                           "can_choose": team_id in can and open_ and teamgoals.enabled(conn)})
-        return page("team_goals.html", ctx, teams=teams, locked=locked, enabled=teamgoals.enabled(conn),
+        mine = ctx.get("real", ctx).get("my_driver")
+        my_seat = S.driver_seats(conn, sid).get(mine["id"]) if mine else None
+        must_choose = bool(my_seat and teamgoals.enabled(conn) and sid == ctx["current_season_id"]
+                           and not teamgoals.choice(conn, sid, my_seat[0]) and not teamgoals.locked(conn, sid, my_seat[0]))
+        return page("team_goals.html", ctx, teams=teams, locked=locked, enabled=teamgoals.enabled(conn), must_choose=must_choose,
                     tiers=teamgoals.TIERS)
 
     @app.route("/career/<token>/team-goals/<int:team_id>", methods=["POST"])
@@ -2475,6 +2576,13 @@ def register_routes(app):
             drivers = teamgoals.player_teams(conn, sid).get(team_id, [])
             if action == "repush":
                 old, o = teamgoals.repush(conn, sid, team_id)
+                before = teamgoals.describe(old)
+                for d in drivers:
+                    impacts.add_notice(conn, d["id"], f"goal-repush-{team_id}-{storage.now_iso()}",
+                                       "Your team goal was updated",
+                                       f"The Race Master worked {team_name}'s {o['label']} goal out again from the latest "
+                                       "car strength, lineup and calendar. The level and its reward/penalty stay the same.",
+                                       details=[f"Before: {before}", f"Now: {o['text']}"])
                 g.audit_summary = f"re-pushed {team_name}'s {o['label']} goal: now {o['text']}"
                 msg = f"{team_name}'s {o['label']} goal was updated from the latest numbers: {o['text']}."
                 flash(f"Targets re-pushed: {o['text']}.", "success")
@@ -2489,6 +2597,9 @@ def register_routes(app):
             o = teamgoals.choose(conn, sid, team_id, request.form.get("tier"), g.user["username"])
             g.audit_summary = f"chose a {o['label']} goal for {S.team_map(conn)[team_id]['name']}: {o['text']}"
             flash(f"{o['label']} goal set: {o['text']}.", "success")
+            mine = ctx.get("real", ctx).get("my_driver")
+            if mine and any(d["id"] == mine["id"] for d in teamgoals.player_teams(conn, sid).get(team_id, [])):
+                return redirect(url_for("dashboard", token=ctx["token"]))
         return redirect(url_for("team_goals_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market")

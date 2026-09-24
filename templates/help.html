@@ -263,14 +263,15 @@
 <section class="card help" id="targets">
   <h2>Weekend targets</h2>
   <p>Before each race your team sets one target pitched at your car, recent results and role, for example <i>Finish P8 or better</i>, <i>Score points</i> or <i>Beat both Haas cars</i>. Accept it with <b>Got it</b> on the Control Room.
-    Hit: <b>{{ '%+.0f'|format(C.TARGET_HIT) }}</b> team standing; missed: <b>{{ C.TARGET_MISSED }}</b>; void if you didn't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault. A Race Master can re-issue the next target (you accept it again).</p>
+    Hit: <b>{{ '%+.0f'|format(C.TARGET_HIT) }}</b> team standing; missed: <b>{{ C.TARGET_MISSED }}</b>; void if you didn't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault. A Race Master can re-issue a target before the race (you accept it again) or remove one on any round; removing one after the race undoes its effect, and you'll see a change notice.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="team-goals">
   <h2>Team goals (Safe, Competitive, Ambitious)</h2>
   <p>When the league turns them on, each team with a player driver picks one Constructors' goal before round 1: <b>Safe</b> (+1 Reputation if met, nothing if missed), <b>Competitive</b> (+3 / −1) or <b>Ambitious</b> (+6 / −3).
     Targets come from car strength, last season's Constructors' position, the lineup, the number of rounds and Sprint weekends. Met means finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower place.
-    Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again. The reward or penalty is added to next season's starting Reputation.</p>
+    Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again.
+  While your team's choice is open you'll be asked to make it before anything else, and re-pushed targets are shown to you to agree to. The reward or penalty is added to next season's starting Reputation.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="orders">
