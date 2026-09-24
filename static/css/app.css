@@ -1478,3 +1478,16 @@ p a, li a:not(.btn), dd a, .small a:not(.btn), td a.driver-link:not(.is-player) 
 [data-theme="light"] { --accent-text: color-mix(in srgb, var(--accent) 80%, #000000); --danger-text: #b3261e; }
 .banner a:not(.btn) { text-decoration: underline; text-underline-offset: 2px; }
 .tap-link { display: inline-block; padding: .3rem 0; min-height: 24px; }
+
+/* Results entry: session tabs and search */
+.session-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; border-bottom: 1px solid var(--line); margin-bottom: .6rem; }
+.session-tabs .entry-search { margin-left: auto; padding-bottom: .3rem; }
+.session-tabs .entry-search input { min-width: 180px; }
+.entry-table.only-q .grp-s, .entry-table.only-q .grp-r, .entry-table.only-q .grp-b { display: none; }
+.entry-table.only-s .grp-q, .entry-table.only-s .grp-r, .entry-table.only-s .grp-b { display: none; }
+.entry-table.only-r .grp-q, .entry-table.only-r .grp-s { display: none; }
+.entry-table tr.search-miss { display: none; }
+@media (max-width: 760px) {
+  .session-tabs { position: sticky; top: var(--topbar-h); z-index: 5; background: var(--panel); padding-top: .3rem; }
+  .session-tabs .entry-search { margin-left: 0; width: 100%; } .session-tabs .entry-search input { width: 100%; }
+}

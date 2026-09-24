@@ -151,7 +151,7 @@
     var input = document.getElementById("palette-q");
     var list = document.getElementById("palette-list");
     var url = searchBtn.dataset.searchUrl;
-    var items = [], active = 0, timer = null, ctrl = null;
+    var items = [], active = 0, timer = null, ctrl = null, loading = false, goWhenLoaded = false, loadedFor = null;
     function render() {
       list.innerHTML = "";
       if (!items.length) {
@@ -179,12 +179,18 @@
       var el = document.getElementById("pal-" + active); if (el) el.scrollIntoView({ block: "nearest" });
     }
     function load() {
+      clearTimeout(timer); timer = null;
       if (ctrl) ctrl.abort();
       ctrl = window.AbortController ? new AbortController() : null;
-      fetch(url + "?q=" + encodeURIComponent(input.value), { credentials: "same-origin", signal: ctrl ? ctrl.signal : undefined })
+      var q = input.value;
+      loading = true;
+      fetch(url + "?q=" + encodeURIComponent(q), { credentials: "same-origin", signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) { return r.json(); })
-        .then(function (data) { items = (data && data.items) || []; active = 0; render(); })
-        .catch(function (err) { if (err.name !== "AbortError") { items = []; render(); } });
+        .then(function (data) {
+          items = (data && data.items) || []; active = 0; loading = false; loadedFor = q; render();
+          if (goWhenLoaded) { goWhenLoaded = false; go(active); }   // Enter pressed while these were on their way
+        })
+        .catch(function (err) { if (err.name !== "AbortError") { loading = false; items = []; render(); } });
     }
     function go(i) {
       var it = items[i]; if (!it) return;
@@ -205,7 +211,12 @@
     input.addEventListener("keydown", function (e) {
       if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(items.length - 1, active + 1); render(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); render(); }
-      else if (e.key === "Enter") { e.preventDefault(); go(active); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        // Never open a stale result: if the list doesn't match what's typed yet, open the first fresh one.
+        if (timer || loading || loadedFor !== input.value) { goWhenLoaded = true; if (timer) load(); }
+        else go(active);
+      }
     });
   }
 

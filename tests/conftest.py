@@ -114,3 +114,29 @@ def rng():
 
 
 __all__ = ["driver_id", "players", "run_event", "login", "market", "pledge_all"]
+
+
+@pytest.fixture
+def live_server(app):
+    """The app on a real local port, for browser tests (test files may define their own)."""
+    import threading
+    from werkzeug.serving import make_server
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+
+
+def open_browser():
+    """(playwright, browser), or skip the test when no browser is available."""
+    import os
+    sync = pytest.importorskip("playwright.sync_api")
+    path = "/opt/pw-browsers/chromium"
+    pw = sync.sync_playwright().start()
+    try:
+        browser = pw.chromium.launch(executable_path=path) if os.path.exists(path) else pw.chromium.launch()
+    except Exception as exc:  # pragma: no cover
+        pw.stop()
+        pytest.skip(f"no browser: {exc}")
+    return pw, browser

@@ -128,6 +128,31 @@
     });
   });
 
+  // ---- Session tabs and driver search (everyone): show one session's columns, find a driver on a big grid.
+  const SESSION_KEY = "f1-entry-session";
+  const sessionTabs = Array.prototype.slice.call(document.querySelectorAll("[data-session]"));
+  function showSession(key) {
+    ["all", "q", "s", "r"].forEach(function (k) { table.classList.toggle("only-" + k, k === key && k !== "all"); });
+    sessionTabs.forEach(function (t) { const on = t.dataset.session === key; t.classList.toggle("is-on", on); t.setAttribute("aria-pressed", on ? "true" : "false"); });
+    try { localStorage.setItem(SESSION_KEY, key); } catch (e) { /* private mode */ }
+  }
+  sessionTabs.forEach(function (t) { t.addEventListener("click", function () { showSession(t.dataset.session); }); });
+  (function () {
+    let saved = null;
+    try { saved = localStorage.getItem(SESSION_KEY); } catch (e) { /* private mode */ }
+    const narrow = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
+    const valid = sessionTabs.some(function (t) { return t.dataset.session === saved; });
+    showSession(valid ? saved : (narrow ? "r" : "all"));
+  })();
+  const search = document.getElementById("entry-search");
+  if (search) search.addEventListener("input", function () {
+    const q = search.value.trim().toLowerCase();
+    rows.forEach(function (tr) {
+      const name = (tr.querySelector(".driver-cell") || tr).textContent.toLowerCase();
+      tr.classList.toggle("search-miss", !!q && name.indexOf(q) === -1);
+    });
+  });
+
   // ---- Saving, offline queue and recovery ------------------------------------------------------------
   // Every edit is kept in this browser (scoped to account, league, season and round) until the server has it.
   // Each save carries the round's revision; if someone else saved in between, the server refuses and we merge.
@@ -418,6 +443,77 @@
   });
   table.addEventListener("change", function (e) {
     if (e.target.matches("select, input[type=radio]")) { markEdited(e.target); recalc(); schedule(); }
+  });
+
+  // ---- Undo: the last 30 changes made on this page (positions, statuses, awards, notes), newest first.
+  const undoBtn = document.getElementById("undo-edit");
+  const history = [];
+  let before = null;
+  table.addEventListener("focusin", function (e) {
+    const el = e.target;
+    if (!el.matches || !el.matches("input, select")) return;
+    before = el.type === "radio" ? { radio: true, name: el.name, was: table.querySelector('input[name="' + el.name + '"]:checked') }
+                                 : { el: el, value: el.value };
+  });
+  function pushHistory(entry) {
+    history.push(entry);
+    if (history.length > 30) history.shift();
+    if (undoBtn) undoBtn.disabled = false;
+  }
+  table.addEventListener("change", function (e) {
+    const el = e.target;
+    if (!before) return;
+    if (el.type === "radio" && before.radio) pushHistory({ radio: true, name: el.name, was: before.was, now: el });
+    else if (before.el === el && before.value !== el.value) pushHistory({ el: el, value: before.value });
+    before = el.type === "radio" ? { radio: true, name: el.name, was: el } : { el: el, value: el.value };
+  }, true);
+  function undo() {
+    const last = history.pop();
+    if (!last) return;
+    if (last.radio) {
+      table.querySelectorAll('input[name="' + last.name + '"]').forEach(function (r) { r.checked = false; });
+      if (last.was) last.was.checked = true;
+      markEdited(last.now);
+    } else {
+      last.el.value = last.value;
+      markEdited(last.el);
+      last.el.focus();
+    }
+    recalc(); schedule();
+    if (undoBtn) undoBtn.disabled = history.length === 0;
+    window.F1.toast("Undid your last change.", "success");
+  }
+  if (undoBtn) undoBtn.addEventListener("click", undo);
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey && (e.key === "z" || e.key === "Z")) { e.preventDefault(); undo(); }
+  });
+
+  // ---- Copy one session's order into another as a starting point (asks before overwriting anything).
+  const copyOrder = document.getElementById("copy-order");
+  if (copyOrder) copyOrder.addEventListener("change", function () {
+    const pick = copyOrder.value;
+    copyOrder.value = "";
+    if (!pick) return;
+    const from = pick.split(">")[0], to = pick.split(">")[1];
+    const names = { qualifying_position: "qualifying", sprint_position: "Sprint", race_position: "Grand Prix" };
+    const pairs = rows.map(function (tr) {
+      return { src: tr.querySelector('input[data-field="' + from + '"]'), dst: tr.querySelector('input[data-field="' + to + '"]') };
+    }).filter(function (p) { return p.src && p.dst; });
+    const filled = pairs.filter(function (p) { return p.src.value.trim(); }).length;
+    if (!filled) { window.F1.toast("There's no " + names[from] + " order to copy yet.", "error"); return; }
+    const clash = pairs.filter(function (p) { return p.dst.value.trim() && p.dst.value.trim() !== p.src.value.trim(); }).length;
+    const go = function () {
+      pairs.forEach(function (p) {
+        if (p.src.value.trim() && p.dst.value !== p.src.value) { pushHistory({ el: p.dst, value: p.dst.value }); p.dst.value = p.src.value; }
+      });
+      recalc(); schedule();
+      window.F1.toast("Copied the " + names[from] + " order into " + names[to] + ". Adjust it where the order changed.", "success");
+    };
+    if (!clash) { go(); return; }
+    ask({ title: "Replace " + clash + " " + names[to] + " position" + (clash === 1 ? "" : "s") + "?",
+      target: names[to] + " · this weekend", what: "Copies the " + names[from] + " order over " + names[to] + ", including positions already entered.",
+      history: "Only this round, once it saves.", undo: "Yes: press Undo (or Alt+Z) for each change.", ok: "Copy order" })
+      .then(function (yes) { if (yes) go(); });
   });
 
   // ---- Clear one driver, or a whole session, after confirming.

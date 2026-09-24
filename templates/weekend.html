@@ -64,6 +64,13 @@
     {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Waiting for players' if gated else 'View only') }}</span>
     {% else %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>{% endif %}
   </div>
+  <div class="session-tabs" role="group" aria-label="Show session">
+    <button type="button" class="tab is-on" data-session="all" aria-pressed="true">All sessions</button>
+    <button type="button" class="tab" data-session="q" aria-pressed="false">Qualifying</button>
+    {% if event.is_sprint %}<button type="button" class="tab" data-session="s" aria-pressed="false">Sprint</button>{% endif %}
+    <button type="button" class="tab" data-session="r" aria-pressed="false">Grand Prix</button>
+    <label class="entry-search"><span class="sr-only">Find a driver</span><input type="search" id="entry-search" placeholder="Find a driver" data-no-dirty></label>
+  </div>
   <div class="entry-tools">
     <div class="filter-chips" role="group" aria-label="Show">
       <button type="button" class="chip is-on" data-filter="all">All</button>
@@ -79,6 +86,14 @@
     {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position">Sprint</button>{% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position">Race</button>
     <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import from screenshot</button>
+    <select id="copy-order" class="btn-sm" aria-label="Copy one session's order into another">
+      <option value="">Copy an order…</option>
+      <option value="qualifying_position>race_position">Qualifying → Grand Prix</option>
+      {% if event.is_sprint %}<option value="qualifying_position>sprint_position">Qualifying → Sprint</option>
+      <option value="sprint_position>race_position">Sprint → Grand Prix</option>{% endif %}
+      <option value="race_position>qualifying_position">Grand Prix → Qualifying</option>
+    </select>
+    <button type="button" class="btn btn-sm btn-ghost" id="undo-edit" disabled title="Undo your last change on this page (Alt+Z)">↶ Undo</button>
     <select id="clear-session" class="btn-sm" aria-label="Clear a session">
       <option value="">Clear a session…</option>
       <option value="qualifying_position">Clear qualifying</option>
@@ -280,6 +295,7 @@
     <dt><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></dt><dd>Next / previous box on the same driver</dd>
     <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt><dd>Save now (changes also save by themselves)</dd>
     <dt><kbd>Esc</kbd></dt><dd>Leave quick order</dd>
+    <dt><kbd>Alt</kbd>+<kbd>Z</kbd></dt><dd>Undo your last change</dd>
     <dt><kbd>?</kbd></dt><dd>Show this list</dd>
   </dl>
 </dialog>
