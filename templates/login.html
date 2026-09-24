@@ -81,7 +81,7 @@
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
     <button class="btn btn-primary">Log in</button>
   </form>
-  <p class="muted small"><a href="{{ url_for('forgot') }}">Forgot your password?</a>
+  <p class="muted small"><a href="{{ url_for('forgot') }}" class="tap-link">Forgot your password?</a>
     {% if signups %}<br>New here? <a href="{{ url_for('register') }}">Create a login</a>{% endif %}</p>
   <p class="muted small">After {{ C.LOGIN_MAX_FAILURES }} wrong passwords the login locks for {{ C.LOGIN_LOCK_MINUTES }} minutes.</p>
   {% endif %}

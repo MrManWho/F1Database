@@ -111,7 +111,7 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
       </div>
       {% if not o.final %}
       <dialog id="counter-{{ o.id }}" class="dialog">
-        <div class="dialog-head"><h2>Counter {{ o.team.name }}</h2><button class="icon-btn" data-close>✕</button></div>
+        <div class="dialog-head"><h2>Counter {{ o.team.name }}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
         <p class="muted small">Teams have limits they won't reveal. Better status and longer deals need a bigger growth pledge,
           and a big pledge can win you more than they first offered. But you have to deliver it: fall short during the season
           and the team will warn you, then drop you. Greedy asks use up their patience twice as fast.

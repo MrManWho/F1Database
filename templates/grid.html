@@ -93,7 +93,7 @@
         <div class="seat {{ 'player-seat' if s.driver and s.driver.is_player }}" {% if s.driver and s.driver.player_color %}style="--player: {{ s.driver.player_color }}"{% endif %}>
           <small>Seat {{ s.seat_no }}</small>
           {% if ro %}<span class="seat-name">{% if s.driver %}{{ driver_link(ctx, s.driver, badge=True) }}{% else %}<span class="muted">Vacant</span>{% endif %}</span>{% else %}
-          <select name="seat_{{ t.id }}_{{ s.seat_no }}">
+          <select name="seat_{{ t.id }}_{{ s.seat_no }}" aria-label="{{ t.name }} seat {{ s.seat_no }}">
             <option value="">— Vacant —</option>
             {% for d in all_drivers %}<option value="{{ d.id }}" {{ 'data-player=1' if d.is_player }} {{ 'selected' if s.driver and s.driver.id == d.id }}>{{ d.name }}</option>{% endfor %}
           </select>{% endif %}

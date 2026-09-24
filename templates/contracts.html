@@ -68,7 +68,7 @@
 </div>
 {% if ctx.is_master %}
 <dialog id="contract-dialog" class="dialog">
-  <div class="dialog-head"><h2>Add negotiation</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Add negotiation</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grid-2">

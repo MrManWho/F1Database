@@ -197,7 +197,7 @@
   <button type="button" class="btn btn-sm" id="share-card" data-card='{{ share|tojson }}'>📸 Make result card</button>
 </section>
 <dialog id="share-dialog" class="dialog share-dialog">
-  <div class="dialog-head"><h2>Result card</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Result card</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <canvas id="share-canvas" width="1080" height="1080"></canvas>
   <div class="button-row"><button type="button" class="btn btn-primary" id="share-go">Share</button>
     <a class="btn btn-ghost" id="share-download" download="result.png">Download</a></div>
@@ -212,7 +212,7 @@
 </section>
 {% if ctx.my_driver or ctx.is_master %}
 <dialog id="incident-dialog" class="dialog">
-  <div class="dialog-head"><h2>Report an incident</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Report an incident</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('incident_report', token=ctx.token, event_id=event.id) }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Who was involved?
@@ -273,7 +273,7 @@
 </dialog>
 {% endif %}
 <dialog id="keys-dialog" class="dialog">
-  <div class="dialog-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <dl class="keys">
     <dt><kbd>↓</kbd> / <kbd>Enter</kbd></dt><dd>Next driver, same column</dd>
     <dt><kbd>↑</kbd></dt><dd>Previous driver, same column</dd>

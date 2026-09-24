@@ -118,7 +118,7 @@
         <td>
           <form method="post" action="{{ url_for('account_set_email', username=u.username) }}" class="inline-form tight">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input name="email" type="email" value="{{ u.email or '' }}" placeholder="none" class="email-input">
+            <input name="email" type="email" value="{{ u.email or '' }}" placeholder="none" class="email-input" aria-label="Email for {{ u.display_name }}">
             <button class="btn btn-sm btn-ghost">Save</button>
           </form>
         </td>
@@ -126,7 +126,7 @@
         <td>
           <form method="post" action="{{ url_for('account_role', username=u.username) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select name="role" onchange="this.form.submit()">
+            <select name="role" onchange="this.form.submit()" aria-label="Site role for {{ u.display_name }}">
               {% for key, label in [('master', 'Race Master (site admin)'), ('driver', 'Member')] %}
               <option value="{{ key }}" {{ 'selected' if u.role == key }}>{{ label }}</option>
               {% endfor %}

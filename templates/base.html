@@ -257,7 +257,7 @@
 
 {% if user %}
 <dialog id="account-dialog" class="dialog">
-  <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Site Race Master' if user.is_master else 'Member' }}{% if ctx is defined and ctx %} · {{ ctx.role }} in {{ ctx.career_name }}{% endif %}</p>
   <div class="stack">
     <label>Theme
@@ -328,7 +328,7 @@
 </script>
 {% endif %}
 
-<div class="toast-stack" id="toasts">
+<div class="toast-stack" id="toasts" role="status" aria-live="polite">
   {% for category, message in get_flashed_messages(with_categories=true) %}
   <div class="toast toast-{{ category }}"><span>{{ message }}</span><button type="button" data-dismiss>✕</button></div>
   {% endfor %}

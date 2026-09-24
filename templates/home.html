@@ -118,7 +118,7 @@
 
 {% if user.is_master %}
 <dialog id="new-dialog" class="dialog">
-  <div class="dialog-head"><h2>New league</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>New league</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('career_new') }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>League name<input name="name" value="My F1 League" maxlength="80" required></label>
@@ -151,7 +151,7 @@
   </form>
 </dialog>
 <dialog id="import-dialog" class="dialog">
-  <div class="dialog-head"><h2>Import a career</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Import a career</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('career_import') }}" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="file" name="file" accept=".f1career" required>

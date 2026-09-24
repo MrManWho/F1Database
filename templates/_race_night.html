@@ -41,7 +41,7 @@
     {% if not ctx.is_spectator %}
     <form method="post" action="{{ url_for('fan_vote_route', token=ctx.token, event_id=ev.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <select name="driver_id" required><option value="">Pick a driver…</option>
+      <select name="driver_id" required aria-label="Fans' Driver of the Day"><option value="">Pick a driver…</option>
         {% for d in hub.entrants %}<option value="{{ d.id }}" {{ 'selected' if hub.fans.mine == d.id }}>{{ d.name }}</option>{% endfor %}
       </select>
       <button class="btn btn-sm">{{ 'Change vote' if hub.fans.mine else 'Vote' }}</button>

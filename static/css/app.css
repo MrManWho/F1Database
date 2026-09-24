@@ -34,7 +34,7 @@ h3 { font-size: 1rem; }
 code { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
-.kicker { font-size: .72rem; text-transform: uppercase; letter-spacing: .16em; color: var(--red); font-weight: 700; margin-bottom: .25rem; }
+.kicker { font-size: .72rem; text-transform: uppercase; letter-spacing: .16em; color: var(--accent-text); font-weight: 700; margin-bottom: .25rem; }
 .error-text { color: #ff6b6b; }
 
 /* Layout */
@@ -52,7 +52,7 @@ code { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; }
 .sidebar nav i { font-style: normal; width: 1.2rem; text-align: center; color: var(--muted); }
 .sidebar-foot { padding: .9rem 1rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); display: flex; flex-direction: column; gap: .3rem; }
 .role-chip { align-self: flex-start; font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); color: var(--blue); }
-.role-chip.master { color: var(--red); background: var(--red-soft); }
+.role-chip.master { color: var(--accent-text); background: var(--red-soft); }
 .role-chip.steward { color: var(--amber); background: rgba(255, 176, 32, .12); }
 .role-help p { margin: .2rem 0 .5rem; }
 .main { margin-left: var(--sidebar); min-height: 100vh; }
@@ -105,7 +105,7 @@ legend { color: var(--muted); font-size: .8rem; }
 .grid-2 > * { min-width: 0; }
 .grid-2 + .card, .grid-2 + section { margin-top: 1.1rem; }
 .empty-state { text-align: center; padding: 3rem 1.5rem; max-width: 560px; margin: 2rem auto; }
-.big-code { font-size: 3rem; font-weight: 900; color: var(--red); }
+.big-code { font-size: 3rem; font-weight: 900; color: var(--accent-text); }
 .auth-card { max-width: 420px; margin: 3rem auto; }
 .banner { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--blue); padding: .7rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: .9rem; }
 .banner-hot { border-left-color: var(--red); background: linear-gradient(90deg, var(--red-soft), var(--panel-2)); }
@@ -251,13 +251,13 @@ input.bad { border-color: #ff4d4d; background: rgba(255, 77, 77, .12); }
 .team-grid, .career-grid, .season-grid, .contract-grid, .offer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
 .team-card { color: var(--text); text-decoration: none !important; border-top: 3px solid var(--team); margin: 0; }
 .team-card-head { display: flex; justify-content: space-between; color: var(--muted); font-weight: 800; }
-.team-card .code { color: var(--team); }
+.team-card .code { color: color-mix(in srgb, var(--team) 45%, #ffffff); }
 .team-card .bar { margin: .7rem 0; }
 .team-stats { display: flex; gap: .8rem; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
 .team-stats b { color: var(--text); }
 .career-card { color: var(--text); text-decoration: none !important; margin: 0; border-top: 3px solid var(--red); }
 .career-card:hover { border-color: #3a475d; border-top-color: var(--red); }
-.career-year { font-size: 2.2rem; font-weight: 900; color: var(--red); line-height: 1; margin-bottom: .3rem; }
+.career-year { font-size: 2.2rem; font-weight: 900; color: var(--accent-text); line-height: 1; margin-bottom: .3rem; }
 .career-meta { display: flex; gap: 1rem; color: var(--muted); font-size: .85rem; }
 .season-card { margin: 0; }
 .season-card.selected { border-color: var(--red); }
@@ -266,7 +266,7 @@ input.bad { border-color: #ff4d4d; background: rgba(255, 77, 77, .12); }
 .grid-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem; margin-bottom: 1rem; }
 .grid-team { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--team); border-radius: 10px; padding: .7rem; }
 .grid-team-head { display: flex; align-items: center; margin-bottom: .5rem; }
-.grid-team-head .code { margin-left: auto; color: var(--team); font-weight: 800; font-size: .8rem; }
+.grid-team-head .code { margin-left: auto; color: color-mix(in srgb, var(--team) 45%, #ffffff); font-weight: 800; font-size: .8rem; }
 .seat { display: grid; grid-template-columns: 50px 1fr; align-items: center; gap: .5rem; padding: .25rem; border-radius: 6px; }
 .seat small { color: var(--muted); font-size: .72rem; }
 .seat.player-seat { background: color-mix(in srgb, var(--player, var(--blue)) 12%, transparent); box-shadow: inset 3px 0 0 var(--player, var(--blue)); }
@@ -363,7 +363,7 @@ input.bad { border-color: #ff4d4d; background: rgba(255, 77, 77, .12); }
 .news-list strong { display: block; font-size: .92rem; }
 .news-list a { color: var(--text); }
 .news-list small { color: var(--muted); }
-.news-kind { font-size: .62rem; text-transform: uppercase; letter-spacing: .12em; color: var(--red); font-weight: 800; }
+.news-kind { font-size: .62rem; text-transform: uppercase; letter-spacing: .12em; color: var(--accent-text); font-weight: 800; }
 .news-rumour .news-kind { color: var(--amber); }
 .news-market .news-kind { color: var(--blue); }
 .news-tech .news-kind { color: var(--purple); }
@@ -371,7 +371,7 @@ input.bad { border-color: #ff4d4d; background: rgba(255, 77, 77, .12); }
 .auto-backups summary { cursor: pointer; font-size: .85rem; }
 
 /* Rivalry, review, paddock */
-.vs { color: var(--red); font-style: italic; font-size: 1.2rem; margin: 0 .3rem; }
+.vs { color: var(--accent-text); font-style: italic; font-size: 1.2rem; margin: 0 .3rem; }
 .rival-board { display: flex; flex-direction: column; gap: .7rem; }
 .rival-row { display: grid; grid-template-columns: 4rem 1fr 4rem; grid-template-rows: auto auto; align-items: center; gap: 0 .8rem; }
 .rival-row small { grid-column: 2; text-align: center; color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; }
@@ -388,7 +388,7 @@ input.bad { border-color: #ff4d4d; background: rgba(255, 77, 77, .12); }
 td.lead { font-weight: 800; color: var(--text); }
 .award-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.1rem; }
 .award { margin: 0; border-top: 3px solid var(--team); }
-.award small { color: var(--red); font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+.award small { color: var(--accent-text); font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
 .award h3 { margin: .3rem 0; font-size: 1.15rem; }
 .award h3 a { color: var(--text); }
 .award-value { font-size: 1.6rem; font-weight: 900; }
@@ -481,7 +481,7 @@ input.imported { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(74, 163, 
 .nav-title { font-size: .62rem; text-transform: uppercase; letter-spacing: .14em; color: #5d6778; font-weight: 700; padding: .45rem .75rem .25rem; }
 .sidebar nav a, .sidebar nav button { padding: .5rem .75rem; }
 .sidebar nav a .ico, .sidebar nav button .ico { color: var(--muted); }
-.sidebar nav a.active .ico { color: var(--red); }
+.sidebar nav a.active .ico { color: var(--accent-text); }
 .sidebar nav .pill { margin-left: auto; }
 .rail-toggle { display: flex; align-items: center; gap: .7rem; margin: 0 .5rem .4rem; padding: .45rem .75rem; background: none; border: 0;
   color: var(--muted); font: inherit; font-size: .8rem; cursor: pointer; border-radius: 8px; }
@@ -550,7 +550,7 @@ body.rail .role-chip { font-size: .5rem; padding: 2px 4px; }
 .race-clock { display: flex; flex-direction: column; gap: .15rem; align-items: flex-end; text-align: right; }
 .race-clock .lights-out { font-size: .85rem; color: var(--muted); }
 .countdown { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
-.countdown.live { color: var(--red); }
+.countdown.live { color: var(--accent-text); }
 .race-clock.big { align-items: flex-start; text-align: left; margin-top: .7rem; }
 .race-clock.big .lights-out { font-size: .95rem; color: var(--text); }
 .race-clock.big .countdown { font-size: 1.25rem; }
@@ -600,7 +600,7 @@ body.rail .role-chip { font-size: .5rem; padding: 2px 4px; }
 .av-xl .av-num { font-size: .9rem; padding: 1px 6px; }
 .profile-head { align-items: center; }
 .profile-head .grow { flex: 1; min-width: 220px; }
-.car-num { color: var(--red); font-style: italic; }
+.car-num { color: var(--accent-text); font-style: italic; }
 .bio { margin: .5rem 0 0; color: var(--muted); max-width: 60ch; }
 .trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .6rem; }
 .trophy { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; display: flex; flex-direction: column; gap: .1rem; background: var(--panel-2); }
@@ -885,7 +885,7 @@ body.plain { --sticky-top: 0px; }
 .story-card { position: relative; background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--cat); border-radius: 10px; padding: .75rem .9rem .7rem; transition: border-color .12s, background .12s; }
 .story-card:hover { border-color: color-mix(in srgb, var(--cat) 45%, var(--line)); border-left-color: var(--cat); }
 .story-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding-right: 2rem; }
-.story-cat { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cat); }
+.story-cat { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--cat) 50%, #ffffff); }
 .story-round { font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--text); }
 .story-time { margin-left: auto; }
 .story-title { font-size: 1rem; margin: .35rem 0 .2rem; line-height: 1.3; }
@@ -919,7 +919,7 @@ body.plain { --sticky-top: 0px; }
 .notif-list li.unread .notif-body > a, .notif-list li.unread .notif-body > span { font-weight: 700; }
 .notif-ico { flex: none; width: 1.6rem; text-align: center; font-size: 1rem; line-height: 1.3; }
 .notif-body { flex: 1; min-width: 0; }
-.notif-new { color: var(--red); font-weight: 800; }
+.notif-new { color: var(--accent-text); font-weight: 800; }
 .notif-list li.notif-empty { display: block; color: var(--muted); padding: 1rem .4rem; border: 0; }
 
 /* v1.16 post-race summary */
@@ -1007,7 +1007,7 @@ body.compact .story-card { padding: .55rem .75rem; }
 
 /* v1.18 neutral driver names: red only on hover of a clickable name; players keep their accent */
 a.driver-link:not(.is-player) { color: var(--text); }
-a.driver-link:not(.is-player):hover, a.driver-link:not(.is-player):focus-visible { color: var(--red); }
+a.driver-link:not(.is-player):hover, a.driver-link:not(.is-player):focus-visible { color: var(--accent-text); }
 a.driver-link.is-player:hover { text-decoration: underline; }
 
 /* v1.18 account forms */
@@ -1167,7 +1167,7 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
 .target-card .target-text { font-size: 1.15rem; font-weight: 700; margin: .2rem 0 .4rem; }
 .target-pill { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .5rem; border-radius: 999px; background: var(--panel-2); white-space: nowrap; }
 .tp-hit { color: var(--green); background: rgba(43, 213, 118, .12); }
-.tp-miss { color: var(--red); background: rgba(225, 6, 0, .12); }
+.tp-miss { color: var(--danger-text); background: rgba(225, 6, 0, .12); }
 .tp-wait { color: var(--amber); background: rgba(255, 176, 32, .12); }
 .tp-ok { color: var(--blue); }
 .target-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
@@ -1180,10 +1180,10 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
 .battle-who { display: flex; flex-wrap: wrap; gap: .2rem .5rem; align-items: baseline; min-width: 0; }
 .battle-stats { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .9rem; }
 .battle-stats .up b { color: var(--green); }
-.battle-stats .down b { color: var(--red); }
+.battle-stats .down b { color: var(--danger-text); }
 .pill-human { background: rgba(255, 176, 32, .15); color: var(--amber); }
 .goal-list .target-hit em { color: var(--green); }
-.goal-list .target-missed em { color: var(--red); }
+.goal-list .target-missed em { color: var(--danger-text); }
 .order-cancelled { opacity: .6; }
 
 /* v2.0: seat & contract state */
@@ -1218,6 +1218,8 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
   --accent: #e10600;
   --on-accent: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-text: color-mix(in srgb, var(--accent) 50%, #ffffff);
+  --danger-text: #ff8a85;
   --bg: #0b0d11;
   --bg-2: #101217;
   --panel: #14171d;
@@ -1467,3 +1469,12 @@ button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .wn-list { padding-left: 1.2rem; display: grid; gap: .45rem; }
 .cl-section { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 1rem 0 .3rem; }
 .cl-fixed { color: var(--green); } .cl-security { color: var(--amber); } .cl-added { color: var(--blue); }
+
+/* Accessibility refinements (axe / WCAG 2.2 AA) */
+.role-chip.master { color: var(--accent-text); }
+.down { color: var(--danger-text); }
+p a, li a:not(.btn), dd a, .small a:not(.btn), td a.driver-link:not(.is-player) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.sidebar nav a, .bottom-nav a, .league-list a, .league-card-link, .settings-nav a, .btn, a.btn { text-decoration: none !important; }
+[data-theme="light"] { --accent-text: color-mix(in srgb, var(--accent) 80%, #000000); --danger-text: #b3261e; }
+.banner a:not(.btn) { text-decoration: underline; text-underline-offset: 2px; }
+.tap-link { display: inline-block; padding: .3rem 0; min-height: 24px; }

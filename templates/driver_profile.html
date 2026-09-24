@@ -115,7 +115,7 @@
 {% endif %}
 {% if can_edit %}
 <dialog id="profile-dialog" class="dialog">
-  <div class="dialog-head"><h2>Edit profile</h2><button class="icon-btn" data-close>✕</button></div>
+  <div class="dialog-head"><h2>Edit profile</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('profile_avatar', token=ctx.token, driver_id=driver.id) }}" enctype="multipart/form-data" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Photo (PNG, JPG or WebP, up to 2 MB)<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"></label>
