@@ -3,6 +3,19 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.2.1 · Sign-up fix from a full-season test
+_Released September 24, 2026_
+> A full simulated season (every role, real settings) found one small sign-up problem, fixed here.
+
+### Highlights
+- **Typos no longer lock people out of signing up.** Only sign-ups that succeed count toward the limit of 5 an hour per connection.
+
+### Fixed
+- **Refused sign-ups used up the hourly limit**: a sign-up turned down for a weak password, a bad username or a taken name still counted toward the 5-an-hour limit for that connection, so a household on one Wi-Fi could be locked out by a few mistakes. Now only successful sign-ups count.
+
+### Tested
+- A full simulated 24-round season plus a rollover through the real website, as a site owner, two drivers, a Scorekeeper, a Spectator, a member without a driver and an outsider with her own league: no server errors, no role able to reach anything it shouldn't, and no league able to see another. Plus a new automated test for this fix.
+
 ## 2.2 · Audit fixes, fairer team goals and a quicker AI recommendation
 _Released September 24, 2026_
 > Fixes from an outside audit (including a page loop after starting a new season), team goals that take the

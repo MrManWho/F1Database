@@ -593,18 +593,27 @@ def signup_direct(username, display_name, password, ip, email=None):
     if reserved(username):
         raise AuthError("That username belonged to someone before the site was reset. Choose another, or ask the "
                         "site owner to release it for you.")
+    if not USERNAME_RE.match(username):
+        raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
+    check_password(password)
+    clean_email(email)
+    if get_user(username):
+        raise AuthError("That username is taken")
+    # Only sign-ups that go through count toward the hourly limit (v2.2), so a mistyped or weak password
+    # doesn't use up a household's allowance.
     key, now = f"signup:{ip or '?'}", time.time()
     with accounts() as conn:
         row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
         count = row["count"] if row and now - row["first_at"] < 3600 else 0
         if count >= SIGNUPS_PER_IP_PER_HOUR:
             raise AuthError("Too many sign-ups from this connection. Try again later.")
+    made = create_user(username, display_name, password, email=email)
+    with accounts() as conn:
         first = row["first_at"] if row and count else now
         conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
-    check_password(password)
-    return create_user(username, display_name, password, email=email)
+    return made
 
 
 def reset_all_logins_213(backup_dir):

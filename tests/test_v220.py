@@ -148,3 +148,16 @@ def test_rollover_summary_counts_provisional_seats(app, master_client):
         year = S.get_season(conn, sid)["year"] + 1
     page = master_client.get(f"/career/{token}/seasons/rollover?year={year}").get_data(as_text=True)
     assert "Provisional (awaiting contract)" in page and 'data-ro-count="provisional"' in page
+
+
+def test_refused_sign_ups_dont_use_up_the_hourly_limit(app):
+    """Found by the full-season simulation: a sign-up refused for a weak password still counted toward the
+    5-an-hour limit for that connection, so a few typos locked a household out."""
+    auth.create_user("admin", "Admin", "password1", is_master=True)
+    for _ in range(auth.SIGNUPS_PER_IP_PER_HOUR + 2):
+        with pytest.raises(auth.AuthError):
+            auth.signup_direct("typo", "T", "short", "9.9.9.9")
+    for i in range(auth.SIGNUPS_PER_IP_PER_HOUR):
+        auth.signup_direct(f"person{i}", "P", "tyre-wall-9", "9.9.9.9")
+    with pytest.raises(auth.AuthError, match="Too many"):
+        auth.signup_direct("one-more", "P", "tyre-wall-9", "9.9.9.9")
