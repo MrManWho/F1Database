@@ -16,7 +16,7 @@ import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
-from . import battle, circuits, delivery, gates, notices, seats
+from . import battle, circuits, delivery, gates, league_profile, library, notices, seats
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -55,7 +55,7 @@ AUDIT_LABELS = {
     "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"view_mode", "league_pin", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -296,16 +296,19 @@ def career_page(master_only=False, ops_only=False):
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
                                                      (C.WINDOW_OPEN,)).fetchone()[0],
                     }
+                    _apply_view_mode(g.ctx, token)
                     mine = g.ctx["my_driver"]
                     g.ctx["role"] = C.ACCESS_ROLES[g.league_role] + (" · Driver" if mine else "")
                     if g.league_role == "member" and mine:
                         g.ctx["role"] = "Driver"
+                    master_view = g.ctx["is_master"]
                     g.ctx["pending_offers"] = conn.execute(
-                        "SELECT COUNT(*) FROM offers WHERE status = ?" + (" AND driver_id = ?" if mine and not is_master() else ""),
-                        (C.OFFER_PENDING, mine["id"]) if mine and not is_master() else (C.OFFER_PENDING,)).fetchone()[0]
+                        "SELECT COUNT(*) FROM offers WHERE status = ?" + (" AND driver_id = ?" if mine and not master_view else ""),
+                        (C.OFFER_PENDING, mine["id"]) if mine and not master_view else (C.OFFER_PENDING,)).fetchone()[0]
                     g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
-                        conn, g.user["username"], mine["id"] if mine else None, is_master() and not mine)
+                        conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
+                    g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
                         if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
@@ -334,8 +337,59 @@ def career_page(master_only=False, ops_only=False):
     return deco
 
 
+# Display modes: how a page is shown, never what the account may do. Server checks always use the real role.
+VIEW_MODES = {"race_master": "Race Master", "scorekeeper": "Scorekeeper", "driver": "Driver", "spectator": "Spectator preview"}
+
+
+def available_modes(role, has_driver):
+    order = {"race_master": ["race_master", "scorekeeper", "driver", "spectator"],
+             "scorekeeper": ["scorekeeper", "driver", "spectator"],
+             "member": ["driver", "spectator"] if has_driver else ["spectator"],
+             "spectator": ["spectator"]}.get(role, ["spectator"])
+    return [m for m in order if m != "driver" or has_driver]
+
+
+def _accent(value):
+    """A league's accent colour and a readable text colour on top of it (never a raw user string in CSS)."""
+    import re as _re
+    value = value if value and _re.fullmatch(r"#[0-9a-fA-F]{6}", value) else "#e10600"
+    r, g_, b = (int(value[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    lum = 0.2126 * r + 0.7152 * g_ + 0.0722 * b
+    return value, ("#0b0d11" if lum > 0.55 else "#ffffff")
+
+
+def _apply_view_mode(ctx, token):
+    """Lower what the page shows to the chosen display mode. The account keeps every real permission."""
+    real_role = g.league_role
+    ctx["real"] = {"is_master": ctx["is_master"], "can_run": ctx["can_run"], "role": real_role,
+                   "my_driver": ctx["my_driver"]}
+    modes = available_modes(real_role, bool(ctx["my_driver"]))
+    natural = modes[0]
+    mode = session.get(f"mode_{token}")
+    if mode not in modes:
+        mode = natural
+    ctx["modes"] = [(m, VIEW_MODES[m]) for m in modes]
+    ctx["mode"], ctx["mode_label"], ctx["mode_lowered"] = mode, VIEW_MODES[mode], mode != natural
+    if mode == "scorekeeper":
+        ctx.update(is_master=False, can_run=True)
+    elif mode == "driver":
+        ctx.update(is_master=False, can_run=False, is_spectator=False)
+    elif mode == "spectator":
+        ctx.update(is_master=False, can_run=False, is_spectator=True, my_driver=None)
+
+
+HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results"), ("statuses", "Result statuses"),
+               ("scoring", "Scoring and Sprint points"), ("form", "Form"), ("reputation", "Reputation"),
+               ("driver-value", "Driver Value"), ("car", "Car strength"), ("market", "Transfer market"),
+               ("pledges", "Growth pledges"), ("relationship", "Team relationship"), ("rivalry", "Rivalries"),
+               ("incidents", "Incidents"), ("difficulty", "AI difficulty"), ("notifications", "Notifications"),
+               ("visibility", "Public visibility"), ("backups", "Backups and recovery"), ("targets", "Weekend targets"),
+               ("gates", "Round gates"), ("contracts", "Contracts and seats"), ("modes", "View modes")]
+
+
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
-SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs"}
+SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
+                     "league_pin"}
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
                  "help_page"}
@@ -439,6 +493,8 @@ def _describe_targets(conn, kwargs):
 def page(template, ctx, **kwargs):
     if ctx.get("is_master"):
         ctx["auto_backups"] = storage.list_auto_backups(ctx["token"])[:8]
+    ctx["leagues"] = library.user_leagues(g.user)
+    ctx["this_league"] = next((l for l in ctx["leagues"] if l["token"] == ctx["token"]), None)
     return render_template(template, ctx=ctx, **kwargs)
 
 
@@ -1004,6 +1060,117 @@ def register_routes(app):
         standings = S.driver_standings(conn, ctx["season"]["id"])
         return page("drivers.html", ctx, standings=standings, others=S.drivers_off_grid(conn, ctx["season"]["id"], standings),
                     teams=S.teams(conn), chart=insights.progression_chart(conn, ctx["season"]["id"], top=6))
+
+    @app.route("/career/<token>/results")
+    @career_page()
+    def results_index(conn, ctx):
+        """Every round of the selected season with its state and headline result."""
+        sid = ctx["season"]["id"]
+        rounds = []
+        dmap = S.driver_map(conn)
+        for e in S.events(conn, sid):
+            code, label = timefmt.race_status(e["race_at"], e["status"], ctx["race_window"], postponed=e["postponed"])
+            r = {"event": e, "state": code, "state_label": label, "winner": None, "pole": None, "players": []}
+            if e["status"] != C.EVENT_NOT_RUN:
+                rows = S.weekend_rows(conn, e["id"])
+                r["winner"] = next((x for x in rows if x["race_position"] == 1 and x["result_status"] == C.STATUS_FINISHED), None)
+                r["pole"] = next((x for x in rows if x["qualifying_position"] == 1), None)
+                r["players"] = [x for x in rows if x["driver"]["is_player"]]
+            rounds.append(r)
+        return page("results_index.html", ctx, rounds=rounds, dmap=dmap)
+
+    @app.route("/career/<token>/standings")
+    @career_page()
+    def standings_page(conn, ctx):
+        """Drivers' and Constructors' championships, with CSV export."""
+        sid = ctx["season"]["id"]
+        drivers = insights.standings_with_changes(conn, sid, limit=10 ** 6)
+        teams = S.constructor_standings(conn, sid)
+        fmt = request.args.get("format")
+        if fmt == "csv":
+            import csv
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            if request.args.get("table") == "constructors":
+                w.writerow(["Position", "Team", "Points", "Wins", "Podiums"])
+                for t in teams:
+                    w.writerow([t["position"], t["team"]["name"], t["points"], t.get("wins", 0), t.get("podiums", 0)])
+                name = f"constructors-{ctx['season']['year']}.csv"
+            else:
+                w.writerow(["Position", "Driver", "Team", "Points", "Wins", "Podiums", "Poles", "Fastest laps", "DNFs",
+                            "Player driver"])
+                for d in drivers:
+                    w.writerow([d["position"], d["driver"]["name"], d["team"]["name"] if d["team"] else "", d["points"],
+                                d["wins"], d["podiums"], d["poles"], d["fastest_laps"], d["dnfs"],
+                                "yes" if d["driver"]["is_player"] else "no"])
+                name = f"drivers-{ctx['season']['year']}.csv"
+            return send_file(io.BytesIO(buf.getvalue().encode("utf-8")), as_attachment=True, download_name=name,
+                             mimetype="text/csv")
+        recent = {}
+        for r in conn.execute("""SELECT r.driver_id, r.race_position, r.result_status, e.round_number FROM results r
+                                 JOIN events e ON e.id = r.event_id WHERE e.season_id = ? AND e.status = ?
+                                 ORDER BY e.round_number DESC""", (sid, C.EVENT_COMPLETE)):
+            lst = recent.setdefault(r["driver_id"], [])
+            if len(lst) < 5:
+                lst.append(f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"]
+                           else r["result_status"])
+        return page("standings.html", ctx, drivers=drivers, teams=teams, recent=recent,
+                    leader=max([t["points"] for t in teams] + [1]))
+
+    @app.route("/api/career/<token>/search")
+    @career_page()
+    def api_search(conn, ctx):
+        """Quick search for the command palette: this league only, never anything the viewer can't open."""
+        q = (request.args.get("q") or "").strip().lower()
+        t = ctx["token"]
+        items = []
+
+        def add(kind, label, url, sub=""):
+            items.append({"kind": kind, "label": label, "url": url, "sub": sub})
+        pages = [("Home", url_for("dashboard", token=t)), ("Calendar", url_for("seasons_page", token=t)),
+                 ("Results", url_for("results_index", token=t)), ("Standings", url_for("standings_page", token=t)),
+                 ("Drivers", url_for("drivers_page", token=t)), ("Teams", url_for("teams_page", token=t)),
+                 ("Records", url_for("records", token=t)), ("News", url_for("news_page", token=t)),
+                 ("Incidents", url_for("incidents_page", token=t)), ("My notifications", url_for("notify_prefs", token=t)),
+                 ("Help", url_for("help_page"))]
+        if ctx["my_driver"]:
+            pages += [("My Garage", url_for("garage", token=t)), ("Relationships", url_for("team_standing", token=t))]
+        if ctx["can_run"]:
+            pages.append(("Enter results", url_for("weekend_next", token=t)))
+        if ctx["is_master"]:
+            pages += [("League settings", url_for("league_settings", token=t)), ("Members & roles", url_for("members", token=t)),
+                      ("Grid & contracts", url_for("grid_page", token=t)), ("Activity log", url_for("activity_log", token=t)),
+                      ("Backups & data", url_for("backups_page", token=t)), ("Market administration", url_for("market_page", token=t)),
+                      ("Notification delivery log", url_for("delivery_log_page", token=t)),
+                      ("Settings: team life", url_for("league_settings", token=t) + "#team-life"),
+                      ("Settings: joining", url_for("league_settings", token=t) + "#joining"),
+                      ("Settings: season rollover", url_for("league_settings", token=t) + "#rollover")]
+        for label, url in pages:
+            add("Page", label, url)
+        for d in S.drivers(conn):
+            add("Driver", d["name"], url_for("driver_profile", token=t, driver_id=d["id"]),
+                "Player driver" if d["is_player"] else ("Retired" if not d["active"] else "AI driver"))
+        for tm in S.teams(conn):
+            add("Team", tm["name"], url_for("team_profile", token=t, team_id=tm["id"]), tm["abbreviation"])
+        for e in S.events(conn, ctx["season"]["id"]):
+            add("Round", f"R{e['round_number']} {e['name']}", url_for("weekend", token=t, event_id=e["id"]),
+                f"{ctx['season']['year']} · {e['status']}")
+        for s_ in ctx["seasons"]:
+            add("Season", f"{s_['year']} season", url_for("season_review", token=t, season_id=s_["id"]), s_["status"])
+        for anchor, label in HELP_TOPICS:
+            add("Help", label, url_for("help_page") + "#" + anchor)
+        if q:
+            words = q.split()
+            items = [i for i in items if all(w in (i["label"] + " " + i["sub"] + " " + i["kind"]).lower() for w in words)]
+            items.sort(key=lambda i: (not i["label"].lower().startswith(q), i["kind"] != "Page", i["label"]))
+        return jsonify(ok=True, items=items[:40])
+
+    @app.route("/career/<token>/backups")
+    @career_page(master_only=True)
+    def backups_page(conn, ctx):
+        """Backups, restore, export and the danger zone for this league."""
+        check = storage.integrity_check(ctx["token"]) if request.args.get("check") else None
+        return page("backups.html", ctx, backups=storage.list_auto_backups(ctx["token"]), check=check)
 
     @app.route("/career/<token>/driver/<int:driver_id>")
     @career_page()
@@ -2270,6 +2437,30 @@ def register_routes(app):
                 hub["reacts"] = community.reactions(conn, [target], me)[target]
         return hub
 
+    @app.route("/career/<token>/mode", methods=["POST"])
+    @career_page()
+    def view_mode(conn, ctx):
+        """Switch how this league is shown on this device. Never changes the account's real role."""
+        wanted = request.form.get("mode")
+        if wanted not in dict(ctx["modes"]):
+            raise ValidationError("That view isn't available for your role")
+        session[f"mode_{ctx['token']}"] = wanted
+        flash(f"Now showing {ctx['career_name']} as {VIEW_MODES[wanted]}." +
+              (" Your real permissions are unchanged." if wanted != ctx["modes"][0][0] else ""), "success")
+        nxt = request.form.get("next") or ""
+        return redirect(nxt if nxt.startswith(f"/career/{ctx['token']}/") else url_for("dashboard", token=ctx["token"]))
+
+    @app.route("/career/<token>/pin", methods=["POST"])
+    @career_page()
+    def league_pin(conn, ctx):
+        action = request.form.get("action")
+        me = g.user["username"]
+        if action in ("pin", "unpin"):
+            library.pin(me, ctx["token"], action == "pin")
+        elif action in ("hide", "unhide"):
+            library.hide(me, ctx["token"], action == "hide")
+        return _back(ctx)
+
     @app.route("/career/<token>/notifications", methods=["GET", "POST"])
     @career_page()
     def notify_prefs(conn, ctx):
@@ -2344,8 +2535,22 @@ def register_routes(app):
         if request.method == "POST":
             before = {"features": community.features(conn), "join": storage.join_mode(conn),
                       "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"],
-                      "life": teamlife.settings(conn)}
+                      "life": teamlife.settings(conn), "name": ctx["career_name"],
+                      "vis": league_profile.visibility(conn), "recs": storage.get_meta(conn, "difficulty_recs", "1")}
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
+            if request.form.get("feature_public") and "visibility" not in request.form:   # older forms
+                request_form = request.form.copy()
+                request_form["visibility"] = "public"
+            else:
+                request_form = request.form
+            profile_changes = league_profile.save(conn, request_form)
+            name = (request.form.get("career_name") or "").strip()[:80]
+            if name:
+                storage.set_meta(conn, "career_name", name)
+            if "team_life" in request.form:
+                storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
+            if league_profile.is_public(conn):
+                community.public_key(conn)
             if request.form.get("team_life") == "1":
                 teamlife.save_settings(conn, request.form.get("team_orders"), bool(request.form.get("weekend_targets")),
                                        bool(request.form.get("round_gates")), bool(request.form.get("gate_press")),
@@ -2364,16 +2569,38 @@ def register_routes(app):
                 if not timefmt.valid_zone(zone):
                     raise ValidationError("Unknown time zone")
                 storage.set_meta(conn, "timezone", zone)
-            g.audit_summary = _settings_changes(conn, before) or "saved League Settings without changes"
+            changes = [c for c in [_settings_changes(conn, before)] if c]
+            if name and name != before["name"]:
+                changes.append(f"renamed the league from {before['name']} to {name}")
+            vis = league_profile.visibility(conn)
+            if vis != before["vis"]:
+                changes.append(f"changed visibility from {league_profile.VISIBILITY[before['vis']][0]} to "
+                               f"{league_profile.VISIBILITY[vis][0]}")
+            if storage.get_meta(conn, "difficulty_recs", "1") != before["recs"]:
+                changes.append("turned AI difficulty recommendations " +
+                               ("on" if storage.get_meta(conn, "difficulty_recs", "1") == "1" else "off"))
+            other = [f for f in profile_changes if f not in ("visibility", "name")]
+            if other:
+                changes.append("updated the league's " + ", ".join(sorted(
+                    {"league_description": "description", "league_region": "region", "league_platform": "platform",
+                     "league_rules": "rules summary", "league_schedule": "schedule", "links": "links",
+                     "accent": "accent colour", "public_incidents": "public incidents setting"}.get(f, f) for f in other)))
+            g.audit_summary = "; ".join(changes) or "saved League Settings without changes"
             flash("League settings saved.", "success")
             return redirect(url_for("league_settings", token=ctx["token"]))
         feats = community.features(conn)
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
+        prof = league_profile.profile(conn)
         return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
                     life=teamlife.settings(conn), rollover_actions=seats.ACTIONS, rollover_default=seats.carry_mode(conn),
                     zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
-                    join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES)
+                    join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES, profile=prof,
+                    visibility_opts=league_profile.VISIBILITY, permissions=roles.PERMISSIONS,
+                    named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
+                    difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
+                    active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
+                    and S.get_season(conn, ctx["current_season_id"])["status"] != C.SEASON_COMPLETE)
 
     @app.route("/career/<token>/settings/timezone", methods=["POST"])
     @career_page(master_only=True)
@@ -2702,6 +2929,12 @@ def register_routes(app):
     @master_required
     def delete(token):
         try:
+            with storage.session(token) as conn:
+                name = storage.get_meta(conn, "career_name", "")
+            if (request.form.get("confirm_name") or "").strip() != name:
+                flash("Type the league's exact name to delete it. Nothing was deleted.", "error")
+                return redirect(url_for("backups_page", token=token) + "#danger")
+            storage.auto_backup(token, "before-delete", force=True)   # kept by the site, so an admin can recover it
             storage.delete_career(token)
         except CareerNotFound:
             abort(404)

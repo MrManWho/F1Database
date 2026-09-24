@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, driver_link, pattrs with context %}
+{% block title %}Standings{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">League · {{ ctx.season.year }}{{ ' · archived' if ctx.season.status == 'Complete' }}</div><h1>Standings</h1>
+    <p class="page-purpose">Both championships after every submitted and in-progress round. Grand Prix and Sprint points count; a DNF scores nothing.</p></div>
+  <div class="button-row">
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('standings_page', token=ctx.token, format='csv', table='drivers') }}" download>Drivers CSV</a>
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('standings_page', token=ctx.token, format='csv', table='constructors') }}" download>Constructors CSV</a>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+<div class="tabs" role="tablist" aria-label="Championship">
+  <button role="tab" id="tab-drivers" aria-controls="panel-drivers" aria-selected="true" class="tab is-on" data-tab="drivers">Drivers</button>
+  <button role="tab" id="tab-teams" aria-controls="panel-teams" aria-selected="false" class="tab" data-tab="teams" tabindex="-1">Constructors</button>
+</div>
+
+<section class="card table-card" id="panel-drivers" role="tabpanel" aria-labelledby="tab-drivers">
+  <div class="table-tools">
+    <label class="sr-only" for="st-search">Search drivers</label>
+    <input type="search" id="st-search" placeholder="Search drivers or teams" data-filter-table="st-drivers">
+    <label class="check small"><input type="checkbox" data-players-only="st-drivers"> Player drivers only</label>
+  </div>
+  {% if drivers and drivers[0].points is defined and drivers|selectattr('has_results')|list %}
+  <div class="table-wrap">
+  <table class="data-table sortable sticky-head" id="st-drivers">
+    <caption class="sr-only">{{ ctx.season.year }} Drivers' Championship</caption>
+    <thead><tr>
+      <th scope="col" data-sort class="num"><abbr title="Championship position (ties split by wins, then podiums)">Pos</abbr></th>
+      <th scope="col" class="num"><abbr title="Places gained or lost since the previous round">±</abbr></th>
+      <th scope="col" data-sort class="sticky-col">Driver</th><th scope="col" data-sort>Team</th>
+      <th scope="col" data-sort class="num"><abbr title="Grand Prix + Sprint points">Pts</abbr></th>
+      <th scope="col" data-sort class="num">Wins</th><th scope="col" data-sort class="num"><abbr title="Podiums">Pod</abbr></th>
+      <th scope="col" data-sort class="num">Poles</th><th scope="col" data-sort class="num"><abbr title="Did not finish">DNF</abbr></th>
+      <th scope="col"><abbr title="Last five finishes, newest first">Recent</abbr></th>
+    </tr></thead>
+    <tbody>
+    {% for d in drivers %}
+    <tr {{ pattrs(d.driver, '', '--team: ' ~ (d.team.color if d.team else '#555') ~ ';', url_for('driver_profile', token=ctx.token, driver_id=d.driver.id)) }}
+        data-search="{{ (d.driver.name ~ ' ' ~ (d.team.name if d.team else ''))|lower }}" data-player="{{ 1 if d.driver.is_player else 0 }}">
+      <td class="num"><b>{{ d.position }}</b></td>
+      <td class="num">{% if d.change > 0 %}<span class="up" aria-label="up {{ d.change }}">▲{{ d.change }}</span>{% elif d.change < 0 %}<span class="down" aria-label="down {{ -d.change }}">▼{{ -d.change }}</span>{% else %}<span class="muted" aria-label="no change">–</span>{% endif %}</td>
+      <td class="sticky-col">{{ driver_link(ctx, d.driver, badge=True) }}</td>
+      <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.name }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="num"><strong>{{ d.points }}</strong></td>
+      <td class="num">{{ d.wins }}</td><td class="num">{{ d.podiums }}</td><td class="num">{{ d.poles }}</td><td class="num">{{ d.dnfs }}</td>
+      <td class="recent">{% for f in recent.get(d.driver.id, []) %}<span class="res-mini">{{ f }}</span>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small filter-empty" hidden>No drivers match.</p>
+  {% else %}
+  <div class="empty-state"><p>No results yet this season. Standings appear after the first round is entered.</p>
+    <p><a href="{{ url_for('seasons_page', token=ctx.token) }}">See the calendar →</a></p></div>
+  {% endif %}
+</section>
+
+<section class="card table-card" id="panel-teams" role="tabpanel" aria-labelledby="tab-teams" hidden>
+  <div class="table-wrap">
+  <table class="data-table sortable sticky-head">
+    <caption class="sr-only">{{ ctx.season.year }} Constructors' Championship</caption>
+    <thead><tr><th scope="col" data-sort class="num">Pos</th><th scope="col" data-sort>Team</th><th scope="col">Drivers</th>
+      <th scope="col" data-sort class="num">Pts</th><th scope="col" class="bar-col"><span class="sr-only">Share of leader</span></th>
+      <th scope="col" data-sort class="num">Wins</th><th scope="col" data-sort class="num"><abbr title="Podiums">Pod</abbr></th><th scope="col" data-sort class="num"><abbr title="Did not finish">DNF</abbr></th></tr></thead>
+    <tbody>
+    {% for t in teams %}
+    <tr style="--team: {{ t.team.color }}" data-href="{{ url_for('team_profile', token=ctx.token, team_id=t.team.id) }}" class="row-link">
+      <td class="num"><b>{{ t.position }}</b></td>
+      <td>{{ team_dot(t.team) }}<a href="{{ url_for('team_profile', token=ctx.token, team_id=t.team.id) }}">{{ t.team.name }}</a></td>
+      <td class="small">{% for d in t.drivers if d %}{{ driver_link(ctx, d) }}{{ ', ' if not loop.last }}{% endfor %}</td>
+      <td class="num"><strong>{{ t.points }}</strong></td>
+      <td class="bar-col"><span class="bar"><span style="width: {{ (t.points / leader * 100)|round(1) }}%; background: var(--team)"></span></span></td>
+      <td class="num">{{ t.wins }}</td><td class="num">{{ t.podiums }}</td><td class="num">{{ t.dnfs }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

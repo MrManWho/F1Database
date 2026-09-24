@@ -45,7 +45,7 @@ def test_features_are_chosen_at_setup_and_toggled_in_settings(app, master_client
     assert ana.get(f"/career/{token}/predictions").status_code == 404
     assert "Predictions" not in ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
     page = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
-    assert "Race-night check-in" in page and "Public results page" in page
+    assert "Race-night check-in" in page and "Public results" in page   # v2.0: visibility is its own setting
     master_client.post(f"/career/{token}/settings", data={"feature_checkin": "1", "feature_predictions": "1",
                                                           "csrf_token": "tok"})
     with storage.session(token) as conn:
@@ -61,7 +61,7 @@ def test_features_are_chosen_at_setup_and_toggled_in_settings(app, master_client
 def test_existing_leagues_get_sensible_defaults(career):
     with storage.session(career) as conn:
         feats = community.features(conn)
-    assert feats == {k: v[2] for k, v in C.FEATURES.items()}
+    assert feats == {**{k: v[2] for k, v in C.FEATURES.items()}, "public": False}
     assert feats["checkin"] is False and feats["comments"] is True
 
 
@@ -235,7 +235,7 @@ def test_public_page_needs_the_feature_and_the_key(app, master_client):
         key = community.public_key(conn)
     anon = app.test_client()
     assert anon.get(f"/public/{token}/{key}").status_code == 404
-    master_client.post(f"/career/{token}/settings", data={"feature_public": "1", "csrf_token": "tok"})
+    master_client.post(f"/career/{token}/settings", data={"visibility": "public", "csrf_token": "tok"})
     settings = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
     assert f"/public/{token}/{key}" in settings
     page = anon.get(f"/public/{token}/{key}").get_data(as_text=True)

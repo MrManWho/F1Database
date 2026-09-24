@@ -470,8 +470,11 @@ def test_browser_offline_queue_recovery_conflict_and_lock(app, master_client, li
         assert not page.evaluate("Object.keys(localStorage).some(k => k.startsWith('f1-recovery'))")
         # Interrupted entry is restored on return.
         ctx.set_offline(True); q(page).fill("6"); page.wait_for_timeout(1300); page.close(); ctx.set_offline(False)
-        page = ctx.new_page(); page.goto(url); page.wait_for_timeout(2000)
+        page = ctx.new_page(); page.goto(url)
+        # Wait for the restore (it fetches the server state first) instead of a fixed pause: slower under load.
+        page.locator("#recovery-banner").wait_for(state="visible", timeout=8000)
         assert q(page).input_value() == "6" and "Restored" in page.locator("#recovery-banner").inner_text()
+        page.wait_for_timeout(1500)   # let the restored value save before the conflict test below
         # Conflict: another save lands first; both values are shown and the person chooses.
         other = ctx.new_page(); other.goto(url); other.wait_for_timeout(600)
         q(other).fill("8"); other.wait_for_timeout(1500)

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Backups & data{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">Backups &amp; data</span></nav>
+<div class="page-head"><div><div class="kicker">Manage · {{ ctx.career_name }}</div><h1>Backups &amp; data</h1>
+  <p class="page-purpose">Everything saves automatically. Backups are made every day, after every completed round, and before risky changes such as a season rollover, a restore or moving results.</p></div></div>
+
+<div class="grid-2">
+  <section class="card" id="download">
+    <h2>Download</h2>
+    <p class="muted small">A full backup (<code>.f1career</code>, restorable here or in any Paddock Legacy of the same or a newer version) or a JSON export for spreadsheets and other tools. Passwords, logins and email addresses are never included; they live in the site's account database, not in the league.</p>
+    <div class="button-row">
+      <a class="btn" href="{{ url_for('backup', token=ctx.token) }}">Download full backup</a>
+      <a class="btn btn-ghost" href="{{ url_for('export', token=ctx.token) }}">Export JSON</a>
+      <a class="btn btn-ghost" href="{{ url_for('standings_page', token=ctx.token, format='csv', table='drivers') }}">Standings CSV</a>
+    </div>
+  </section>
+  <section class="card" id="integrity">
+    <h2>Check this league</h2>
+    <p class="muted small">Runs SQLite's integrity check and makes sure the latest automatic backups can be restored. Read-only.</p>
+    {% if check %}
+    {% if check.ok %}<p class="banner" role="status">✅ All good: {{ check.seasons }} season{{ 's' if check.seasons != 1 }}, {{ check.results }} result rows, {{ check.backups }} recent backup{{ 's' if check.backups != 1 }} verified restorable.</p>
+    {% else %}<div class="banner banner-danger" role="alert"><b>Problems found</b><ul>{% for p in check.problems %}<li>{{ p }}</li>{% endfor %}</ul>Download a backup now and restore a working one below.</div>{% endif %}
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('backups_page', token=ctx.token, check=1) }}#integrity">Run the check</a>
+  </section>
+</div>
+
+<section class="card" id="automatic">
+  <div class="card-head"><h2>Automatic backups</h2><span class="muted small">{{ backups|length }} kept</span></div>
+  <p class="muted small">Daily and after-round backups: the newest {{ C.AUTO_BACKUPS_KEPT }} are kept. Safety copies made before risky changes are kept separately.
+    <b>Restore</b> rolls the whole league back to that moment; the current state is backed up first, so a restore can itself be undone.</p>
+  {% if backups %}
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <thead><tr><th scope="col">When</th><th scope="col">Why</th><th scope="col" class="num">Size</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+    {% set why = b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' %}
+    <tr><td>{{ b.when|stamp }}</td><td>{{ why.replace('-', ' ')|capitalize }}</td><td class="num">{{ b.size_kb }} KB</td>
+      <td class="button-row tight">
+        <a class="btn btn-sm btn-ghost" href="{{ url_for('auto_backup_download', token=ctx.token, name=b.name) }}">Download</a>
+        <form method="post" action="{{ url_for('auto_backup_restore', token=ctx.token, name=b.name) }}"
+              data-confirm='{{ {"title": "Restore the backup from " ~ (b.when|stamp) ~ "?", "target": ctx.career_name ~ " (the whole league)",
+                "what": "Rolls everything back to that moment: results, seasons, contracts, members and settings.",
+                "history": "Anything entered after " ~ (b.when|stamp) ~ " is replaced.",
+                "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore the backup made just before this.",
+                "ok": "Restore backup"}|tojson }}'>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Restore</button></form>
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<div class="empty-state"><p>No automatic backups yet. The first is made today.</p></div>{% endif %}
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Restore from a file</h2>
+    <form method="post" action="{{ url_for('restore_upload', token=ctx.token) }}" enctype="multipart/form-data" class="stack"
+          data-confirm='{{ {"title": "Replace this league with the uploaded backup?", "target": ctx.career_name ~ " (the whole league)",
+            "what": "Everything in the league is replaced by the file you chose. It's checked first.", "history": "Results entered since that backup are replaced.",
+            "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore that automatic backup.", "ok": "Replace league"}|tojson }}'>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Backup file (.f1career)<input type="file" name="file" accept=".f1career" required></label>
+      <div><button class="btn">Check and restore</button></div>
+    </form>
+    <p class="muted small">To try a backup without touching this league, import it as a new league from <a href="{{ url_for('home') }}">All my leagues</a>.</p>
+  </section>
+  <section class="card">
+    <h2>League name &amp; copies</h2>
+    <form method="post" action="{{ url_for('rename', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>League name<input name="name" value="{{ ctx.career_name }}" maxlength="80" required></label>
+      <div><button class="btn btn-sm">Rename</button></div>
+    </form>
+    <form method="post" action="{{ url_for('save_as', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Make an independent copy (for testing)<input name="name" value="{{ ctx.career_name }} (copy)" maxlength="80" required></label>
+      <div><button class="btn btn-sm btn-ghost">Save as a new league</button></div>
+    </form>
+  </section>
+</div>
+
+<section class="card danger-card" id="danger">
+  <h2>Danger zone</h2>
+  <p>Deleting <b>{{ ctx.career_name }}</b> removes it for every member: results, seasons, contracts and history. It can't be undone from here.
+    A final backup is kept on the site so a site administrator could recover it.</p>
+  <form method="post" action="{{ url_for('delete', token=ctx.token) }}" class="stack"
+        data-confirm='{{ {"title": "Delete " ~ ctx.career_name ~ " permanently?", "target": ctx.career_name,
+          "what": "The league and everything in it is deleted for every member.", "history": "All results, seasons and career history are removed.",
+          "backup": "A final backup is kept on the site.", "undo": "Not from here. Only a site administrator can recover it.",
+          "strong": ctx.career_name, "ok": "Delete league"}|tojson }}'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Type the league's name to confirm<input name="confirm_name" autocomplete="off" required placeholder="{{ ctx.career_name }}"></label>
+    <div><button class="btn btn-danger">Delete league</button></div>
+  </form>
+</section>
+{% endblock %}

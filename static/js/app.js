@@ -51,8 +51,7 @@
     try { localStorage.setItem("f1-rail", on ? "1" : "0"); } catch (e) { /* private mode */ }
   });
 
-  const menu = document.getElementById("menu-btn");
-  if (menu) menu.addEventListener("click", function () { document.getElementById("sidebar").classList.toggle("open"); });
+  // The phone/tablet menu drawer lives in shell.js.
 
   // Client-side sortable tables
   document.querySelectorAll("table.sortable").forEach(function (table) {

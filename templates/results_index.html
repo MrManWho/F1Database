@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, driver_link with context %}
+{% block title %}Results{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">League · {{ ctx.season.year }}{{ ' · archived' if ctx.season.status == 'Complete' }}</div><h1>Results</h1>
+    <p class="page-purpose">Every round this season. A round only shows as Completed once its results are submitted.</p></div>
+  {% if ctx.can_run %}<a class="btn btn-primary" href="{{ url_for('weekend_next', token=ctx.token) }}">Enter results →</a>{% endif %}
+</div>
+{% if rounds %}
+<section class="card table-card">
+  <div class="table-wrap">
+  <table class="data-table results-index">
+    <caption class="sr-only">{{ ctx.season.year }} rounds and results</caption>
+    <thead><tr><th scope="col" class="num">Rd</th><th scope="col">Event</th><th scope="col">State</th><th scope="col">Winner</th><th scope="col">Pole</th><th scope="col">Player drivers</th></tr></thead>
+    <tbody>
+    {% for r in rounds %}{% set e = r.event %}
+    <tr class="row-link" data-href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">
+      <td class="num">{{ e.round_number }}</td>
+      <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}"><b>{{ e.name }}</b></a>{% if e.is_sprint %} <span class="pill pill-sprint">Sprint</span>{% endif %}
+        <small class="muted d-block">{{ e.location }}{% if e.race_at %} · {{ e.race_at|race_time }}{% endif %}</small></td>
+      <td><span class="race-state rs-{{ r.state }}">{{ r.state_label }}</span></td>
+      <td>{% if r.winner %}{{ team_dot(r.winner.team) }}{{ driver_link(ctx, r.winner.driver) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if r.pole %}{{ driver_link(ctx, r.pole.driver) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="small">{% for p in r.players %}{{ driver_link(ctx, p.driver) }} <b>{{ 'P' ~ p.race_position if p.result_status == 'Finished' and p.race_position else p.result_status }}</b>{{ ' · ' if not loop.last }}{% else %}<span class="muted">—</span>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% else %}
+<section class="card empty-state"><p>This season has no rounds yet.</p>
+  {% if ctx.is_master %}<p><a href="{{ url_for('seasons_page', token=ctx.token) }}#calendar">Add rounds to the calendar →</a></p>{% endif %}</section>
+{% endif %}
+{% endblock %}

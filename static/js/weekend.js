@@ -132,6 +132,8 @@
   // Every edit is kept in this browser (scoped to account, league, season and round) until the server has it.
   // Each save carries the round's revision; if someone else saved in between, the server refuses and we merge.
   let timer = null, saving = false, queued = false, dirty = false, retryTimer = null, locked = false;
+  // Tell the shell about unsaved edits, so switching league or view mode asks first.
+  if (window.F1 && window.F1.registerUnsaved) window.F1.registerUnsaved(function () { return dirty || saving; });
   let revision = parseInt(table.dataset.revision || "0", 10);
   let lastError = null;
   const RKEY = "f1-recovery:" + (table.dataset.scope || location.pathname);

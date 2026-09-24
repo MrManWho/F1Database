@@ -176,6 +176,13 @@ def _summary(path):
                 invited = [r[0] for r in conn.execute("SELECT username FROM invitations WHERE status = 'Pending'")]
             except sqlite3.OperationalError:
                 pass
+            roles_, muted = {}, []
+            try:
+                roles_ = {r[0]: {"role": r[1], "driver_id": r[2]}
+                          for r in conn.execute("SELECT username, role, driver_id FROM career_members")}
+                muted = [r[0] for r in conn.execute("SELECT username FROM member_notify WHERE muted = 1")]
+            except sqlite3.OperationalError:
+                pass
             try:
                 members = [r[0] for r in conn.execute("SELECT username FROM career_members")]
                 players = conn.execute("SELECT COUNT(*) FROM drivers WHERE is_player = 1 AND active = 1").fetchone()[0]
@@ -201,6 +208,11 @@ def _summary(path):
         "invited": invited,
         "pending_requests": requests,
         "players": players,
+        "roles": roles_,
+        "muted": muted,
+        "visibility": meta.get("visibility", "private"),
+        "description": meta.get("league_description", ""),
+        "accent": meta.get("accent_color", ""),
     }
 
 
@@ -320,6 +332,35 @@ def auto_backup(token, reason="daily", force=False):
     for old in routine[:-AUTO_BACKUPS_KEPT] + safety[:-SAFETY_BACKUPS_KEPT]:
         old.unlink(missing_ok=True)
     return target
+
+
+def integrity_check(token):
+    """SQLite's own check plus the league's basic shape, for the Backups page. Read-only."""
+    path = career_path(token)
+    out = {"ok": True, "problems": [], "backups": 0}
+    conn = _connect(path)
+    try:
+        result = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if result != "ok":
+            out["problems"].append(f"Database check: {result}")
+        missing = REQUIRED_TABLES - {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if missing:
+            out["problems"].append("Missing tables: " + ", ".join(sorted(missing)))
+        fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if fk:
+            out["problems"].append(f"{len(fk)} rows point at something that no longer exists")
+        out["seasons"] = conn.execute("SELECT COUNT(*) FROM seasons").fetchone()[0]
+        out["results"] = conn.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+    finally:
+        conn.close()
+    for b in list_auto_backups(token)[:3]:
+        try:
+            _validate_save(auto_backup_path(token, b["name"]))
+            out["backups"] += 1
+        except (ValueError, CareerNotFound) as exc:
+            out["problems"].append(f"Backup {b['name']} can't be restored: {exc}")
+    out["ok"] = not out["problems"]
+    return out
 
 
 def export_json(token):

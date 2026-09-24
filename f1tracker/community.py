@@ -21,6 +21,8 @@ def features(conn):
     for key, (_label, _desc, default) in C.FEATURES.items():
         value = get_meta(conn, f"feature_{key}")
         out[key] = default if value is None else value == "1"
+    from . import league_profile
+    out["public"] = league_profile.is_public(conn)   # v2.0: decided by the league's visibility setting
     return out
 
 
@@ -28,7 +30,9 @@ def set_features(conn, enabled):
     """enabled: the feature keys to switch on; every other feature is switched off."""
     for key in C.FEATURES:
         set_meta(conn, f"feature_{key}", "1" if key in enabled else "0")
-    if "public" in enabled:
+    if "public" in enabled:   # older callers: turning the public page on means "public results"
+        set_meta(conn, "visibility", "public")
+        set_meta(conn, "feature_public", "1")
         public_key(conn)
 
 

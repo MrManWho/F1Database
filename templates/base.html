@@ -23,108 +23,168 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
+      {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
 <script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
-  <aside class="sidebar" id="sidebar">
+  <a class="skip-link" href="#main">Skip to content</a>
+  {% set ep = request.endpoint %}
+  {% set lg = ctx.this_league %}
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <a class="brand" href="{{ url_for('dashboard', token=t) }}">
-      <svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/><rect x="13" y="15.6" width="2.3" height="2.3" opacity=".0"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg>
-      <span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }} · {{ ctx.career_name }}</small></span>
+      <svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg>
+      <span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}</small></span>
     </a>
-    <nav>
-      {% set ep = request.endpoint %}
-      {% macro item(endpoint, label, ic, active, extra='') -%}
-      <a href="{{ endpoint }}" class="{{ 'active' if active }}" title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
+    <nav class="nav-scroll">
+      {% macro item(href, label, ic, active, extra='') -%}
+      <a href="{{ href }}" class="{{ 'active' if active }}" {% if active %}aria-current="page"{% endif %} title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
       {%- endmacro %}
-      <div class="nav-group">
-        <div class="nav-title">Race weekend</div>
-        {{ item(url_for('dashboard', token=t), 'Control Room', 'home', ep == 'dashboard') }}
-        {{ item(url_for('weekend_next', token=t), 'Enter results' if ctx.can_run else 'Race results', 'flag', ep in ('weekend', 'weekend_next')) }}
+      {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot" title="{{ ctx.pending_offers }} offer(s) waiting">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
+      <div class="nav-group" role="group" aria-labelledby="nav-league">
+        <div class="nav-title" id="nav-league">League</div>
+        {{ item(url_for('dashboard', token=t), 'Home', 'home', ep == 'dashboard') }}
+        {{ item(url_for('seasons_page', token=t), 'Calendar', 'calendar', ep in ('seasons_page', 'season_review', 'season_rollover')) }}
+        {{ item(url_for('results_index', token=t), 'Results', 'flag', ep in ('results_index', 'race_summary') or (ep in ('weekend', 'weekend_next') and not ctx.can_run)) }}
+        {{ item(url_for('standings_page', token=t), 'Standings', 'standings', ep == 'standings_page') }}
+        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep in ('drivers_page', 'driver_profile')) }}
+        {{ item(url_for('teams_page', token=t), 'Teams', 'teams', ep in ('teams_page', 'team_profile')) }}
+        {{ item(url_for('records', token=t), 'Records', 'records', ep == 'records') }}
+        {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
         {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
+        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
       </div>
-      {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
       {% if ctx.my_driver %}
-      <div class="nav-group">
-        <div class="nav-title">My career</div>
+      <div class="nav-group" role="group" aria-labelledby="nav-career">
+        <div class="nav-title" id="nav-career">Career · {{ ctx.my_driver.name }}</div>
         {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
-        {{ item(url_for('team_standing', token=t), 'Team Standing', 'teams', ep == 'team_standing') }}
-        {{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}
+        {{ item(url_for('garage', token=t) ~ '#offers', 'Contracts & offers', 'contracts', false) }}
+        {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}
+        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
+        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
+        {{ item(url_for('dashboard', token=t) ~ '#press', 'Press', 'press', false) }}
+        {{ item(url_for('driver_profile', token=t, driver_id=ctx.my_driver.id), 'Progression', 'progress', false) }}
+      </div>
+      {% else %}
+      <div class="nav-group" role="group" aria-labelledby="nav-paddock">
+        <div class="nav-title" id="nav-paddock">Paddock</div>
+        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
+        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
       </div>
       {% endif %}
-      <div class="nav-group">
-        <div class="nav-title">Championship</div>
-        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep in ('drivers_page', 'driver_profile')) }}
-        {{ item(url_for('teams_page', token=t), 'Constructors', 'teams', ep in ('teams_page', 'team_profile')) }}
-        {{ item(url_for('news_page', token=t), 'Paddock News', 'news', ep == 'news_page') }}
-        {{ item(url_for('records', token=t), 'Hall of Records', 'records', ep == 'records') }}
-        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
-        {% if not ctx.my_driver %}{{ item(url_for('rivalry_page', token=t), 'Rivalry', 'rivalry', ep == 'rivalry_page') }}{% endif %}
-      </div>
-      <div class="nav-group">
-        <div class="nav-title">Season</div>
-        {{ item(url_for('seasons_page', token=t), 'Calendar & Seasons', 'calendar', ep in ('seasons_page', 'season_review')) }}
-        {{ item(url_for('grid_page', token=t), 'Grid & Transfers', 'grid', ep == 'grid_page') }}
-        {{ item(url_for('contracts_page', token=t), 'Driver Market', 'contracts', ep == 'contracts_page') }}
-      </div>
-      {% if ctx.is_master %}
+      {% if ctx.can_run %}
       <div class="nav-group nav-admin" id="nav-admin">
         <button type="button" class="nav-title nav-toggle" id="nav-admin-toggle" aria-expanded="true" aria-controls="nav-admin-items">
-          <span>Race Master tools</span><span class="chev" aria-hidden="true">▾</span></button>
+          <span>Manage</span><span class="chev" aria-hidden="true">▾</span></button>
         <div class="nav-admin-items" id="nav-admin-items">
-        {% if not ctx.my_driver %}
-        {{ item(url_for('garage', token=t), 'Player Garages', 'garage', ep == 'garage', badge) }}
-        {{ item(url_for('team_standing', token=t), 'Team Standings', 'teams', ep == 'team_standing') }}
+        {{ item(url_for('weekend_next', token=t), 'Results entry', 'entry', ep in ('weekend', 'weekend_next')) }}
+        {% if ctx.is_master %}
+        {{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}
+        {{ item(url_for('grid_page', token=t), 'Grid & contracts', 'grid', ep == 'grid_page') }}
+        {{ item(url_for('members', token=t), 'Members & roles', 'players', ep == 'members') }}
+        {{ item(url_for('market_page', token=t), 'Market administration', 'market', ep == 'market_page') }}
+        {{ item(url_for('paddock_admin', token=t), 'Drivers & teams', 'settings', ep == 'paddock_admin') }}
+        {% if not ctx.my_driver %}{{ item(url_for('garage', token=t), 'Player garages', 'garage', ep == 'garage', badge) }}
+        {{ item(url_for('team_standing', token=t), 'Team standings', 'teams', ep == 'team_standing') }}{% endif %}
+        {{ item(url_for('league_settings', token=t), 'League settings', 'toggles', ep == 'league_settings') }}
+        {{ item(url_for('delivery_log_page', token=t), 'Notifications', 'bell', ep == 'delivery_log_page') }}
+        {{ item(url_for('activity_log', token=t), 'Activity log', 'log', ep == 'activity_log') }}
+        {{ item(url_for('backups_page', token=t), 'Backups & data', 'backup', ep == 'backups_page') }}
         {% endif %}
-        {{ item(url_for('market_page', token=t), 'Transfer Market', 'market', ep == 'market_page') }}
-        {{ item(url_for('paddock_admin', token=t), 'Paddock Admin', 'settings', ep == 'paddock_admin') }}
-        {{ item(url_for('members', token=t), 'Players & Logins', 'players', ep == 'members') }}
-        {{ item(url_for('league_settings', token=t), 'League Settings', 'toggles', ep == 'league_settings') }}
-        {{ item(url_for('activity_log', token=t), 'Activity Log', 'log', ep == 'activity_log') }}
-        <button type="button" data-dialog="career-dialog" title="League & Saves">{{ icon('saves') }}<span class="label">League &amp; Saves</span></button>
         </div>
       </div>
       {% endif %}
-      <div class="nav-group">
-        {{ item(url_for('home'), 'League Library', 'library', false) }}
-        {{ item(url_for('help_page'), 'How it works', 'help', false) }}
+      <div class="nav-group nav-bottom">
+        {{ item(url_for('home'), 'All my leagues', 'library', false) }}
+        {{ item(url_for('help_page'), 'Help', 'help', false) }}
       </div>
     </nav>
-    <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
+    <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu" aria-label="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
     <div class="sidebar-foot">
-      <span class="role-chip {{ 'master' if ctx.is_master else ('steward' if ctx.can_run else '') }}" title="Your role in this league: {{ ctx.role }}">{{ ctx.role }}</span>
-      <a class="rail-season" href="{{ url_for('seasons_page', token=t) }}" title="Viewing the {{ ctx.season.year }} season">{{ ctx.season.year }}</a>
-      <span>{{ user.display_name }}{% if ctx.my_driver %} · {{ ctx.my_driver.name }}{% endif %}</span>
+      <span class="role-chip {{ 'master' if ctx.real.is_master else ('steward' if ctx.real.can_run else '') }}" title="Your role in this league: {{ ctx.role }}">{{ ctx.role }}</span>
+      <span>{{ user.display_name }}{% if ctx.real.my_driver %} · {{ ctx.real.my_driver.name }}{% endif %}</span>
     </div>
   </aside>
+  <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
   <div class="main">
     <header class="topbar">
-      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Menu">☰</button>
+      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">{{ icon('menu') }}</button>
+      <details class="dropdown league-switch" id="league-switch">
+        <summary class="league-chip" aria-label="Switch league. Current league: {{ ctx.career_name }}">
+          <span class="league-mark" {% if lg and lg.accent %}style="--accent: {{ lg.accent }}"{% endif %} aria-hidden="true">{{ lg.initials if lg else ctx.career_name[:2]|upper }}</span>
+          <span class="league-name"><b>{{ ctx.career_name }}</b><small>{{ ctx.role }}{% if lg and lg.muted %} · 🔕 muted{% endif %}</small></span>
+          <span class="chev" aria-hidden="true">▾</span>
+        </summary>
+        <div class="dropdown-panel" role="menu">
+          <div class="dropdown-title">Your leagues</div>
+          <ul class="league-list">
+            {% for l in ctx.leagues %}
+            <li class="{{ 'current' if l.token == t }}">
+              <a href="{{ url_for('dashboard', token=l.token) }}" role="menuitem" data-league-link {% if l.token == t %}aria-current="true"{% endif %}>
+                <span class="league-mark" {% if l.accent %}style="--accent: {{ l.accent }}"{% endif %} aria-hidden="true">{{ l.initials }}</span>
+                <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site admin (not a member)' }}{% if l.year %} · {{ l.year }}{% endif %}{% if l.muted %} · 🔕{% endif %}</small></span>
+                {% if l.pinned %}<span class="pin-mark" title="Pinned" aria-label="Pinned">★</span>{% endif %}
+                {% if l.pending %}<span class="pill pill-hot" title="{{ l.pending }} join request(s) waiting">{{ l.pending }}</span>{% endif %}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          <div class="dropdown-foot">
+            <form method="post" action="{{ url_for('league_pin', token=t) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-ghost" name="action" value="{{ 'unpin' if lg and lg.pinned else 'pin' }}">{{ '☆ Unpin' if lg and lg.pinned else '★ Pin' }} this league</button></form>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('home') }}">All leagues, invitations &amp; requests</a>
+          </div>
+        </div>
+      </details>
       <form method="get" class="season-picker">
-        <label>Season
-          <select name="season" onchange="this.form.submit()">
+        <label><span class="sr-only">Season</span>
+          <select name="season" onchange="this.form.submit()" aria-label="Season">
             {% for s in ctx.seasons %}
-            <option value="{{ s.id }}" {{ 'selected' if s.id == ctx.season.id }}>{{ s.year }}{{ ' ★' if s.id == ctx.current_season_id }}</option>
+            <option value="{{ s.id }}" {{ 'selected' if s.id == ctx.season.id }}>{{ s.year }}{{ ' (current)' if s.id == ctx.current_season_id else ' (archived)' if s.status == 'Complete' }}</option>
             {% endfor %}
           </select>
         </label>
-        <span class="status-badge status-{{ ctx.season.status|lower }}">{{ ctx.season.status }}</span>
+        {% if ctx.season.status == 'Complete' %}<span class="status-badge status-archived" title="A completed season: its history is read-only">Archived</span>
+        {% else %}<span class="status-badge status-{{ ctx.season.status|lower }}">{{ 'Current' if ctx.season.id == ctx.current_season_id else ctx.season.status }}</span>{% endif %}
       </form>
-      {% if ctx.is_spectator %}<span class="view-only-badge" title="You can follow everything in this league but not change it">Spectator · view only</span>{% endif %}
+      {% if ctx.modes|length > 1 %}
+      <details class="dropdown mode-switch">
+        <summary class="mode-chip {{ 'is-lowered' if ctx.mode_lowered }}" aria-label="View mode: {{ ctx.mode_label }}. Change view">{{ icon('eye') }}<span>{{ ctx.mode_label }}</span><span class="chev" aria-hidden="true">▾</span></summary>
+        <div class="dropdown-panel" role="menu">
+          <div class="dropdown-title">Show this league as</div>
+          <form method="post" action="{{ url_for('view_mode', token=t) }}" data-mode-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else '' }}">
+            {% for key, label in ctx.modes %}
+            <button class="mode-opt {{ 'current' if key == ctx.mode }}" name="mode" value="{{ key }}" role="menuitemradio" aria-checked="{{ 'true' if key == ctx.mode else 'false' }}">
+              <b>{{ label }}</b><small class="muted">{{ {'race_master': 'Every tool, including administration', 'scorekeeper': 'Result entry only, like a Scorekeeper', 'driver': 'Your garage, races, standings and career', 'spectator': 'Read-only, what a spectator sees'}[key] }}</small></button>
+            {% endfor %}
+          </form>
+          <p class="muted small">Only changes what's shown on this device. Your real permissions never change.</p>
+        </div>
+      </details>
+      {% endif %}
+      {% if ctx.is_spectator and not ctx.mode_lowered %}<span class="view-only-badge" title="You can follow everything in this league but not change it">Spectator · view only</span>{% endif %}
       <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm search-btn" type="button" id="search-btn" data-search-url="{{ url_for('api_search', token=t) }}" aria-keyshortcuts="Control+K Meta+K">{{ icon('search') }}<span class="label">Search</span><kbd class="kbd-hint">Ctrl K</kbd></button>
         {% if ctx.is_master %}
-        <form method="post" action="{{ url_for('save_now', token=t) }}">
+        <form method="post" action="{{ url_for('save_now', token=t) }}" class="hide-sm">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
         </form>
         {% endif %}
-        <button class="icon-btn bell" type="button" id="bell" data-dialog="notif-dialog" aria-label="Notifications"
+        <button class="icon-btn bell" type="button" id="bell" data-dialog="notif-dialog" aria-label="Notifications{{ ', ' ~ ctx.unread ~ ' unread' if ctx.unread }}"
                 data-url="{{ url_for('api_notifications', token=t) }}" data-read="{{ url_for('notifications_read', token=t) }}">🔔<span class="bell-count" id="bell-count" {{ 'hidden' if not ctx.unread }}>{{ ctx.unread }}</span></button>
-        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}">{{ user.display_name[:1]|upper }}</button>
+        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu">{{ user.display_name[:1]|upper }}</button>
       </div>
     </header>
-    <main class="content">
+    {% if ctx.mode_lowered %}
+    <div class="mode-banner" role="status"><span>{{ icon('eye') }} Viewing <b>{{ ctx.career_name }}</b> as <b>{{ ctx.mode_label }}</b>. Your real role is {{ ctx.role }}; nothing about it has changed.</span>
+      <form method="post" action="{{ url_for('view_mode', token=t) }}" data-mode-form class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else '' }}">
+        <button class="btn btn-sm" name="mode" value="{{ ctx.modes[0][0] }}">Back to {{ ctx.modes[0][1] }}</button></form></div>
+    {% endif %}
+    <main class="content" id="main" tabindex="-1">
       {% if ctx.my_todo %}{% set td = ctx.my_todo %}
       <div class="banner banner-warn todo-banner" role="status"><span aria-hidden="true">⏳</span>
         <b>R{{ td.event.round_number }} {{ td.event.name }} is waiting on you.</b>
@@ -133,7 +193,23 @@
       {% endif %}
       {% block content %}{% endblock %}
     </main>
+    <nav class="bottom-nav" aria-label="Quick navigation">
+      <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}">{{ icon('home') }}<span>Home</span></a>
+      <a href="{{ url_for('weekend_next', token=t) if ctx.can_run else url_for('results_index', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next', 'results_index') }}">{{ icon('entry' if ctx.can_run else 'flag') }}<span>{{ 'Enter' if ctx.can_run else 'Results' }}</span></a>
+      <a href="{{ url_for('standings_page', token=t) }}" class="{{ 'active' if ep == 'standings_page' }}">{{ icon('standings') }}<span>Standings</span></a>
+      {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}">{{ icon('garage') }}<span>Garage</span></a>
+      {% else %}<a href="{{ url_for('news_page', token=t) }}" class="{{ 'active' if ep == 'news_page' }}">{{ icon('news') }}<span>News</span></a>{% endif %}
+      <button type="button" data-open-menu aria-controls="sidebar">{{ icon('menu') }}<span>More</span></button>
+    </nav>
   </div>
+
+  <dialog id="palette" class="dialog palette" aria-labelledby="palette-title">
+    <h2 id="palette-title" class="sr-only">Search and go to</h2>
+    <div class="palette-input">{{ icon('search') }}<input type="search" id="palette-q" placeholder="Search drivers, teams, rounds, seasons, settings, help…" autocomplete="off"
+      role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"><kbd>Esc</kbd></div>
+    <ul id="palette-list" class="palette-list" role="listbox" aria-label="Results"></ul>
+    <p class="muted small palette-foot">↑ ↓ to move · Enter to open · only this league is searched</p>
+  </dialog>
 
   <dialog id="confirm-dialog" class="dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
     <div class="dialog-head"><h2 id="confirm-title">Are you sure?</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
@@ -159,56 +235,7 @@
     <label class="check small"><input type="checkbox" id="notif-sound"> Play a sound when something new arrives</label>
   </dialog>
 
-  {% if ctx.is_master %}
-  <dialog id="career-dialog" class="dialog">
-    <div class="dialog-head"><h2>League &amp; Saves</h2><button class="icon-btn" data-close>✕</button></div>
-    <p class="muted">Every change is saved automatically to <code>{{ t }}.f1career</code>.</p>
-    <form method="post" action="{{ url_for('rename', token=t) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Rename league<input name="name" value="{{ ctx.career_name }}" maxlength="80" required></label>
-      <button class="btn btn-sm">Rename</button>
-    </form>
-    <form method="post" action="{{ url_for('save_as', token=t) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Save As (independent copy)<input name="name" value="{{ ctx.career_name }} (copy)" maxlength="80" required></label>
-      <button class="btn btn-sm">Save As</button>
-    </form>
-    <div class="button-row">
-      <a class="btn btn-ghost" href="{{ url_for('backup', token=t) }}">Download backup</a>
-      <a class="btn btn-ghost" href="{{ url_for('export', token=t) }}">Export JSON</a>
-    </div>
-    <details class="auto-backups">
-      <summary>Automatic backups ({{ ctx.auto_backups|length }} recent)</summary>
-      <p class="muted small">Made once a day and after every completed race weekend. The newest {{ C.AUTO_BACKUPS_KEPT }} are kept.
-        <b>Restore</b> rolls this league back to that moment (the current state is backed up first, so it can be undone).</p>
-      <ul class="plain-list small">
-        {% for b in ctx.auto_backups %}<li class="backup-row"><a href="{{ url_for('auto_backup_download', token=t, name=b.name) }}">{{ b.when|stamp }}</a> · {{ b.name.split('-', 2)[2].rsplit('.', 1)[0] if b.name.count('-') >= 2 else '' }} · {{ b.size_kb }} KB
-          <form method="post" action="{{ url_for('auto_backup_restore', token=t, name=b.name) }}"
-                data-confirm='{{ {"title": "Restore the backup from " ~ (b.when|stamp) ~ "?", "target": "The whole league",
-                  "what": "Rolls everything back to that moment: results, seasons, contracts, members' access and settings.",
-                  "history": "Anything entered after " ~ (b.when|stamp) ~ " is replaced.",
-                  "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore the backup made just before this.",
-                  "ok": "Restore backup"}|tojson }}'>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Restore</button></form></li>
-        {% else %}<li class="muted">None yet.</li>{% endfor %}
-      </ul>
-    </details>
-    <form method="post" action="{{ url_for('restore_upload', token=t) }}" enctype="multipart/form-data" class="inline-form"
-          data-confirm='{{ {"title": "Replace this league with the uploaded backup?", "target": "The whole league",
-            "what": "Everything in the league is replaced by the file you chose.", "history": "Results entered since that backup are replaced.",
-            "backup": "Yes: the current state is backed up first.", "undo": "Yes: restore that automatic backup.", "ok": "Replace league"}|tojson }}'>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Restore from a downloaded backup<input type="file" name="file" accept=".f1career" required></label>
-      <button class="btn btn-sm">Restore</button>
-    </form>
-    <form method="post" action="{{ url_for('delete', token=t) }}" class="danger-zone"
-          onsubmit="return confirm('Delete this league permanently? Download a backup first if you might want it back.');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <strong>Danger zone</strong>
-      <button class="btn btn-danger btn-sm">Delete league</button>
-    </form>
-  </dialog>
-  {% endif %}
+
 {% else %}
   <header class="plain-head">
     <a class="brand" href="{{ url_for('home') }}"><svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/><rect x="13" y="15.6" width="2.3" height="2.3" opacity=".0"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg><span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}</small></span></a>
@@ -271,6 +298,7 @@
 </div>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shell.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

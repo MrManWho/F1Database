@@ -158,3 +158,23 @@ def unify_legacy_scorekeepers():
     with auth.accounts() as conn:
         conn.execute("UPDATE users SET is_steward = 0 WHERE is_steward = 1")
     return moved
+
+
+# --------------------------------------------------------------------------- the permission matrix
+# One list, shown in Settings, Members & Roles and Help. The server enforces each row (see the permission-audit
+# tests); hiding a button is never the only protection. (capability, race_master, scorekeeper, member, spectator)
+PERMISSIONS = [
+    ("See standings, results, calendar, drivers, teams, records and news", True, True, True, True),
+    ("Comment, react, vote for Driver of the Day and make predictions (if switched on)", True, True, True, False),
+    ("Choose your own notifications for this league", True, True, True, True),
+    ("Manage your own driver: garage, offers, pledges, press answers, weekend targets", "With a driver", "With a driver", "With a driver", False),
+    ("Enter and submit results for rounds that aren't complete", True, True, False, False),
+    ("Correct a completed round, or reopen it", True, False, False, False),
+    ("Open a round early past its round gates (with a note)", True, False, False, False),
+    ("Calendar, race times, seasons and the season rollover", True, False, False, False),
+    ("Grid, seats, contracts and the transfer market", True, False, False, False),
+    ("Members, roles, invitations and join requests", True, False, False, False),
+    ("League settings, visibility, integrations and branding", True, False, False, False),
+    ("Backups, restore, export, activity log and delivery log", True, False, False, False),
+    ("Delete the league or transfer ownership", True, False, False, False),
+]

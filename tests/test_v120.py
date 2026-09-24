@@ -121,7 +121,7 @@ def test_league_settings_change_team_life_and_log_it(app, master_client):
         log = community.audit_entries(conn)[0]["summary"]
     assert "changed team orders from Off to Advisory" in log and "turned the weekend-target gate off" in log
     page = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
-    assert "Team life" in page and 'value="advisory" selected' in page
+    assert "Career systems" in page and 'value="advisory" selected' in page
 
 
 # --------------------------------------------------------------------------- weekend targets
