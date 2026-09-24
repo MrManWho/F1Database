@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from conftest import login, players, pledge_all, run_event
+from markupsafe import escape
 from f1tracker import auth, community, insights, relations, roles, schema, services as S, storage, timefmt
 from f1tracker import constants as C
 
@@ -83,12 +84,16 @@ def test_completed_round_with_tracked_difficulty_is_recognised(master_client):
         run_event(conn, ev, order=_order_with(conn, ev, first=a), difficulty=80)
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert "Track the AI difficulty on a completed round" not in page
-    assert "1 of 3 usable rounds at AI 80" in page and "Waiting for a consistent pattern" in page
-    assert "Recommended for next round" in page
+    with storage.session(token) as conn:
+        rec = S.difficulty_recommendation(conn)
+    # v2.1: one tracked round is already evidence (a small step), explained per player.
+    assert rec["sample"] and rec["current"] == 80
+    reason = str(escape(rec["reason"]))
+    assert reason in page and "Recommended for next round" in page
     # The next round's page and the Control Room agree.
     nxt = master_client.get(f"/career/{token}/weekend/{_events(token)[1]['id']}").get_data(as_text=True)
-    assert "1 of 3 usable rounds at AI 80" in nxt
-    assert "1 of 3 usable rounds at AI 80" in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    assert reason in nxt
+    assert reason in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
 
 
 def test_tracked_but_unfinished_round_never_asks_to_be_tracked(master_client):
@@ -109,7 +114,7 @@ def test_untracked_and_dnf_rounds(db):
     run_event(db, evs[1], difficulty=80, overrides={a: "DNF", b: "DNF"})      # tracked, but nobody finished
     rec = S.difficulty_recommendation(db, (2026, evs[2]["round_number"]))
     assert rec["history_rounds"] == 1 and rec["current"] == 80 and rec["sample"] == [] and rec["unusable"] == 1
-    assert "0 of 3 usable rounds at AI 80" in rec["reason"] and "didn't count" in rec["reason"]
+    assert "No usable rounds yet" in rec["reason"] and rec["recommended"] == 80
 
 
 def test_three_rounds_and_one_offs_stay_gradual(db):

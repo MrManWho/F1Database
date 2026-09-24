@@ -128,6 +128,16 @@ MAX_OFFERS_PER_WINDOW = 4
 ROOKIE_OFFERS = 3
 
 # Difficulty recommender
+# v2.1 adaptive recommendation: no round minimum and no fixed one-point step. Each player's recent results are
+# turned into the level they'd be comfortable at; agreement between players decides how far it moves.
+DIFF_SPAN = 20               # levels a perfect weekend (score +1) says you could handle above the level used
+DIFF_ROUND_CAP = 12          # the most one round can say about a player's comfortable level
+DIFF_DEADBAND = 0.12         # scores this close to 0 mean "about right"
+DIFF_RECENT_HALF_LIFE = 4    # rounds; recent rounds matter most
+DIFF_RECENT_ROUNDS = 10      # usable rounds looked at
+DIFF_MAX_STEP = 5            # never recommend a bigger jump than this in one go
+DIFF_MIXED = 0.5             # players disagree (one struggling, one fine): move half as far
+DIFF_CONFIDENCE_K = 2.0      # evidence weight w gives confidence w / (w + K): small steps while it's feeling it out
 DIFF_MIN_ROUNDS = 3
 DIFF_MAX_ROUNDS = 5
 DIFF_THRESHOLD = 0.35

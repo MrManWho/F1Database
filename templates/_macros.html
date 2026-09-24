@@ -44,13 +44,14 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
       {% endif %}
       {% if rec.used %}<p class="small"><b>Used ({{ rec.used|length }}):</b> {% for u in rec.used %}{{ u.label }} ({{ '%+.2f'|format(u.score) }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
       {% if rec.excluded %}<p class="small"><b>Not counted:</b> {% for x in rec.excluded %}{{ x.label }}: {{ x.why }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
-      <p class="small muted">Only completed, tracked rounds at the current AI level count, Grand Prix results only (unless your league counts Sprints), and the recommendation never moves more than one step at a time. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
+      {% if rec.players %}<ul class="small diff-players">{% for p in rec.players %}<li><b>{{ p.name }}</b>: {{ p.verdict }}{% if p.verdict != 'about right' %} (about {{ '%+.0f'|format(p.delta) }} levels){% endif %} · {{ p.rounds }} round{{ 's' if p.rounds != 1 }}</li>{% endfor %}</ul>{% endif %}
+      <p class="small muted">Every completed, tracked round counts, at any AI level, with recent rounds weighing most. Each player driver is judged separately: if they agree it moves further, if one is struggling and another isn't it moves a little, and it never jumps more than {{ C.DIFF_MAX_STEP }} at once. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
     </details>
     {% endif %}
     {% if not compact %}
     <div class="diff-facts">
       {% if rec.current is not none %}<span>Last used <b>{{ rec.current }}</b></span>{% endif %}
-      {% if rec.sample %}<span>Sample <b>{{ rec.sample|length }}</b>/{{ C.DIFF_MAX_ROUNDS }} rounds</span>{% endif %}
+      {% if rec.sample %}<span>Based on <b>{{ rec.sample|length }}</b> round{{ 's' if rec.sample|length != 1 }}</span>{% endif %}
       {% if rec.average is not none %}<span>Avg score <b>{{ '%+.2f'|format(rec.average) }}</b></span>{% endif %}
       {% if rec.sweet_spot %}<span title="Recency-weighted estimate across {{ rec.sweet_spot.rounds }} rounds and {{ rec.sweet_spot.seasons }} season(s)">Career sweet spot <b>{{ '%.1f'|format(rec.sweet_spot.value) }}</b> · {{ rec.sweet_spot.confidence }} confidence</span>{% endif %}
     </div>

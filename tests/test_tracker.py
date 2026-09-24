@@ -166,26 +166,45 @@ def _player_rounds(conn, finishes, difficulty, season_id=None, start=0):
     return start + len(finishes)
 
 
-def test_difficulty_waits_for_three_rounds_then_moves_one(db):
+# v2.1: the recommendation feels out the level from every tracked round (no round minimum, no one-point step).
+
+def test_difficulty_moves_after_one_round_but_only_a_little(db):
     seat_players_at_cadillac(db)
     assert S.difficulty_recommendation(db)["recommended"] is None
-    nxt = _player_rounds(db, [(1, 2), (1, 3)], 90)
-    rec = S.difficulty_recommendation(db)
-    assert rec["recommended"] == 90 and rec["direction"] == "hold"
-    _player_rounds(db, [(2, 1)], 90, start=nxt)
-    rec = S.difficulty_recommendation(db)
-    assert rec["recommended"] == 91 and rec["direction"] == "up"
+    nxt = _player_rounds(db, [(1, 2)], 90)                       # both players dominate at AI 90 in the slowest car
+    first = S.difficulty_recommendation(db)
+    assert first["direction"] == "up" and 90 < first["recommended"] <= 90 + 4
+    assert "Still feeling it out" in first["reason"]
+    _player_rounds(db, [(1, 2), (2, 1), (1, 3)], 90, start=nxt)
+    more = S.difficulty_recommendation(db)
+    assert more["recommended"] >= first["recommended"]            # more evidence, bigger (but capped) step
+    assert more["recommended"] - 90 <= C.DIFF_MAX_STEP
+    assert "every player driver is on top of AI 90" in more["reason"]
 
 
-def test_one_bad_round_is_only_noted(db):
+def test_both_struggling_moves_further_than_one_struggling(db):
+    def fresh():
+        token = storage.new_token()
+        with storage.session(token, create=True) as conn:
+            S.seed_career(conn, token, "Other", 2026, ["David Conley", "Carson Hayes"])
+        return token
+    recs = {}
+    for label, finishes in (("one", [(22, 16), (22, 16), (21, 16)]), ("both", [(22, 21), (22, 21), (21, 22)])):
+        with storage.session(fresh()) as conn:
+            seat_players_at_cadillac(conn)
+            _player_rounds(conn, finishes, 90)
+            recs[label] = S.difficulty_recommendation(conn)
+    assert recs["one"]["recommended"] <= 90
+    assert recs["both"]["recommended"] < recs["one"]["recommended"]
+    assert "every player driver is struggling" in recs["both"]["reason"]
+
+
+def test_one_player_struggling_while_the_other_flies_is_a_small_move(db):
     seat_players_at_cadillac(db)
-    nxt = _player_rounds(db, [(8, 9), (9, 10), (7, 9)], 95)
-    before = S.difficulty_recommendation(db)
-    nxt = _player_rounds(db, [(22, 21)], 95, start=nxt)
+    _player_rounds(db, [(1, 22), (1, 22), (2, 21)], 90)
     rec = S.difficulty_recommendation(db)
-    assert rec["recommended"] == 95
-    assert rec["note"] and "tough" in rec["note"]
-    assert before["recommended"] == 95
+    assert abs(rec["recommended"] - 90) <= 2
+    assert {p["verdict"] for p in rec["players"]} == {"struggling", "comfortable"}
 
 
 def test_double_dnf_rounds_do_not_force_reduction(db):
@@ -197,22 +216,22 @@ def test_double_dnf_rounds_do_not_force_reduction(db):
     assert rec["recommended"] == 100 and rec["direction"] == "hold" and not rec["sample"]
 
 
-def test_mixed_results_hold(db):
-    seat_players_at_cadillac(db)
-    _player_rounds(db, [(1, 2), (20, 21), (1, 2), (21, 20)], 90)
-    rec = S.difficulty_recommendation(db)
-    assert rec["recommended"] == 90
-
-
-def test_difficulty_history_carries_across_seasons(db):
+def test_difficulty_uses_rounds_at_other_levels_and_across_seasons(db):
     sid, *_ = seat_players_at_cadillac(db)
-    _player_rounds(db, [(1, 2), (2, 1)], 88)
+    _player_rounds(db, [(1, 2), (2, 1)], 86)
     new_id = S.create_next_season(db, sid, 2027)
     assert all(e["ai_difficulty"] is None for e in S.events(db, new_id))
     _player_rounds(db, [(1, 3)], 88, season_id=new_id)
     rec = S.difficulty_recommendation(db)
-    assert len(rec["sample"]) == 3 and rec["recommended"] == 89
-    assert rec["sweet_spot"]["seasons"] == 2 and rec["sweet_spot"]["value"] > 88
+    assert len(rec["sample"]) == 3 and rec["current"] == 88 and rec["recommended"] > 88
+    assert rec["sweet_spot"]["seasons"] == 2
+
+
+def test_recommendation_never_jumps_more_than_the_cap(db):
+    seat_players_at_cadillac(db)
+    _player_rounds(db, [(1, 2)] * 10, 40)
+    rec = S.difficulty_recommendation(db)
+    assert rec["recommended"] - 40 == C.DIFF_MAX_STEP
 
 
 # --------------------------------------------------------------------------- seasons & reputation

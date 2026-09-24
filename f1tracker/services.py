@@ -916,28 +916,10 @@ def difficulty_recommendation(conn, before=None):
         return rec
     current = history[-1]["ai_difficulty"]
     rec["current"] = current
-    sample, unusable = [], 0
-    for h in reversed(history):
-        if h["ai_difficulty"] != current:
-            break
-        if h["score"] is not None:
-            sample.append(h)
-        else:
-            unusable += 1  # tracked, but no player finished (DNFs don't count)
-        if len(sample) >= C.DIFF_MAX_ROUNDS:
-            break
-    rec["sample"] = list(reversed(sample))
-    rec["unusable"] = unusable
-    # What the explanation shows (the formula above is unchanged): the rounds behind the number, the ones left out
-    # and why, and the recent history for a small chart.
-    rec["used"] = [{"label": f"{h['year']} R{h['round_number']} {h['name']}", "difficulty": h["ai_difficulty"],
-                    "score": h["score"]} for h in rec["sample"]]
+    # Tracked rounds where no player driver finished say nothing about the level (DNFs don't count).
+    rec["unusable"] = sum(1 for h in history[-C.DIFF_RECENT_ROUNDS:] if h["score"] is None)
     excluded = []
-    for h in reversed(history):
-        if h["ai_difficulty"] != current:
-            excluded.append({"label": f"{h['year']} R{h['round_number']} {h['name']}",
-                             "why": f"a different AI level ({h['ai_difficulty']})"})
-            break
+    for h in reversed(history[-C.DIFF_RECENT_ROUNDS:]):
         if h["score"] is None:
             excluded.append({"label": f"{h['year']} R{h['round_number']} {h['name']}",
                              "why": "no player driver finished (DNFs don't count)"})
@@ -952,40 +934,100 @@ def difficulty_recommendation(conn, before=None):
 
     last = next((h for h in reversed(history) if h["score"] is not None), None)
     if last and last["score"] <= -C.DIFF_THRESHOLD:
-        rec["note"] = f"Noted: the {last['year']} {last['name']} was a tough one. One bad round won't move the setting."
+        rec["note"] = (f"The {last['year']} {last['name']} was a tough one. It counts, weighed against the rounds "
+                       "around it, so one bad day only nudges the level.")
     elif last and last["score"] >= C.DIFF_THRESHOLD:
-        rec["note"] = f"Noted: the {last['year']} {last['name']} was a strong one. Waiting to see if it holds."
+        rec["note"] = (f"The {last['year']} {last['name']} was a strong one. It counts, weighed against the rounds "
+                       "around it.")
 
-    rec["recommended"] = current
-    rec["direction"] = "hold"
-    if len(sample) < C.DIFF_MIN_ROUNDS:
-        rec["reason"] = (f"{len(sample)} of {C.DIFF_MIN_ROUNDS} usable rounds at AI {current}. "
-                         f"Waiting for a consistent pattern ({C.DIFF_MIN_ROUNDS - len(sample)} more needed)."
-                         + (f" {unusable} tracked round{'s' if unusable != 1 else ''} at AI {current} didn't count "
-                            "because no player driver finished." if unusable else ""))
-        return rec
-    avg = sum(h["score"] for h in sample) / len(sample)
-    rec["average"] = round(avg, 3)
-    if -C.DIFF_THRESHOLD < avg < C.DIFF_THRESHOLD:
-        rec["reason"] = f"Average score {avg:+.2f} over {len(sample)} rounds at {current} is inside the hold band."
-        return rec
-    step = 1 if avg > 0 else -1
-    agreeing = sum(1 for h in sample if (h["score"] > 0) == (step > 0) and h["score"] != 0)
-    if agreeing < math.ceil(len(sample) * 2 / 3):
-        rec["reason"] = (f"Average {avg:+.2f} leans {'up' if step > 0 else 'down'}, but results are mixed "
-                         f"({agreeing} of {len(sample)} rounds agree). Holding.")
-        return rec
-    spot = rec["sweet_spot"]
-    if spot and ((step > 0 and spot["value"] < current - 0.5) or (step < 0 and spot["value"] > current + 0.5)):
-        rec["reason"] = (f"Recent average {avg:+.2f} points {'up' if step > 0 else 'down'}, but the career "
-                         f"sweet spot ({spot['value']:.1f}) disagrees. Holding.")
-        return rec
-    rec["recommended"] = int(clamp(current + step, C.MIN_DIFFICULTY, C.MAX_DIFFICULTY))
-    rec["direction"] = "up" if rec["recommended"] > current else "down" if rec["recommended"] < current else "hold"
-    word = "Increase" if step > 0 else "Decrease"
-    rec["reason"] = (f"{word} by 1: average {avg:+.2f} across {len(sample)} consistent rounds at {current}"
-                     + (f", backed by the career sweet spot ({spot['value']:.1f})." if spot else "."))
+    _adaptive(conn, rec, history, current)
     return rec
+
+
+def _soft(score):
+    """Scores near zero mean the level is about right; only the part beyond the dead band says to move."""
+    return math.copysign(max(0.0, abs(score) - C.DIFF_DEADBAND), score)
+
+
+def _adaptive(conn, rec, history, current):
+    """v2.1: feel out the right level from every tracked round (at any AI level), player by player.
+
+    Each usable round says, for each player driver who finished, "this player could handle about
+    difficulty + score x SPAN" (capped per round). Recent rounds weigh more. If the players agree the
+    recommendation moves by their average; if one is struggling and another is fine it moves half as far
+    (so it goes down a little); with little evidence it only moves a little. Never more than MAX_STEP at once.
+    """
+    usable = [h for h in history if h["score"] is not None][-C.DIFF_RECENT_ROUNDS:]
+    rec["sample"] = usable
+    rec["used"] = [{"label": f"{h['year']} R{h['round_number']} {h['name']}", "difficulty": h["ai_difficulty"],
+                    "score": h["score"]} for h in usable]
+    rec["recommended"], rec["direction"], rec["players"] = current, "hold", []
+    if not usable:
+        rec["reason"] = (f"No usable rounds yet: a tracked round needs at least one player driver to finish. "
+                         f"Holding at {current}.")
+        return
+    dmap = driver_map(conn)
+    per = {}
+    for age, h in enumerate(reversed(usable)):
+        w = 0.5 ** (age / C.DIFF_RECENT_HALF_LIFE)
+        for d in h["details"]:
+            shift = clamp(_soft(d["score"]) * C.DIFF_SPAN, -C.DIFF_ROUND_CAP, C.DIFF_ROUND_CAP)
+            p = per.setdefault(d["driver_id"], {"w": 0.0, "sum": 0.0, "rounds": 0})
+            p["w"] += w
+            p["sum"] += w * (h["ai_difficulty"] + shift)
+            p["rounds"] += 1
+    players = []
+    for did, p in per.items():
+        level = p["sum"] / p["w"]
+        delta = level - current
+        verdict = "struggling" if delta <= -1.5 else "comfortable" if delta >= 1.5 else "about right"
+        players.append({"driver_id": did, "name": dmap[did]["name"] if did in dmap else "A player", "rounds": p["rounds"],
+                        "level": round(level, 1), "delta": round(delta, 1), "verdict": verdict, "weight": p["w"]})
+    players.sort(key=lambda x: x["delta"])
+    rec["players"] = players
+    rec["average"] = round(sum(h["score"] for h in usable[-5:]) / len(usable[-5:]), 3)
+    ups = [x for x in players if x["verdict"] == "comfortable"]
+    downs = [x for x in players if x["verdict"] == "struggling"]
+    mean = sum(x["delta"] for x in players) / len(players)
+    weight = sum(x["weight"] for x in players) / len(players)
+    confidence = weight / (weight + C.DIFF_CONFIDENCE_K)
+    rec["confidence"] = round(confidence, 2)
+    mixed = bool(ups and downs)
+    raw = mean * (C.DIFF_MIXED if mixed else 1.0) * confidence
+    step = int(round(clamp(raw, -C.DIFF_MAX_STEP, C.DIFF_MAX_STEP)))
+    if not ups and not downs:
+        step = 0
+    rec["recommended"] = int(clamp(current + step, C.MIN_DIFFICULTY, C.MAX_DIFFICULTY))
+    step = rec["recommended"] - current
+    rec["direction"] = "up" if step > 0 else "down" if step < 0 else "hold"
+
+    def who(xs):
+        return " and ".join(x["name"] for x in xs)
+    n = len(usable)
+    evidence = f"{n} recent round{'s' if n != 1 else ''}"
+    if step == 0:
+        if mixed:
+            rec["reason"] = (f"{who(downs)} {'is' if len(downs) == 1 else 'are'} finding AI {current} hard while "
+                             f"{who(ups)} {'is' if len(ups) == 1 else 'are'} comfortable. Too close to call: hold at {current}.")
+        elif ups or downs:
+            rec["reason"] = f"Leaning {'up' if ups else 'down'}, but not enough evidence yet ({evidence}). Hold at {current}."
+        else:
+            rec["reason"] = f"Results over {evidence} say AI {current} is about right. Hold."
+        return
+    size = abs(step)
+    word = ("Raise" if step > 0 else "Lower") + f" by {size}"
+    if mixed:
+        rec["reason"] = (f"{word}: {who(downs)} {'is' if len(downs) == 1 else 'are'} struggling but {who(ups)} "
+                         f"{'is' if len(ups) == 1 else 'are'} doing fine, so only a small change.")
+    elif len(players) > 1 and (len(ups) == len(players) or len(downs) == len(players)):
+        rec["reason"] = (f"{word}: every player driver is {'on top of' if step > 0 else 'struggling at'} AI {current} "
+                         f"({evidence}).")
+    else:
+        mover = ups or downs
+        rec["reason"] = (f"{word}: {who(mover)} {'is' if len(mover) == 1 else 'are'} "
+                         f"{'comfortable' if step > 0 else 'struggling'} at AI {current} ({evidence}).")
+    if confidence < 0.5:
+        rec["reason"] += " Still feeling it out, so the step is small."
 
 
 # --------------------------------------------------------------------------- seasons & calendar

@@ -250,8 +250,14 @@
 
 <section class="card help" id="difficulty">
   <h2>AI difficulty</h2>
-  <p>Enter the AI level you raced on for each weekend. The recommender only suggests a change after 3–5 rounds at the same level point the same way, learns across seasons,
-    ignores DNFs, and never moves more than one step at a time.</p>
+  <p>Enter the AI level (0–110) you raced on for each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level,
+    with the latest counting most. Each player driver's finish, qualifying, points, teammate and car-adjusted result says roughly what level they'd be comfortable at.</p>
+  <ul>
+    <li><b>Everyone doing too well</b> or <b>everyone struggling</b>: it moves by a few levels.</li>
+    <li><b>Mixed</b> (one player struggling, another fine): it moves only a little, leaning toward the player who's struggling.</li>
+    <li><b>Early on</b>, with little evidence, the steps are small while it feels out the right level. It never jumps more than {{ C.DIFF_MAX_STEP }} at once.</li>
+  </ul>
+  <p>DNFs and rounds marked <em>Don't track</em> don't count. Sprint points count unless the league turns that off. It's only a suggestion: the Race Master picks the level.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
