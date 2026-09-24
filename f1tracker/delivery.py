@@ -72,6 +72,9 @@ def plan(items, exclude=None):
             for it in league_items:
                 cat = it.get("category") or "career"
                 people = [u for u in notices.audience(conn, cat, it.get("driver_id"), it.get("username")) if u != exclude]
+                if it.get("usernames") is not None:
+                    group = set(it["usernames"])
+                    people = [u for u in people if u in group]
                 key = it.get("key") or notices.dedupe_key(cat, it.get("id") or it["text"], it.get("driver_id"),
                                                           it.get("username"))
                 label = notices.CATEGORIES.get(cat, (cat,))[0]

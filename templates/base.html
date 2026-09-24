@@ -54,6 +54,8 @@
         {{ item(url_for('records', token=t), 'Records', 'records', ep == 'records') }}
         {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
         {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
+        {{ item(url_for('stats_page', token=t), 'Statistics', 'progress', ep == 'stats_page') }}
+        {{ item(url_for('announcements_page', token=t), 'Announcements', 'news', ep == 'announcements_page') }}
         {% if ctx.team_goals_on %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
         {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
       </div>

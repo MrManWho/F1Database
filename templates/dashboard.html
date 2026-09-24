@@ -11,6 +11,20 @@
   </div>
 </div>
 
+{% if notices_ %}
+<section class="card announce-card" id="announcements" aria-labelledby="announce-title">
+  <div class="card-head"><h2 id="announce-title">Announcements</h2>
+    {% if ctx.is_master %}<a class="btn btn-sm btn-ghost" href="{{ url_for('announcements_page', token=ctx.token) }}">Manage</a>{% endif %}</div>
+  {% for a in notices_ %}
+  <article class="announce{{ ' pinned' if a.pinned }}">
+    <h3>{% if a.pinned %}<span class="pill">Pinned</span> {% endif %}{{ a.title }}</h3>
+    {% if a.body %}<p class="pre-line">{{ a.body }}</p>{% endif %}
+    <small class="muted">{{ a.published_at|ago }}{% if a.expires_at %} · until {{ a.expires_at|stamp }}{% endif %}</small>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if pending %}
 <section class="card pending-card" aria-labelledby="pending-title">
   <h2 id="pending-title">Waiting for you</h2>

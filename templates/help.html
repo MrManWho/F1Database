@@ -15,6 +15,8 @@
     <optgroup label="Career and contracts"><option value="market">Transfer market</option><option value="pledges">Growth pledges</option><option value="relationship">Team relationship</option><option value="goals">Season goals</option><option value="targets">Weekend targets</option><option value="battle">Teammate battle</option><option value="orders">Team orders</option><option value="gates">Round gates</option></optgroup>
     <optgroup label="Race weekends"><option value="results">Entering results</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="difficulty">AI difficulty</option><option value="press">Press pen</option><option value="incidents">Incidents</option></optgroup>
     <optgroup label="Extra features"><option value="extras">League features</option><option value="notifications">Notifications</option><option value="comments">Comments and reactions</option><option value="predictions">Predictions</option><option value="public">Public results</option><option value="discord">Discord</option></optgroup>
+    <optgroup label="Results and statistics"><option value="statuses">Result statuses</option><option value="scoring">Scoring and Sprint points</option><option value="statistics">Statistics</option><option value="rivalry">Rivalries</option></optgroup>
+    <optgroup label="Running a league"><option value="modes">View modes</option><option value="contracts">Contracts and seats</option><option value="team-goals">Team goals</option><option value="announcements">Announcements</option><option value="visibility">Public visibility</option><option value="backups">Backups and recovery</option><option value="security">Account security</option><option value="your-data">Your data</option></optgroup>
   </select></label>
   <nav class="help-toc-groups">
     <div class="help-group"><h3>Roles and league management</h3><a href="#roles" data-topic="roles">Who can do what</a><a href="#scorekeeper" data-topic="scorekeeper">Scorekeeper</a><a href="#race-master" data-topic="race-master">Race Master</a><a href="#drivers" data-topic="drivers">Assigned drivers</a><a href="#joining" data-topic="joining">Joining a league</a></div>
@@ -22,6 +24,8 @@
     <div class="help-group"><h3>Career and contracts</h3><a href="#market" data-topic="market">Transfer market</a><a href="#pledges" data-topic="pledges">Growth pledges</a><a href="#relationship" data-topic="relationship">Team relationship</a><a href="#goals" data-topic="goals">Season goals</a><a href="#targets" data-topic="targets">Weekend targets</a><a href="#battle" data-topic="battle">Teammate battle</a><a href="#orders" data-topic="orders">Team orders</a><a href="#gates" data-topic="gates">Round gates</a></div>
     <div class="help-group"><h3>Race weekends</h3><a href="#results" data-topic="results">Entering results</a><a href="#sprints" data-topic="sprints">Sprint weekends</a><a href="#race-times" data-topic="race-times">Race times</a><a href="#difficulty" data-topic="difficulty">AI difficulty</a><a href="#press" data-topic="press">Press pen</a><a href="#incidents" data-topic="incidents">Incidents</a></div>
     <div class="help-group"><h3>Extra features</h3><a href="#extras" data-topic="extras">League features</a><a href="#notifications" data-topic="notifications">Notifications</a><a href="#comments" data-topic="comments">Comments and reactions</a><a href="#predictions" data-topic="predictions">Predictions</a><a href="#public" data-topic="public">Public results</a><a href="#discord" data-topic="discord">Discord</a></div>
+    <div class="help-group"><h3>Results and statistics</h3><a href="#statuses" data-topic="statuses">Result statuses</a><a href="#scoring" data-topic="scoring">Scoring and Sprint points</a><a href="#statistics" data-topic="statistics">Statistics</a><a href="#rivalry" data-topic="rivalry">Rivalries</a></div>
+    <div class="help-group"><h3>Running a league</h3><a href="#modes" data-topic="modes">View modes</a><a href="#contracts" data-topic="contracts">Contracts and seats</a><a href="#team-goals" data-topic="team-goals">Team goals</a><a href="#announcements" data-topic="announcements">Announcements</a><a href="#visibility" data-topic="visibility">Public visibility</a><a href="#backups" data-topic="backups">Backups and recovery</a><a href="#security" data-topic="security">Account security</a><a href="#your-data" data-topic="your-data">Your data</a></div>
   </nav>
 </aside>
 <div class="help-content" id="help-content">
@@ -276,6 +280,7 @@
 <section class="card help" id="notifications">
   <h2>Notifications</h2>
   <p>The bell shows results, offers, rulings, comments and team messages. Opening it doesn't mark anything read: use <b>Mark all as read</b>, and <b>Clear read</b> to hide old ones (they aren't deleted). You can turn on a sound, and phone or desktop alerts from the account menu.</p>
+  <p><b>Every league has its own settings.</b> Open <em>Notifications</em> in a league to choose email and phone alerts per category, pick a quick preset or mute that league. Nothing you choose in one league changes another, and every email names the league it came from with a link to change or unsubscribe. <em>Pause every email</em> in your account stops all league emails at once. Race Masters can see what was sent (not to whom) in <em>Manage → Notifications</em>.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
@@ -293,7 +298,7 @@
 
 <section class="card help" id="public">
   <h2>Public results</h2>
-  <p>The Race Master can share a read-only link with the standings, calendar and results. Anyone with the link can view it; nothing else in the league is visible, and it can be turned off at any time.</p>
+  <p>The Race Master can share a read-only link with the standings, calendar, results, driver and team pages, records and news. Anyone with the link can view it; see <a href="#visibility">Public visibility</a> for what is and isn't shown.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
@@ -302,6 +307,104 @@
   <p>Paste a Discord channel webhook in League Settings to post race results and paddock headlines to your server automatically. Use the test button to check it works.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
+<h2 class="help-group-title" id="group-results-and-statistics">Results and statistics</h2>
+
+<section class="card help" id="statuses">
+  <h2>Result statuses</h2>
+  <p><b>Finished</b>: classified at the finish; scores points for the position. <b>DNF</b>: retired; no points, still counts as a start.
+    <b>DNS</b>: didn't start; no points and not a start. <b>DSQ</b>: disqualified; no points. <b>Not Run</b>: no result entered yet.
+    Grand Prix and Sprint statuses are separate, so a Sprint DNF never affects the Grand Prix.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="scoring">
+  <h2>Scoring and Sprint points</h2>
+  <p>Grand Prix: {% for pos, pts in C.GP_POINTS.items() %}P{{ pos }} {{ pts }}{{ ', ' if not loop.last }}{% endfor %}.
+    Sprint: {% for pos, pts in C.SPRINT_POINTS.items() %}P{{ pos }} {{ pts }}{{ ', ' if not loop.last }}{% endfor %}.
+    Both count in the Drivers' and Constructors' championships. Only submitted rounds count on public pages and in Statistics; the league's own standings also show rounds in progress.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="statistics">
+  <h2>Statistics</h2>
+  <p><em>Statistics</em> shows the season from submitted rounds only: points progression, a finish distribution per driver, qualifying against race position,
+    Sprint results, teammate head-to-heads, reliability by team and player drivers season over season. Switch to <b>Player drivers only</b> to hide the AI field.
+    Statistics only read results; they never change them.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="rivalry">
+  <h2>Rivalries</h2>
+  <p>Compare any two drivers: race head-to-head over time, the season's points side by side and incidents between them. Pick the drivers at the top of the Rivalries page.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<h2 class="help-group-title" id="group-running-a-league">Running a league</h2>
+
+<section class="card help" id="modes">
+  <h2>View modes</h2>
+  <p>Race Masters and Scorekeepers can switch the display to <b>Race Master</b>, <b>Scorekeeper</b>, <b>Driver</b> or <b>Spectator preview</b> from the top bar, to see what others see.
+    A mode only changes what's shown: the server still checks your real role for every action, and your real permissions come back when you switch back. The mode is remembered per league.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="contracts">
+  <h2>Contracts and seats</h2>
+  <p><em>Grid &amp; contracts</em> lists every contract as current, upcoming, expiring, expired, historical or <b>seated elsewhere</b> (a contract with one team while racing for another).
+    Each seat is confirmed, provisional, temporary or has no contract. When a season ends, the rollover review asks what happens to each player driver whose contract ends:
+    renew, keep provisionally or release. A backup is made before anything changes.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="team-goals">
+  <h2>Team goals (Safe, Competitive, Ambitious)</h2>
+  <p>When the league turns them on, each team with a player driver picks one Constructors' goal before the first round:
+    <b>Safe</b> (+1 Reputation if met, nothing if missed), <b>Competitive</b> (+3 / −1) or <b>Ambitious</b> (+6 / −3).
+    Targets come from car strength, last season's Constructors' position, the lineup, the number of rounds and Sprint weekends, and every option shows its reasons.
+    A goal is met by finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower position.
+    Choices lock when round 1 is submitted, and the reward or penalty is added to next season's starting Reputation when the next season starts.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="announcements">
+  <h2>Announcements</h2>
+  <p>Race Masters post announcements that appear at the top of the Control Room. Each can be pinned, aimed at some roles (drivers, Scorekeepers, Race Masters, Spectators),
+    scheduled for later and given a time to come down. The form shows how many members will see it, get a phone alert and get an email; email only goes to members who want
+    Announcements email from this league.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="visibility">
+  <h2>Public visibility</h2>
+  <p>Leagues are <b>private</b> unless the Race Master changes it in League settings. <b>Public</b> gives a share link; <b>Listed</b> also shows the league in the public directory.
+    Public pages only ever show submitted rounds, driver and team names, standings, records and news. They never show emails, usernames, private notes, garages, offers,
+    drafts or rounds in progress. Anyone can report a listed league, and site admins can remove it from the directory.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="backups">
+  <h2>Backups and recovery</h2>
+  <p>A copy of the league is saved automatically every few hours, and always before a season rollover, a restore, a schema upgrade or deleting the league.
+    <em>Backups &amp; data</em> lists them; restoring one makes a fresh backup of the current state first, so a restore can itself be undone.
+    Downloaded backups and JSON exports leave out the Discord webhook and the public-link key. Importing a <code>.f1career</code> file shows what's in it first and always creates a new league.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="security">
+  <h2>Account security</h2>
+  <p>Your account page lists the devices you're signed in on; end any of them, or all the others at once. Changing your password signs out every other device.
+    Turn on <b>two-step sign-in</b> to also enter a 6-digit code from an authenticator app when you log in. If you lose your phone, a site admin can switch it off for you.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="your-data">
+  <h2>Your data, leaving and handing over</h2>
+  <p>Download everything your account holds from <em>Account → Your data</em>. You can leave a league from its Notifications page (type its name to confirm);
+    your driver and results stay. Race Masters can hand a league to another member from <em>Members &amp; roles</em>. Deleting your account removes your login;
+    leagues keep their results. The only Race Master of a league, or the site's only admin, has to hand over first.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
 <p class="muted small" id="help-empty" hidden>No topics match your search.</p>
 </div>
 </div>

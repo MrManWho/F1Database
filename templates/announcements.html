@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>Announcements</h1>
+  <p class="page-purpose">Messages from the Race Master{{ 's' if ctx.is_master }} of {{ ctx.career_name }}. They show at the top of the Control Room.</p></div></div>
+
+{% if ctx.real.is_master %}
+<form method="post" class="card stack" id="announce-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>New announcement</h2>
+  <label>Title<input name="title" required minlength="3" maxlength="120" placeholder="e.g. Round 5 moved to Sunday"></label>
+  <label>Message<textarea name="body" rows="4" maxlength="4000"></textarea></label>
+  <fieldset class="audience"><legend>Who is it for?</legend>
+    {% for key, label in audiences.items() %}<label class="check"><input type="checkbox" name="audience" value="{{ key }}" {{ 'checked' if key == 'all' }}> {{ label }}</label>{% endfor %}
+  </fieldset>
+  <div class="grid-2">
+    <label>Post at (optional, {{ ctx.timezone }})<input type="datetime-local" name="publish_at"></label>
+    <label>Take down at (optional)<input type="datetime-local" name="expires_at"></label>
+  </div>
+  <label class="check"><input type="checkbox" name="pinned" value="1"> Pin to the top</label>
+  <label class="check"><input type="checkbox" name="email" value="1" {{ 'disabled' if not email_ready }}> Also email the members who want Announcements email from this league{% if not email_ready %} (email isn't set up on this site){% endif %}</label>
+  <p class="muted small" id="announce-preview" aria-live="polite">{{ preview.app }} member{{ 's' if preview.app != 1 }} will see it in the app, {{ preview.push }} get a phone alert{% if email_ready %} and {{ preview.email }} can get an email{% endif %}.</p>
+  <div><button class="btn btn-primary">Post announcement</button></div>
+</form>
+{% endif %}
+
+<section class="card">
+  <h2>{{ 'All announcements' if ctx.real.is_master else 'Current announcements' }}</h2>
+  {% if items %}
+  <ul class="plain-list announce-list">
+    {% for a in items %}
+    <li class="announce{{ ' pinned' if a.pinned }}">
+      <h3>{% if a.pinned %}<span class="pill">Pinned</span> {% endif %}{{ a.title }}{% if a.state %} <span class="pill pill-muted">{{ a.state }}</span>{% endif %}</h3>
+      {% if a.body %}<p class="pre-line">{{ a.body }}</p>{% endif %}
+      <small class="muted">{% if a.state == 'Scheduled' %}Goes out {{ a.publish_at|stamp }}{% else %}{{ a.published_at|ago }}{% endif %}{% if a.audience_label %} · for {{ a.audience_label }}{% endif %}{% if a.expires_at %} · until {{ a.expires_at|stamp }}{% endif %}{% if a.email %} · emailed{% endif %}</small>
+      {% if ctx.real.is_master and a.state != 'Expired' %}
+      <form method="post" class="button-row tight">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if a.state == 'Live' %}<button class="btn btn-sm btn-ghost" formaction="{{ url_for('announcement_action', token=ctx.token, ann_id=a.id, action='unpin' if a.pinned else 'pin') }}">{{ 'Unpin' if a.pinned else 'Pin' }}</button>{% endif %}
+        <button class="btn btn-sm btn-ghost" formaction="{{ url_for('announcement_action', token=ctx.token, ann_id=a.id, action='end') }}">{{ 'Cancel' if a.state == 'Scheduled' else 'Take down' }}</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No announcements yet.{% if ctx.real.is_master %} Post one above: pin it, aim it at some roles or schedule it for later.{% endif %}</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{% if ctx.real.is_master %}
+<script>
+(function () {
+  var form = document.getElementById('announce-form'), out = document.getElementById('announce-preview');
+  if (!form || !out) return;
+  form.addEventListener('change', function (e) {
+    if (e.target.name !== 'audience') return;
+    var params = new URLSearchParams();
+    form.querySelectorAll('input[name=audience]:checked').forEach(function (b) { params.append('audience', b.value); });
+    fetch('{{ url_for("announcements_preview", token=ctx.token) }}?' + params.toString(), {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        out.textContent = p.app + ' member' + (p.app === 1 ? '' : 's') + ' will see it in the app, ' + p.push +
+          ' get a phone alert{% if email_ready %} and ' + p.email + ' can get an email{% endif %}.';
+      }).catch(function () {});
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

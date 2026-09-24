@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot, driver_link with context %}
+{% block title %}Statistics{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">League · {{ ctx.season.year }}</div><h1>Statistics</h1>
+    <p class="page-purpose">The {{ ctx.season.year }} season in numbers, from submitted rounds only. Hover or tap a bar for the exact figures.</p></div>
+  <div class="button-row" role="group" aria-label="Which drivers">
+    <a class="btn btn-sm {{ 'btn-ghost' if players_only else '' }}" href="{{ url_for('stats_page', token=ctx.token) }}" {{ 'aria-current=true' if not players_only }}>All drivers</a>
+    <a class="btn btn-sm {{ '' if players_only else 'btn-ghost' }}" href="{{ url_for('stats_page', token=ctx.token, who='players') }}" {{ 'aria-current=true' if players_only }}>Player drivers only</a>
+  </div>
+</div>
+
+{% if not rows %}
+<section class="card empty-state"><h2>No statistics yet</h2>
+  <p class="muted">Statistics appear once the first round of {{ ctx.season.year }} has been submitted.{% if ctx.can_run %} <a href="{{ url_for('weekend_next', token=ctx.token) }}">Enter results</a>.{% endif %}</p></section>
+{% else %}
+
+<nav class="chip-nav" aria-label="Sections">
+  <a href="#progression">Points progression</a><a href="#finishes">Finishes</a><a href="#quali-race">Qualifying vs race</a>
+  {% if sprint %}<a href="#sprint">Sprints</a>{% endif %}<a href="#teammates">Teammates</a><a href="#reliability">Reliability</a>
+  {% if sos %}<a href="#seasons">Season over season</a>{% endif %}
+</nav>
+
+{% if chart %}
+<section class="card" id="progression">
+  <h2>Points progression</h2>
+  <p class="muted small">Championship points after each submitted round{{ ' for player drivers' if players_only else ' for the top six and every player driver' }}.</p>
+  <div class="chart" data-chart='{{ chart|tojson }}' data-height="280"></div>
+</section>
+{% endif %}
+
+<section class="card" id="finishes">
+  <h2>Finish distribution</h2>
+  <p class="muted small">Grand Prix results only. Each bar is one driver's races this season.</p>
+  <ul class="dist-legend" aria-hidden="true"><li class="d-win">Wins</li><li class="d-podium">P2–P3</li><li class="d-points">P4–P10</li><li class="d-outside">P11+</li><li class="d-retired">DNF / DNS / DSQ</li></ul>
+  <div class="dist-list">
+  {% for s in rows %}
+    <div class="dist-row">
+      <span class="dist-name">{{ team_dot(s.team) }} {{ driver_link(ctx, s.driver) }}</span>
+      <span class="dist-bar" role="img" aria-label="{{ s.driver.name }}: {% for key, label, n, pct in s.distribution %}{{ label }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}">
+        {% for key, label, n, pct in s.distribution if n %}<span class="d-{{ key }}" style="width: {{ pct }}%" title="{{ label }}: {{ n }} ({{ pct }}%)"></span>{% endfor %}
+      </span>
+    </div>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="card table-card" id="quali-race">
+  <h2>Qualifying vs race</h2>
+  <div class="table-wrap">
+  <table class="data-table sortable compact">
+    <caption class="sr-only">Average qualifying and finishing positions</caption>
+    <thead><tr><th scope="col">Driver</th><th scope="col" class="num" title="Average qualifying position">Avg quali</th>
+      <th scope="col" class="num" title="Average finishing position when classified">Avg finish</th>
+      <th scope="col" class="num" title="Average places gained from qualifying to the finish (classified races)">Gained</th>
+      <th scope="col" class="num">Starts</th></tr></thead>
+    <tbody>{% for s in rows %}<tr>
+      <td>{{ team_dot(s.team) }} {{ driver_link(ctx, s.driver) }}</td>
+      <td class="num">{{ s.avg_quali if s.avg_quali is not none else '—' }}</td>
+      <td class="num">{{ s.avg_race if s.avg_race is not none else '—' }}</td>
+      <td class="num {{ 'up' if s.avg_gained and s.avg_gained > 0 else 'down' if s.avg_gained and s.avg_gained < 0 }}">{{ ('%+.1f'|format(s.avg_gained)) if s.avg_gained is not none else '—' }}</td>
+      <td class="num">{{ s.starts }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+
+{% if sprint %}
+<section class="card table-card" id="sprint">
+  <h2>Sprint results</h2>
+  <p class="muted small">Sprint points on their own (they also count in the championship).</p>
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Sprint points</caption>
+    <thead><tr><th scope="col">Driver</th><th scope="col" class="num">Sprints</th><th scope="col" class="num">Best</th><th scope="col" class="num">Points</th></tr></thead>
+    <tbody>{% for s in sprint %}<tr><td>{{ team_dot(s.team) }} {{ driver_link(ctx, s.driver) }}</td><td class="num">{{ s.sprints }}</td>
+      <td class="num">{{ 'P%d'|format(s.sprint_best) if s.sprint_best else '—' }}</td><td class="num"><b>{{ s.sprint_points }}</b></td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card" id="teammates">
+  <h2>Teammate head-to-heads</h2>
+  {% if pairs %}
+  <div class="h2h-grid">
+  {% for p in pairs %}
+    <div class="h2h-card">
+      <div class="small muted">{{ team_dot(p.team) }} {{ p.team.name if p.team else '' }}</div>
+      <div class="h2h-names"><span>{{ driver_link(ctx, p.a) }}</span><span>{{ driver_link(ctx, p.b) }}</span></div>
+      {% for label, pair in [('Qualifying', p.quali), ('Race', p.race), ('Points', p.points)] %}
+      {% set total = (pair[0] + pair[1]) or 1 %}
+      <div class="h2h-line" title="{{ label }}: {{ p.a.name }} {{ pair[0] }}, {{ p.b.name }} {{ pair[1] }}">
+        <b>{{ pair[0] }}</b><span class="h2h-bar"><span style="width: {{ (100 * pair[0] / total)|round|int }}%"></span></span><b>{{ pair[1] }}</b>
+        <small class="muted">{{ label }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  </div>
+  {% else %}<p class="muted">No teammate pairs have raced together yet.</p>{% endif %}
+</section>
+
+<section class="card table-card" id="reliability">
+  <h2>Reliability</h2>
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Finishes and retirements by team</caption>
+    <thead><tr><th scope="col">Team</th><th scope="col" class="num">Entries</th><th scope="col" class="num">Finished</th><th scope="col" class="num">DNFs</th><th scope="col" class="num" title="Share of entries that finished">Finish rate</th></tr></thead>
+    <tbody>{% for t in reliability %}<tr><td>{{ team_dot(t.team) }} {{ t.team.name if t.team else '' }}</td><td class="num">{{ t.entries }}</td><td class="num">{{ t.finished }}</td><td class="num">{{ t.dnf }}</td><td class="num">{{ t.rate }}%</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="muted small">Player drivers: {% for s in rows if s.driver.is_player %}{{ s.driver.name }} {{ s.finish_rate if s.finish_rate is not none else '—' }}%{{ ', ' if not loop.last }}{% else %}none this season{% endfor %}.</p>
+</section>
+
+{% if sos %}
+<section class="card table-card" id="seasons">
+  <h2>Season over season</h2>
+  <p class="muted small">Player drivers' championship position and points in each season (submitted rounds only).</p>
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Player drivers by season</caption>
+    <thead><tr><th scope="col">Driver</th>{% for y in years %}<th scope="col" class="num">{{ y }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in sos %}<tr><td>{{ driver_link(ctx, r.driver) }}</td>
+      {% for y in years %}{% set c = r.seasons.get(y) %}<td class="num">{% if c %}P{{ c.position }} <small class="muted">{{ c.points }} pts</small>{% else %}<span class="muted">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

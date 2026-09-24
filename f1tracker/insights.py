@@ -16,9 +16,10 @@ def _points(r):
         S.sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
 
 
-def points_progression(conn, season_id, driver_ids):
-    """Cumulative championship points after every round that has results."""
-    rounds = [e for e in S.events(conn, season_id) if e["status"] != C.EVENT_NOT_RUN]
+def points_progression(conn, season_id, driver_ids, completed_only=False):
+    """Cumulative championship points after every round that has results (or only submitted rounds)."""
+    rounds = [e for e in S.events(conn, season_id)
+              if (e["status"] == C.EVENT_COMPLETE if completed_only else e["status"] != C.EVENT_NOT_RUN)]
     totals = {d: 0 for d in driver_ids}
     series = {d: [] for d in driver_ids}
     by_event = {}

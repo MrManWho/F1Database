@@ -1551,3 +1551,30 @@ tr.contract-historical { opacity: .75; }
 .goal-option.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .state { font-size: .75rem; font-weight: 700; padding: .1rem .45rem; border-radius: 999px; border: 1px solid currentColor; }
 .state-met { color: var(--green); } .state-behind, .state-missed { color: var(--danger-text, var(--red)); } .state-on-track { color: var(--blue); }
+.announce { padding: .6rem .8rem; border-radius: 10px; background: var(--panel-2); margin-bottom: .5rem; }
+.announce.pinned { border-left: 3px solid var(--accent); }
+.announce h3 { margin: 0 0 .25rem; font-size: 1rem; }
+.announce p { margin: .2rem 0 .3rem; }
+.pre-line { white-space: pre-line; }
+.audience { border: 0; padding: 0; margin: 0; display: grid; gap: .2rem; }
+.audience legend { font-weight: 600; margin-bottom: .3rem; }
+
+/* v2.0 statistics */
+.chip-nav { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1rem; }
+.chip-nav a { padding: .35rem .7rem; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; font-size: .85rem; min-height: 32px; display: inline-flex; align-items: center; }
+.dist-legend { list-style: none; display: flex; flex-wrap: wrap; gap: .8rem; padding: 0; margin: .3rem 0 .8rem; font-size: .8rem; }
+.dist-legend li::before { content: ""; display: inline-block; width: .8rem; height: .8rem; border-radius: 3px; margin-right: .3rem; vertical-align: -1px; background: var(--c); }
+.dist-list { display: grid; gap: .35rem; }
+.dist-row { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr; gap: .6rem; align-items: center; }
+.dist-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dist-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--panel-2); }
+.dist-bar > span { background: var(--c); min-width: 3px; }
+.d-win { --c: #f5c542; } .d-podium { --c: #c0c7d2; } .d-points { --c: #2bd576; } .d-outside { --c: #4a5a73; } .d-retired { --c: #e5484d; }
+.h2h-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .7rem; }
+.h2h-card { background: var(--panel-2); border-radius: 10px; padding: .6rem .8rem; }
+.h2h-names { display: flex; justify-content: space-between; gap: .5rem; font-weight: 600; margin: .2rem 0 .4rem; }
+.h2h-line { display: grid; grid-template-columns: 2rem 1fr 2rem 4.5rem; gap: .4rem; align-items: center; font-size: .85rem; }
+.h2h-line b:nth-of-type(2) { text-align: right; }
+.h2h-bar { height: 8px; border-radius: 4px; background: #e5484d55; overflow: hidden; }
+.h2h-bar > span { display: block; height: 100%; background: var(--accent); }
+@media (max-width: 560px) { .dist-row { grid-template-columns: 1fr; gap: .15rem; } }

@@ -21,6 +21,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
+from . import announcements, stats
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -349,6 +350,8 @@ def career_page(master_only=False, ops_only=False):
                         conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
                     g.ctx["team_goals_on"] = teamgoals.enabled(conn)
+                    if not request.path.startswith("/api/"):
+                        announcements.publish_due(conn)
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
@@ -433,7 +436,9 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
                ("pledges", "Growth pledges"), ("relationship", "Team relationship"), ("rivalry", "Rivalries"),
                ("incidents", "Incidents"), ("difficulty", "AI difficulty"), ("notifications", "Notifications"),
                ("visibility", "Public visibility"), ("backups", "Backups and recovery"), ("targets", "Weekend targets"),
-               ("gates", "Round gates"), ("contracts", "Contracts and seats"), ("modes", "View modes")]
+               ("gates", "Round gates"), ("contracts", "Contracts and seats"), ("modes", "View modes"),
+               ("statistics", "Statistics"), ("team-goals", "Team goals"), ("announcements", "Announcements"),
+               ("security", "Account security and two-step sign-in"), ("your-data", "Your data and leaving a league")]
 
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
@@ -1381,6 +1386,9 @@ def register_routes(app):
                     if ctx["my_driver"] and sid == ctx["current_season_id"] else [],
                     gate=gate, my_target=my_target,
                     pending=insights.pending_actions(conn, ctx) if sid == ctx["current_season_id"] else [],
+                    notices_=announcements.visible(conn, g.user["username"], ctx.get("real", ctx).get("role"),
+                                                   ctx["my_driver"]["id"] if ctx["my_driver"] else None,
+                                                   manager=ctx.get("real", ctx)["is_master"]),
                     can_finish=bool(evs) and all(e["status"] == C.EVENT_COMPLETE for e in evs))
 
     @app.route("/career/<token>/weekend/<int:event_id>")
@@ -1560,6 +1568,28 @@ def register_routes(app):
                            else r["result_status"])
         return page("standings.html", ctx, drivers=drivers, teams=teams, recent=recent,
                     leader=max([t["points"] for t in teams] + [1]))
+
+    @app.route("/career/<token>/stats")
+    @career_page()
+    def stats_page(conn, ctx):
+        """Season statistics from submitted rounds only: progression, finishes, qualifying vs race, Sprints,
+        teammates, reliability and season-over-season."""
+        sid = ctx["season"]["id"]
+        players_only = request.args.get("who") == "players"
+        rows = stats.season(conn, sid, players_only)
+        standings = S.driver_standings(conn, sid, completed_only=True)
+        picked = [r["driver"] for r in standings if r["driver"]["is_player"] or (not players_only and r["position"] <= 6)]
+        labels, values = insights.points_progression(conn, sid, [d["id"] for d in picked], completed_only=True) if picked else ([], {})
+        chart = {"labels": labels, "yLabel": "Points", "markers": len(labels) < 12,
+                 "series": [{"name": d["name"], "values": values.get(d["id"], []), "player": bool(d["is_player"]),
+                             "color": d.get("player_color")} for d in picked]} if labels else None
+        years, sos = stats.season_over_season(conn, players_only=True)
+        pairs = stats.teammates(conn, sid)
+        if players_only:
+            pairs = [p for p in pairs if p["a"]["is_player"] or p["b"]["is_player"]]
+        return page("stats.html", ctx, rows=rows, sprint=stats.sprint_table(rows), chart=chart,
+                    reliability=stats.teams_reliability(conn, sid), pairs=pairs, years=years, sos=sos,
+                    players_only=players_only)
 
     @app.route("/api/career/<token>/search")
     @career_page()
@@ -2175,6 +2205,54 @@ def register_routes(app):
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
                     own=bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]))
+
+    @app.route("/career/<token>/announcements", methods=["GET", "POST"])
+    @career_page()
+    def announcements_page(conn, ctx):
+        real = ctx.get("real", ctx)
+        if request.method == "POST":
+            if not real["is_master"]:
+                abort(403)
+            tz = ctx["timezone"]
+            try:
+                publish_at = timefmt.from_input(request.form.get("publish_at"), tz)
+                expires_at = timefmt.from_input(request.form.get("expires_at"), tz)
+            except ValueError:
+                raise ValidationError("Check the dates")
+            audience = announcements.clean_audience(request.form.getlist("audience"))
+            ann_id = announcements.create(conn, g.user["username"], request.form.get("title"), request.form.get("body"),
+                                          audience, bool(request.form.get("pinned")), bool(request.form.get("email")),
+                                          publish_at, expires_at)
+            a = announcements.get(conn, ann_id)
+            g.audit_summary = (f"{'scheduled' if not a['published_at'] else 'posted'} an announcement: {a['title']}"
+                               + ("" if audience == "all" else f" (for {audience.replace(',', ', ').replace('_', ' ')})"))
+            flash("Announcement scheduled." if not a["published_at"] else "Announcement posted.", "success")
+            return redirect(url_for("announcements_page", token=ctx["token"]))
+        mine = ctx.get("my_driver")
+        return page("announcements.html", ctx, audiences=announcements.AUDIENCES,
+                    items=announcements.all_for_admin(conn) if real["is_master"] else
+                    announcements.visible(conn, g.user["username"], real.get("role"), mine["id"] if mine else None),
+                    preview=announcements.preview(conn, "all", exclude=g.user["username"]) if real["is_master"] else None,
+                    email_ready=mailer.configured())
+
+    @app.route("/career/<token>/announcements/preview")
+    @career_page(master_only=True)
+    def announcements_preview(conn, ctx):
+        audience = announcements.clean_audience(request.args.getlist("audience"))
+        return jsonify(announcements.preview(conn, audience, exclude=g.user["username"]))
+
+    @app.route("/career/<token>/announcements/<int:ann_id>/<action>", methods=["POST"])
+    @career_page(master_only=True)
+    def announcement_action(conn, ctx, ann_id, action):
+        a = announcements.get(conn, ann_id)
+        if not a or action not in ("pin", "unpin", "end"):
+            abort(404)
+        if action == "end":
+            announcements.end(conn, ann_id)
+        else:
+            announcements.set_pinned(conn, ann_id, action == "pin")
+        g.audit_summary = {"pin": "pinned", "unpin": "unpinned", "end": "took down"}[action] + f" the announcement {a['title']}"
+        return redirect(url_for("announcements_page", token=ctx["token"]))
 
     def _my_goal_teams(conn, ctx, sid):
         """Teams this person may choose a goal for: their driver's team, or every player team for a Race Master."""

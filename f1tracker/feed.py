@@ -34,12 +34,28 @@ KIND_TO_CATEGORY = {"Race": "results", "Market": "contracts", "Team": "career", 
                     "Update": "career"}
 
 
-def notify(conn, driver_id, text, link=None, ref=None, category=None, username=None, email=True, dedupe=None):
+def notify(conn, driver_id, text, link=None, ref=None, category=None, username=None, email=True, dedupe=None,
+           usernames=None):
     """driver_id None and username None = everyone in the league (Race Masters only for masters-only categories).
     category decides which preference controls email and phone alerts; email=False when a richer email is
     sent separately (race results). dedupe: a key for things that must only ever go out once (a round's
     results, a season starting), so a retry or a second background job can't send them again."""
     category = category or KIND_TO_CATEGORY.get(notify_kind(text)[1], "career")
+    if usernames is not None:
+        # A group of members (e.g. an announcement for drivers only): one in-app row each, one delivery for all.
+        usernames = sorted(set(usernames))
+        last = None
+        for name in usernames:
+            last = conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref, category, username) "
+                                "VALUES(NULL,?,?,?,?,?,?)", (text, link, now_iso(), ref, category, name)).lastrowid
+        token = _token(conn)
+        if token and usernames:
+            if not hasattr(_outbox, "items"):
+                _outbox.items = []
+            _outbox.items.append({"token": token, "driver_id": None, "username": None, "usernames": usernames,
+                                  "text": text, "link": link, "category": category, "ref": ref, "id": f"n{last}",
+                                  "email": email, "key": dedupe})
+        return
     cur = conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref, category, username) "
                        "VALUES(?,?,?,?,?,?,?)", (driver_id, text, link, now_iso(), ref, category, username))
     token = _token(conn)
