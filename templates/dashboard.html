@@ -11,6 +11,17 @@
   </div>
 </div>
 
+{% if pending %}
+<section class="card pending-card" aria-labelledby="pending-title">
+  <h2 id="pending-title">Waiting for you</h2>
+  <ul class="pending-list">
+    {% for text, link, tone in pending %}<li class="pt-{{ tone }}"><a href="/career/{{ ctx.token }}/{{ link }}">{{ text }} →</a></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% if can_finish and ctx.is_master and ctx.season.id == ctx.current_season_id %}
+<div class="banner" role="status"><b>Every round of {{ ctx.season.year }} is complete.</b> <a href="{{ url_for('season_rollover', token=ctx.token) }}">Review contracts and start {{ ctx.season.year + 1 }} →</a></div>
+{% endif %}
 {% for w in windows %}
 <div class="banner banner-hot">
   <strong>{{ w.kind }} open</strong> · teams are making offers for {{ w.target_year }}.

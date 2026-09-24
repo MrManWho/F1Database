@@ -1,6 +1,7 @@
 """Flask application: pages, mutation routes, logins and access control."""
 
 import hmac
+from datetime import timezone
 import io
 import os
 import secrets
@@ -465,6 +466,38 @@ def _settings_changes(conn, before):
             if life[key] != was[key]:
                 changes.append(f"turned {label} {'on' if life[key] else 'off'}")
     return "; ".join(changes)
+
+
+def _ics_response(league, season, evs, base_link):
+    """RFC 5545 calendar of the races that have a time. Two-hour events; titles name the league and round."""
+    def esc(text):
+        return str(text).replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\n", "\\n")
+    from datetime import datetime as _dt, timedelta as _td
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Paddock Legacy//Calendar//EN", "CALSCALE:GREGORIAN",
+             f"X-WR-CALNAME:{esc(league)} {season['year']}"]
+    stamp = _dt.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for e in evs:
+        if not e["race_at"]:
+            continue
+        try:
+            start = _dt.fromisoformat(e["race_at"].replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        start = start.astimezone(timezone.utc) if start.tzinfo else start
+        fmt = "%Y%m%dT%H%M%SZ"
+        lines += ["BEGIN:VEVENT", f"UID:pl-{season['id']}-{e['id']}@paddock-legacy", f"DTSTAMP:{stamp}",
+                  f"DTSTART:{start.strftime(fmt)}", f"DTEND:{(start + _td(hours=2)).strftime(fmt)}",
+                  "SUMMARY:" + esc(f"{league}: R{e['round_number']} {e['name']}" + (" (Sprint weekend)" if e["is_sprint"] else "")),
+                  f"LOCATION:{esc(e['location'] or '')}", f"URL:{base_link}/{e['id']}",
+                  "STATUS:" + ("CANCELLED" if e["postponed"] else "CONFIRMED"), "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    body = "\r\n".join(lines) + "\r\n"
+    return app_response(body)
+
+
+def app_response(body):
+    from flask import Response
+    return Response(body, mimetype="text/calendar", headers={"Content-Disposition": "attachment; filename=calendar.ics"})
 
 
 def event_label(event, year=None):
@@ -1136,14 +1169,16 @@ def register_routes(app):
                     card=insights.driver_card(conn, sid, ctx["my_driver"]["id"]) if ctx["my_driver"] else None,
                     contract=market.current_contract(conn, ctx["my_driver"]["id"]) if ctx["my_driver"] else None,
                     constructors=S.constructor_standings(conn, sid)[:5],
-                    rec=S.difficulty_recommendation(conn, before),
+                    rec=_recs_off(conn) or S.difficulty_recommendation(conn, before),
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
                     news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
                     hub=_hub(conn, ctx, nxt) if nxt else None,
                     circuit=circuits.lookup(nxt["name"], nxt["location"]) if nxt else None,
                     press_pens=teamlife.press_pens(conn, ctx["current_season_id"], ctx["my_driver"]["id"])
                     if ctx["my_driver"] and sid == ctx["current_season_id"] else [],
-                    gate=gate, my_target=my_target)
+                    gate=gate, my_target=my_target,
+                    pending=insights.pending_actions(conn, ctx) if sid == ctx["current_season_id"] else [],
+                    can_finish=bool(evs) and all(e["status"] == C.EVENT_COMPLETE for e in evs))
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
@@ -1160,7 +1195,7 @@ def register_routes(app):
         return page("weekend.html", ctx, event=event, rows=S.weekend_rows(conn, event_id),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
-                    rec=_weekend_recommendation(conn, season, event),
+                    rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
                     entrants=_entrants(conn, event_id),
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
@@ -1172,6 +1207,14 @@ def register_routes(app):
         return [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"],
                  "is_player": bool(r["driver"]["is_player"]), "color": r["driver"]["player_color"]}
                 for r in S.weekend_rows(conn, event_id)]
+
+    def _recs_off(conn, event=None):
+        """A league can switch recommendations off; the difficulty used is still recorded each round."""
+        if storage.get_meta(conn, "difficulty_recs", "1") == "1":
+            return None
+        return {"disabled": True, "recommended": None, "direction": None, "for_next": False, "sample": [], "used": [],
+                "excluded": [], "recent": [], "reason": "AI difficulty recommendations are off in this league. "
+                "The difficulty used each round is still recorded.", "current": event["ai_difficulty"] if event else None}
 
     def _weekend_recommendation(conn, season, event):
         """On a completed round the recommendation includes that round (it's the advice for the next one);
@@ -1421,7 +1464,8 @@ def register_routes(app):
         sid = ctx["season"]["id"]
         seats_ = S.driver_seats(conn, sid)
         return page("grid.html", ctx, grid=S.grid(conn, sid), players=S.player_drivers(conn), seats=seats_,
-                    all_drivers=S.drivers(conn, active_only=True), states=seats.season_states(conn, sid))
+                    all_drivers=S.drivers(conn, active_only=True), states=seats.season_states(conn, sid),
+                    contract_rows=seats.contract_list(conn, sid))
 
     @app.route("/career/<token>/seats/<int:driver_id>", methods=["POST"])
     @career_page(master_only=True)
@@ -1526,12 +1570,44 @@ def register_routes(app):
         return page("records.html", ctx, rows=rows, all_time=insights.all_time_records(conn), leaders={
             "points": leader("points"), "wins": leader("wins"), "poles": leader("poles"), "titles": leader("titles")})
 
+    def _calendar_warnings(evs):
+        """Schedule conflicts: two rounds at the same time or within three hours, gaps in round numbers."""
+        from datetime import datetime as _dt
+        out = []
+        timed = sorted((e for e in evs if e["race_at"]), key=lambda e: e["race_at"])
+        for a, b in zip(timed, timed[1:]):
+            try:
+                gap = (_dt.fromisoformat(b["race_at"].replace("Z", "+00:00")) -
+                       _dt.fromisoformat(a["race_at"].replace("Z", "+00:00"))).total_seconds() / 3600
+            except ValueError:
+                continue
+            if gap < 3:
+                out.append(f"R{a['round_number']} {a['name']} and R{b['round_number']} {b['name']} are scheduled "
+                           + ("at the same time." if gap == 0 else f"only {gap:.1f} hours apart."))
+        order = [e for e in sorted(evs, key=lambda e: e["round_number"]) if e["race_at"]]
+        for a, b in zip(order, order[1:]):
+            if b["race_at"] < a["race_at"]:
+                out.append(f"R{b['round_number']} {b['name']} is scheduled before R{a['round_number']} {a['name']}.")
+        numbers = sorted(e["round_number"] for e in evs)
+        if numbers and numbers != list(range(1, len(numbers) + 1)):
+            out.append("Round numbers have gaps: " + ", ".join(f"R{n}" for n in numbers) + ".")
+        return out
+
+    @app.route("/career/<token>/calendar.ics")
+    @career_page()
+    def calendar_ics(conn, ctx):
+        """The season's scheduled races as a calendar file (Google, Apple, Outlook...)."""
+        return _ics_response(ctx["career_name"], ctx["season"], S.events(conn, ctx["season"]["id"]),
+                             url_for("weekend", token=ctx["token"], event_id=0, _external=True).rsplit("/", 1)[0])
+
     @app.route("/career/<token>/seasons")
     @career_page()
     def seasons_page(conn, ctx):
         seasons = S.list_seasons(conn)
         latest = seasons[-1] if seasons else None
-        return page("seasons.html", ctx, seasons_list=seasons, events=S.events(conn, ctx["season"]["id"]),
+        evs_ = S.events(conn, ctx["season"]["id"])
+        return page("seasons.html", ctx, seasons_list=seasons, events=evs_, warnings=_calendar_warnings(evs_),
+                    months=timefmt.month_grid(evs_, ctx["timezone"]),
                     next_year=(latest["year"] + 1) if latest else 2026, latest=latest,
                     all_complete=all(e["status"] == C.EVENT_COMPLETE for e in S.events(conn, latest["id"])))
 
@@ -1605,13 +1681,19 @@ def register_routes(app):
     @career_page(master_only=True)
     def calendar_save(conn, ctx):
         sid = ctx["season"]["id"]
+        history = request.form.get("historical_correction") == "1"
+        if S.get_season(conn, sid)["status"] == C.SEASON_COMPLETE and not history:
+            raise ValidationError(f"The {ctx['season']['year']} season is archived. Turn on historical correction mode "
+                                  "to change its calendar.")
         entries = []
         for e in S.events(conn, sid):
             entries.append({"id": e["id"], "round_number": request.form.get(f"round_{e['id']}"),
                             "name": request.form.get(f"name_{e['id']}"),
                             "location": request.form.get(f"location_{e['id']}"),
                             "is_sprint": request.form.get(f"sprint_{e['id']}")})
-        S.save_calendar(conn, sid, entries)
+        S.save_calendar(conn, sid, entries, history=history)
+        if history:
+            g.audit_summary = f"corrected the archived/completed {ctx['season']['year']} calendar (historical correction mode)"
         flash("Calendar saved.", "success")
         return redirect(url_for("seasons_page", token=ctx["token"]))
 
@@ -2616,6 +2698,12 @@ def register_routes(app):
             hub["targets"] = teamlife.targets_for_event(conn, event["id"])
         if full and hub["complete"]:
             hub["battles"] = battle.player_battles(conn, event)
+        if full and ctx["is_master"] and not hub["complete"]:
+            people = [u for u in notices.audience(conn, "schedule") if u != g.user["username"]]
+            hub["notify_preview"] = {"members": len(people),
+                                     "push": len(notices.wanted(conn, people, "schedule", "push")),
+                                     "email": len(notices.email_recipients(conn, people, "schedule"))
+                                     if mailer.configured() else 0}
         if feats["checkin"] and not hub["complete"]:
             hub["checkins"], hub["checkin_counts"] = community.checkins(conn, event["id"])
             hub["my_checkin"] = next((r["status"] for r in hub["checkins"] if r["username"] == me), None)
@@ -2760,6 +2848,7 @@ def register_routes(app):
                 storage.set_meta(conn, "career_name", name)
             if "team_life" in request.form:
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
+                storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
             if league_profile.is_public(conn):
                 community.public_key(conn)
             if request.form.get("team_life") == "1":
@@ -2810,6 +2899,7 @@ def register_routes(app):
                     visibility_opts=league_profile.VISIBILITY, permissions=roles.PERMISSIONS,
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
+                    difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "0") == "1",
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
                     and S.get_season(conn, ctx["current_season_id"])["status"] != C.SEASON_COMPLETE)
 

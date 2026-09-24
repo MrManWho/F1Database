@@ -32,6 +32,21 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
     <p>{{ rec.reason }}</p>
     {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
     {% if rec.this_round and rec.this_round != rec.reason %}<p class="diff-note">{{ rec.this_round }}</p>{% endif %}
+    {% if rec.used or rec.excluded or rec.recent|length > 1 %}
+    <details class="diff-why"><summary class="small">The rounds behind this</summary>
+      {% if rec.recent|length > 1 %}
+      {% set ds = rec.recent|map(attribute='difficulty')|list %}{% set lo = ds|min - 1 %}{% set hi = ds|max + 1 %}
+      <svg class="diff-spark" viewBox="0 0 {{ (rec.recent|length - 1) * 20 + 8 }} 44" role="img"
+           aria-label="AI difficulty over the last {{ rec.recent|length }} tracked rounds: {{ ds|join(', ') }}">
+        <polyline fill="none" stroke="currentColor" stroke-width="1.6" points="{% for r in rec.recent %}{{ loop.index0 * 20 + 4 }},{{ 40 - ((r.difficulty - lo) / (hi - lo) * 36) }} {% endfor %}"/>
+        {% for r in rec.recent %}<circle cx="{{ loop.index0 * 20 + 4 }}" cy="{{ 40 - ((r.difficulty - lo) / (hi - lo) * 36) }}" r="2.4"><title>{{ r.year }} {{ r.label }}: AI {{ r.difficulty }}</title></circle>{% endfor %}
+      </svg>
+      {% endif %}
+      {% if rec.used %}<p class="small"><b>Used ({{ rec.used|length }}):</b> {% for u in rec.used %}{{ u.label }} ({{ '%+.2f'|format(u.score) }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+      {% if rec.excluded %}<p class="small"><b>Not counted:</b> {% for x in rec.excluded %}{{ x.label }}: {{ x.why }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
+      <p class="small muted">Only completed, tracked rounds at the current AI level count, Grand Prix results only (unless your league counts Sprints), and the recommendation never moves more than one step at a time. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
+    </details>
+    {% endif %}
     {% if not compact %}
     <div class="diff-facts">
       {% if rec.current is not none %}<span>Last used <b>{{ rec.current }}</b></span>{% endif %}

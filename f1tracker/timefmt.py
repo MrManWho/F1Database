@@ -188,3 +188,21 @@ def from_input(value, tz):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=zone(tz))
     return dt.astimezone(timezone.utc).isoformat(timespec="minutes")
+
+
+def month_grid(events, tz):
+    """Months that contain scheduled races, as week rows (Monday first) of day cells with that day's races."""
+    import calendar
+    by_day = {}
+    for e in events:
+        dt = local(e.get("race_at"), tz)
+        if dt:
+            by_day.setdefault(dt.date(), []).append({**e, "local": dt})
+    months = sorted({(d.year, d.month) for d in by_day})
+    out = []
+    for year, month in months:
+        weeks = []
+        for week in calendar.Calendar(firstweekday=0).monthdatescalendar(year, month):
+            weeks.append([{"date": d, "in_month": d.month == month, "races": by_day.get(d, [])} for d in week])
+        out.append({"label": datetime(year, month, 1).strftime("%B %Y"), "weeks": weeks})
+    return out

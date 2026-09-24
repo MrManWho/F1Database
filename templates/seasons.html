@@ -1,5 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Seasons & Calendar{% endblock %}
+{% block scripts %}<script>
+(function () {
+  // Round numbers and Sprint formats of rounds with results only unlock in historical correction mode.
+  var mode = document.getElementById("history-mode");
+  function lock() {
+    document.querySelectorAll("[data-locked]").forEach(function (el) {
+      if (el.type === "checkbox") el.onclick = mode && mode.checked ? null : function () { return false; };
+      else el.readOnly = !(mode && mode.checked);
+      el.title = mode && mode.checked ? "" : "Has results: locked outside historical correction mode";
+    });
+  }
+  if (mode) { mode.addEventListener("change", lock); lock(); }
+  // Each person also sees race times in their own time zone when it differs from the league's.
+  var league = {{ ctx.timezone|tojson }}, mine = "";
+  try { mine = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { /* old browser */ }
+  if (!mine || mine === league) return;
+  var any = false;
+  document.querySelectorAll("time[data-local-time]").forEach(function (t) {
+    var d = new Date(t.getAttribute("datetime")); if (isNaN(d)) return;
+    var s = document.createElement("small"); s.className = "your-time muted";
+    s.textContent = " · your time " + d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    t.after(s); any = true;
+  });
+  var note = document.querySelector("[data-your-zone]"); if (note && any) note.hidden = false;
+})();
+</script>{% endblock %}
 {% block content %}
 <div class="page-head">
   <div><div class="kicker">Seasons &amp; Calendar</div><h1>Season archive</h1></div>
@@ -25,21 +51,50 @@
   {% endfor %}
 </div>
 
-<section class="card table-card">
-  <div class="card-head"><h2>{{ ctx.season.year }} calendar</h2>{% if not ctx.is_master %}<span class="view-only-badge">View only</span>{% endif %}</div>
+<section class="card table-card" id="calendar">
+  <div class="card-head"><h2>{{ ctx.season.year }} calendar</h2>
+    <div class="button-row tight">
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('calendar_ics', token=ctx.token) }}" download title="Add the race times to Google, Apple or Outlook calendar">📅 Calendar file (.ics)</a>
+      {% if not ctx.is_master %}<span class="view-only-badge">View only</span>{% endif %}</div></div>
+  <p class="muted small">Times are shown in the league's time zone ({{ ctx.timezone.replace('_', ' ') }}){% if events|selectattr('race_at')|list %}<span data-your-zone hidden>, with your own time alongside</span>{% endif %}.
+    A round only shows Completed once its results are submitted.</p>
+  {% if warnings and ctx.is_master %}<div class="banner banner-warn" role="note"><b>Check the schedule:</b><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="tabs" role="tablist" aria-label="Calendar view">
+    <button role="tab" id="tab-cal-list" aria-controls="panel-cal-list" aria-selected="true" class="tab is-on" data-tab="list">List</button>
+    <button role="tab" id="tab-cal-month" aria-controls="panel-cal-month" aria-selected="false" class="tab" data-tab="month" tabindex="-1">Month</button>
+  </div>
+  <div id="panel-cal-month" role="tabpanel" aria-labelledby="tab-cal-month" hidden>
+    {% for m in months %}
+    <div class="month">
+      <h3>{{ m.label }}</h3>
+      <div class="month-grid" role="grid" aria-label="{{ m.label }}">
+        {% for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="mg-head" role="columnheader">{{ d }}</div>{% endfor %}
+        {% for week in m.weeks %}{% for day in week %}
+        <div class="mg-day {{ 'out' if not day.in_month }} {{ 'has-race' if day.races }}" role="gridcell">
+          <span class="mg-num">{{ day.date.day }}</span>
+          {% for e in day.races %}<a class="mg-race {{ 'is-sprint' if e.is_sprint }}" href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">R{{ e.round_number }} {{ e.name }}<small>{{ e.local.strftime('%H:%M') }}{{ ' · Sprint' if e.is_sprint }}</small></a>{% endfor %}
+        </div>
+        {% endfor %}{% endfor %}
+      </div>
+    </div>
+    {% else %}<div class="empty-state"><p>No rounds have a race time yet{% if ctx.is_master %}. Set one on each round's page{% endif %}.</p></div>{% endfor %}
+  </div>
+  <div id="panel-cal-list" role="tabpanel" aria-labelledby="tab-cal-list">
   {% if ctx.is_master %}
   <form method="post" action="{{ url_for('calendar_save', token=ctx.token) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th class="num">Round</th><th>Grand Prix</th><th>Location</th><th class="center">Sprint</th><th class="num"><abbr title="AI difficulty used">AI</abbr></th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th class="num">Round</th><th>Grand Prix</th><th>Location</th><th class="center">Sprint</th><th>Race time</th><th class="num"><abbr title="AI difficulty used">AI</abbr></th><th>Status</th><th><span class="sr-only">Remove</span></th></tr></thead>
       <tbody>
       {% for e in events %}
       <tr>
-        <td><input type="number" name="round_{{ e.id }}" value="{{ e.round_number }}" min="1" class="narrow" aria-label="Round number for {{ e.name }}"></td>
+        <td><input type="number" name="round_{{ e.id }}" value="{{ e.round_number }}" min="1" class="narrow" aria-label="Round number for {{ e.name }}" {{ 'data-locked' if e.status != 'Not Run' }}></td>
         <td><input name="name_{{ e.id }}" value="{{ e.name }}" required maxlength="80" aria-label="Name"></td>
         <td><input name="location_{{ e.id }}" value="{{ e.location }}" maxlength="80" aria-label="Location"></td>
-        <td class="center"><input type="checkbox" name="sprint_{{ e.id }}" value="1" {{ 'checked' if e.is_sprint }} aria-label="Sprint weekend"></td>
+        <td class="center"><input type="checkbox" name="sprint_{{ e.id }}" value="1" {{ 'checked' if e.is_sprint }} aria-label="Sprint weekend" {{ 'data-locked' if e.status != 'Not Run' }}></td>
+        <td class="small">{% if e.race_at %}<time datetime="{{ e.race_at }}" data-local-time>{{ e.race_at|race_time }}</time>{% else %}<a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}#race-night">Set a time</a>{% endif %}
+          {% set st = e|race_status %}<span class="race-state rs-{{ st[0] }}">{{ st[1] }}</span></td>
         <td class="num">{{ e.ai_difficulty if e.ai_difficulty is not none else '—' }}</td>
         <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}" class="status-badge status-{{ e.status|lower|replace(' ', '-') }}">{{ e.status }}</a></td>
         <td>{% if e.status == 'Not Run' %}<button class="btn btn-sm btn-ghost" type="submit" form="del-{{ e.id }}">Remove</button>{% endif %}</td>
@@ -48,6 +103,11 @@
       </tbody>
     </table>
     </div>
+    {% set archived = ctx.season.status == 'Complete' %}
+    <label class="check small history-mode"><input type="checkbox" name="historical_correction" value="1" id="history-mode">
+      Historical correction mode: let me change round numbers or Sprint formats of rounds that already have results{{ ' in this archived season' if archived }}</label>
+    <p class="muted small">Round numbers and Sprint formats of rounds with results are locked, so standings and history never shift by accident.
+      Correction mode unlocks them for this save only, and the change is recorded in the Activity Log.</p>
     <button class="btn btn-primary">Save calendar</button>
   </form>
   {% else %}
@@ -61,7 +121,7 @@
       <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}"><strong>{{ e.name }}</strong></a></td>
       <td>{{ e.location or '—' }}</td>
       <td>{% if e.is_sprint %}<span class="pill pill-sprint">Sprint</span>{% else %}<span class="muted small">Standard</span>{% endif %}</td>
-      <td class="small">{% if e.race_at %}{{ e.race_at|race_time }} {{ e.race_at|zone_label }}{% endif %}{% set st = e|race_status %}<span class="race-state state-{{ st[0] }}">{{ ' · ' if e.race_at }}{{ st[1] }}</span></td>
+      <td class="small">{% if e.race_at %}<time datetime="{{ e.race_at }}" data-local-time>{{ e.race_at|race_time }} {{ e.race_at|zone_label }}</time>{% endif %}{% set st = e|race_status %}<span class="race-state state-{{ st[0] }}">{{ ' · ' if e.race_at }}{{ st[1] }}</span></td>
       <td class="num">{{ e.ai_difficulty if e.ai_difficulty is not none else '—' }}</td>
       <td><span class="status-badge status-{{ e.status|lower|replace(' ', '-') }}">{{ e.status }}</span></td>
     </tr>
@@ -70,6 +130,7 @@
   </table>
   </div>
   {% endif %}
+  </div>
   {% if ctx.is_master %}
   {% for e in events if e.status == 'Not Run' %}
   <form id="del-{{ e.id }}" method="post" action="{{ url_for('calendar_delete', token=ctx.token, event_id=e.id) }}" onsubmit="return confirm('Remove {{ e.name }} from the calendar?');">

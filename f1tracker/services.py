@@ -839,14 +839,16 @@ def player_event_score(conn, event, ranks=None):
         by_team.setdefault(r["team_id"], []).append(r)
     scores = []
     details = []
+    # v2.0: Sprint points only count when the league explicitly says so (League settings → Career systems).
+    with_sprint = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "0"})["value"] == "1"
     for r in rows:
         if not r["is_player"] or r["result_status"] != C.STATUS_FINISHED or not r["race_position"]:
             continue
         pos = r["race_position"]
         finish = (11.5 - pos) / 10.5
         quali = (11.5 - r["qualifying_position"]) / 10.5 if r["qualifying_position"] else 0.0
-        pts = gp_points(pos, r["result_status"]) + sprint_points(r["sprint_position"], r["sprint_status"],
-                                                                 bool(event["is_sprint"]))
+        pts = gp_points(pos, r["result_status"]) + (sprint_points(r["sprint_position"], r["sprint_status"],
+                                                                  bool(event["is_sprint"])) if with_sprint else 0)
         points = _signal((pts - 5) / 20)
         mate = next((m for m in by_team.get(r["team_id"], []) if not m["is_player"] and m["race_position"]
                      and m["result_status"] == C.STATUS_FINISHED), None)
@@ -925,6 +927,27 @@ def difficulty_recommendation(conn, before=None):
             break
     rec["sample"] = list(reversed(sample))
     rec["unusable"] = unusable
+    # What the explanation shows (the formula above is unchanged): the rounds behind the number, the ones left out
+    # and why, and the recent history for a small chart.
+    rec["used"] = [{"label": f"{h['year']} R{h['round_number']} {h['name']}", "difficulty": h["ai_difficulty"],
+                    "score": h["score"]} for h in rec["sample"]]
+    excluded = []
+    for h in reversed(history):
+        if h["ai_difficulty"] != current:
+            excluded.append({"label": f"{h['year']} R{h['round_number']} {h['name']}",
+                             "why": f"a different AI level ({h['ai_difficulty']})"})
+            break
+        if h["score"] is None:
+            excluded.append({"label": f"{h['year']} R{h['round_number']} {h['name']}",
+                             "why": "no player driver finished (DNFs don't count)"})
+    untracked = _rows(conn, """SELECT e.round_number, e.name, s.year FROM events e JOIN seasons s ON s.id = e.season_id
+                               WHERE e.status = ? AND e.ai_untracked = 1 ORDER BY s.year DESC, e.round_number DESC LIMIT 3""",
+                      (C.EVENT_COMPLETE,))
+    excluded += [{"label": f"{r['year']} R{r['round_number']} {r['name']}", "why": "marked \"Don't track this round\""}
+                 for r in untracked]
+    rec["excluded"] = excluded[:6]
+    rec["recent"] = [{"label": f"R{h['round_number']}", "year": h["year"], "difficulty": h["ai_difficulty"],
+                      "score": h["score"]} for h in history[-12:]]
 
     last = next((h for h in reversed(history) if h["score"] is not None), None)
     if last and last["score"] <= -C.DIFF_THRESHOLD:
@@ -1029,9 +1052,13 @@ def make_current(conn, season_id):
     set_meta(conn, "current_season_id", season_id)
 
 
-def save_calendar(conn, season_id, entries):
-    """entries: list of {id, round_number, name, location, is_sprint}. Swaps are applied atomically."""
-    own = {e["id"] for e in events(conn, season_id)}
+def save_calendar(conn, season_id, entries, history=False):
+    """entries: list of {id, round_number, name, location, is_sprint}. Swaps are applied atomically.
+
+    Rounds that already have results keep their number and Sprint format (so history and points never move)
+    unless `history` is set: the Race Master's explicit historical-correction mode."""
+    current = {e["id"]: e for e in events(conn, season_id)}
+    own = set(current)
     rounds = []
     cleaned = []
     for e in entries:
@@ -1048,7 +1075,12 @@ def save_calendar(conn, season_id, entries):
         if rnd < 1:
             raise ValidationError("Round numbers start at 1")
         rounds.append(rnd)
-        cleaned.append((eid, rnd, name[:80], (e.get("location") or "").strip()[:80], int(bool(e.get("is_sprint")))))
+        sprint = int(bool(e.get("is_sprint")))
+        before = current[eid]
+        if not history and before["status"] != C.EVENT_NOT_RUN and (rnd != before["round_number"] or sprint != before["is_sprint"]):
+            raise ValidationError(f"R{before['round_number']} {before['name']} already has results, so its round number and "
+                                  "Sprint format are locked. Use historical correction mode if they really are wrong.")
+        cleaned.append((eid, rnd, name[:80], (e.get("location") or "").strip()[:80], sprint))
     if len(rounds) != len(set(rounds)):
         raise ValidationError("Round numbers must be unique")
     for eid, *_ in cleaned:

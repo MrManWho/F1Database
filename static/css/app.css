@@ -1491,3 +1491,33 @@ p a, li a:not(.btn), dd a, .small a:not(.btn), td a.driver-link:not(.is-player) 
   .session-tabs { position: sticky; top: var(--topbar-h); z-index: 5; background: var(--panel); padding-top: .3rem; }
   .session-tabs .entry-search { margin-left: 0; width: 100%; } .session-tabs .entry-search input { width: 100%; }
 }
+
+/* Calendar month view */
+.month { margin-bottom: 1.2rem; }
+.month h3 { font-size: .95rem; margin: .6rem 0; }
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.mg-head { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--faint); padding: .2rem .3rem; }
+.mg-day { min-height: 70px; background: var(--panel-2); border-radius: 6px; padding: .25rem .3rem; display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.mg-day.out { opacity: .35; }
+.mg-day.has-race { outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.mg-num { font-size: .72rem; color: var(--muted); }
+.mg-race { display: block; font-size: .72rem; font-weight: 700; line-height: 1.2; color: var(--text); background: var(--accent-soft); border-radius: 4px; padding: .15rem .25rem; overflow: hidden; text-overflow: ellipsis; }
+.mg-race small { display: block; font-weight: 400; color: var(--muted); }
+.mg-race.is-sprint { box-shadow: inset 2px 0 0 var(--amber); }
+.history-mode { margin-top: .6rem; }
+@media (max-width: 700px) { .mg-day { min-height: 44px; } .mg-race { font-size: 0; padding: 4px; } .mg-race small { display: none; } .mg-race::before { content: "R"; font-size: .65rem; } }
+.diff-why { margin-top: .4rem; }
+.diff-why summary { cursor: pointer; color: var(--muted); }
+.diff-spark { width: 100%; max-width: 260px; height: 44px; color: var(--accent-text); display: block; margin: .4rem 0; }
+.diff-spark circle { fill: var(--accent-text); }
+.pending-card h2 { margin-bottom: .4rem; }
+.pending-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.pending-list li a { display: block; padding: .45rem .7rem; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--line); color: var(--text); text-decoration: none; }
+.pending-list li a:hover { background: var(--panel-3); }
+.pending-list .pt-hot a { border-left-color: var(--accent); }
+.pending-list .pt-warn a { border-left-color: var(--amber); }
+.contract-state { font-size: .76rem; font-weight: 700; padding: .08rem .5rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.cs-current { color: var(--green); } .cs-upcoming { color: var(--blue); } .cs-expired { color: var(--amber); }
+.cs-historical { color: var(--faint); } .cs-mismatch { color: var(--danger-text); }
+tr.contract-historical { opacity: .75; }
+.notify-preview { margin-top: -.4rem; }

@@ -252,3 +252,27 @@ def carry_mode(conn):
     from .storage import get_meta
     mode = get_meta(conn, "rollover_default", "provisional")
     return mode if mode in ACTIONS else "provisional"
+
+
+def contract_list(conn, season_id):
+    """Every player driver's contracts, labelled relative to the season being viewed."""
+    year = _year(conn, season_id)
+    seats_ = S.driver_seats(conn, season_id)
+    out = []
+    for d in S.player_drivers(conn):
+        for c in contracts(conn, d["id"]):
+            if c["target_year"] > year:
+                state = ("upcoming", "Upcoming")
+            elif c["end_year"] < year:
+                state = ("expired", "Expired") if c["end_year"] == year - 1 else ("historical", "Historical")
+            else:
+                state = ("current", "Current")
+            seat = seats_.get(d["id"])
+            if state[0] == "current" and seat and seat[0] != c["team_id"]:
+                state = ("mismatch", "Current, but seated elsewhere")
+            out.append({**c, "driver": d, "state": state[0], "state_label": state[1],
+                        "expiring": state[0] == "current" and c["end_year"] == year,
+                        "kind": "Recorded by the Race Master" if c.get("origin") == "manual" else (c.get("window_kind") or "Market")})
+    order = {"current": 0, "mismatch": 0, "upcoming": 1, "expired": 2, "historical": 3}
+    out.sort(key=lambda c: (order[c["state"]], c["driver"]["name"], -c["target_year"]))
+    return out

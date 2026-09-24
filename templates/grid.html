@@ -53,6 +53,30 @@
   </div>
 </section>
 
+<section class="card table-card" id="contract-list">
+  <div class="card-head"><h2>Contracts</h2><span class="muted small">Relative to {{ ctx.season.year }}</span></div>
+  {% if contract_rows %}
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Every player driver contract</caption>
+    <thead><tr><th scope="col">Driver</th><th scope="col">Team</th><th scope="col">Years</th><th scope="col">Seat status</th><th scope="col">How</th><th scope="col">State</th></tr></thead>
+    <tbody>
+    {% for c in contract_rows %}
+    <tr class="contract-{{ c.state }}">
+      <th scope="row">{{ driver_link(ctx, c.driver) }}</th>
+      <td>{{ team_dot(c.team) }}{{ c.team.name if c.team else '?' }}</td>
+      <td>{{ c.target_year }}{{ '–' ~ c.end_year if c.end_year != c.target_year }}</td>
+      <td>{{ c.role }}</td>
+      <td class="small muted">{{ c.kind }}</td>
+      <td><span class="contract-state cs-{{ c.state }}">{{ c.state_label }}{{ ' · ends this season' if c.expiring }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<div class="empty-state"><p>No contracts yet. They're created when a player signs an offer in the transfer market, or when you record one above.</p></div>{% endif %}
+</section>
+
 <section class="card">
   <h2>Player seats</h2>
   {% if not ro %}<p class="muted small">Normally players sign seats through offers in My Garage. You can also place players directly here. Taking a seat replaces its current occupant.</p>{% endif %}

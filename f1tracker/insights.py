@@ -517,3 +517,43 @@ def season_progress(conn, season_id):
             "sprints_done": sum(1 for e in done if e["is_sprint"]), "sprints_total": len(sprints),
             "wdc": wdc, "wcc": wcc, "avg_ai": round(sum(diffs) / len(diffs), 1) if diffs else None,
             "ai_rounds": len(diffs), "milestone": milestone}
+
+
+def pending_actions(conn, ctx):
+    """Things waiting for the person looking at the Control Room, most urgent first: (text, link, tone)."""
+    from . import gates, relations, seats, teamlife, timefmt
+    out = []
+    sid = ctx["current_season_id"]
+    me = ctx.get("my_driver")
+    if me:
+        if ctx.get("pending_offers"):
+            n = ctx["pending_offers"]
+            out.append((f"{n} contract offer{'s' if n != 1 else ''} waiting for your answer", "garage#offers", "hot"))
+        if relations.needs_pledge(conn, sid, me["id"]):
+            out.append(("Choose your growth pledge for this season", "pledge", "hot"))
+        todo = gates.my_todo(conn, sid, me["id"])
+        if todo and todo["press"]:
+            out.append((f"Answer {todo['press']} press question{'s' if todo['press'] != 1 else ''} before "
+                        f"R{todo['event']['round_number']} can start", "dashboard#press", "warn"))
+        nxt = S.next_incomplete_event(conn, sid)
+        if nxt and ctx["team_life"]["targets"]:
+            t = teamlife.target_for(conn, nxt["id"], me["id"])
+            if t and not t["acknowledged_at"] and t["status"] == "Set":
+                out.append((f"Accept your R{nxt['round_number']} weekend target", "dashboard#target", "warn"))
+    if ctx.get("is_master"):
+        reqs = conn.execute("SELECT COUNT(*) FROM join_requests WHERE status = 'Pending'").fetchone()[0]
+        if reqs:
+            out.append((f"{reqs} join request{'s' if reqs != 1 else ''} to answer", "members", "hot"))
+        inc = conn.execute("SELECT COUNT(*) FROM incidents WHERE status = 'Open'").fetchone()[0]
+        if inc:
+            out.append((f"{inc} incident report{'s' if inc != 1 else ''} to rule on", "incidents", "warn"))
+        probs = seats.problems(conn, sid)
+        if probs:
+            out.append((f"{len(probs)} seat/contract problem{'s' if len(probs) != 1 else ''} to resolve", "grid#contracts", "hot"))
+    if ctx.get("can_run"):
+        window = ctx.get("race_window")
+        for e in S.events(conn, sid):
+            code, _label = timefmt.race_status(e["race_at"], e["status"], window, postponed=e["postponed"])
+            if code == "pending":
+                out.append((f"Results pending for R{e['round_number']} {e['name']}", f"weekend/{e['id']}", "warn"))
+    return out

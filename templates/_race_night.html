@@ -16,6 +16,11 @@
     <button class="btn btn-sm">Save</button>
     {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="race_at" value="">Clear</button>{% endif %}
   </form>
+  {% if hub.notify_preview is defined %}{% set np = hub.notify_preview %}
+  <p class="muted small notify-preview">Saving a time {{ 'or postponing ' if not ev.postponed }}tells the league:
+    {{ np.members }} member{{ 's' if np.members != 1 }} see it in the app, {{ np.push }} get a phone alert and {{ np.email }} an email,
+    each according to their own notification settings for this league.</p>
+  {% endif %}
   {% endif %}
 
   {% if full and hub.story is defined %}
