@@ -32,6 +32,7 @@ _Released September 24, 2026_
 - **Help** rewritten and regrouped (Getting started, Race weekends, Your driver, Contracts and your team, League extras, Admin and account) with the same page names as the menu everywhere.
 
 ### Fixed
+- **Predictions**: picks can now be made straight from the Control Room and the Predictions page (not only the round page). A race time saved without a time zone by an older version could break the check that closes picks; it no longer does. When picks are closed, the page says why.
 - The league list showed rounds from every season (e.g. "24/48" after a rollover); it now counts the current season.
 - Rounds further ahead no longer say "ready to start" because an earlier round's press questions were answered.
 - "Contracts & offers", "Press" and "Progression" in the menu opened other pages.

@@ -2,10 +2,23 @@
 {% block title %}Predictions{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">{{ ctx.season.year }} mini-game</div><h1>Predictions</h1></div>
-  {% if next_event %}<a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}#race-night">Pick R{{ next_event.round_number }} {{ next_event.name }} →</a>{% endif %}</div>
+</div>
 <p class="muted">Before each race pick pole ({{ C.PREDICTION_POINTS.pole }} pts), the winner ({{ C.PREDICTION_POINTS.winner }}),
   fastest lap ({{ C.PREDICTION_POINTS.fastest_lap }}) and the top player driver ({{ C.PREDICTION_POINTS.top_player }}).
   Picks lock when the race starts or the first results go in.</p>
+{% if next_event and hub %}
+<section class="card" id="pick">
+  <div class="card-head"><h2>Your picks · R{{ next_event.round_number }} {{ next_event.name }}</h2>
+    <span class="muted small">{{ hub.pick_count }} pick{{ 's' if hub.pick_count != 1 }} in</span></div>
+  {% if hub.picks_closed %}<p class="muted">{{ hub.picks_closed }}</p>
+  {% elif ctx.is_spectator %}<p class="muted small">Spectators can follow the game but don't make picks.</p>
+  {% else %}
+  {% set ev = next_event %}{% set back = 'predictions' %}{% include "_pick_form.html" with context %}
+  <p class="muted small">{% if hub.my_picks %}✅ Your picks are in. You can change them until the race starts.{% else %}You can change your picks until the race starts.{% endif %}</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card table-card">
   <h2>Table</h2>
   <table class="data-table">

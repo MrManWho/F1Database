@@ -465,6 +465,8 @@ def _impact_gate(conn, ctx):
         return None
     if not impacts.pending(conn, mine["id"], g.user["username"]):
         return None
+    if request.method == "POST":
+        flash("Please read and agree to the changes to your driver first. Nothing else was saved.", "error")
     return redirect(url_for("impact_page", token=ctx["token"]))
 
 
@@ -3251,12 +3253,14 @@ def register_routes(app):
             hub["my_checkin"] = next((r["status"] for r in hub["checkins"] if r["username"] == me), None)
         if feats["predictions"]:
             hub["picks_locked"] = community.predictions_locked(event)
+            hub["picks_closed"] = community.predictions_closed_reason(event)
             picks, outcome = community.event_predictions(conn, event["id"])
             hub["my_picks"] = next((p for p in picks if p["username"] == me), None)
             hub["picks"] = picks if hub["picks_locked"] else []
             hub["pick_count"] = len(picks)
             hub["outcome"] = outcome
-        if full:
+        if full or (feats["predictions"] and not hub.get("picks_locked")):
+            # The pick form needs the entry list; it's shown on the round page, the Control Room and Predictions.
             entrants = sorted(S.weekend_rows(conn, event["id"]), key=lambda r: r["driver"]["name"])
             hub["entrants"] = [r["driver"] for r in entrants]
             hub["players"] = [r["driver"] for r in entrants if r["driver"]["is_player"]]
@@ -3632,7 +3636,12 @@ def register_routes(app):
         community.save_prediction(conn, event_id, g.user["username"],
                                   {k: request.form.get(k) for k in community.PICKS})
         flash("Picks saved. You can change them until the race starts.", "success")
-        return _back(ctx, "#race-night")
+        back = request.form.get("back")
+        if back == "predictions":
+            return redirect(url_for("predictions_page", token=ctx["token"]) + "#pick")
+        if back == "dashboard":
+            return redirect(url_for("dashboard", token=ctx["token"]) + "#race-night")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#race-night")
 
     @app.route("/career/<token>/predictions")
     @career_page()
@@ -3646,8 +3655,9 @@ def register_routes(app):
                 picks, outcome = community.event_predictions(conn, ev["id"])
                 if picks:
                     rounds.append({"event": ev, "picks": picks, "outcome": outcome})
+        nxt = S.next_incomplete_event(conn, sid) if sid == ctx["current_season_id"] else None
         return page("predictions.html", ctx, table=community.leaderboard(conn, sid), rounds=list(reversed(rounds)),
-                    next_event=S.next_incomplete_event(conn, sid), dmap=S.driver_map(conn))
+                    next_event=nxt, hub=_hub(conn, ctx, nxt) if nxt else None, dmap=S.driver_map(conn))
 
     # ---------------------------------------------------------------- driver profiles
     def _may_edit_profile(ctx, driver_id):

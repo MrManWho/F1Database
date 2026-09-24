@@ -513,3 +513,51 @@ def test_every_member_has_a_my_settings_page(app, master_client):
     sam.post(f"/career/{token}/leave", data={"csrf_token": "tok", "confirm_name": "Issue League"})
     with storage.session(token) as conn:
         assert not conn.execute("SELECT 1 FROM career_members WHERE username = 'sam'").fetchone()
+
+
+# --------------------------------------------------------------------------- predictions
+
+def _predictions_league(master_client):
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        storage.set_meta(conn, "feature_predictions", "1")
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        evs = S.events(conn, sid)
+    pledge_all(token)
+    return token, a, evs
+
+
+def test_drivers_can_pick_from_the_control_room_and_the_predictions_page(app, master_client):
+    from f1tracker import community
+    token, a, evs = _predictions_league(master_client)
+    ana = _client(app, "ana")
+    for path in ("dashboard", "predictions"):
+        page = ana.get(f"/career/{token}/{path}").get_data(as_text=True)
+        assert 'class="pick-form"' in page, path
+    res = ana.post(f"/career/{token}/weekend/{evs[0]['id']}/predict",
+                   data={"csrf_token": "tok", "winner": str(a), "back": "predictions"})
+    assert res.headers["Location"].endswith(f"/career/{token}/predictions#pick")
+    res = ana.post(f"/career/{token}/weekend/{evs[0]['id']}/predict",
+                   data={"csrf_token": "tok", "pole": str(a), "back": "dashboard"})
+    assert res.headers["Location"].endswith(f"/career/{token}/dashboard#race-night")
+    with storage.session(token) as conn:
+        mine = [p for p in community.event_predictions(conn, evs[0]["id"])[0] if p["username"] == "ana"][0]
+        assert mine["pole"]["id"] == a
+
+
+def test_a_race_time_saved_without_a_zone_never_breaks_predictions(app, master_client):
+    from f1tracker import community
+    token, a, evs = _predictions_league(master_client)
+    with storage.session(token) as conn:
+        conn.execute("UPDATE events SET race_at = '2999-01-01T19:00' WHERE id = ?", (evs[0]["id"],))   # an old, zone-less time
+        assert not community.race_started(S.get_event(conn, evs[0]["id"]))
+    ana = _client(app, "ana")
+    assert ana.get(f"/career/{token}/weekend/{evs[0]['id']}").status_code == 200
+    assert ana.get(f"/career/{token}/dashboard").status_code == 200
+    with storage.session(token) as conn:
+        conn.execute("UPDATE events SET race_at = '2000-01-01T19:00' WHERE id = ?", (evs[0]["id"],))
+    page = ana.get(f"/career/{token}/predictions").get_data(as_text=True)
+    assert "Picks closed when the race started" in page

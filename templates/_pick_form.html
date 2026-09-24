@@ -1,0 +1,11 @@
+{# The prediction form for one round. Needs: ctx, ev, hub (with entrants, players, my_picks); back = where to return. #}
+      <form method="post" action="{{ url_for('prediction_save', token=ctx.token, event_id=ev.id) }}" class="pick-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+        {% for key, label, pool in [('pole', 'Pole', hub.entrants), ('winner', 'Winner', hub.entrants), ('fastest_lap', 'Fastest lap', hub.entrants), ('top_player', 'Top player driver', hub.players)] if pool %}
+        <label>{{ label }} <small class="muted">{{ C.PREDICTION_POINTS[key] }} pts</small>
+          <select name="{{ key }}"><option value="">—</option>
+            {% for d in pool %}<option value="{{ d.id }}" {{ 'selected' if hub.my_picks and hub.my_picks[key ~ '_id'] == d.id }}>{{ d.name }}</option>{% endfor %}
+          </select></label>
+        {% endfor %}
+        <button class="btn btn-sm btn-primary">{{ 'Update picks' if hub.my_picks else 'Lock in picks' }}</button>
+      </form>

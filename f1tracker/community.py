@@ -91,12 +91,22 @@ def parse_race_at(value, tz_offset_minutes=0):
 
 
 def race_started(event):
-    if not event.get("race_at"):
-        return False
-    try:
-        return datetime.fromisoformat(event["race_at"]) <= datetime.now(timezone.utc)
-    except ValueError:
-        return False
+    """True once the scheduled race time has passed. Times saved without a zone (older saves) are read as the
+    server's clock instead of crashing the comparison."""
+    from . import timefmt
+    when = timefmt.parse(event.get("race_at"))
+    return bool(when and when <= datetime.now(timezone.utc))
+
+
+def predictions_closed_reason(event):
+    """Why picks can't be made or changed any more (None while they're open)."""
+    if event["status"] == C.EVENT_COMPLETE:
+        return "This round is complete."
+    if event["status"] != C.EVENT_NOT_RUN:
+        return "Results have started going in for this round, so picks are closed."
+    if race_started(event):
+        return "Picks closed when the race started (the scheduled race time)."
+    return None
 
 
 def set_race_at(conn, event_id, race_at):

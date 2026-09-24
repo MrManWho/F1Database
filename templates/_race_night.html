@@ -129,22 +129,14 @@
     {% if not hub.picks_locked %}
       {% if ctx.is_spectator %}
       <p class="muted small">Players make their picks before the race. They're revealed once it starts.</p>
-      {% elif full %}
-      <form method="post" action="{{ url_for('prediction_save', token=ctx.token, event_id=ev.id) }}" class="pick-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        {% for key, label, pool in [('pole', 'Pole', hub.entrants), ('winner', 'Winner', hub.entrants), ('fastest_lap', 'Fastest lap', hub.entrants), ('top_player', 'Top player driver', hub.players)] if pool %}
-        <label>{{ label }} <small class="muted">{{ C.PREDICTION_POINTS[key] }} pts</small>
-          <select name="{{ key }}"><option value="">—</option>
-            {% for d in pool %}<option value="{{ d.id }}" {{ 'selected' if hub.my_picks and hub.my_picks[key ~ '_id'] == d.id }}>{{ d.name }}</option>{% endfor %}
-          </select></label>
-        {% endfor %}
-        <button class="btn btn-sm btn-primary">{{ 'Update picks' if hub.my_picks else 'Lock in picks' }}</button>
-      </form>
+      {% elif hub.entrants %}
+      {% set back = none if full else 'dashboard' %}{% include "_pick_form.html" with context %}
       <p class="muted small">Everyone's picks are revealed once the race starts or results go in.</p>
       {% else %}
       <p>{% if hub.my_picks %}✅ Your picks are in.{% else %}You haven't picked yet.{% endif %}
         <a href="{{ wk }}#race-night">{{ 'Change them' if hub.my_picks else 'Make your picks' }} →</a></p>
       {% endif %}
+    {% elif hub.picks_closed and not hub.picks %}<p class="muted small">{{ hub.picks_closed }}</p>
     {% elif full and hub.picks %}
       <div class="table-wrap"><table class="data-table compact">
         <thead><tr><th>Who</th><th>Pole</th><th>Winner</th><th>FL</th><th>Top player</th>{% if hub.outcome %}<th>Pts</th>{% endif %}</tr></thead>
