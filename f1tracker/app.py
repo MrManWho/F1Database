@@ -2513,13 +2513,61 @@ def register_routes(app):
         team = S.team_map(conn)[team_id]["name"]
         flash({"rejected": f"{team} turned you down.",
                "trial": f"{team} offered a one-year trial.",
-               "offer": f"{team} want to talk. Their opening terms are in your garage.",
+               "offer": f"{team} want to talk. Their opening terms are below.",
                "agreed": f"{team} agreed to your terms! Sign to make it official.",
                "countered": f"{team} came back with a counter-offer.",
                "final": f"{team} made a take-it-or-leave-it offer.",
                "collapsed": f"{team} weren't impressed by your demands and ended talks."}[result],
               "error" if result in ("rejected", "collapsed") else "success")
         return redirect(url_for("offers_page", token=ctx["token"], driver=driver_id) + f"#offer-{offer_id}")
+
+    @app.route("/career/<token>/offers/interview/<int:team_id>", methods=["GET", "POST"])
+    @career_page()
+    def team_interview(conn, ctx, team_id):
+        """Sit down with a team: four questions, a goal you set with them, then they decide whether to talk.
+        Uses one of the window's approaches, like any approach."""
+        from . import pitch
+        mine = ctx["my_driver"]
+        if not mine:
+            abort(403)
+        window = conn.execute("SELECT * FROM market_windows WHERE status = ? ORDER BY target_year DESC, id DESC",
+                              (C.WINDOW_OPEN,)).fetchone()
+        if not window:
+            raise ValidationError("The transfer market is closed")
+        if team_id not in {t["id"] for t in market.approachable_teams(conn, window["id"], mine["id"])}:
+            raise ValidationError("You can't talk to that team right now (already in talks, or no seat for you)")
+        if market.approaches_left(conn, window["id"], mine["id"]) <= 0:
+            raise ValidationError("You've used all your approaches for this window")
+        team = S.team_map(conn)[team_id]
+        questions = pitch.interview_questions(conn, window["id"], mine["id"], team_id)
+        if request.method == "POST":
+            answers = {}
+            for q in questions:
+                a = request.form.get(f"q{q['id']}", type=int)
+                if a is None:
+                    raise ValidationError("Answer every question")
+                answers[q["id"]] = a
+            goal = request.form.get("goal")
+            if goal not in pitch.GOALS:
+                raise ValidationError("Choose the goal you'd set with them")
+            ranks = S.team_strength_ranks(conn, window["season_id"])
+            try:
+                bonus, score, lines = pitch.interview_score(conn, window["id"], mine["id"], team_id,
+                                                            ranks.get(team_id, len(ranks)), len(ranks), answers, goal)
+            except ValueError as exc:
+                raise ValidationError(str(exc))
+            verdict = ("The interview went very well." if score >= 0.5 else "The interview went fine." if score >= 0.15
+                       else "The interview didn't land." if score <= -0.15 else "The interview was so-so.")
+            summary = " ".join([verdict] + lines[:3])
+            offer_id, result = market.approach_team(
+                conn, window["id"], mine["id"], team_id, message=f"Interview. My goal with you: {pitch.GOALS[goal]}.",
+                interview={"bonus": bonus, "summary": summary})
+            g.audit_summary = f"interviewed with {team['name']} ({pitch.GOALS[goal].lower()})"
+            flash(f"{team['name']}: {verdict}", "success" if result not in ("rejected", "collapsed") else "error")
+            return redirect(url_for("offers_page", token=ctx["token"]) + f"#offer-{offer_id}")
+        return page("interview.html", ctx, team=team, questions=questions, goals=pitch.GOALS, window=window,
+                    record=pitch.last_season(conn, mine["id"]),
+                    approaches=market.approaches_left(conn, window["id"], mine["id"]))
 
     @app.route("/career/<token>/news")
     @career_page()

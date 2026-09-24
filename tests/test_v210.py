@@ -297,3 +297,82 @@ def test_race_master_can_reissue_season_goals_and_the_next_target(app, master_cl
         assert t and t["acknowledged_at"] is None                          # has to be accepted again
     page = master_client.get(f"/career/{token}/team-standing?driver={a}").get_data(as_text=True)
     assert "Re-issue season goals" in page and "Re-issue for everyone" in page
+
+
+# --------------------------------------------------------------------------- team talks
+
+def test_messages_are_read_for_themes_tone_and_negation():
+    from f1tracker import pitch
+    r = pitch.analyse("I'd love to build a long-term project with you and keep learning from your engineers. "
+                      "Last season I scored points consistently.")
+    assert {"commitment", "development", "record"} <= set(r["themes"]) and not r["arrogant"]
+    assert "commitment" not in pitch.analyse("I don't want to stay long term anywhere")["themes"]
+    rude = pitch.analyse("I'm the best driver on the grid and I deserve your seat. My car was rubbish!!!")
+    assert rude["arrogant"] and rude["blame"] and rude["shouting"]
+    taste = {"tier": "back", "weights": pitch.TASTES["back"], "favourite": "development"}
+    assert pitch.score(r, taste) > 0.5 > pitch.score(rude, taste)
+    assert pitch.score(pitch.analyse("hi"), taste) == 0.0             # too short to mean anything
+
+
+def _approach_at(conn, mp, value_gap, message, interview=None):
+    """Approach a mid-grid team with the driver's value set so interest = value_gap before the message."""
+    import random
+    from f1tracker import market
+    sid = S.current_season_id(conn)
+    a = players(conn)[0]
+    ranks = S.team_strength_ranks(conn, sid)
+    team = next(t for t, r in ranks.items() if r == 6)
+    wid = market.open_window(conn, sid, rng=random.Random(2))
+    conn.execute("DELETE FROM offers WHERE driver_id = ? AND team_id = ?", (a, team))
+    mp.setattr(market, "JITTER", 0.0)
+    mp.setattr(market, "experience", lambda c, d: "Experienced")
+    real = market.driver_value
+    mp.setattr(market, "driver_value", lambda *args: {**real(*args), "value": market.team_bar(6) + value_gap})
+    return market.approach_team(conn, wid, a, team, message=message, rng=random.Random(3), interview=interview)
+
+
+def test_a_good_pitch_tips_a_team_on_the_edge_but_never_a_hopeless_case(app, master_client, monkeypatch):
+    from f1tracker import pitch
+    good = ("It would be an honour. I want to commit long term, keep developing with your engineers and put the "
+            "team first. Last season I scored points consistently and beat my teammate.")
+    results = {}
+    for label, gap, msg in (("edge_quiet", -7, ""), ("edge_good", -7, good), ("hopeless", -15, good)):
+        token = _league(master_client, name=f"Talks {label}")
+        with storage.session(token) as conn, monkeypatch.context() as mp:
+            S.place_players(conn, S.current_season_id(conn), {players(conn)[0]: (11, 1)})
+            iv = {"bonus": pitch.INTERVIEW_MAX, "summary": "Great interview."} if label == "hopeless" else None
+            results[label] = _approach_at(conn, mp, gap, msg, iv)[1]
+    assert results["edge_quiet"] == "rejected"
+    assert results["edge_good"] in ("trial", "offer")
+    assert results["hopeless"] == "rejected"                        # even with the best message and interview
+
+
+def test_interview_page_uses_an_approach_and_weighs_the_record(app, master_client):
+    import random
+    from f1tracker import market, pitch
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (11, 1)})
+        wid = market.open_window(conn, sid, rng=random.Random(5))
+        team = market.approachable_teams(conn, wid, a)[-1]["id"]
+        before = market.approaches_left(conn, wid, a)
+        qs = pitch.interview_questions(conn, wid, a, team)
+        assert qs == pitch.interview_questions(conn, wid, a, team) and len(qs) == 4   # stable on refresh
+    pledge_all(token)
+    ana = _client(app, "ana")
+    page = ana.get(f"/career/{token}/offers/interview/{team}").get_data(as_text=True)
+    assert qs[0]["text"] in page and "The goal you" in page
+    form = {"csrf_token": "tok", "goal": "develop", **{f"q{q['id']}": q["answers"][0]["id"] for q in qs}}
+    ana.post(f"/career/{token}/offers/interview/{team}", data=form)
+    with storage.session(token) as conn:
+        assert market.approaches_left(conn, wid, a) == before - 1
+        msgs = [m["message"] for m in conn.execute(
+            "SELECT m.message FROM offer_messages m JOIN offers o ON o.id = m.offer_id WHERE o.team_id = ? AND o.driver_id = ?",
+            (team, a))]
+        assert any("Interview" in m for m in msgs) and any("interview" in m.lower() for m in msgs[1:])
+    # A bluff: a podium goal that the record doesn't back up counts against you.
+    record = {"year": 2026, "rounds": 10, "avg": 18.0, "points_rate": 0.0, "podiums": 0}
+    assert pitch._goal_realism("podiums", record) == -1 and pitch._goal_realism("top_half", {**record, "avg": 7}) == 1

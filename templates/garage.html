@@ -160,10 +160,17 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
       </div>
       <label id="approach-growth" hidden>Growth pledge{{ growth_select(none, 1) }}</label>
       <label>Message (optional)<textarea name="message" rows="2" maxlength="500" placeholder="I'm looking for a seat for {{ window.target_year }}…"></textarea></label>
-      <p class="muted small">Teams that rate you (see the interest board) will talk. Top-3 teams won't sign rookies, and teams that aren't interested say no.
+      <p class="muted small">Teams read your message: say what they want to hear (commitment, development, results, being a team player…) and it can tip a team that's on the fence.
+        Arrogance or blaming others counts against you. Top-3 teams won't sign rookies, and teams far from interested say no.
         Each team can only be approached once per window.</p>
       <button class="btn btn-primary">Send approach</button>
     </form>
+    {% if own %}
+    <div class="interview-links"><h4 class="mini-head">Or ask for an interview</h4>
+      <p class="muted small">Answer four questions and set a goal with them. It uses an approach, and can matter a bit more than a message.</p>
+      <div class="button-row tight">{% for i in interest if i.team in approachable %}<a class="btn btn-sm btn-ghost" href="{{ url_for('team_interview', token=ctx.token, team_id=i.team.id) }}">{{ i.team.name }}</a>{% endfor %}</div>
+    </div>
+    {% endif %}
     {% else %}
     <p class="muted small">{{ 'No approaches left this window.' if not approaches else 'No other teams have a seat available.' }}</p>
     {% endif %}

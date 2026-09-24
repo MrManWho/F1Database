@@ -501,7 +501,7 @@ def parse_terms(role, years, growth):
     return role, years, growth
 
 
-def _evaluate(conn, offer, role, years, growth, rng):
+def _evaluate(conn, offer, role, years, growth, rng, pitch_score=0.0, heard=""):
     """The team's response to the driver's proposed terms.
 
     A bigger pledge than the team needs buys leverage: two levels over lets an experienced driver push
@@ -527,7 +527,7 @@ def _evaluate(conn, offer, role, years, growth, rng):
     if role_gap <= 0 and years_ok and growth >= need and need <= MAX_GROWTH:
         conn.execute("UPDATE offers SET role=?, years=?, growth=?, final=1, stage=? WHERE id=?",
                      (role, years, growth, "Terms agreed", offer["id"]))
-        lead = f"That pledge convinced {team}. " if stretched else ""
+        lead = (f"That pledge convinced {team}. " if stretched else "") + (heard + " " if heard else "")
         _log(conn, offer["id"], "team", "agree", lead + rng.choice([
             f"{team} can work with that. Terms agreed. Sign when you're ready.",
             f"Deal. {team} accept your terms. The contract is on the table.",
@@ -535,7 +535,13 @@ def _evaluate(conn, offer, role, years, growth, rng):
         return "agreed"
 
     greedy = role_gap >= 2 or years < lo - 1 or years > hi + 1 or growth < need - 1
-    patience = (offer["patience"] or 0) - (2 if greedy else 1)
+    cost = 2 if greedy else 1
+    # v2.1: a message that lands well keeps them at the table a little longer; a bad one wears them out.
+    if pitch_score >= 0.35 and not greedy:
+        cost = 0
+    elif pitch_score <= -0.35:
+        cost += 1
+    patience = (offer["patience"] or 0) - cost
     if patience < 0:
         conn.execute("UPDATE offers SET status=?, stage=?, patience=0, responded_at=? WHERE id=?",
                      (C.OFFER_COLLAPSED, "Talks collapsed", now_iso(), offer["id"]))
@@ -564,7 +570,7 @@ def _evaluate(conn, offer, role, years, growth, rng):
         notes.append("that's not quite what we had in mind")
     final = patience == 0
     stage = "Final offer" if final else "Counter-offer"
-    lead = "That's a big ask. " if greedy else ""
+    lead = ("That's a big ask. " if greedy else "") + (heard + " " if heard else "")
     body = "; ".join(notes)
     message = lead + f"{team}: " + body[:1].upper() + body[1:] + "."
     if final:
@@ -583,7 +589,12 @@ def counter_offer(conn, offer_id, role, years, growth, message="", rng=None):
     role, years, growth = parse_terms(role, years, growth)
     _log(conn, offer_id, "driver", "counter", (message or "").strip()[:500], role, years, growth)
     conn.execute("UPDATE offers SET stage = ? WHERE id = ?", ("Negotiating", offer_id))
-    result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng)
+    from . import pitch
+    ranks = S.team_strength_ranks(conn, offer["window_season"])
+    team = S.team_map(conn)[offer["team_id"]]["name"]
+    _b, score, heard, _r = pitch.message_effect(conn, offer["team_id"], ranks.get(offer["team_id"], len(ranks)),
+                                                len(ranks), message, team)
+    result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng, pitch_score=score, heard=heard)
     if result == "collapsed":
         feed.on_talks_collapsed(conn, offer_id, "news")
         ensure_lifeline(conn, offer["window_id"], offer["driver_id"], rng)
@@ -606,8 +617,12 @@ def approachable_teams(conn, window_id, driver_id):
             and not _full_of_players(conn, window["season_id"], t["id"], signed)]
 
 
-def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, growth=None, message="", rng=None):
-    """A player driver contacts a team. The team decides whether to talk, and on what terms."""
+def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, growth=None, message="", rng=None,
+                  interview=None):
+    """A player driver contacts a team. The team decides whether to talk, and on what terms.
+
+    v2.1: the team reads the message (pitch.py) and, if the driver did one, weighs the interview. Either can tip a
+    team that's on the fence; neither can make a team sign someone far below their bar."""
     rng = rng or random.Random()
     window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
     if not window or window["status"] != C.WINDOW_OPEN:
@@ -641,6 +656,15 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
         interest = max(interest, 1.0 + rng.uniform(0, 3))  # backmarkers will talk to any rookie
     team = S.team_map(conn)[team_id]["name"]
     note = (message or "").strip()[:500] or "Is there a seat for me?"
+    from . import pitch
+    heard_bonus, _heard, heard, _reading = pitch.message_effect(conn, team_id, rank, len(ranks), message, team)
+    interest += heard_bonus
+    if interview:
+        interest += interview["bonus"]
+        heard = " ".join(x for x in [heard, interview["summary"]] if x)
+
+    def said(text):
+        return f"{text} {heard}".strip() if heard else text
 
     if team_id == my_team and relations.is_released(conn, season_id, driver_id):
         verdict = f"{team} have made their decision. They won't be renewing your contract."
@@ -660,7 +684,7 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
              C.OFFER_REJECTED, now_iso(), now_iso(), "driver", "Not interested", 0, 1)).lastrowid
         _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
              years if has_terms else None, growth if has_terms else None)
-        _log(conn, offer_id, "team", "reject", verdict)
+        _log(conn, offer_id, "team", "reject", said(verdict))
         ensure_lifeline(conn, window_id, driver_id, rng)
         return offer_id, "rejected"
 
@@ -672,7 +696,7 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
         _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
              years if has_terms else None, growth if has_terms else None)
         o = get_offer(conn, offer_id)
-        _log(conn, offer_id, "team", "offer", reason + " Take it or leave it: you'd need a Strong season.",
+        _log(conn, offer_id, "team", "offer", said(reason + " Take it or leave it: you'd need a Strong season."),
              o["role"], o["years"], o["growth"])
         return offer_id, "trial"
 
@@ -682,12 +706,12 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
     _log(conn, offer_id, "driver", "approach", note, role if has_terms else None,
          years if has_terms else None, growth if has_terms else None)
     if has_terms:
-        result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng)
+        result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng, pitch_score=_heard, heard=heard)
         if result == "collapsed":
             ensure_lifeline(conn, window_id, driver_id, rng)
         return offer_id, result
     o = get_offer(conn, offer_id)
-    _log(conn, offer_id, "team", "offer", f"{team} would like to open talks. Here's where they'd start.",
+    _log(conn, offer_id, "team", "offer", said(f"{team} would like to open talks. Here's where they'd start."),
          o["role"], o["years"], o["growth"])
     return offer_id, "offer"
 

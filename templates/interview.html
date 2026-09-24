@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_dot %}
+{% block title %}Interview · {{ team.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Contracts &amp; offers · {{ window.kind }} {{ window.target_year }}</div>
+  <h1>{{ team_dot(team) }} Interview with {{ team.name }}</h1>
+  <p class="page-purpose">Every team wants something different: work out what {{ team.name }} value and answer to that. They'll also look at your last season, so set a goal your results back up.</p></div></div>
+
+<form method="post" class="card stack interview">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% for q in questions %}
+  <fieldset class="iv-q">
+    <legend>{{ loop.index }}. {{ q.text }}</legend>
+    {% for a in q.answers %}<label class="check"><input type="radio" name="q{{ q.id }}" value="{{ a.id }}" required> {{ a.text }}</label>{% endfor %}
+  </fieldset>
+  {% endfor %}
+  <fieldset class="iv-q">
+    <legend>The goal you'd set with {{ team.name }}</legend>
+    {% for key, label in goals.items() %}<label class="check"><input type="radio" name="goal" value="{{ key }}" required> {{ label }}</label>{% endfor %}
+    <p class="muted small">{% if record %}They'll compare it with your {{ record.year }} season: {{ record.rounds }} rounds{% if record.avg %}, average finish P{{ record.avg }}{% endif %}, {{ record.podiums }} podium{{ 's' if record.podiums != 1 }}.{% else %}You don't have a full season yet, so they'll judge the goal on your answers.{% endif %}</p>
+  </fieldset>
+  <p class="muted small">This uses one of your {{ approaches }} approach{{ 'es' if approaches != 1 }} for this window. A good interview can win over a team that's on the fence; it can't change a team's mind about a driver far below what they need.</p>
+  <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('offers_page', token=ctx.token) }}">Back</a><button class="btn btn-primary">Finish the interview</button></div>
+</form>
+{% endblock %}
