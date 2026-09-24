@@ -325,6 +325,31 @@ CREATE TABLE IF NOT EXISTS team_orders (
     PRIMARY KEY (event_id, driver_id)
 );
 
+CREATE TABLE IF NOT EXISTS weekend_targets (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    team_id INTEGER,
+    kind TEXT NOT NULL,
+    target INTEGER,
+    rival_team_id INTEGER,
+    label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Set',
+    effect REAL NOT NULL DEFAULT 0,
+    excused INTEGER NOT NULL DEFAULT 0,
+    acknowledged_at TEXT,
+    judged_at TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, driver_id)
+);
+
+CREATE TABLE IF NOT EXISTS gate_bypasses (
+    event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    note TEXT NOT NULL,
+    waiting TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS incidents (
     id INTEGER PRIMARY KEY,
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -419,6 +444,9 @@ def migrate(conn):
     v15 -> v16: events.ai_untracked (the round was deliberately marked "Don't track this round") and
                events.postponed (the Race Master marked the round postponed); audit_log.summary and link
                (a readable sentence and a link for each Activity Log entry; older entries keep their text).
+    v16 -> v17: weekend targets and Race Master gate bypasses (new tables, created empty) and events.press_required
+               (the round's post-race press questions stay open until answered). Rounds completed before this
+               version keep press_required = 0, so nothing already finished becomes a requirement.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -429,7 +457,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "summary" in _columns(conn, "audit_log"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "press_required" in _columns(conn, "events"):
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -494,6 +522,9 @@ def migrate(conn):
         conn.execute("ALTER TABLE audit_log ADD COLUMN link TEXT")
     if "postponed" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN postponed INTEGER NOT NULL DEFAULT 0")
+    if "press_required" not in _columns(conn, "events"):
+        # v1.20: round gates. Only rounds first submitted from now on can require press answers.
+        conn.execute("ALTER TABLE events ADD COLUMN press_required INTEGER NOT NULL DEFAULT 0")
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

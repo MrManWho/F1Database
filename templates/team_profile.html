@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import driver_link, pattrs, delta with context %}
+{% from "_macros.html" import driver_link, pattrs, delta, battle_row with context %}
 {% block title %}{{ team.name }}{% endblock %}
 {% block content %}
 <div class="profile-head" style="--team: {{ team.color }}">
@@ -45,6 +45,12 @@
     {% else %}<p class="muted small">No car ratings yet.</p>{% endif %}
   </section>
 </div>
+{% if battles %}
+<section class="card" id="battle">
+  <h2>🥊 Teammate battle · {{ ctx.season.year }}</h2>
+  {% for p in battles %}{{ battle_row(ctx, p, 'both') }}{% endfor %}
+</section>
+{% endif %}
 <section class="card table-card">
   <h2>Season by season</h2>
   {% if archive %}

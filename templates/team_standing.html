@@ -93,12 +93,19 @@
     </ul>
   </section>
   <section class="card">
-    <h2>Team orders</h2>
+    <h2>Weekend targets</h2>
+    {% if targets %}
+    <ul class="goal-list">{% for t in targets %}<li class="target-{{ t.status|lower }}"><span>R{{ t.round_number }} {{ t.event_name }}: {{ t.label }}</span>
+      <em>{{ {'Set': ('Accepted' if t.acknowledged_at else 'Waiting'), 'Hit': '✅ Hit', 'Missed': '❌ Missed', 'Void': 'Void'}[t.status] }}</em></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">{% if ctx.team_life.targets %}Your team sets one before each race.{% else %}Weekend targets are switched off in this league.{% endif %}</p>{% endif %}
+    {% if ctx.team_life.orders != 'off' or orders %}
+    <h3 class="mini-head">Team orders{% if ctx.team_life.orders == 'advisory' %} <small class="muted">(advisory)</small>{% elif ctx.team_life.orders == 'off' %} <small class="muted">(switched off)</small>{% endif %}</h3>
     {% if orders %}
     <ul class="goal-list">{% for o in orders %}<li class="order-{{ o.status|lower }}"><span>R{{ o.round_number }} {{ o.event_name }}: let {{ o.beneficiary.name }} through</span>
-      <em>{{ {'Issued': 'Pending', 'Obeyed': 'Followed', 'Ignored': 'Ignored', 'Void': 'Void'}[o.status] }}</em></li>{% endfor %}</ul>
+      <em>{{ {'Issued': 'Pending', 'Obeyed': 'Followed', 'Ignored': 'Ignored', 'Void': 'Void', 'Cancelled': 'Cancelled'}.get(o.status, o.status) }}</em></li>{% endfor %}</ul>
     {% else %}<p class="muted small">{% if rel.role == 'No. 2' %}None yet. As a No. 2 you may be asked to give way to your teammate.{% else %}As {{ 'the No. 1' if rel.role == 'No. 1' else 'an Equal Status driver' }} you won't be asked to give way.{% endif %}</p>{% endif %}
-    {% if rel.bonus %}<p class="muted small">Press answers and team orders have moved the relationship by <b>{{ '%+.0f'|format(rel.bonus) }}</b> this season.</p>{% endif %}
+    {% endif %}
+    {% if rel.bonus %}<p class="muted small">Press answers, weekend targets{{ ' and team orders' if orders }} have moved the relationship by <b>{{ '%+.0f'|format(rel.bonus) }}</b> this season.</p>{% endif %}
   </section>
 </div>
 {% elif driver %}

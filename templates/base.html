@@ -125,6 +125,12 @@
       </div>
     </header>
     <main class="content">
+      {% if ctx.my_todo %}{% set td = ctx.my_todo %}
+      <div class="banner banner-warn todo-banner" role="status"><span aria-hidden="true">⏳</span>
+        <b>R{{ td.event.round_number }} {{ td.event.name }} is waiting on you.</b>
+        {% if td.press %}You have {{ td.press }} press question{{ 's' if td.press != 1 }} to answer{% if td.press_event %} from R{{ td.press_event.round_number }}{% endif %}{% endif %}{% if td.press and td.target %} and{% endif %}{% if td.target %} {{ 'you need to' if td.press else 'You need to' }} accept your weekend target{% endif %} before results can go in.
+        <a href="{{ url_for('dashboard', token=ctx.token) }}#todo">Do it now →</a></div>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>

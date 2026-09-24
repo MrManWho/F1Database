@@ -3,7 +3,8 @@
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
 {% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
-{% set ro = not ctx.can_run or locked %}
+{% set gated = gate and gate.blocking %}
+{% set ro = not ctx.can_run or locked or gated %}
 <div class="weekend-head">
   <div>
     <div class="kicker">Round {{ event.round_number }} · {{ ctx.season.year }} · {{ index }}/{{ total }}</div>
@@ -32,7 +33,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
 {% endif %}
 
-{% set full = True %}{% include "_race_night.html" with context %}
+{% set full = True %}{% include "_gate.html" with context %}
+{% include "_race_night.html" with context %}
 
 <section class="card diff-strip">
   {{ difficulty(rec, compact=True) }}
@@ -59,7 +61,7 @@
 <section class="card table-card">
   <div class="card-head">
     <h2>Results</h2>
-    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else 'View only' }}</span>
+    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Waiting for players' if gated else 'View only') }}</span>
     {% else %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>{% endif %}
   </div>
   <div class="entry-tools">

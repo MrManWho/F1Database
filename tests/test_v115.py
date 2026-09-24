@@ -169,6 +169,8 @@ def test_team_orders_for_number_two_drivers(db):
     S.place_players(db, sid, {david: (cad, 1), carson: (cad, 2)})
     relations.ensure(db, sid)
     assert relations.assess(db, sid, carson)["role"] == "No. 2"
+    assert teamlife.issue_orders(db, sid) == []   # team orders are off unless the Race Master switches them on
+    storage.set_meta(db, "team_orders", "on")
     issued = teamlife.issue_orders(db, sid, rng=random.Random(0))  # 0.84 > chance? force with a low roll instead
     if not issued:
         class Low(random.Random):
@@ -278,4 +280,4 @@ def test_help_value_breakdown_and_share_card(app, master_client):
     week = ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert 'id="share-card"' in week and "Ana Silva" in week.split("data-card=")[1][:600]
     standing = ana.get(f"/career/{token}/team-standing").get_data(as_text=True)
-    assert "Season goals" in standing and "Team orders" in standing
+    assert "Season goals" in standing and "Weekend targets" in standing

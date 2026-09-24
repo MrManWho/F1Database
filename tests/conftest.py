@@ -16,6 +16,18 @@ def data_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "gates: run with round gates at their real default (on)")
+
+
+@pytest.fixture(autouse=True)
+def round_gates_default(request, monkeypatch):
+    """Tests written before round gates (v1.20) run with gates off unless marked @pytest.mark.gates."""
+    from f1tracker import teamlife
+    if not request.node.get_closest_marker("gates"):
+        monkeypatch.setitem(teamlife.DEFAULTS, "round_gates", "0")
+
+
 @pytest.fixture
 def career():
     token = storage.new_token()

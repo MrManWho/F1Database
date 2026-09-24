@@ -152,3 +152,30 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 <p class="pw-caps small" role="status" aria-live="polite" hidden>⚠️ Caps Lock is on</p>
 <p class="form-error small pw-error" role="alert" hidden></p>
 {%- endmacro %}
+
+{# Teammate battle row. p: a pairing from battle.pairings; show: 'mate' (from the driver's side) or 'both'. #}
+{% macro battle_row(ctx, p, show='mate') -%}
+<div class="battle-row {{ 'battle-human' if p.human }}" style="--team: {{ p.team.color if p.team else 'var(--line)' }}">
+  <div class="battle-who">
+    {% if show == 'both' %}<b>{{ p.driver.name }}</b> <span class="muted">vs</span> <b>{{ p.mate.name }}</b>
+    {% else %}<span class="muted">vs</span> <a href="{{ url_for('driver_profile', token=ctx.token, driver_id=p.mate.id) }}"><b>{{ p.mate.name }}</b></a>{% endif %}
+    <small class="muted">{{ p.team.name if p.team else '' }} · R{{ p.first_round }}{{ '–R' ~ p.last_round if p.last_round != p.first_round }}</small>
+    {% if p.human %}<span class="pill pill-human" title="Both drivers are players">👥 Human vs human</span>{% endif %}
+  </div>
+  <div class="battle-stats">
+    <span class="{{ 'up' if p.quali_won > p.quali_lost else 'down' if p.quali_won < p.quali_lost }}">Quali <b>{{ p.quali_won }}–{{ p.quali_lost }}</b></span>
+    <span class="{{ 'up' if p.race_won > p.race_lost else 'down' if p.race_won < p.race_lost }}">Race <b>{{ p.race_won }}–{{ p.race_lost }}</b></span>
+    <span class="{{ 'up' if p.gap > 0 else 'down' if p.gap < 0 }}"><b>{{ '%+d'|format(p.gap) }}</b> pts</span>
+    {% if p.streak >= 3 %}<span class="pill">🔥 {{ p.streak }} in a row</span>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{# A weekend target line. t: row from weekend_targets. #}
+{% macro target_state(t) -%}
+{% if t.status == 'Hit' %}<span class="target-pill tp-hit">✅ Hit</span>
+{% elif t.status == 'Missed' %}<span class="target-pill tp-miss">❌ Missed</span>
+{% elif t.status == 'Void' %}<span class="target-pill tp-void">— Void{{ ' (not their fault)' if t.excused }}</span>
+{% elif t.acknowledged_at %}<span class="target-pill tp-ok">Accepted</span>
+{% else %}<span class="target-pill tp-wait">Not accepted yet</span>{% endif %}
+{%- endmacro %}

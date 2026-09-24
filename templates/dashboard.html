@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, driver_link, difficulty, race_clock, pattrs with context %}
+{% from "_macros.html" import team_dot, driver_link, difficulty, race_clock, pattrs, target_state with context %}
 {% block title %}Control Room{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -112,11 +112,34 @@
   {% endif %}
 </div>
 
-{% if press and press.questions %}
-<section class="card press-pen" id="press">
+{% if gate %}{% set full = False %}{% set reminded = False %}{% include "_gate.html" with context %}{% endif %}
+
+{% if my_target or press_pens %}
+<div id="todo"></div>
+{% endif %}
+{% if my_target and next_event %}
+<section class="card target-card" id="target">
+  <div class="card-head"><h2>🎯 Weekend target · R{{ next_event.round_number }} {{ next_event.name }}</h2>{{ target_state(my_target) }}</div>
+  <p class="target-text">{{ my_target.label }}</p>
+  <p class="muted small">Set by your team from the car's pace, your recent form and your contract. Hit it: <b>+{{ C.TARGET_HIT|int }}</b> team standing.
+    Miss it: <b>{{ C.TARGET_MISSED }}</b>. It doesn't count if you don't take part, or if the Race Master rules a DNF wasn't your fault.</p>
+  {% if not my_target.acknowledged_at and my_target.status == 'Set' %}
+  <form method="post" action="{{ url_for('target_ack', token=ctx.token, event_id=next_event.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary btn-sm">Got it</button>
+    {% if ctx.team_life.gates and ctx.team_life.gate_targets %}<span class="muted small">Results for this round can't go in until you accept.</span>{% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% set press_required = ctx.team_life.gates and ctx.team_life.gate_press %}
+{% for press in press_pens if press.questions %}
+<section class="card press-pen" {% if loop.last %}id="press"{% endif %}>
   <div class="card-head"><h2>🎙️ Press pen · R{{ press.event.round_number }} {{ press.event.name }}</h2>
-    <span class="muted small">{{ press.open }} question{{ 's' if press.open != 1 }} waiting · optional</span></div>
-  <p class="muted small">What you say gets back to your team, and some answers make headlines. Questions close when the next race is completed.</p>
+    <span class="muted small">{{ press.open }} question{{ 's' if press.open != 1 }} waiting · {{ 'required' if press_required and press.event.press_required else 'optional' }}</span></div>
+  <p class="muted small">What you say gets back to your team, and some answers make headlines.
+    {% if press_required and press.event.press_required %}Answer both before the next round can start. They stay open until you do.{% else %}Questions close when the next race is completed.{% endif %}</p>
   <div class="press-grid">
   {% for q in press.questions %}
     <form method="post" action="{{ url_for('press_answer', token=ctx.token, event_id=press.event.id) }}" class="press-q">
@@ -129,7 +152,7 @@
   {% endfor %}
   </div>
 </section>
-{% endif %}
+{% endfor %}
 
 {% if hub and (hub.checkins is defined or hub.picks_locked is defined or hub.order is defined) %}
 {% set full = False %}{% include "_race_night.html" with context %}

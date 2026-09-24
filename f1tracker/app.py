@@ -16,7 +16,7 @@ import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
-from . import circuits
+from . import battle, circuits, gates
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -52,6 +52,8 @@ AUDIT_LABELS = {
     "incident_delete": "Deleted an incident report", "paddock_move_results": "Moved results between drivers", "weekend_reopen": "Reopened a submitted round", "request_pledge": "Asked for a new growth pledge",
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
+    "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
+    "target_excuse": "Changed a weekend target ruling",
 }
 QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
@@ -301,6 +303,9 @@ def career_page(master_only=False, ops_only=False):
                         (C.OFFER_PENDING, mine["id"]) if mine and not is_master() else (C.OFFER_PENDING,)).fetchone()[0]
                     g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
                         conn, g.user["username"], mine["id"] if mine else None, is_master() and not mine)
+                    g.ctx["team_life"] = teamlife.settings(conn)
+                    g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
+                        if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
                     gate = _pledge_gate(conn, g.ctx, master_only)
                     if gate is not None:
@@ -371,6 +376,15 @@ def _settings_changes(conn, before):
     tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
     if tz != before["tz"]:
         changes.append(f"changed the league time zone from {before['tz']} to {tz}")
+    life, was = teamlife.settings(conn), before.get("life")
+    if was:
+        if life["orders"] != was["orders"]:
+            changes.append(f"changed team orders from {C.TEAM_ORDER_MODES[was['orders']].split(' (')[0]} to "
+                           f"{C.TEAM_ORDER_MODES[life['orders']].split(' (')[0]}")
+        for key, label in (("targets", "weekend targets"), ("gates", "round gates"),
+                           ("gate_press", "the press-questions gate"), ("gate_targets", "the weekend-target gate")):
+            if life[key] != was[key]:
+                changes.append(f"turned {label} {'on' if life[key] else 'off'}")
     return "; ".join(changes)
 
 
@@ -839,6 +853,9 @@ def register_routes(app):
         evs = S.events(conn, sid)
         nxt = S.next_incomplete_event(conn, sid)
         before = (ctx["season"]["year"], nxt["round_number"]) if nxt else None
+        gate = gates.status(conn, nxt["id"]) if nxt and sid == ctx["current_season_id"] else None
+        my_target = teamlife.target_for(conn, nxt["id"], ctx["my_driver"]["id"]) \
+            if nxt and ctx["my_driver"] and ctx["team_life"]["targets"] else None
         return page("dashboard.html", ctx, events=evs, next_event=nxt,
                     completed=sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE),
                     drivers=insights.standings_with_changes(conn, sid, 8),
@@ -851,8 +868,9 @@ def register_routes(app):
                     news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
                     hub=_hub(conn, ctx, nxt) if nxt else None,
                     circuit=circuits.lookup(nxt["name"], nxt["location"]) if nxt else None,
-                    press=teamlife.press_pen(conn, ctx["current_season_id"], ctx["my_driver"]["id"])
-                    if ctx["my_driver"] and sid == ctx["current_season_id"] else None)
+                    press_pens=teamlife.press_pens(conn, ctx["current_season_id"], ctx["my_driver"]["id"])
+                    if ctx["my_driver"] and sid == ctx["current_season_id"] else [],
+                    gate=gate, my_target=my_target)
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
@@ -873,7 +891,8 @@ def register_routes(app):
                     entrants=_entrants(conn, event_id),
                     gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
-                    share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None)
+                    share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
+                    gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id))
 
     def _entrants(conn, event_id):
         """The drivers in this round, for the screenshot importer to match against (never anyone else)."""
@@ -988,6 +1007,7 @@ def register_routes(app):
                     contracts=community.contract_history(conn, driver_id), trophies=trophies,
                     can_edit=_may_edit_profile(ctx, driver_id), nationalities=community.NATIONALITIES,
                     owner=auth.get_user(owner) if owner else None,
+                    battles=battle.pairings(conn, ctx["season"]["id"], driver_id),
                     changes=insights.stat_changes(conn, ctx["season"]["id"], driver_id)
                     if any(t["season"]["id"] == ctx["season"]["id"] for t in timeline) else None)
 
@@ -1006,7 +1026,8 @@ def register_routes(app):
             abort(404)
         archive, totals = S.team_history(conn, team_id)
         return page("team_profile.html", ctx, team=team, archive=archive, totals=totals,
-                    details=S.team_details(conn, team_id, ctx["season"]["id"]))
+                    details=S.team_details(conn, team_id, ctx["season"]["id"]),
+                    battles=battle.team_battles(conn, ctx["season"]["id"], team_id))
 
     @app.route("/career/<token>/grid")
     @career_page()
@@ -1217,6 +1238,51 @@ def register_routes(app):
                                   if effect < 0 else "Nobody reads much into it."), "success")
         return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
 
+    @app.route("/career/<token>/target/<int:event_id>/accept", methods=["POST"])
+    @career_page()
+    def target_ack(conn, ctx, event_id):
+        if not ctx["my_driver"]:
+            abort(403)
+        t = teamlife.acknowledge(conn, event_id, ctx["my_driver"]["id"])
+        ev = S.get_event(conn, event_id)
+        g.audit_summary = f"accepted their Round {ev['round_number']} weekend target ({t['label']})"
+        flash("Target accepted. Good luck out there.", "success")
+        return _back(ctx, "#target")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/open-early", methods=["POST"])
+    @career_page(master_only=True)
+    def gate_bypass(conn, ctx, event_id):
+        waiting = gates.bypass(conn, event_id, g.user["username"], request.form.get("note"))
+        ev = S.get_event(conn, event_id)
+        note = request.form.get("note", "").strip()
+        g.audit_summary = (f"opened {event_label(ev, S.get_season(conn, ev['season_id'])['year'])} before everyone was "
+                           f"ready (waiting on {waiting}). Note: {note[:200]}")
+        g.audit_link = f"weekend/{event_id}"
+        flash("Round opened. Results can go in now; the outstanding items stay open for the players to do later.",
+              "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+
+    @app.route("/career/<token>/weekend/<int:event_id>/remind", methods=["POST"])
+    @career_page(ops_only=True)
+    def gate_remind(conn, ctx, event_id):
+        names = gates.remind(conn, event_id)
+        ev = S.get_event(conn, event_id)
+        g.audit_summary = f"reminded {', '.join(names)} that Round {ev['round_number']} is waiting on them"
+        flash(f"Reminder sent to {', '.join(names)}.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+
+    @app.route("/career/<token>/weekend/<int:event_id>/target/<int:driver_id>/excuse", methods=["POST"])
+    @career_page(master_only=True)
+    def target_excuse(conn, ctx, event_id, driver_id):
+        excused = request.form.get("excused") == "1"
+        t = teamlife.excuse(conn, event_id, driver_id, excused)
+        ev = S.get_event(conn, event_id)
+        name = S.driver_map(conn)[driver_id]["name"]
+        g.audit_summary = (f"marked {name}'s Round {ev['round_number']} {'DNF as not their fault' if excused else 'DNF as counting'}"
+                           f" (target now {t['status'].lower()})")
+        flash(f"{name}'s target is now {t['status'].lower()}.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#targets")
+
     @app.route("/career/<token>/weekend/<int:event_id>/incident", methods=["POST"])
     @career_page()
     def incident_report(conn, ctx, event_id):
@@ -1354,6 +1420,7 @@ def register_routes(app):
                 teammate = S.driver_map(conn).get(S.grid_map(conn, sid).get((seat[0], 2 if seat[1] == 1 else 1)))
         return page("team_standing.html", ctx, driver=driver, players=players, rel=rel, interest=interest, me=me,
                     orders=teamlife.orders_for(conn, sid, driver["id"]),
+                    targets=teamlife.targets_history(conn, sid, driver["id"]),
                     needs_pledge=relations.needs_pledge(conn, sid, driver["id"]),
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
@@ -1931,6 +1998,12 @@ def register_routes(app):
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
                     return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
                                    "can reopen or change it now."), 403
+                gate = gates.status(conn, event_id)
+                if gate["blocking"]:
+                    why = ("This round can't start yet. Waiting on: " + gates.waiting_text(gate) +
+                           (". Open it early from the round page with a note if you need to." if is_master()
+                            else ". Only the Race Master can open it early."))
+                    return jsonify(ok=False, gated=True, error=why), 423
                 base = payload.get("base_revision")
                 if base is not None and str(base).lstrip("-").isdigit() and int(base) != before["revision"]:
                     # Someone saved this round after the edits being sent were started (e.g. while offline).
@@ -1960,6 +2033,8 @@ def register_routes(app):
                     feed.on_weekend_complete(conn, event_id, f"weekend/{event_id}")
                     teamlife.after_race(conn, event_id)
                     opened = market.maybe_open_silly_season(conn, before["season_id"])
+                elif result["complete"]:
+                    teamlife.judge_targets(conn, event_id)   # a correction re-judges this round's weekend targets
                 result["market_opened"] = bool(opened)
                 result["summary_url"] = url_for("race_summary", token=token, event_id=event_id) if result["complete"] else None
         except CareerNotFound:
@@ -2051,11 +2126,17 @@ def register_routes(app):
         feats = ctx["features"]
         me = g.user["username"]
         hub = {"event": event, "started": community.race_started(event), "complete": event["status"] == C.EVENT_COMPLETE}
-        if ctx["my_driver"]:
-            order = conn.execute("SELECT * FROM team_orders WHERE event_id = ? AND driver_id = ?",
+        life = ctx["team_life"]
+        if ctx["my_driver"] and life["orders"] != "off":
+            order = conn.execute("SELECT * FROM team_orders WHERE event_id = ? AND driver_id = ? AND status != 'Cancelled'",
                                  (event["id"], ctx["my_driver"]["id"])).fetchone()
             if order:
-                hub["order"] = {**dict(order), "beneficiary": S.driver_map(conn).get(order["beneficiary_id"])}
+                hub["order"] = {**dict(order), "beneficiary": S.driver_map(conn).get(order["beneficiary_id"]),
+                                "advisory": life["orders"] == "advisory"}
+        if life["targets"] and full:
+            hub["targets"] = teamlife.targets_for_event(conn, event["id"])
+        if full and hub["complete"]:
+            hub["battles"] = battle.player_battles(conn, event)
         if feats["checkin"] and not hub["complete"]:
             hub["checkins"], hub["checkin_counts"] = community.checkins(conn, event["id"])
             hub["my_checkin"] = next((r["status"] for r in hub["checkins"] if r["username"] == me), None)
@@ -2093,8 +2174,13 @@ def register_routes(app):
     def league_settings(conn, ctx):
         if request.method == "POST":
             before = {"features": community.features(conn), "join": storage.join_mode(conn),
-                      "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"]}
+                      "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"],
+                      "life": teamlife.settings(conn)}
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
+            if request.form.get("team_life") == "1":
+                teamlife.save_settings(conn, request.form.get("team_orders"), bool(request.form.get("weekend_targets")),
+                                       bool(request.form.get("round_gates")), bool(request.form.get("gate_press")),
+                                       bool(request.form.get("gate_targets")))
             if request.form.get("join_mode") in storage.JOIN_MODES:
                 storage.set_join_mode(conn, request.form.get("join_mode"))
             discord.save_settings(conn, request.form.get("discord_webhook"), request.form.get("discord_results"),
@@ -2114,6 +2200,7 @@ def register_routes(app):
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         return page("settings.html", ctx, feats=feats, public_link=link, discord=discord.settings(conn),
+                    life=teamlife.settings(conn),
                     zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
                     join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES)
 

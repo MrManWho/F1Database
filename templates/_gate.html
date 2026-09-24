@@ -1,0 +1,52 @@
+{# Round gate checklist. Needs: ctx, gate (gates.status), reminded; full=True on the round page. #}
+{% set ev = gate.event %}
+{% if gate.active or gate.bypass %}
+<section class="card gate-card {{ 'gate-blocked' if gate.blocking else 'gate-open' }}" id="gate" aria-labelledby="gate-title">
+  <div class="card-head">
+    <h2 id="gate-title">{% if gate.blocking %}⏳ R{{ ev.round_number }} can't start yet{% elif gate.bypass %}🔓 R{{ ev.round_number }} opened early{% else %}✅ R{{ ev.round_number }} is ready to start{% endif %}</h2>
+    {% if gate.active %}<span class="muted small">{{ gate.players|length - gate.waiting }} of {{ gate.players|length }} ready</span>{% endif %}
+  </div>
+  {% if gate.active %}
+  <p class="small">{% if gate.blocking %}Results can go in once every player below has done their part.{% else %}Everyone's done their part.{% endif %}</p>
+  <ul class="gate-list">
+    {% for p in gate.players %}
+    <li class="{{ 'is-done' if p.done else 'is-waiting' }}" {% if p.driver.player_color %}style="--player: {{ p.driver.player_color }}"{% endif %}>
+      <span class="gate-who"><b>{{ p.driver.name }}</b></span>
+      <span class="gate-items">{% for i in p.checks %}<span class="gate-item {{ 'ok' if i.done else 'no' }}">{{ '✓' if i.done else '✗' }} {{ i.label }}</span>{% endfor %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if gate.bypass %}
+  <p class="small gate-bypass-note"><b>Opened by the Race Master</b>{% if gate.bypass.waiting %} while waiting on {{ gate.bypass.waiting }}{% endif %}: “{{ gate.bypass.note }}”
+    <span class="muted">{{ gate.bypass.created_at|stamp }}</span></p>
+  {% if gate.active and gate.waiting %}<p class="muted small">Anything still open can be done later and still counts.</p>{% endif %}
+  {% endif %}
+  {% if gate.blocking and full %}
+    {% if ctx.can_run %}
+    <div class="button-row tight">
+      <form method="post" action="{{ url_for('gate_remind', token=ctx.token, event_id=ev.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm" {{ 'disabled' if reminded }}>{{ '✓ Reminder sent' if reminded else '🔔 Send a reminder' }}</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if ctx.is_master %}
+    <details class="gate-bypass">
+      <summary class="small">Open this round early…</summary>
+      <form method="post" action="{{ url_for('gate_bypass', token=ctx.token, event_id=ev.id) }}" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Why? <small class="muted">(required, kept on the round and in the Activity Log)</small>
+          <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. Carson's away, answering later"></label>
+        <p class="muted small">Opens R{{ ev.round_number }} only. The players can still do what's outstanding later and it still counts.</p>
+        <div><button class="btn btn-sm btn-primary">Open round</button></div>
+      </form>
+    </details>
+    {% elif ctx.can_run %}
+    <p class="muted small">Only the Race Master can open a round early.</p>
+    {% endif %}
+  {% elif gate.blocking and ctx.can_run %}
+  <p class="small"><a href="{{ url_for('weekend', token=ctx.token, event_id=ev.id) }}#gate">Go to the round →</a></p>
+  {% endif %}
+</section>
+{% endif %}

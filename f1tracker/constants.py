@@ -1,8 +1,8 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "1.19"
-SCHEMA_VERSION = 16
+APP_VERSION = "1.20"
+SCHEMA_VERSION = 17
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -198,6 +198,13 @@ RELATION_START = 60.0
 RELATION_EXTRA_CAP = 15.0
 TEAM_ORDER_IGNORED = -6.0
 TEAM_ORDER_OBEYED = 2.0
+# Team orders: "off" (never issued; the default), "advisory" (shown, but no effect or headlines), "on" (judged).
+TEAM_ORDER_MODES = {"off": "Off", "advisory": "Advisory (shown, no effect)", "on": "On (judged, affects your standing)"}
+# Weekend targets: one per player driver per round, judged from the results.
+TARGET_HIT = 2.0
+TARGET_MISSED = -1.5
+TARGET_STREAKS = (3, 5, 8, 10)   # consecutive targets hit that make a headline
+GATE_NOTE_MIN = 10               # characters a Race Master's gate bypass note needs
 GOAL_WEIGHT = 4.0   # each season goal adds or removes this much (scaled by how far into the season)
 
 INCIDENT_RULINGS = {

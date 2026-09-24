@@ -1147,3 +1147,41 @@ body.rail .nav-admin-items { display: flex !important; max-height: none; }
 .season-info .season-facts { flex: none; }
 .move-preview { margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .8rem; }
 .pill-muted { opacity: .75; }
+
+/* v1.20: round gates, weekend targets, teammate battle */
+.todo-banner a { font-weight: 600; margin-left: .3rem; }
+.gate-card.gate-blocked { border-left: 3px solid var(--amber); }
+.gate-card.gate-open { border-left: 3px solid var(--green); }
+.gate-list { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .35rem; }
+.gate-list li { display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: baseline; padding: .45rem .6rem; border-radius: 8px;
+  background: var(--panel-2); border-left: 3px solid var(--player, var(--line)); min-width: 0; }
+.gate-who { min-width: 8rem; }
+.gate-items { display: flex; flex-wrap: wrap; gap: .3rem .8rem; font-size: .85rem; min-width: 0; }
+.gate-item.ok { color: var(--green); }
+.gate-item.no { color: var(--amber); }
+.gate-bypass { margin-top: .6rem; }
+.gate-bypass summary { cursor: pointer; }
+.gate-bypass-note { border-left: 3px solid var(--blue); padding-left: .6rem; }
+.gate-options { display: grid; gap: .3rem; margin: -.2rem 0 .4rem 3.2rem; }
+@media (max-width: 600px) { .gate-options { margin-left: 0; } }
+.target-card .target-text { font-size: 1.15rem; font-weight: 700; margin: .2rem 0 .4rem; }
+.target-pill { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .5rem; border-radius: 999px; background: var(--panel-2); white-space: nowrap; }
+.tp-hit { color: var(--green); background: rgba(43, 213, 118, .12); }
+.tp-miss { color: var(--red); background: rgba(225, 6, 0, .12); }
+.tp-wait { color: var(--amber); background: rgba(255, 176, 32, .12); }
+.tp-ok { color: var(--blue); }
+.target-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.target-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; padding: .35rem .5rem; border-left: 3px solid var(--player, var(--line)); background: var(--panel-2); border-radius: 6px; min-width: 0; }
+.target-list .tl-who { min-width: 9rem; }
+.target-list .tl-what { flex: 1 1 12rem; min-width: 0; }
+.battle-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .3rem 1rem; align-items: center; padding: .5rem .6rem;
+  border-left: 3px solid var(--team); background: var(--panel-2); border-radius: 8px; margin-bottom: .4rem; min-width: 0; }
+.battle-row.battle-human { box-shadow: inset 0 0 0 1px var(--amber); }
+.battle-who { display: flex; flex-wrap: wrap; gap: .2rem .5rem; align-items: baseline; min-width: 0; }
+.battle-stats { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .9rem; }
+.battle-stats .up b { color: var(--green); }
+.battle-stats .down b { color: var(--red); }
+.pill-human { background: rgba(255, 176, 32, .15); color: var(--amber); }
+.goal-list .target-hit em { color: var(--green); }
+.goal-list .target-missed em { color: var(--red); }
+.order-cancelled { opacity: .6; }

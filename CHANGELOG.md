@@ -3,6 +3,22 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 1.20 · Weekend targets, teammate battles and round gates
+### New
+- **Weekend targets.** Before each race every player driver gets one realistic target from their team (e.g. "Finish P8 or better", "Score points", "Beat both Haas cars", now and then "Finish ahead of your teammate"), pitched from the car's pace, recent form and contract role, so a backmarker is never asked for a podium. Accept it with **Got it** on the Control Room. It's judged from the results: hit +2 team standing, missed -1.5, void if you didn't take part. The Race Master can rule a DNF/DSQ "not the driver's fault". Corrections re-judge it. Three, five, eight or ten in a row makes the news. Switch it off in League Settings.
+- **Teammate battle.** A season-long head-to-head with whoever shares your car: qualifying, race (a finisher beats a DNF; skipped if neither finished) and the points gap. It's on driver pages, team pages and the race page after each round, with one battle per teammate if someone changes seat mid-season. Human-vs-human battles are marked 👥. Headlines cover a new leader, five in a row and the season verdict. Beating your teammate is never punished.
+- **Round gates.** Results for the next round can't go in until every player with a login has answered both post-race press questions and accepted their weekend target. Players without a login never hold a round up. A banner on every page tells you what's waiting on you, and the round page shows the checklist to everyone. Scorekeepers can't get past it (they can send one reminder per round). The Race Master can open a round early with a note, which is kept on the round and in the Activity Log. Anything still open can be done later and still counts. The server enforces it, not just the page.
+
+### Changed
+- **Team orders are now a League Settings choice** and are **off** by default: Off (none issued; any waiting order is cancelled with no penalty), Advisory (shown, no effect, no headlines) or On (as before). Past orders stay in history.
+- With press gates on, unanswered press questions no longer lapse when the next race is completed.
+
+### Preserved
+- No results, contracts, relationships or past orders were changed. Rounds completed before this version never become a requirement, and a round that already has results is never gated, so corrections are never blocked.
+
+### Tested
+- Team-order modes; target planning for fast and slow cars; judging including void, excused DNF and corrections; streak headlines; teammate battle counts with DNFs and a mid-season seat change; linked vs unlinked players; Scorekeepers blocked in the page and the API; the Race Master's bypass needs a note and is logged; late answers after a bypass still count; Spectators see the checklist read-only; migration keeps every result.
+
 ## 1.19 · Fixes, safer admin and free screenshot import
 ### Fixed
 - **AI difficulty on a completed round.** A completed round with a tracked difficulty now counts toward the recommendation on its own page (it used to say "Track the AI difficulty on a completed round to establish a baseline"). The message now reads like "1 of 3 usable rounds at AI 80. Waiting for a consistent pattern (2 more needed)", and says when a tracked round didn't count because no player driver finished. "Don't track this round" is remembered explicitly. The recommendation formula is unchanged and never moves more than one step.

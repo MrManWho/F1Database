@@ -14,6 +14,27 @@
     <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span>
   </label>
   {% endfor %}
+  <h2 id="team-life">Team life</h2>
+  <input type="hidden" name="team_life" value="1">
+  <label>Team orders
+    <select name="team_orders">{% for key, label in C.TEAM_ORDER_MODES.items() %}<option value="{{ key }}" {{ 'selected' if life.orders == key }}>{{ label }}</option>{% endfor %}</select></label>
+  <p class="muted small">Off: teams never tell anyone to let a teammate through, and any order still waiting is cancelled with no penalty.
+    Advisory: the order still shows, but it has no effect and makes no headlines. On: finishing ahead of the teammate counts as ignoring it.
+    Past orders stay in history either way.</p>
+  <label class="toggle-row">
+    <input type="checkbox" name="weekend_targets" value="1" {{ 'checked' if life.targets }}>
+    <span class="switch"></span>
+    <span><b>Weekend targets</b><small class="muted">Before each race every player driver gets one realistic target from their team (finish P8 or better, score points, beat both cars of a rival team…). Hit: +{{ C.TARGET_HIT|int }} team standing, missed: {{ C.TARGET_MISSED }}.</small></span>
+  </label>
+  <label class="toggle-row">
+    <input type="checkbox" name="round_gates" value="1" {{ 'checked' if life.gates }}>
+    <span class="switch"></span>
+    <span><b>Round gates</b><small class="muted">Results for the next round can't go in until every player with a login has done the things ticked below. Players without a login never hold anything up. Scorekeepers can't get past it; you can open a round early with a note.</small></span>
+  </label>
+  <div class="gate-options">
+    <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Post-race press questions answered (they stay open until answered)</label>
+    <label class="check"><input type="checkbox" name="gate_targets" value="1" {{ 'checked' if life.gate_targets }}> Weekend target accepted</label>
+  </div>
   <h2>Time zone</h2>
   <label>Race times, notifications and dates are shown in
     <select name="timezone">

@@ -12,14 +12,14 @@
     <option value="">Jump to a topic…</option>
     <optgroup label="Roles and league management"><option value="roles">Who can do what</option><option value="scorekeeper">Scorekeeper</option><option value="race-master">Race Master</option><option value="drivers">Assigned drivers</option><option value="joining">Joining a league</option></optgroup>
     <optgroup label="Driver development"><option value="form">Form</option><option value="reputation">Reputation</option><option value="driver-value">Driver Value</option><option value="car">Car strength</option><option value="racecraft">Racecraft</option></optgroup>
-    <optgroup label="Career and contracts"><option value="market">Transfer market</option><option value="pledges">Growth pledges</option><option value="relationship">Team relationship</option><option value="goals">Season goals</option><option value="orders">Team orders</option></optgroup>
+    <optgroup label="Career and contracts"><option value="market">Transfer market</option><option value="pledges">Growth pledges</option><option value="relationship">Team relationship</option><option value="goals">Season goals</option><option value="targets">Weekend targets</option><option value="battle">Teammate battle</option><option value="orders">Team orders</option><option value="gates">Round gates</option></optgroup>
     <optgroup label="Race weekends"><option value="results">Entering results</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="difficulty">AI difficulty</option><option value="press">Press pen</option><option value="incidents">Incidents</option></optgroup>
     <optgroup label="Extra features"><option value="extras">League features</option><option value="notifications">Notifications</option><option value="comments">Comments and reactions</option><option value="predictions">Predictions</option><option value="public">Public results</option><option value="discord">Discord</option></optgroup>
   </select></label>
   <nav class="help-toc-groups">
     <div class="help-group"><h3>Roles and league management</h3><a href="#roles" data-topic="roles">Who can do what</a><a href="#scorekeeper" data-topic="scorekeeper">Scorekeeper</a><a href="#race-master" data-topic="race-master">Race Master</a><a href="#drivers" data-topic="drivers">Assigned drivers</a><a href="#joining" data-topic="joining">Joining a league</a></div>
     <div class="help-group"><h3>Driver development</h3><a href="#form" data-topic="form">Form</a><a href="#reputation" data-topic="reputation">Reputation</a><a href="#driver-value" data-topic="driver-value">Driver Value</a><a href="#car" data-topic="car">Car strength</a><a href="#racecraft" data-topic="racecraft">Racecraft</a></div>
-    <div class="help-group"><h3>Career and contracts</h3><a href="#market" data-topic="market">Transfer market</a><a href="#pledges" data-topic="pledges">Growth pledges</a><a href="#relationship" data-topic="relationship">Team relationship</a><a href="#goals" data-topic="goals">Season goals</a><a href="#orders" data-topic="orders">Team orders</a></div>
+    <div class="help-group"><h3>Career and contracts</h3><a href="#market" data-topic="market">Transfer market</a><a href="#pledges" data-topic="pledges">Growth pledges</a><a href="#relationship" data-topic="relationship">Team relationship</a><a href="#goals" data-topic="goals">Season goals</a><a href="#targets" data-topic="targets">Weekend targets</a><a href="#battle" data-topic="battle">Teammate battle</a><a href="#orders" data-topic="orders">Team orders</a><a href="#gates" data-topic="gates">Round gates</a></div>
     <div class="help-group"><h3>Race weekends</h3><a href="#results" data-topic="results">Entering results</a><a href="#sprints" data-topic="sprints">Sprint weekends</a><a href="#race-times" data-topic="race-times">Race times</a><a href="#difficulty" data-topic="difficulty">AI difficulty</a><a href="#press" data-topic="press">Press pen</a><a href="#incidents" data-topic="incidents">Incidents</a></div>
     <div class="help-group"><h3>Extra features</h3><a href="#extras" data-topic="extras">League features</a><a href="#notifications" data-topic="notifications">Notifications</a><a href="#comments" data-topic="comments">Comments and reactions</a><a href="#predictions" data-topic="predictions">Predictions</a><a href="#public" data-topic="public">Public results</a><a href="#discord" data-topic="discord">Discord</a></div>
   </nav>
@@ -164,11 +164,51 @@
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 
+<section class="card help" id="targets">
+  <h2>Weekend targets</h2>
+  <p>Before each race your team sets you one target, pitched at what your car can do, your last few results and your contract (a No. 1 is asked for a bit more,
+    a No. 2 a bit less). For example: <i>Finish P8 or better</i>, <i>Score points</i>, <i>Beat both Haas cars</i> (the team just behind you on pace), or now and then
+    <i>Finish ahead of your teammate</i>. It's never an order to hold anyone up.</p>
+  <ul>
+    <li>Accept it with <b>Got it</b> on the Control Room (one click, no choices).</li>
+    <li>It's judged from the results: hit it for <b>{{ '%+.0f'|format(C.TARGET_HIT) }}</b> team standing, miss it for <b>{{ C.TARGET_MISSED }}</b>.</li>
+    <li>It doesn't count (void) if you didn't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault.</li>
+    <li>If the Race Master corrects the results, the target is judged again. Hitting {{ C.TARGET_STREAKS[0] }} in a row makes the news.</li>
+  </ul>
+  <p class="muted small">The Race Master can switch weekend targets off in League Settings.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="battle">
+  <h2>Teammate battle</h2>
+  <p>A running head-to-head with whoever shares your car, on your driver page, the team page and the race page after each round:
+    <b>Qualifying</b> (who qualified ahead), <b>Race</b> (who finished ahead; a finisher beats a DNF, and the round is skipped if neither finished) and the <b>points</b> gap.
+    If you change seat mid-season you get a separate battle for each teammate. Battles between two players are marked 👥.</p>
+  <p>Beating your teammate is never punished. Leading the race battle gives a small boost to your team standing. The news picks up a new leader, five in a row, and the end-of-season verdict.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
 <section class="card help" id="orders">
   <h2>Team orders</h2>
-  <p>Seat status matters. A <b>No. 2</b> driver can be told before a race to let their teammate through (more likely when the teammate is ahead in the championship).
+  <p>Off unless the Race Master switches them on in League Settings. When they're on, a <b>No. 2</b> driver can be told before a race to let their teammate through (more likely when the teammate is ahead in the championship).
     It's judged from the result: finish ahead of them and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }} relationship, and a headline); finish behind and you followed it
     ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). If either of you doesn't finish, the order is void.</p>
+  <p>In <b>Advisory</b> mode the order still shows but has no effect and makes no headlines. Switching them <b>Off</b> cancels any order still waiting, with no penalty. Past orders stay in history.</p>
+  <a class="back-top small" href="#top">Back to top ↑</a>
+</section>
+
+<section class="card help" id="gates">
+  <h2>Round gates</h2>
+  <p>Results for the next round can't go in until every player with a login has done their part: answered both post-race press questions from the last round,
+    and accepted their weekend target. Players without a login never hold a round up. You'll see a reminder banner on every page until you've done yours,
+    and the round page shows who it's waiting on.</p>
+  <ul>
+    <li><b>Scorekeepers</b> can't get past it. They can send one reminder per round.</li>
+    <li>The <b>Race Master</b> can open a round early with a note (e.g. “Carson's away, answering later”). The note stays on the round and in the Activity Log.
+      Anything still outstanding can be done later and still counts.</li>
+    <li>A round that already has results is never gated, so corrections are never blocked. Nothing from before gates existed becomes a requirement.</li>
+  </ul>
+  <p class="muted small">The Race Master can switch gates, or either requirement, off in League Settings.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 

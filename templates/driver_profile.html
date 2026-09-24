@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, avatar, trend_chart, delta, stat_change with context %}
+{% from "_macros.html" import team_dot, avatar, trend_chart, delta, stat_change, battle_row with context %}
 {% block title %}{{ driver.name }}{% endblock %}
 {% block content %}
 {% set latest = timeline[-1] if timeline else none %}
@@ -41,6 +41,13 @@
     {{ stat_change('Points', changes.points, changes.since) }}
     {{ stat_change('WDC', changes.position, changes.since, prefix='P') }}
   </div>
+</section>
+{% endif %}
+{% if battles %}
+<section class="card" id="battle">
+  <div class="card-head"><h2>🥊 Teammate battle · {{ ctx.season.year }}</h2><span class="muted small">completed rounds</span></div>
+  {% for p in battles %}{{ battle_row(ctx, p) }}{% endfor %}
+  <p class="muted small">Race: who finished ahead (a finisher beats a DNF; skipped if neither finished). Points: Grand Prix and Sprint points in the rounds they shared.</p>
 </section>
 {% endif %}
 {% set final_trophies = trophies|rejectattr('live')|list %}

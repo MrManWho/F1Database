@@ -210,6 +210,12 @@
       saving = false;
       if (res.httpStatus === 409 && res.conflict) { resolveConflict(res.server); return false; }
       if (res.httpStatus === 403 && res.locked) { lockOut(res.error); return false; }
+      if (res.httpStatus === 423 && res.gated) {
+        // The round is waiting on players (round gates). Keep the edits on this device; reload shows the checklist.
+        remember(); dirty = true; setState("error", "Waiting for players", true);
+        showBanner("⏳ " + esc(res.error) + " Your edits are kept on this device. Reload the page to see what the round is waiting on.", true);
+        return false;
+      }
       if (res.httpStatus === 422 && res.blocked) { revision = res.revision || revision; renderChecklist(res.checklist); return false; }
       if (!res.ok) {
         dirty = true;
