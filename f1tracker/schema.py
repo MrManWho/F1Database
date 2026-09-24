@@ -562,6 +562,8 @@ def migrate(conn):
         # first use from their account's old race-result email switch); nobody new inherits anything.
         conn.execute("INSERT OR IGNORE INTO member_notify(username, legacy, updated_at) "
                      "SELECT username, 1, NULL FROM career_members")
+    if "driver_id" not in _columns(conn, "invitations"):
+        conn.execute("ALTER TABLE invitations ADD COLUMN driver_id INTEGER")   # v2.0: an invitation to drive a driver
     if "notify_preset" not in _columns(conn, "join_requests"):
         conn.execute("ALTER TABLE join_requests ADD COLUMN notify_preset TEXT")   # v2.0: chosen when asking to join
     note_cols = _columns(conn, "notifications")

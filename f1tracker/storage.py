@@ -209,6 +209,7 @@ def _summary(path):
         "pending_requests": requests,
         "players": players,
         "roles": roles_,
+        "demo": token.startswith("demo-"),
         "muted": muted,
         "visibility": meta.get("visibility", "private"),
         "description": meta.get("league_description", ""),

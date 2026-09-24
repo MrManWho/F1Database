@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Public leagues{% endblock %}
+{% block plain %}
+<div class="directory">
+<div class="page-head"><div><div class="kicker">Directory</div><h1>Public leagues</h1>
+  <p class="page-purpose">Leagues whose Race Master chose to be listed. Their standings and results are public; everything else stays private.</p></div>
+  <form method="get" class="inline-form"><label class="sr-only" for="dir-q">Search leagues</label>
+    <input type="search" id="dir-q" name="q" value="{{ q }}" placeholder="Search by name, region or game" maxlength="60"><button class="btn">Search</button></form>
+</div>
+{% if leagues %}
+<div class="league-grid">
+  {% for l in leagues %}
+  <article class="league-card card" {% if l.accent %}style="--accent: {{ l.accent }}"{% endif %}>
+    <a class="league-card-link" href="{{ l.public_url }}">
+      <span class="league-mark" aria-hidden="true">{{ l.name[:2]|upper }}</span>
+      <span class="league-name"><b>{{ l.name }}</b><small>{{ l.year }} season · {{ l.completed }}/{{ l.total }} rounds</small></span>
+    </a>
+    {% if l.league_description %}<p class="small">{{ l.league_description }}</p>{% endif %}
+    <div class="league-card-meta small">
+      {% if l.league_region %}<span>🌍 {{ l.league_region }}</span>{% endif %}
+      {% if l.league_platform %}<span>🎮 {{ l.league_platform }}</span>{% endif %}
+      {% if l.league_schedule %}<span>🗓 {{ l.league_schedule }}</span>{% endif %}
+      <span>{{ l.join_label }}</span>
+    </div>
+    <div class="button-row tight league-card-actions">
+      <a class="btn btn-sm" href="{{ l.public_url }}">View standings</a>
+      {% if l.join_mode == 'requests' %}<a class="btn btn-sm btn-ghost" href="{{ url_for('home') }}">Ask to join</a>{% endif %}
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('report_league', token=l.token) }}">Report</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<section class="card empty-state"><p>{{ 'No public leagues match “' ~ q ~ '”.' if q else 'No leagues are listed yet.' }}</p>
+  <p><a href="{{ url_for('demo_start') }}">Explore the demo instead →</a></p></section>
+{% endif %}
+</div>
+{% endblock %}

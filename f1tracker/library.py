@@ -45,7 +45,7 @@ def user_leagues(user, careers=None, include_hidden=False):
     out = []
     for c in careers:
         member = c["roles"].get(user["username"])
-        if not member and not user["is_master"]:
+        if not member and (not user["is_master"] or c.get("demo")):
             continue
         p = prefs.get(c["token"], {})
         role = "race_master" if user["is_master"] and not member else (member or {}).get("role", "member")

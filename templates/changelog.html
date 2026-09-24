@@ -2,15 +2,26 @@
 {% block title %}What's new{% endblock %}
 {% block plain %}
 <div class="page-head"><div><div class="kicker">Version history</div><h1>What's new</h1></div>
-  <a class="btn btn-ghost" href="{{ url_for('home') }}">← League Library</a></div>
+  <a class="btn btn-ghost" href="{{ url_for('home') }}">← {{ 'Your leagues' if user else 'Home' }}</a></div>
 <p class="muted">You're on <b>v{{ APP_VERSION }}</b>. Every update keeps your leagues, logins and results.</p>
 {% for v in versions %}
 <section class="card changelog-entry {{ 'current' if v.version == APP_VERSION }}" id="v{{ v.version }}">
   <div class="card-head"><h2>v{{ v.version }}{% if v.title %} · {{ v.title }}{% endif %}</h2>
     {% if v.version == APP_VERSION %}<span class="pill pill-hot">Current</span>{% endif %}</div>
+  {% if v.date %}<p class="muted small">Released {{ v.date }}</p>{% endif %}
+  {% if v.overview %}<p>{{ v.overview }}</p>{% endif %}
+  {% if v.sections %}
+  {% for sec in v.sections %}
+  <h3 class="cl-section cl-{{ sec.title|lower|replace(' ', '-') }}">{{ sec.title }}</h3>
+  <ul class="changelog-list">
+    {% for item in sec['items'] %}<li>{{ item.text }}{% if item.children %}<ul>{% for c in item.children %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
+  </ul>
+  {% endfor %}
+  {% else %}
   <ul class="changelog-list">
     {% for item in v['items'] %}<li>{{ item.text }}{% if item.children %}<ul>{% for c in item.children %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
   </ul>
+  {% endif %}
 </section>
 {% else %}<p class="muted">No changelog found.</p>{% endfor %}
 {% endblock %}

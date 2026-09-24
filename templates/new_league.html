@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}New league{% endblock %}
+{% block plain %}
+<div class="wizard-wrap">
+<div class="page-head"><div><div class="kicker">New league</div><h1>Set up your league</h1>
+  <p class="page-purpose">Eight short steps. Every choice can be changed later in League Settings, and nothing is sent to anyone until you create the league.</p></div>
+  <a class="btn btn-ghost" href="{{ url_for('home') }}">Cancel</a></div>
+
+<ol class="wizard-steps" id="wizard-steps" aria-label="Setup steps">
+  {% for label in ['Identity', 'Season & calendar', 'Teams & grid', 'Scoring', 'Career systems', 'Roles & invitations', 'Notifications', 'Review'] %}
+  <li data-step-link="{{ loop.index0 }}"><span class="num">{{ loop.index }}</span><span class="lbl">{{ label }}</span></li>
+  {% endfor %}
+</ol>
+
+<form method="post" action="{{ url_for('career_new') }}" class="wizard" id="wizard" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="wizard" value="1">
+
+  <fieldset class="card wizard-step" data-step="0">
+    <legend><h2>1 · League identity</h2></legend>
+    <label>League name<input name="name" required maxlength="80" placeholder="e.g. Thursday Night F1" data-summary="League"></label>
+    <label>Short description <small class="muted">(optional; shown publicly only if you make the league public)</small>
+      <textarea name="league_description" rows="2" maxlength="600"></textarea></label>
+    <div class="grid-2">
+      <label>Region <small class="muted">(optional)</small><input name="league_region" maxlength="60" placeholder="e.g. Europe"></label>
+      <label>Platform / game <small class="muted">(optional)</small><input name="league_platform" maxlength="80" placeholder="e.g. F1 25 on PlayStation"></label>
+    </div>
+    <label>Accent colour<input type="color" name="accent_color" value="#e10600"></label>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="1">
+    <legend><h2>2 · Season and calendar</h2></legend>
+    <label>Opening season<input name="year" type="number" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" value="{{ default_year }}" required data-summary="Season"></label>
+    <div class="choice-cards" role="radiogroup" aria-label="Calendar">
+      <label class="choice"><input type="radio" name="calendar" value="standard" checked data-summary="Calendar" data-summary-text="Standard {{ calendar|length }}-round calendar">
+        <span><b>Standard calendar</b><small class="muted">{{ calendar|length }} rounds, including {{ calendar|selectattr(3)|list|length }} Sprint weekends. Edit, reorder or remove rounds any time.</small></span></label>
+      <label class="choice"><input type="radio" name="calendar" value="blank" data-summary="Calendar" data-summary-text="Empty: I'll add rounds">
+        <span><b>Start empty</b><small class="muted">Add your own rounds in Calendar management.</small></span></label>
+    </div>
+    <label class="check"><input type="checkbox" name="sprints" value="1" checked> Keep Sprint weekends in the standard calendar</label>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="2">
+    <legend><h2>3 · Teams and grid</h2></legend>
+    <p class="muted small">The league starts with the {{ teams|length }} current teams and their drivers as AI. Add the human (player) drivers: one, several or none.
+      Player drivers replace AI drivers on the grid; you choose seats afterwards in Grid &amp; contracts.</p>
+    <div id="player-rows" class="stack">
+      <div class="player-row-w grid-3">
+        <label>Driver name<input name="player_name" maxlength="60" placeholder="First Last"></label>
+        <label>Who drives it?
+          <select name="player_who" data-who>
+            <option value="me">Me</option><option value="invite">Invite a login</option><option value="none">Nobody yet</option>
+          </select></label>
+        <label data-invite-field hidden>Their username<input name="player_invite" maxlength="32" autocomplete="off" placeholder="username"></label>
+      </div>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="add-player">+ Add another player driver</button>
+    <p class="muted small">Invitations are only created when you finish, and nobody is emailed unless you choose to on the last step.</p>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="3">
+    <legend><h2>4 · Scoring and Sprints</h2></legend>
+    <p>Standard points: Grand Prix {% for pos, pts in C.GP_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.GP_POINTS|length }};
+      Sprint {% for pos, pts in C.SPRINT_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.SPRINT_POINTS|length }}.</p>
+    <ul class="muted small">
+      <li>A DNF, DNS or DSQ scores nothing in that session; a Sprint DNF never affects Grand Prix points.</li>
+      <li>Standings, records and career stats use these rules in every season, so seasons stay comparable.</li>
+    </ul>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="4">
+    <legend><h2>5 · Career systems</h2></legend>
+    <div class="choice-cards" role="radiogroup" aria-label="Setup preset">
+      {% for key, p in presets.items() %}
+      <label class="choice"><input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'multiplayer' }} data-summary="Setup" data-summary-text="{{ p.label }}">
+        <span><b>{{ p.label }}</b><small class="muted">{{ p.blurb }}</small><small class="enables">{{ p.enables|join(' · ') }}</small></span></label>
+      {% endfor %}
+    </div>
+    <div class="custom-systems" id="custom-systems" hidden>
+      <h3>Choose each system</h3>
+      {% for key, (label, desc, default) in features.items() %}
+      <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> {{ label }} <small class="muted">· {{ desc }}</small></label>
+      {% endfor %}
+      <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Contracts and the transfer market (starts with a Rookie Draft)</label>
+      <label class="check"><input type="checkbox" name="weekend_targets" value="1" checked> Weekend targets</label>
+      <label class="check"><input type="checkbox" name="round_gates" value="1" checked> Round gates</label>
+      <label>Team orders<select name="team_orders">{% for k, l in order_modes.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="5">
+    <legend><h2>6 · Roles, joining and visibility</h2></legend>
+    <p class="muted small">You'll be the Race Master. Race Masters run the league; Scorekeepers enter results; Members follow along and drive their own driver; Spectators only watch.</p>
+    <label>How people join
+      <select name="join_mode" data-summary="Joining">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == 'invite' }}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Who can see the league
+      <select name="visibility" data-summary="Visibility">{% for key, (label, desc) in visibility.items() %}<option value="{{ key }}" {{ 'selected' if key == 'private' }}>{{ label }}: {{ desc }}</option>{% endfor %}</select></label>
+    <fieldset><legend>Invite more people (optional)</legend>
+      <div id="invite-rows" class="stack">
+        <div class="grid-2 invite-row"><label>Username<input name="invite_username" maxlength="32" autocomplete="off"></label>
+          <label>Role<select name="invite_role"><option value="member">Member</option><option value="scorekeeper">Scorekeeper</option><option value="spectator">Spectator</option></select></label></div>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" id="add-invite">+ Another</button>
+    </fieldset>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="6">
+    <legend><h2>7 · Your notifications</h2></legend>
+    <div class="choice-cards" role="radiogroup" aria-label="Notifications from this league">
+      {% for key, (label, desc) in notify_presets.items() %}
+      <label class="choice"><input type="radio" name="notify_preset" value="{{ key }}" {{ 'checked' if key == 'important' }} data-summary="Your notifications" data-summary-text="{{ label }}">
+        <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span></label>
+      {% endfor %}
+    </div>
+    <p class="muted small">Only for you, in this league. Everyone else chooses for themselves when they join; nobody is subscribed automatically.</p>
+  </fieldset>
+
+  <fieldset class="card wizard-step" data-step="7">
+    <legend><h2>8 · Review and create</h2></legend>
+    <dl class="review-list" id="review-list"><div><dt>League</dt><dd class="muted">Fill in the steps above.</dd></div></dl>
+    <label class="check"><input type="checkbox" name="send_invites" value="1"> Email the people I invited (they'll see the invitation in their League Library either way)</label>
+    <p class="muted small">Creating the league makes you its Race Master. It's private until you choose otherwise, and you can change every setting later.</p>
+  </fieldset>
+
+  <div class="wizard-nav">
+    <button type="button" class="btn btn-ghost" id="wiz-back">← Back</button>
+    <span class="muted small" id="wiz-pos" aria-live="polite"></span>
+    <button type="button" class="btn btn-primary" id="wiz-next">Next →</button>
+    <button type="submit" class="btn btn-primary" id="wiz-create">Create league</button>
+  </div>
+</form>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+  "use strict";
+  var form = document.getElementById("wizard");
+  var steps = Array.prototype.slice.call(form.querySelectorAll(".wizard-step"));
+  var links = Array.prototype.slice.call(document.querySelectorAll("[data-step-link]"));
+  var back = document.getElementById("wiz-back"), next = document.getElementById("wiz-next"), create = document.getElementById("wiz-create");
+  var pos = document.getElementById("wiz-pos");
+  var at = 0;
+  form.classList.add("js");
+  function show(i) {
+    at = Math.max(0, Math.min(steps.length - 1, i));
+    steps.forEach(function (s, j) { s.hidden = j !== at; });
+    links.forEach(function (l, j) { l.classList.toggle("is-on", j === at); l.classList.toggle("is-done", j < at); if (j === at) l.setAttribute("aria-current", "step"); else l.removeAttribute("aria-current"); });
+    back.hidden = at === 0; next.hidden = at === steps.length - 1; create.hidden = at !== steps.length - 1;
+    pos.textContent = "Step " + (at + 1) + " of " + steps.length;
+    if (at === steps.length - 1) summarise();
+    var h = steps[at].querySelector("h2"); if (h) { h.tabIndex = -1; h.focus(); }
+  }
+  function valid() {
+    var bad = Array.prototype.find.call(steps[at].querySelectorAll("input, select, textarea"), function (el) { return !el.checkValidity(); });
+    if (bad) { bad.reportValidity(); return false; }
+    return true;
+  }
+  next.addEventListener("click", function () { if (valid()) show(at + 1); });
+  back.addEventListener("click", function () { show(at - 1); });
+  links.forEach(function (l, j) { l.addEventListener("click", function () { if (j < at || valid()) show(j); }); });
+  form.addEventListener("submit", function (e) {
+    var first = Array.prototype.find.call(form.querySelectorAll("input, select, textarea"), function (el) { return !el.checkValidity(); });
+    if (first) { e.preventDefault(); show(steps.indexOf(first.closest(".wizard-step"))); first.reportValidity(); return; }
+    create.disabled = true; create.textContent = "Creating…";
+  });
+  // Player rows: "invite a login" asks for a username.
+  function wire(row) {
+    var sel = row.querySelector("[data-who]"), field = row.querySelector("[data-invite-field]");
+    if (sel && field) sel.addEventListener("change", function () { field.hidden = sel.value !== "invite"; });
+  }
+  document.querySelectorAll(".player-row-w").forEach(wire);
+  document.getElementById("add-player").addEventListener("click", function () {
+    var rows = document.getElementById("player-rows"), row = rows.lastElementChild.cloneNode(true);
+    row.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+    var sel = row.querySelector("[data-who]"); if (sel) sel.value = "none";
+    row.querySelector("[data-invite-field]").hidden = true;
+    rows.appendChild(row); wire(row); row.querySelector("input").focus();
+  });
+  document.getElementById("add-invite").addEventListener("click", function () {
+    var rows = document.getElementById("invite-rows"), row = rows.lastElementChild.cloneNode(true);
+    row.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+    rows.appendChild(row); row.querySelector("input").focus();
+  });
+  // Custom preset shows every system.
+  function customToggle() { document.getElementById("custom-systems").hidden = (form.querySelector("input[name=preset]:checked") || {}).value !== "custom"; }
+  form.querySelectorAll("input[name=preset]").forEach(function (r) { r.addEventListener("change", customToggle); });
+  customToggle();
+  function summarise() {
+    var list = document.getElementById("review-list"); list.innerHTML = "";
+    function add(term, value) { var d = document.createElement("div"), dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = term; dd.textContent = value || "—"; d.append(dt, dd); list.appendChild(d); }
+    form.querySelectorAll("[data-summary]").forEach(function (el) {
+      if (el.type === "radio" && !el.checked) return;
+      var v = el.dataset.summaryText || (el.tagName === "SELECT" ? el.options[el.selectedIndex].text.split(":")[0] : el.value);
+      add(el.dataset.summary, v);
+    });
+    var players = Array.prototype.map.call(form.querySelectorAll(".player-row-w"), function (r) {
+      var n = r.querySelector("[name=player_name]").value.trim(); if (!n) return null;
+      var who = r.querySelector("[data-who]").value, inv = r.querySelector("[name=player_invite]").value.trim();
+      return n + (who === "me" ? " (you)" : who === "invite" ? " (invite " + (inv || "?") + ")" : "");
+    }).filter(Boolean);
+    add("Player drivers", players.length ? players.join(", ") : "None yet (AI-only grid)");
+    var invites = Array.prototype.map.call(form.querySelectorAll(".invite-row"), function (r) {
+      var u = r.querySelector("input").value.trim(); return u ? u + " as " + r.querySelector("select").value : null;
+    }).filter(Boolean);
+    add("Invitations", invites.length ? invites.join(", ") : "None");
+  }
+  show(0);
+})();
+</script>{% endblock %}

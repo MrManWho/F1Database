@@ -1419,3 +1419,51 @@ button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .nav-scroll > * { flex-shrink: 0; }
 .settings-section { display: flex; flex-direction: column; gap: .8rem; }
 .settings-section > .card-head { margin-bottom: 0; }
+
+/* New-league wizard */
+.wizard-wrap { max-width: 860px; margin: 1.5rem auto; padding: 0 1rem 4rem; }
+.wizard-steps { list-style: none; display: grid; grid-template-columns: repeat(8, 1fr); gap: .35rem; padding: 0; margin: 0 0 1rem; counter-reset: s; }
+.wizard-steps li { display: flex; flex-direction: column; align-items: center; gap: .25rem; text-align: center; font-size: .72rem; color: var(--faint); cursor: pointer; }
+.wizard-steps .num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); background: var(--panel); font-weight: 700; }
+.wizard-steps li.is-on { color: var(--text); }
+.wizard-steps li.is-on .num { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.wizard-steps li.is-done .num { border-color: var(--green); color: var(--green); }
+.wizard-step { border: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: .8rem; }
+.wizard-step legend { padding: 0; float: left; width: 100%; }
+.wizard-step legend h2 { margin: 0 0 .3rem; }
+.wizard:not(.js) .wizard-step { margin-bottom: 1rem; }
+.wizard-nav { display: flex; align-items: center; gap: .8rem; justify-content: space-between; margin-top: 1rem; }
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .6rem; }
+.choice { flex-direction: row; align-items: flex-start; gap: .6rem; padding: .75rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--text); cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choice span { display: flex; flex-direction: column; gap: .2rem; }
+.choice .enables { color: var(--green); font-size: .74rem; }
+.grid-3 { display: grid; grid-template-columns: 2fr 1.2fr 1.2fr; gap: .8rem; }
+.review-list { display: grid; gap: .3rem; margin: 0; }
+.review-list > div { display: grid; grid-template-columns: 11rem 1fr; gap: .8rem; padding: .35rem 0; border-bottom: 1px solid var(--line-soft); }
+.review-list dt { color: var(--muted); } .review-list dd { margin: 0; }
+@media (max-width: 700px) { .wizard-steps { grid-template-columns: repeat(8, 1fr); } .wizard-steps .lbl { display: none; } .grid-3 { grid-template-columns: 1fr; } .review-list > div { grid-template-columns: 1fr; gap: .1rem; } }
+.league-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 1.2rem; }
+.league-card { display: flex; flex-direction: column; gap: .7rem; margin: 0; }
+.league-card.is-pinned { border-color: color-mix(in srgb, var(--amber) 35%, var(--line-soft)); }
+.league-card-link { display: flex; align-items: center; gap: .7rem; color: var(--text); text-decoration: none !important; }
+.league-card .league-mark { width: 42px; height: 42px; font-size: .95rem; border-radius: 10px; }
+.league-card .league-name b { font-size: 1.05rem; }
+.league-card-meta { display: flex; flex-wrap: wrap; gap: .3rem .8rem; color: var(--muted); }
+.league-card-actions { border-top: 1px solid var(--line-soft); padding-top: .55rem; }
+.archived-leagues summary { cursor: pointer; font-weight: 600; }
+.demo-banner { display: flex; align-items: center; justify-content: space-between; gap: .8rem; flex-wrap: wrap; padding: .5rem 1.25rem;
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg)); border-bottom: 1px solid color-mix(in srgb, var(--blue) 35%, transparent); font-size: .88rem; }
+.welcome { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+.welcome-hero { padding: 2.5rem 0 2rem; max-width: 760px; }
+.welcome-hero h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.1; margin-bottom: .8rem; }
+.welcome-hero .lead { font-size: 1.08rem; color: var(--muted); margin-bottom: 1.2rem; }
+.welcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.welcome-grid .card { margin: 0; }
+.role-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; margin: 0; }
+.role-list dt { font-weight: 700; } .role-list dd { margin: .2rem 0 0; color: var(--muted); font-size: .9rem; }
+.directory { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+.whats-new { width: min(620px, 94vw); }
+.wn-list { padding-left: 1.2rem; display: grid; gap: .45rem; }
+.cl-section { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 1rem 0 .3rem; }
+.cl-fixed { color: var(--green); } .cl-security { color: var(--amber); } .cl-added { color: var(--blue); }

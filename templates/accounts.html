@@ -57,14 +57,28 @@
   {% endif %}
 </div>
 {% if user.is_master %}
+<section class="card" id="moderation">
+  <h2>Reports about public leagues</h2>
+  {% if reports %}
+  <ul class="plain-list">{% for r in reports %}<li><b>{{ r.league_name }}</b> · {{ reasons.get(r.reason, r.reason) }} · {{ r.created_at|stamp }}
+    {% if r.details %}<blockquote class="small muted">{{ r.details }}</blockquote>{% endif %}
+    <form method="post" action="{{ url_for('moderation_decide', report_id=r.id) }}" class="button-row tight"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm" name="action" value="delist">Remove from the directory</button>
+      <button class="btn btn-sm btn-ghost" name="action" value="dismiss">Dismiss</button></form></li>{% endfor %}</ul>
+  {% else %}<p class="muted small">No open reports.</p>{% endif %}
+  {% if delisted %}<p class="muted small">{{ delisted|length }} league{{ 's' if delisted|length != 1 }} removed from the directory by an admin.</p>{% endif %}
+</section>
 <section class="card">
   <h2>Settings</h2>
   <form method="post" action="{{ url_for('settings_save') }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="check"><input type="checkbox" name="allow_signups" value="1" {{ 'checked' if signups }}>
-      Let people create their own Driver login from the login page (you still link them to a driver)</label>
+      Let people create their own login from the login page</label>
+    <label class="check"><input type="checkbox" name="anyone_creates" value="1" {{ 'checked' if anyone_creates }}>
+      Anyone with a login can create their own league (they become its Race Master). Off: only site admins can.</label>
+    <p class="muted small">New leagues are private by default. Each account can create up to 5 leagues a day.</p>
     <p class="muted small">Screenshot import is free and runs in each person's browser: no API key, account or upload needed.</p>
-    <h3>Email (password resets &amp; race results) · {{ 'ready' if mail_ready else 'not set up' }}</h3>
+    <h3>Email (password resets and league notifications) · {{ 'ready' if mail_ready else 'not set up' }}</h3>
     <p class="muted small">Use any SMTP mail service. For Gmail: turn on 2-step verification, create an <em>App password</em>, then use
       host <code>smtp.gmail.com</code>, port <code>587</code>, your Gmail address as username and sender, and the app password.
       On Render you can set these as environment variables instead (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM).</p>

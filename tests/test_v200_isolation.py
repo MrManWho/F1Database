@@ -73,7 +73,7 @@ def test_spectators_are_read_only_on_every_route(app, master_client):
     sam = _client(app, "sam")
     # Personal, harmless actions: their own notifications, their own league list and how the league is shown.
     allowed = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "career_join",
-               "invitation_answer", "view_mode", "league_pin"}
+               "invitation_answer", "view_mode", "league_pin", "league_order"}
     for rule in _league_rules(app):
         if rule.endpoint in allowed:
             continue

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block plain %}
+<div class="welcome">
+  <section class="welcome-hero">
+    <div class="kicker">Paddock Legacy</div>
+    <h1>Run your racing league like a real championship.</h1>
+    <p class="lead">Track every qualifying, Sprint and Grand Prix result, with standings, records and season archives that last for years.
+      Add driver careers if you want them: contracts, a transfer market, team relationships and rivalries. Works for one person tracking a career,
+      a few friends, or a big public league.</p>
+    <div class="button-row">
+      {% if signups %}<a class="btn btn-primary" href="{{ url_for('register') }}">Create a free account</a>{% endif %}
+      <a class="btn" href="{{ url_for('login') }}">Log in</a>
+      <a class="btn btn-ghost" href="{{ url_for('demo_start') }}">Explore the demo</a>
+      <a class="btn btn-ghost" href="{{ url_for('directory') }}">Browse public leagues{% if listed %} ({{ listed }}){% endif %}</a>
+    </div>
+  </section>
+
+  <div class="welcome-grid">
+    <section class="card"><h2>Create a league</h2>
+      <p>A short setup asks for the name, season, drivers and which career systems you want. A simple results tracker, a multiplayer career league or the full simulation. Everything can be changed later.</p></section>
+    <section class="card"><h2>Join a league</h2>
+      <p>Accept an invitation from your League Library, or ask to join a league that takes requests. The Race Master approves each person and their role.</p></section>
+    <section class="card"><h2>Follow a public league</h2>
+      <p>Public leagues share standings, results, driver pages and records with anyone, no account needed. Nothing private is ever public.</p></section>
+  </div>
+
+  <section class="card">
+    <h2>Roles</h2>
+    <dl class="role-list">
+      <div><dt>Race Master</dt><dd>Runs the league: calendar, grid, contracts, members, settings, and corrections to completed rounds.</dd></div>
+      <div><dt>Scorekeeper</dt><dd>Enters and submits results for rounds that aren't complete yet. Nothing administrative.</dd></div>
+      <div><dt>Driver / Member</dt><dd>Follows everything and, with a driver, manages their own career: offers, pledges, press and targets.</dd></div>
+      <div><dt>Spectator</dt><dd>Read-only. Perfect for fans and friends.</dd></div>
+    </dl>
+  </section>
+
+  <div class="welcome-grid">
+    <section class="card"><h2>Privacy</h2>
+      <p>Leagues are private unless the Race Master makes them public, and a league is only listed in the directory by choice. Email addresses, notes, drafts and settings are never public.</p></section>
+    <section class="card"><h2>Notifications</h2>
+      <p>You choose what each league may email or alert you about, league by league. Joining one league never subscribes you to another, and every email links to that league's settings.</p></section>
+    <section class="card"><h2>Free, and local where it matters</h2>
+      <p>Paddock Legacy has no paid APIs or per-use charges. Screenshot import reads results right in your browser: screenshots are never uploaded or sent to an AI provider.</p></section>
+  </div>
+  <p class="muted small center"><a href="{{ url_for('help_page') }}">How it works</a> · <a href="{{ url_for('changelog_page') }}">What's new</a></p>
+</div>
+{% endblock %}

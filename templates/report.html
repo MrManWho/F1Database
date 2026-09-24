@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Report a league{% endblock %}
+{% block plain %}
+<section class="auth-card card">
+  <div class="kicker">Report</div>
+  <h1>Report {{ league.name }}</h1>
+  <p class="muted small">The site administrators review every report and can remove a league from the directory. Your report doesn't include your email or IP address.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>What's wrong?<select name="reason" required>{% for k, v in reasons.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Details (optional)<textarea name="details" rows="4" maxlength="1000"></textarea></label>
+    <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('directory') }}">Cancel</a><button class="btn btn-primary">Send report</button></div>
+  </form>
+</section>
+{% endblock %}

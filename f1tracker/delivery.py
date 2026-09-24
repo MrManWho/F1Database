@@ -66,6 +66,8 @@ def plan(items, exclude=None):
         except storage.CareerNotFound:
             continue
         with closing(conn):
+            if storage.get_meta(conn, "demo") == "1":
+                continue   # demo leagues never email or alert anyone
             league = notices.league_name(conn)
             for it in league_items:
                 cat = it.get("category") or "career"
@@ -91,7 +93,7 @@ def plan(items, exclude=None):
 
 def send_email(conn, token, category, usernames, key, subject, text, html, base_url, label=""):
     """A league email with its own content (e.g. race results): same preference filter, dedupe and log."""
-    if not mailer.configured():
+    if not mailer.configured() or storage.get_meta(conn, "demo") == "1":
         return 0
     to = notices.email_recipients(conn, usernames, category)
     if not to or not notices.claim(conn, key, category, "email", label or notices.CATEGORIES[category][0]):

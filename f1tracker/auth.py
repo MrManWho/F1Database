@@ -54,6 +54,8 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_results" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    if "is_demo" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")   # v2.0: temporary demo guests
     if "email_paused" not in columns:
         # v2.0: one switch to stop every email from every league (league choices are kept separately).
         conn.execute("ALTER TABLE users ADD COLUMN email_paused INTEGER NOT NULL DEFAULT 0")
@@ -106,7 +108,7 @@ def list_users():
     with accounts() as conn:
         users = [dict(r) for r in conn.execute("SELECT id, username, display_name, is_master, is_steward, email, "
                                                "email_results, created_at "
-                                               "FROM users ORDER BY is_master DESC, is_steward DESC, username")]
+                                               "FROM users WHERE is_demo = 0 ORDER BY is_master DESC, is_steward DESC, username")]
     for u in users:
         u["role"] = role_of(u)
     return users

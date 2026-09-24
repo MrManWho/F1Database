@@ -341,7 +341,10 @@ def test_login_is_required_and_setup_runs_first(app):
     client.post("/setup", data={"username": "david", "password": "password1", "csrf_token": csrf})
     assert auth.get_user("david")["is_master"] == 1
     other = app.test_client()
-    assert "/login" in other.get("/").headers["Location"]
+    # v2.0: a first-time visitor sees the welcome page; anything inside still needs a login.
+    welcome = other.get("/")
+    assert welcome.status_code == 200 and "Log in" in welcome.get_data(as_text=True)
+    assert "/login" in other.get("/accounts").headers["Location"]
 
 
 def test_every_major_page_returns_successfully(master_client, data_dir):

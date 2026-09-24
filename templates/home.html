@@ -3,44 +3,64 @@
 {% block title %}League Library{% endblock %}
 {% block plain %}
 <div class="page-head">
-  <div><div class="kicker">League Library</div><h1>F1 career leagues</h1></div>
-  {% if user.is_master %}
+  <div><div class="kicker">Paddock Legacy</div><h1>Your leagues</h1>
+    <p class="page-purpose">Every league you're in, your invitations and leagues you can ask to join. Pin favourites and put them in your own order.</p></div>
   <div class="button-row">
-    <button class="btn btn-ghost" data-dialog="import-dialog">Import .f1career</button>
-    <button class="btn btn-primary" data-dialog="new-dialog">New league</button>
+    {% if user.is_master %}<button class="btn btn-ghost" data-dialog="import-dialog">Import .f1career</button>{% endif %}
+    {% if may_create %}<a class="btn btn-primary" href="{{ url_for('league_new_page') }}">Create a league</a>{% endif %}
   </div>
-  {% endif %}
 </div>
 
-{% if careers %}
-<div class="career-grid">
-  {% for c in careers %}
-  <a class="career-card card" href="{{ url_for('dashboard', token=c.token) }}">
-    <div class="career-year">{{ c.year or '—' }}</div>
-    <h2>{{ c.name }}</h2>
-    <div class="career-meta">
-      <span>{{ c.completed }}/{{ c.total }} rounds</span>
-      <span>{{ c.size_kb }} KB</span>
+{% set shown = leagues|rejectattr('hidden')|list %}
+{% set archived = leagues|selectattr('hidden')|list %}
+{% if shown %}
+<div class="league-grid">
+  {% for l in shown %}{% set c = by_token[l.token] %}
+  <article class="league-card card {{ 'is-pinned' if l.pinned }}" {% if l.accent %}style="--accent: {{ l.accent }}"{% endif %}>
+    <a class="league-card-link" href="{{ url_for('dashboard', token=l.token) }}">
+      <span class="league-mark" aria-hidden="true">{{ l.initials }}</span>
+      <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site admin · not a member' }}{% if l.year %} · {{ l.year }} season{% endif %}</small></span>
+    </a>
+    <div class="league-card-meta small">
+      <span>{{ c.completed }}/{{ c.total }} rounds</span><span>{{ c.players }} player driver{{ 's' if c.players != 1 }}</span>
+      <span class="join-status join-{{ c.join_mode }}">{{ c.join_label }}</span>
+      {% if l.muted %}<span title="You muted this league's emails and alerts">🔕 Muted</span>{% endif %}
+      {% if l.pinned %}<span class="pin-mark">★ Pinned</span>{% endif %}
+      {% if l.pending %}<span class="pill pill-hot">{{ l.pending }} join request{{ 's' if l.pending != 1 }}</span>{% endif %}
     </div>
-    <div class="muted small">Last opened {{ c.last_opened|stamp if c.last_opened else '—' }}</div>
-    <div class="small muted">{{ c.players }} player driver{{ 's' if c.players != 1 }}</div>
-    <div class="small"><span class="join-status join-{{ c.join_mode }}"><span aria-hidden="true">{{ {'requests': '✉️', 'invite': '🔑', 'closed': '🔒'}[c.join_mode] }}</span> {{ c.join_label }}</span>
-      {% if user.is_master and c.pending_requests %} · <span class="pill pill-hot">{{ c.pending_requests|length }} join request{{ 's' if c.pending_requests|length != 1 }}</span>{% endif %}</div>
-  </a>
+    <div class="button-row tight league-card-actions">
+      <form method="post" action="{{ url_for('league_pin', token=l.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost" name="action" value="{{ 'unpin' if l.pinned else 'pin' }}" aria-label="{{ 'Unpin' if l.pinned else 'Pin' }} {{ l.name }}">{{ '☆ Unpin' if l.pinned else '★ Pin' }}</button></form>
+      {% if l.member %}
+      <form method="post" action="{{ url_for('league_order', token=l.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost" name="dir" value="-1" aria-label="Move {{ l.name }} up" {{ 'disabled' if loop.first }}>↑</button>
+        <button class="btn btn-sm btn-ghost" name="dir" value="1" aria-label="Move {{ l.name }} down" {{ 'disabled' if loop.last }}>↓</button></form>
+      <form method="post" action="{{ url_for('league_pin', token=l.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost" name="action" value="hide" title="Hide from your list. You stay in the league.">Archive from my list</button></form>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('notify_prefs', token=l.token) }}">Notifications</a>
+      {% endif %}
+    </div>
+  </article>
   {% endfor %}
 </div>
-{% elif user.is_master or not joinable %}
+{% elif not joinable and not invited %}
 <section class="card empty-state">
-  <div class="big-code">🏁</div>
-  <h2>No leagues yet</h2>
-  {% if user.is_master %}
-  <p class="muted">Create a league for any number of players. Everyone starts as a rookie: teams make offers, each player signs from their own login,
-    and the Race Master or a Scorekeeper enters the results after every race.</p>
-  <button class="btn btn-primary" data-dialog="new-dialog">Create a league</button>
-  {% else %}
-  <p class="muted">You're not in a league yet. Leagues that take join requests appear here, and invitations from a Race Master show up here too.</p>
-  {% endif %}
+  <div class="big-code" aria-hidden="true">🏁</div>
+  <h2>You're not in a league yet</h2>
+  <p class="muted">{% if may_create %}Create one for your group, or ask a Race Master to invite you.{% else %}Ask a Race Master to invite you. Leagues that take join requests and your invitations appear here.{% endif %}</p>
+  <div class="button-row" style="justify-content:center">
+    {% if may_create %}<a class="btn btn-primary" href="{{ url_for('league_new_page') }}">Create a league</a>{% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('directory') }}">Browse public leagues</a>
+  </div>
 </section>
+{% endif %}
+{% if archived %}
+<details class="card archived-leagues"><summary>Archived from your list ({{ archived|length }})</summary>
+  <p class="muted small">You're still a member of these. Archiving only tidies your own list.</p>
+  <ul class="plain-list">{% for l in archived %}<li><a href="{{ url_for('dashboard', token=l.token) }}">{{ l.name }}</a>
+    <form method="post" action="{{ url_for('league_pin', token=l.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-ghost" name="action" value="unhide">Restore to my list</button></form></li>{% endfor %}</ul>
+</details>
 {% endif %}
 
 {% if invited %}

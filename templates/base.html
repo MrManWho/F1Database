@@ -178,6 +178,10 @@
         <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu">{{ user.display_name[:1]|upper }}</button>
       </div>
     </header>
+    {% if ctx.is_demo %}
+    <div class="demo-banner" role="status"><span><b>Demo league.</b> Explore and change anything: it's your own private copy, it never emails anyone, and it deletes itself after a couple of hours.</span>
+      <form method="post" action="{{ url_for('demo_start') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Restart the demo</button></form></div>
+    {% endif %}
     {% if ctx.mode_lowered %}
     <div class="mode-banner" role="status"><span>{{ icon('eye') }} Viewing <b>{{ ctx.career_name }}</b> as <b>{{ ctx.mode_label }}</b>. Your real role is {{ ctx.role }}; nothing about it has changed.</span>
       <form method="post" action="{{ url_for('view_mode', token=t) }}" data-mode-form class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -289,6 +293,39 @@
     </form>
   </div>
 </dialog>
+{% endif %}
+
+{% if whats_new %}
+<dialog id="whats-new" class="dialog whats-new" aria-labelledby="wn-title" data-autoshow>
+  <div class="dialog-head"><div><div class="kicker">What's new · v{{ whats_new.version }}{% if whats_new.date %} · {{ whats_new.date }}{% endif %}</div>
+    <h2 id="wn-title">{{ whats_new.title or 'Paddock Legacy ' ~ whats_new.version }}</h2></div></div>
+  {% if whats_new.overview %}<p>{{ whats_new.overview }}</p>{% endif %}
+  <ul class="wn-list">{% for item in whats_new.highlights %}<li>{{ item.text }}</li>{% endfor %}</ul>
+  {% if whats_new.action %}<div class="banner banner-warn"><b>Action needed:</b><ul>{% for item in whats_new.action %}<li>{{ item.text }}</li>{% endfor %}</ul></div>{% endif %}
+  <form method="post" action="{{ url_for('whats_new_ack') }}" class="button-row" data-wn-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('changelog_page') }}#v{{ whats_new.version }}">Full changelog</a>
+    <button class="btn btn-ghost btn-sm" name="choice" value="later">Later</button>
+    <button class="btn btn-ghost btn-sm" name="choice" value="never">Don't show this version again</button>
+    <button class="btn btn-primary" name="choice" value="got_it" autofocus>Got it</button>
+  </form>
+</dialog>
+<script>
+(function () {
+  var d = document.getElementById("whats-new"); if (!d || !d.showModal) return;
+  d.showModal();
+  d.querySelector("[data-wn-form]").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var data = new FormData(this); data.set("choice", (e.submitter || {}).value || "got_it");
+    fetch(this.action, { method: "POST", body: data, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+    d.close();
+  });
+  d.addEventListener("cancel", function () {
+    var data = new FormData(d.querySelector("form")); data.set("choice", "later");
+    fetch(d.querySelector("form").action, { method: "POST", body: data, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+  });
+})();
+</script>
 {% endif %}
 
 <div class="toast-stack" id="toasts">

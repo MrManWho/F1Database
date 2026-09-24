@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Demo{% endblock %}
+{% block plain %}
+<section class="auth-card card">
+  <div class="kicker">Try it</div>
+  <h1>Explore a demo league</h1>
+  <p>You'll get your own private copy of a sample league: a finished 2026 season and a 2027 season under way, three player drivers on a full AI grid,
+    contracts, a transfer, records and every Race Master screen.</p>
+  <ul class="muted small">
+    <li>It's clearly marked as demo data. Change anything: it's only your copy.</li>
+    <li>It never sends emails, alerts or invitations, and real leagues are never shown.</li>
+    <li>It deletes itself after about {{ hours }} hours. You can restart it any time.</li>
+  </ul>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary">Start the demo</button>
+  </form>
+  <p class="muted small"><a href="{{ url_for('home') }}">← Back</a></p>
+</section>
+{% endblock %}

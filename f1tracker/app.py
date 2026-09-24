@@ -16,7 +16,8 @@ import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
-from . import battle, circuits, delivery, gates, league_profile, library, notices, seats
+from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
+               ratelimit, seats)
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -30,7 +31,8 @@ def _base_dir():
 
 
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
-                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar", "unsubscribe"}
+                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar", "unsubscribe",
+                    "home", "directory", "report_league", "help_page", "changelog_page", "demo_start"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
 AUDIT_LABELS = {
@@ -55,7 +57,7 @@ AUDIT_LABELS = {
     "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"view_mode", "league_pin", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"view_mode", "league_pin", "league_order", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -108,6 +110,9 @@ def register_hooks(app):
             elif g.user["is_steward"]:  # an old account-wide Scorekeeper: move it into their leagues first
                 roles.unify_legacy_scorekeepers()
                 g.user = auth.get_user(session["user"])
+        if g.user and g.user.get("is_demo") and endpoint in DEMO_BLOCKED:
+            flash("That isn't available in the demo. Create a free account to use it.", "info")
+            return redirect(url_for("dashboard", token=session.get("demo")) if session.get("demo") else url_for("home"))
         if not g.user and endpoint not in PUBLIC_ENDPOINTS:
             if request.path.startswith("/api/"):
                 return jsonify(ok=False, error="Please log in again"), 401
@@ -172,7 +177,19 @@ def register_hooks(app):
             except Exception:
                 app.logger.exception("push keys unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
-                "APP_NAME": C.APP_NAME, "C": C, "push_key": key}
+                "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new()}
+
+    def _whats_new():
+        """This version's highlights, once per account, on ordinary page views only."""
+        user = g.get("user")
+        if not user or user.get("is_demo") or request.method != "GET" or request.path.startswith("/api/") \
+                or session.get("whats_new_later") == C.APP_VERSION or request.endpoint in ("changelog_page", "whats_new_ack"):
+            return None
+        from . import changelog, whatsnew
+        entry = changelog.entry(_base_dir(), C.APP_VERSION)
+        if not entry or not entry["highlights"] or whatsnew.acknowledged(user["username"], C.APP_VERSION):
+            return None
+        return entry
 
     @app.errorhandler(403)
     def forbidden(_e):
@@ -309,6 +326,7 @@ def career_page(master_only=False, ops_only=False):
                         conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
+                    g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
                         if mine and not request.path.startswith("/api/") else None
                     storage.touch_opened(conn)
@@ -336,6 +354,11 @@ def career_page(master_only=False, ops_only=False):
         return wrapper
     return deco
 
+
+# Demo guests can explore their own copy of the demo league but never change an account or reach anyone.
+DEMO_BLOCKED = {"accounts_page", "account_email", "account_self_password", "career_join", "invitation_answer",
+                "league_new_page", "career_new", "career_import", "push_subscribe", "push_test", "settings_save",
+                "member_invite", "discord_test", "restore_upload", "save_as", "export", "backup"}
 
 # Display modes: how a page is shown, never what the account may do. Server checks always use the real role.
 VIEW_MODES = {"race_master": "Race Master", "scorekeeper": "Scorekeeper", "driver": "Driver", "spectator": "Spectator preview"}
@@ -389,7 +412,7 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
-                     "league_pin"}
+                     "league_pin", "league_order"}
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
                  "help_page"}
@@ -705,6 +728,7 @@ def register_routes(app):
     @master_required
     def settings_save():
         auth.set_setting("allow_signups", "1" if request.form.get("allow_signups") else "0")
+        auth.set_setting("league_creation", "everyone" if request.form.get("anyone_creates") else "admins")
         for field in ("smtp_host", "smtp_port", "smtp_username", "smtp_from"):
             if field in request.form:
                 auth.set_setting(field, (request.form.get(field) or "").strip() or None)
@@ -712,6 +736,23 @@ def register_routes(app):
             auth.set_setting("smtp_password", request.form.get("smtp_password").strip())
         flash("Settings saved.", "success")
         return redirect(url_for("accounts_page"))
+
+    @app.route("/moderation/<int:report_id>", methods=["POST"])
+    @master_required
+    def moderation_decide(report_id):
+        """Site admins: dismiss a report, or take the league out of the public directory (and put it back)."""
+        action = request.form.get("action")
+        match = next((r for r in moderation.reports() if r["id"] == report_id), None)
+        if not match:
+            abort(404)
+        if action == "delist":
+            moderation.set_delisted(match["token"], True)
+            moderation.decide(report_id, "Delisted")
+            flash(f"{match['league_name']} is no longer listed in the directory.", "success")
+        else:
+            moderation.decide(report_id, "Dismissed")
+            flash("Report dismissed.", "success")
+        return redirect(url_for("accounts_page") + "#moderation")
 
     @app.route("/logout", methods=["POST"])
     def logout():
@@ -736,7 +777,10 @@ def register_routes(app):
                 except storage.CareerNotFound:
                     continue
         return render_template("accounts.html", users=auth.list_users() if is_master() else [],
-                               memberships=memberships, my_leagues=mine, signups=auth.signups_allowed(),
+                               memberships=memberships, my_leagues=mine,
+                               anyone_creates=onboarding.creation_policy() == "everyone",
+                               reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
+                               delisted=moderation.delisted() if is_master() else set(), signups=auth.signups_allowed(),
                                mail=mailer.config(), mail_ready=mailer.configured(),
                                pw_min=auth.PASSWORD_MIN)
 
@@ -802,13 +846,19 @@ def register_routes(app):
     # ---------------------------------------------------------------- career library
     @app.route("/")
     def home():
+        if not g.user:   # first visit: what Paddock Legacy is, before any login form
+            return render_template("welcome.html", signups=auth.signups_allowed(),
+                                   listed=len(_listed_leagues()), demo=demo.available())
         everything = storage.list_careers()
-        careers = everything if is_master() else [c for c in everything if g.user["username"] in c["members"]]
+        careers = [c for c in everything if not c.get("demo")] if is_master() else \
+            [c for c in everything if g.user["username"] in c["members"]]
         me = g.user["username"]
         outside = [c for c in everything if me not in c["members"] and not is_master()]
         joinable = [c for c in outside if c["join_mode"] == "requests" and me not in c["invited"]]
         invited = [c for c in outside if me in c["invited"]]
         return render_template("home.html", careers=careers, joinable=joinable, invited=invited,
+                               leagues=library.user_leagues(g.user, everything, include_hidden=True),
+                               by_token={c["token"]: c for c in everything}, may_create=onboarding.may_create(g.user),
                                join_modes=storage.JOIN_MODES, notify_presets=notices.PRESETS,
                                users=auth.list_users() if is_master() else [], default_year=2026)
 
@@ -853,47 +903,195 @@ def register_routes(app):
         flash("Request sent. You'll see the league here once the Race Master approves it.", "success")
         return redirect(url_for("home"))
 
+    def _listed_leagues():
+        out = []
+        hidden = moderation.delisted()
+        for c in storage.list_careers():
+            if c.get("visibility") != "listed" or c.get("demo") or c["token"] in hidden:
+                continue
+            try:
+                with storage.session(c["token"]) as conn:
+                    prof = league_profile.profile(conn)
+                    if prof["visibility"] != "listed":
+                        continue
+                    out.append({**c, **prof, "public_url": url_for("public_page", token=c["token"],
+                                                                     key=community.public_key(conn))})
+            except CareerNotFound:
+                continue
+        return out
+
+    @app.route("/demo", methods=["GET", "POST"])
+    def demo_start():
+        """Explore a ready-made league. Each visitor gets a private copy that deletes itself; nothing real is touched."""
+        if request.method == "GET":
+            return render_template("demo.html", hours=demo.DEMO_HOURS)
+        if g.get("user") and not g.user.get("is_demo"):
+            flash("You're logged in, so the demo would sign you out. Log out first to try it.", "info")
+            return redirect(url_for("home"))
+        if not ratelimit.allow("demo", request.remote_addr or "?", 10, 3600):
+            flash("Several demos were started from here recently. Please try again later.", "error")
+            return redirect(url_for("demo_start"))
+        if g.get("user") and g.user.get("is_demo"):   # restarting: the old copy and guest go straight away
+            demo.discard(g.user["username"], session.get("demo"))
+        username, token = demo.start()
+        session.clear()
+        session["user"] = username
+        session["demo"] = token
+        return redirect(url_for("dashboard", token=token))
+
+    @app.route("/leagues")
+    def directory():
+        """Leagues whose Race Master chose "Publicly discoverable". Nothing else is ever listed."""
+        q = (request.args.get("q") or "").strip().lower()[:60]
+        if q and not ratelimit.allow("directory-search", request.remote_addr or "?", 60, 60):
+            flash("Too many searches at once. Wait a moment and try again.", "error")
+            q = ""
+        leagues = [l for l in _listed_leagues()
+                   if not q or q in " ".join([l["name"], l["league_description"], l["league_region"],
+                                              l["league_platform"]]).lower()]
+        return render_template("directory.html", leagues=leagues, q=q)
+
+    @app.route("/leagues/<token>/report", methods=["GET", "POST"])
+    def report_league(token):
+        """Moderation foundation: anyone can flag a public league for the site administrators to review."""
+        listed = {l["token"]: l for l in _listed_leagues()}
+        league = listed.get(storage.sanitize_token(token))
+        if not league:
+            abort(404)
+        if request.method == "POST":
+            if not ratelimit.allow("report", request.remote_addr or "?", 5, 3600):
+                flash("You've sent several reports recently. Please try again later.", "error")
+                return redirect(url_for("directory"))
+            reason = request.form.get("reason") if request.form.get("reason") in moderation.REASONS else "other"
+            moderation.report(league["token"], league["name"], reason, (request.form.get("details") or "")[:1000],
+                              g.user["username"] if g.get("user") else None)
+            flash("Thanks. The site administrators will review it.", "success")
+            return redirect(url_for("directory"))
+        return render_template("report.html", league=league, reasons=moderation.REASONS)
+
+    @app.route("/leagues/new")
+    def league_new_page():
+        """The step-by-step new-league setup."""
+        if not onboarding.may_create(g.user):
+            flash("On this site only administrators can create leagues. Ask one, or join an existing league.", "info")
+            return redirect(url_for("home"))
+        return render_template("new_league.html", presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
+                               join_modes=storage.JOIN_MODES, visibility=league_profile.VISIBILITY,
+                               default_year=2026, features=C.FEATURES, order_modes=C.TEAM_ORDER_MODES,
+                               calendar=C.CALENDAR, teams=C.TEAMS)
+
     @app.route("/careers/new", methods=["POST"])
-    @master_required
     def career_new():
-        name = (request.form.get("name") or "").strip()[:80] or "F1 Career"
+        """Create a league. Anyone allowed to create one becomes its Race Master. Nothing is sent to anyone unless
+        the creator ticked "send the invitations" on the review step."""
+        if not onboarding.may_create(g.user):
+            abort(403)
+        name = (request.form.get("name") or "").strip()[:80] or "F1 League"
         token = storage.new_token()
+        wizard = request.form.get("wizard") == "1"
+        invites_to_mail = []
         try:
+            if not is_master():
+                onboarding.check_rate(g.user["username"])
             names = request.form.getlist("player_name")
-            logins = request.form.getlist("player_login")
-            rows = [(n, logins[i] if i < len(logins) else "") for i, n in enumerate(names) if (n or "").strip()]
-            chosen = [auth.normalise(l) for _, l in rows if l]
+            logins = request.form.getlist("player_login")          # site admins' quick form: link existing logins
+            who = request.form.getlist("player_who")               # wizard: me / invite / none
+            invite_to = request.form.getlist("player_invite")
+            rows = []
+            for i, n in enumerate(names):
+                if not (n or "").strip():
+                    continue
+                rows.append({"name": n, "login": auth.normalise(logins[i]) if i < len(logins) and is_master() else "",
+                             "who": who[i] if i < len(who) else "none",
+                             "invite": auth.normalise(invite_to[i]) if i < len(invite_to) else ""})
+            if sum(1 for r in rows if r["who"] == "me") > 1:
+                raise ValidationError("You can only drive one of the player drivers")
+            chosen = [r["login"] for r in rows if r["login"]] + [r["invite"] for r in rows if r["who"] == "invite" and r["invite"]]
             if len(chosen) != len(set(chosen)):
                 raise ValidationError("One login can only drive one player driver")
+            for r in rows:
+                if r["who"] == "invite" and r["invite"] and not auth.get_user(r["invite"]):
+                    raise ValidationError(f"There's no login called {r['invite']}. They can sign up first, "
+                                          "or you can invite them later.")
+            preset = onboarding.PRESETS.get(request.form.get("preset") or "")
+            custom = not preset or request.form.get("preset") == "custom"
             with storage.session(token, create=True) as conn:
-                S.seed_career(conn, token, name, request.form.get("year") or 2026, [n for n, _ in rows])
+                S.seed_career(conn, token, name, request.form.get("year") or 2026, [r["name"] for r in rows])
+                sid = S.current_season_id(conn)
+                if request.form.get("calendar") == "blank":
+                    conn.execute("DELETE FROM events WHERE season_id = ?", (sid,))
+                elif wizard and not request.form.get("sprints"):
+                    conn.execute("UPDATE events SET is_sprint = 0 WHERE season_id = ?", (sid,))
                 mode = request.form.get("join_mode") or ("requests" if request.form.get("join_open") else "invite")
                 storage.set_join_mode(conn, mode if mode in storage.JOIN_MODES else "requests")
-                community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
+                if custom:
+                    feats = {k for k in C.FEATURES if request.form.get(f"feature_{k}")}
+                    market_on = bool(request.form.get("rookie_market"))
+                    life = (request.form.get("team_orders") or "off", bool(request.form.get("weekend_targets")) or not wizard,
+                            bool(request.form.get("round_gates")) or not wizard)
+                else:
+                    feats, market_on = set(preset["features"]), preset["market"]
+                    life = (preset["orders"], preset["targets"], preset["gates"])
+                community.set_features(conn, feats)
+                if wizard:   # the quick form leaves team-life settings at their defaults
+                    teamlife.save_settings(conn, life[0], life[1], life[2], True, True)
+                league_profile.save(conn, request.form)
                 players = S.player_drivers(conn)
-                for (_, login), driver in zip(rows, players):
-                    username = auth.normalise(login)
-                    user = auth.get_user(username) if username else None
-                    if user:
-                        roles.set_member(conn, username, "race_master" if user["is_master"] else "member", driver["id"])
                 creator = g.user["username"]
-                if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (creator,)).fetchone():
-                    roles.set_member(conn, creator, "race_master", None)
+                my_driver = None
+                for r, driver in zip(rows, players):
+                    if r["who"] == "me":
+                        my_driver = driver["id"]
+                    elif r["login"]:
+                        user = auth.get_user(r["login"])
+                        if user:
+                            roles.set_member(conn, user["username"], "race_master" if user["is_master"] else "member",
+                                             driver["id"])
+                    elif r["who"] == "invite" and r["invite"]:
+                        conn.execute("INSERT OR REPLACE INTO invitations(username, role, invited_by, status, created_at, driver_id) "
+                                     "VALUES(?, 'member', ?, 'Pending', ?, ?)", (r["invite"], creator, storage.now_iso(), driver["id"]))
+                        invites_to_mail.append((r["invite"], f"to drive {driver['name']}"))
+                mine = conn.execute("SELECT driver_id FROM career_members WHERE username = ?", (creator,)).fetchone()
+                roles.set_member(conn, creator, "race_master", my_driver or (mine["driver_id"] if mine else None))
                 notices.save(conn, creator, preset=_preset())
-                if request.form.get("rookie_market") and players:
-                    market.open_window(conn, S.current_season_id(conn), kind="Rookie Draft")
-        except (ValidationError, ValueError) as exc:
+                for i, username in enumerate(request.form.getlist("invite_username")):
+                    username = auth.normalise(username)
+                    role = (request.form.getlist("invite_role") + ["member"] * 10)[i]
+                    if not username or role not in ("member", "scorekeeper", "spectator"):
+                        continue
+                    if not auth.get_user(username):
+                        raise ValidationError(f"There's no login called {username}")
+                    if username == creator:
+                        continue
+                    conn.execute("INSERT OR REPLACE INTO invitations(username, role, invited_by, status, created_at) "
+                                 "VALUES(?, ?, ?, 'Pending', ?)", (username, role, creator, storage.now_iso()))
+                    invites_to_mail.append((username, f"as {C.ACCESS_ROLES[role]}"))
+                if market_on and players:
+                    market.open_window(conn, sid, kind="Rookie Draft")
+                community.audit(conn, creator, "Created the league", name,
+                                summary=f"created {name} ({(preset or {}).get('label', 'custom setup')}, {len(players)} player "
+                                        f"driver{'s' if len(players) != 1 else ''})")
+            if not is_master():
+                onboarding.record_creation(g.user["username"])
+        except (ValidationError, ValueError, auth.AuthError) as exc:
             try:
                 storage.delete_career(token)
             except CareerNotFound:
                 pass
             flash(str(exc), "error")
-            return redirect(url_for("home"))
-        flash("League created." + (" Rookie offers are waiting in each player's garage."
-                                   if request.form.get("rookie_market") and rows else "")
-              + (" Other people can now ask to join from the league library."
-                 if (request.form.get("join_mode") or ("requests" if request.form.get("join_open") else "")) == "requests"
-                 else ""),
+            return redirect(url_for("league_new_page") if wizard else url_for("home"))
+        if invites_to_mail and request.form.get("send_invites"):
+            for username, what in invites_to_mail:
+                user = auth.get_user(username)
+                if user and user.get("email") and not user.get("email_paused"):
+                    mailer.send_later([user["email"]], f"You're invited to {name}",
+                                      f"{g.user['display_name']} invited you to join the league \"{name}\" {what}. "
+                                      f"Accept it from your League Library:\n\n{url_for('home', _external=True)}\n\n"
+                                      f"—\nSent by Paddock Legacy for the league \"{name}\".")
+        flash("League created." + (f" {len(invites_to_mail)} invitation(s) are waiting in people's League Library"
+                                   + (" and were emailed." if request.form.get("send_invites") else ".")
+                                   if invites_to_mail else "")
+              + (" Rookie offers are waiting in each player's garage." if request.form.get("rookie_market") and rows else ""),
               "success")
         return redirect(url_for("dashboard", token=token))
 
@@ -2150,6 +2348,8 @@ def register_routes(app):
     @app.route("/career/<token>/members/invite", methods=["POST"])
     @career_page(master_only=True)
     def member_invite(conn, ctx):
+        if ctx.get("is_demo"):
+            raise ValidationError("The demo can't invite real people. Create your own league to invite your group.")
         user = auth.get_user(request.form.get("username"))
         role = request.form.get("role") or "member"
         if not user:
@@ -2199,7 +2399,11 @@ def register_routes(app):
                     if storage.join_mode(conn) == "closed":
                         raise ValidationError("This league is closed to new members right now, so the invitation can't be accepted")
                     if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
-                        roles.set_member(conn, me, "race_master" if g.user["is_master"] else inv["role"], None)
+                        driver = inv["driver_id"] if "driver_id" in inv.keys() else None
+                        if driver and conn.execute("SELECT 1 FROM career_members WHERE driver_id = ?", (driver,)).fetchone():
+                            driver = None   # someone else took that driver meanwhile
+                        roles.set_member(conn, me, "race_master" if g.user["is_master"] else inv["role"],
+                                         None if inv["role"] == "spectator" else driver)
                         notices.save(conn, me, preset=_preset())
                     feed.notify(conn, None, f"{g.user['display_name']} accepted an invitation and joined", "members",
                                 category="join_requests")
@@ -2460,6 +2664,13 @@ def register_routes(app):
         elif action in ("hide", "unhide"):
             library.hide(me, ctx["token"], action == "hide")
         return _back(ctx)
+
+    @app.route("/career/<token>/order", methods=["POST"])
+    @career_page()
+    def league_order(conn, ctx):
+        library.move(g.user["username"], ctx["token"], request.form.get("dir", type=int) or 1,
+                     library.user_leagues(g.user))
+        return redirect(url_for("home"))
 
     @app.route("/career/<token>/notifications", methods=["GET", "POST"])
     @career_page()
@@ -2860,6 +3071,17 @@ def register_routes(app):
     @app.route("/help")
     def help_page():
         return render_template("help.html")
+
+    @app.route("/whats-new", methods=["POST"])
+    def whats_new_ack():
+        from . import whatsnew
+        if request.form.get("choice") == "later":
+            session["whats_new_later"] = C.APP_VERSION
+        else:
+            whatsnew.acknowledge(g.user["username"], C.APP_VERSION)
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        return redirect(request.referrer or url_for("home"))
 
     @app.route("/changelog")
     def changelog_page():
