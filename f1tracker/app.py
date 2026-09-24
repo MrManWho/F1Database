@@ -20,7 +20,7 @@ import random
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
-               ratelimit, seats, security)
+               ratelimit, seats, security, teamgoals)
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -348,6 +348,7 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["notifications"], g.ctx["unread"] = feed.notifications_for(
                         conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
+                    g.ctx["team_goals_on"] = teamgoals.enabled(conn)
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
@@ -1859,6 +1860,7 @@ def register_routes(app):
         relations.settle(conn, latest["id"])
         new_id = S.create_next_season(conn, latest["id"], year)
         rewarded = relations.apply_rewards(conn, latest["id"], new_id)
+        goal_changes = teamgoals.apply_rewards(conn, latest["id"], new_id)
         changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
         feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
@@ -1870,6 +1872,10 @@ def register_routes(app):
         left = seats.problems(conn, new_id)
         if left:
             flash(f"{len(left)} seat/contract problem(s) still need attention: see Grid & Contracts.", "error")
+        if goal_changes:
+            met = sum(1 for v in goal_changes.values() if v > 0)
+            flash(f"Team goals settled: {met} of {len(goal_changes)} player driver(s) gain Reputation from their "
+                  "team's goal.", "success")
         if rewarded:
             flash(f"{len(rewarded)} player driver(s) kept their pledge and start the new season with extra Reputation.",
                   "success")
@@ -2169,6 +2175,50 @@ def register_routes(app):
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
                     own=bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]))
+
+    def _my_goal_teams(conn, ctx, sid):
+        """Teams this person may choose a goal for: their driver's team, or every player team for a Race Master."""
+        lineup = teamgoals.player_teams(conn, sid)
+        real = ctx.get("real", ctx)
+        if real["is_master"]:
+            return set(lineup)
+        mine = real.get("my_driver")
+        return {t for t, ds in lineup.items() if mine and any(d["id"] == mine["id"] for d in ds)}
+
+    @app.route("/career/<token>/team-goals")
+    @career_page()
+    def team_goals_page(conn, ctx):
+        sid = ctx["season"]["id"]
+        lineup = teamgoals.player_teams(conn, sid)
+        tmap = S.team_map(conn)
+        can = _my_goal_teams(conn, ctx, sid) if sid == ctx["current_season_id"] else set()
+        locked = teamgoals.locked(conn, sid)
+        chosen = {g["team_id"]: g for g in teamgoals.progress(conn, sid)}
+        teams = []
+        for team_id, drivers in sorted(lineup.items(), key=lambda kv: tmap[kv[0]]["name"]):
+            teams.append({"team": tmap[team_id], "drivers": drivers, "goal": chosen.get(team_id),
+                          "info": teamgoals.options(conn, sid, team_id) if not locked else None,
+                          "can_choose": team_id in can and not locked and teamgoals.enabled(conn)})
+        return page("team_goals.html", ctx, teams=teams, locked=locked, enabled=teamgoals.enabled(conn),
+                    tiers=teamgoals.TIERS)
+
+    @app.route("/career/<token>/team-goals/<int:team_id>", methods=["POST"])
+    @career_page()
+    def team_goal_choose(conn, ctx, team_id):
+        sid = ctx["current_season_id"]
+        if team_id not in _my_goal_teams(conn, ctx, sid):
+            abort(403)
+        if request.form.get("action") == "clear":
+            if not ctx.get("real", ctx)["is_master"]:
+                abort(403)
+            teamgoals.clear(conn, sid, team_id)
+            g.audit_summary = f"cleared {S.team_map(conn)[team_id]['name']}'s team goal"
+            flash("Goal cleared. The team can choose again.", "success")
+        else:
+            o = teamgoals.choose(conn, sid, team_id, request.form.get("tier"), g.user["username"])
+            g.audit_summary = f"chose a {o['label']} goal for {S.team_map(conn)[team_id]['name']}: {o['text']}"
+            flash(f"{o['label']} goal set: {o['text']}.", "success")
+        return redirect(url_for("team_goals_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market")
     @career_page()
@@ -3079,7 +3129,8 @@ def register_routes(app):
             before = {"features": community.features(conn), "join": storage.join_mode(conn),
                       "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"],
                       "life": teamlife.settings(conn), "name": ctx["career_name"],
-                      "vis": league_profile.visibility(conn), "recs": storage.get_meta(conn, "difficulty_recs", "1")}
+                      "vis": league_profile.visibility(conn), "recs": storage.get_meta(conn, "difficulty_recs", "1"),
+                      "goals": teamgoals.enabled(conn)}
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
             if request.form.get("feature_public") and "visibility" not in request.form:   # older forms
                 request_form = request.form.copy()
@@ -3093,6 +3144,7 @@ def register_routes(app):
             if "team_life" in request.form:
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
+                teamgoals.set_enabled(conn, bool(request.form.get("team_goal_choice")))
             if league_profile.is_public(conn):
                 community.public_key(conn)
             if request.form.get("team_life") == "1":
@@ -3120,6 +3172,8 @@ def register_routes(app):
             if vis != before["vis"]:
                 changes.append(f"changed visibility from {league_profile.VISIBILITY[before['vis']][0]} to "
                                f"{league_profile.VISIBILITY[vis][0]}")
+            if teamgoals.enabled(conn) != before["goals"]:
+                changes.append("turned selectable team goals " + ("on" if teamgoals.enabled(conn) else "off"))
             if storage.get_meta(conn, "difficulty_recs", "1") != before["recs"]:
                 changes.append("turned AI difficulty recommendations " +
                                ("on" if storage.get_meta(conn, "difficulty_recs", "1") == "1" else "off"))
@@ -3144,6 +3198,7 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "0") == "1",
+                    team_goal_choice=teamgoals.enabled(conn),
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
                     and S.get_season(conn, ctx["current_season_id"])["status"] != C.SEASON_COMPLETE)
 

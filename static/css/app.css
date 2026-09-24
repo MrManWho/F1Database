@@ -1544,3 +1544,10 @@ tr.contract-historical { opacity: .75; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; margin: .6rem 0; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
+.team-goal { border-left: 4px solid var(--team); }
+.goal-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .6rem; margin: .6rem 0; }
+.goal-option { display: grid; gap: .25rem; text-align: left; padding: .7rem .8rem; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; cursor: pointer; min-height: 44px; }
+.goal-option:hover, .goal-option:focus-visible { border-color: var(--accent); }
+.goal-option.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.state { font-size: .75rem; font-weight: 700; padding: .1rem .45rem; border-radius: 999px; border: 1px solid currentColor; }
+.state-met { color: var(--green); } .state-behind, .state-missed { color: var(--danger-text, var(--red)); } .state-on-track { color: var(--blue); }

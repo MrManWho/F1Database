@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Team goals{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Team goals</h1>
+  <p class="page-purpose">Each team with a player driver picks one goal for the Constructors' Championship. The bigger the goal, the bigger the Reputation reward, and the bigger the cost of missing it.</p></div></div>
+
+{% if not enabled %}
+<section class="card empty-state"><h2>Team goals are off in this league</h2>
+  <p class="muted">{% if ctx.is_master %}Turn on <em>Selectable team goals</em> in <a href="{{ url_for('league_settings', token=ctx.token) }}#team-goals">League settings</a>.{% else %}The Race Master can turn them on in League settings.{% endif %}</p>
+  {% if teams|selectattr('goal')|list %}<p class="muted small">Goals chosen earlier are still shown below.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>How it works</h2>
+  <div class="table-wrap"><table class="data-table compact">
+    <caption class="sr-only">Goal levels</caption>
+    <thead><tr><th scope="col">Goal</th><th scope="col">Target</th><th scope="col" class="num">Met</th><th scope="col" class="num">Missed</th></tr></thead>
+    <tbody>{% for key, t in tiers.items() %}<tr><th scope="row">{{ t.label }}</th>
+      <td>{{ {'safe': 'Two places below what the car should do', 'competitive': 'What the car should do', 'ambitious': 'Two places above the car'}[key] }}</td>
+      <td class="num">+{{ '%g'|format(t.reward) }}</td><td class="num">{{ '%g'|format(t.penalty) if t.penalty else '0' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="muted small">Met means finishing at or above the target position <b>or</b> scoring the target points. Rewards and penalties are Reputation for each player driver in the team, added when the next season starts.
+    Targets come from car strength, last season's Constructors' position, the lineup, the number of rounds and Sprint weekends.
+    {% if locked %}The first round is complete, so goals are locked for this season.{% else %}You can change your choice until the first round is complete.{% endif %}</p>
+</section>
+
+{% for t in teams %}
+<section class="card team-goal" style="--team: {{ t.team.color or 'var(--accent)' }}">
+  <div class="card-head"><h2>{{ t.team.name }}</h2><span class="muted small">{{ t.drivers|map(attribute='name')|join(' & ') }}</span></div>
+  {% if t.goal %}
+  <p><span class="pill">{{ t.goal.label }}</span> {{ t.goal.text }}.
+    <span class="state state-{{ t.goal.state|lower|replace(' ', '-') }}">{{ t.goal.state }}</span></p>
+  <p class="muted small">Now: {% if t.goal.position %}P{{ t.goal.position }}, {% endif %}{{ t.goal.points }} pts · Met +{{ '%g'|format(t.goal.reward) }}, missed {{ '%g'|format(t.goal.penalty) if t.goal.penalty else '0' }} · {{ t.goal.why }}</p>
+  {% endif %}
+  {% if t.can_choose %}
+  <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="goal-options">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for key, o in t.info.options.items() %}
+    <button class="goal-option{{ ' chosen' if t.goal and t.goal.tier == key }}" name="tier" value="{{ key }}" aria-pressed="{{ 'true' if t.goal and t.goal.tier == key else 'false' }}">
+      <b>{{ o.label }}</b><span>{{ o.text }}</span><small class="muted">Met +{{ '%g'|format(o.reward) }} · missed {{ '%g'|format(o.penalty) if o.penalty else '0' }}</small></button>
+    {% endfor %}
+  </form>
+  <p class="muted small">Expected: P{{ t.info.expected }} · {{ t.info.why }}</p>
+  {% if t.goal and ctx.real.is_master %}
+  <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="inline-form tight">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" name="action" value="clear">Clear this goal</button></form>
+  {% endif %}
+  {% elif not t.goal %}
+  <p class="muted small">{{ 'No goal was chosen, so no reward or penalty this season.' if locked else 'No goal chosen yet.' }}</p>
+  {% endif %}
+</section>
+{% else %}
+<section class="card empty-state"><h2>No player teams this season</h2><p class="muted">Goals appear once a player driver has a seat.</p></section>
+{% endfor %}
+{% endblock %}

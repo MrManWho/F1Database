@@ -535,6 +535,11 @@ def pending_actions(conn, ctx):
         if todo and todo["press"]:
             out.append((f"Answer {todo['press']} press question{'s' if todo['press'] != 1 else ''} before "
                         f"R{todo['event']['round_number']} can start", "dashboard#press", "warn"))
+        from . import teamgoals
+        if teamgoals.enabled(conn) and not teamgoals.locked(conn, sid):
+            seat = S.driver_seats(conn, sid).get(me["id"])
+            if seat and not teamgoals.choice(conn, sid, seat[0]):
+                out.append(("Choose your team's goal for the season", "team-goals", "warn"))
         nxt = S.next_incomplete_event(conn, sid)
         if nxt and ctx["team_life"]["targets"]:
             t = teamlife.target_for(conn, nxt["id"], me["id"])
