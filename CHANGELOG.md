@@ -62,7 +62,7 @@ _Released September 24, 2026_
 ### Migration notes
 - Save files move from schema 17 to 18: new tables for notification preferences, deliveries, seat flags, weekend targets and gate bypasses, and new columns on events, notifications, join requests and invitations. Nothing existing is changed or removed. Every league is backed up automatically before it's upgraded.
 - **Existing members keep the results emails they had**: each membership starts with the old account-wide choice, now applied to that league only. Everything else uses the Important-only preset.
-- The **AI difficulty recommendation now ignores Sprint points** unless the league turns "Count Sprint points" on (League settings). Recorded difficulties and past recommendations aren't changed.
+- The **AI difficulty recommendation still counts Sprint points**, as before. A league can now turn that off ("Count Sprint points", League settings) so only the Grand Prix counts. Recorded difficulties and past recommendations aren't changed.
 - **Team goals, announcements and statistics** don't change any stored result or rating. Team goals are off until a league turns them on.
 - New leagues are private. Creating leagues is limited to site admins unless the site setting allows everyone. The person who creates a league becomes its Race Master.
 

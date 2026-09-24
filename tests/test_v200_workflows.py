@@ -169,7 +169,7 @@ def test_difficulty_explains_rounds_and_can_be_switched_off(app, master_client):
         assert S.get_event(conn, evs[0]["id"])["ai_difficulty"] == 85
 
 
-def test_sprint_points_only_count_when_the_league_says_so(app, master_client):
+def test_sprint_points_count_unless_the_league_turns_them_off(app, master_client):
     token = _league(master_client)
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
@@ -179,9 +179,9 @@ def test_sprint_points_only_count_when_the_league_says_so(app, master_client):
         ids = [r["driver_id"] for r in S.weekend_rows(conn, sprint["id"])]
         run_event(conn, sprint, order=[d for d in ids if d != p][:9] + [p],
                   sprint_order=[p] + [d for d in ids if d != p], difficulty=85)
+        with_sprint, _ = S.player_event_score(conn, S.get_event(conn, sprint["id"]))     # default: Sprints count
+        storage.set_meta(conn, "difficulty_sprints", "0")
         without, _ = S.player_event_score(conn, S.get_event(conn, sprint["id"]))
-        storage.set_meta(conn, "difficulty_sprints", "1")
-        with_sprint, _ = S.player_event_score(conn, S.get_event(conn, sprint["id"]))
     assert with_sprint > without
 
 

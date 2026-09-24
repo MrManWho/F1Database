@@ -3275,7 +3275,7 @@ def register_routes(app):
                     visibility_opts=league_profile.VISIBILITY, permissions=roles.PERMISSIONS,
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
-                    difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "0") == "1",
+                    difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
                     team_goal_choice=teamgoals.enabled(conn),
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
                     and S.get_season(conn, ctx["current_season_id"])["status"] != C.SEASON_COMPLETE)

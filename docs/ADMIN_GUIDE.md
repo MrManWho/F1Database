@@ -26,7 +26,7 @@ All of these affect one league only.
   rounds, names, standings, records and news; never emails, usernames, notes, garages, offers, drafts or rounds in progress.
 - **Selectable team goals**: off by default. See Help → Team goals. Rewards: Safe +1/0, Competitive +3/−1, Ambitious +6/−3
   Reputation, settled once at the next season rollover.
-- **AI difficulty**: recommendations on/off; *Count Sprint points* (off by default in 2.0).
+- **AI difficulty**: recommendations on/off; *Count Sprint points* (on by default, as before 2.0).
 - **Team orders, weekend targets, round gates**: as in 1.20.
 - **Joining**: requests, invite only or closed. **Rollover default** for ending contracts.
 - **Discord webhook**: kept private; never shown in the Activity Log, exports or downloaded backups.

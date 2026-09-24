@@ -841,7 +841,7 @@ def player_event_score(conn, event, ranks=None):
     scores = []
     details = []
     # v2.0: Sprint points only count when the league explicitly says so (League settings → Career systems).
-    with_sprint = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "0"})["value"] == "1"
+    with_sprint = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "1"})["value"] == "1"
     for r in rows:
         if not r["is_player"] or r["result_status"] != C.STATUS_FINISHED or not r["race_position"]:
             continue

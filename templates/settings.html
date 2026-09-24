@@ -84,7 +84,7 @@
       <span class="switch"></span>
       <span><b>AI difficulty recommendations</b><small class="muted">Suggest the next AI level from your results. Off still records the difficulty used each round.</small></span>
     </label>
-    <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprint points in the AI recommendation (off: only the Grand Prix counts)</label>
+    <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprint points in the AI recommendation (on by default; off: only the Grand Prix counts)</label>
     <label>Team orders
       <select name="team_orders">{% for key, label in C.TEAM_ORDER_MODES.items() %}<option value="{{ key }}" {{ 'selected' if life.orders == key }}>{{ label }}</option>{% endfor %}</select></label>
     <p class="muted small">Off: nobody is told to let a teammate through (waiting orders are cancelled, no penalty). Advisory: shown, no effect. On: judged from the result. Past orders stay in history.</p>
