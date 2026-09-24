@@ -370,6 +370,8 @@ def after_race(conn, event_id):
     judge_targets(conn, event_id)
     battle.after_race(conn, event_id)
     relations.review(conn, event["season_id"])
+    from . import ultimatums
+    ultimatums.after_race(conn, event_id)
     issue_orders(conn, event["season_id"])
     required = press_stays_open(conn)
     for rel in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (event["season_id"],)).fetchall():

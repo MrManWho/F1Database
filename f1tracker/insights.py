@@ -536,7 +536,10 @@ def pending_actions(conn, ctx):
         if todo and todo["press"]:
             out.append((f"Answer {todo['press']} press question{'s' if todo['press'] != 1 else ''} before "
                         f"R{todo['event']['round_number']} can start", "dashboard#press", "warn"))
-        from . import teamgoals
+        from . import teamgoals, ultimatums
+        u = ultimatums.active(conn, sid, me["id"])
+        if u and u["status"] == "Issued":
+            out.insert(0, (f"Final warning: {u['label']}", "team-standing", "hot"))
         if teamgoals.enabled(conn) and not teamgoals.locked(conn, sid):
             seat = S.driver_seats(conn, sid).get(me["id"])
             if seat and not teamgoals.choice(conn, sid, seat[0]):
@@ -553,6 +556,11 @@ def pending_actions(conn, ctx):
         inc = conn.execute("SELECT COUNT(*) FROM incidents WHERE status = 'Open'").fetchone()[0]
         if inc:
             out.append((f"{inc} incident report{'s' if inc != 1 else ''} to rule on", "incidents", "warn"))
+        from . import ultimatums
+        waiting = ultimatums.awaiting(conn, sid)
+        if waiting:
+            out.append((f"{len(waiting)} mid-season dismissal{'s' if len(waiting) != 1 else ''} to confirm or overrule",
+                        "grid#dismissals", "hot"))
         probs = seats.problems(conn, sid)
         if probs:
             out.append((f"{len(probs)} seat/contract problem{'s' if len(probs) != 1 else ''} to resolve", "grid#contracts", "hot"))

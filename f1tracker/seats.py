@@ -32,6 +32,7 @@ KINDS = {
     "wrong_team": ("Contract is with another team", "bad"),
     "unseated": ("Contracted but not seated", "bad"),
     "free_agent": ("Free agent", "muted"),
+    "released": ("Released mid-season", "warn"),
     "ai": ("AI driver", "muted"),
 }
 PROBLEMS = {"expired", "wrong_team", "unseated"}
@@ -111,7 +112,10 @@ def state(conn, season_id, driver_id, seats=None, driver=None):
         else:
             out["kind"] = "no_contract"
     else:
-        out["kind"] = "unseated" if deal and driver["active"] else "free_agent"
+        released = deal and conn.execute("SELECT name FROM sqlite_master WHERE name = 'ultimatums'").fetchone() and \
+            conn.execute("SELECT 1 FROM ultimatums WHERE season_id = ? AND driver_id = ? AND team_id = ? AND "
+                         "status = 'Dismissed'", (season_id, driver_id, deal["team_id"])).fetchone()
+        out["kind"] = "released" if released else "unseated" if deal and driver["active"] else "free_agent"
     return _label(out)
 
 
@@ -126,6 +130,8 @@ def _label(out):
         out["detail"] = f"Last contract: {l['team']['name'] if l['team'] else '?'} to {l['end_year']}"
     elif out["kind"] == "wrong_team" and c:
         out["detail"] = f"Contract for {out['year']} is with {c['team']['name']}"
+    elif out["kind"] == "released" and c:
+        out["detail"] = f"Dropped by {c['team']['name']} during {out['year']}; free to sign elsewhere"
     elif out["kind"] == "unseated" and c:
         out["detail"] = f"Signed with {c['team']['name']} for {out['year']}"
     elif out["kind"] in FLAGS and out.get("flag") and out["flag"].get("note"):

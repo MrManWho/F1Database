@@ -6,6 +6,31 @@
 <div class="page-head"><div><div class="kicker">Grid &amp; Transfers · {{ ctx.season.year }}</div><h1>The {{ ctx.season.year }} grid</h1></div>
   {% if ro %}<span class="view-only-badge">View only</span>{% endif %}</div>
 
+{% if dismissals %}
+<section class="card" id="dismissals">
+  <div class="card-head"><h2>Final warnings &amp; dismissals · {{ ctx.season.year }}</h2></div>
+  <ul class="plain-list">
+  {% for u in dismissals %}
+    <li class="dismissal dismissal-{{ u.status|lower|replace(' ', '-') }}">
+      <b>{{ dmap[u.driver_id].name }}</b> · {{ tmap[u.team_id].name }} · R{{ u.round_number }} {{ u.event_name }}: {{ u.label }}
+      <span class="pill">{{ u.status }}</span>{% if u.note %} <small class="muted">“{{ u.note }}”</small>{% endif %}
+      {% if u.status == 'Awaiting decision' and ctx.real.is_master %}
+      <form method="post" action="{{ url_for('dismissal_decide', token=ctx.token, ultimatum_id=u.id) }}" class="stack tight">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Note <small class="muted">(required to overrule)</small><input name="note" maxlength="500" placeholder="e.g. The car failed him, not the other way round"></label>
+        <div class="button-row tight">
+          <button class="btn btn-sm btn-danger" name="decision" value="dismiss">Confirm: drop {{ dmap[u.driver_id].name }}</button>
+          <button class="btn btn-sm" name="decision" value="overrule">Overrule: they keep the seat</button>
+        </div>
+        <p class="muted small">Dropping takes the seat away now (the best unseated AI driver steps in). Results, points and Reputation stay with the driver, who's free to sign elsewhere.</p>
+      </form>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 <section class="card" id="contracts">
   <div class="card-head"><h2>Seats &amp; contracts · {{ ctx.season.year }}</h2>
     {% set bad = states|selectattr('problem')|list %}

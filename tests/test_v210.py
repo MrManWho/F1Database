@@ -376,3 +376,115 @@ def test_interview_page_uses_an_approach_and_weighs_the_record(app, master_clien
     # A bluff: a podium goal that the record doesn't back up counts against you.
     record = {"year": 2026, "rounds": 10, "avg": 18.0, "points_rate": 0.0, "podiums": 0}
     assert pitch._goal_realism("podiums", record) == -1 and pitch._goal_realism("top_half", {**record, "avg": 7}) == 1
+
+
+# --------------------------------------------------------------------------- final warnings and mid-season dismissals
+
+def _at_risk(conn, monkeypatch, driver_id):
+    from f1tracker import relations, ultimatums
+    sid = S.current_season_id(conn)
+    relations.ensure(conn, sid)
+    conn.execute("UPDATE team_relations SET warning_level = 3 WHERE driver_id = ?", (driver_id,))
+    real = relations.assess
+    monkeypatch.setattr(ultimatums.relations, "assess",
+                        lambda c, s, d, *a: {**real(c, s, d, *a), "live_status": "Seat at risk"} if d == driver_id
+                        else real(c, s, d, *a))
+
+
+def _order(conn, ev, driver_id, pos):
+    ids = [r["driver_id"] for r in S.weekend_rows(conn, ev["id"])]
+    others = [d for d in ids if d != driver_id]
+    return others[:pos - 1] + [driver_id] + others[pos - 1:]
+
+
+def test_final_warning_then_race_master_confirms_the_dismissal(app, master_client, monkeypatch):
+    from f1tracker import impacts, seats, ultimatums
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})                         # the fastest car
+        seats.record_contract(conn, a, 1, 2026, 2)
+        evs = S.events(conn, sid)
+        for e in evs[:3]:
+            run_event(conn, e, order=_order(conn, e, a, 20))
+        _at_risk(conn, monkeypatch, a)
+        assert ultimatums.after_race(conn, evs[2]["id"]) is None and not ultimatums.active(conn, sid, a)  # too early
+        run_event(conn, evs[3], order=_order(conn, evs[3], a, 20))
+        ultimatums.after_race(conn, evs[3]["id"])
+        u = ultimatums.active(conn, sid, a)
+        assert u and u["event_id"] == evs[4]["id"] and "or you're out" in u["label"]
+        assert conn.execute("SELECT 1 FROM news WHERE headline LIKE '%final warning%'").fetchone()
+        run_event(conn, evs[4], order=_order(conn, evs[4], a, 22))    # missed
+        ultimatums.after_race(conn, evs[4]["id"])
+        assert ultimatums.active(conn, sid, a)["status"] == "Awaiting decision"
+        team = S.driver_seats(conn, sid)[a]
+    pledge_all(token)
+    assert "mid-season dismissal" in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    ana = _client(app, "ana")
+    assert ana.post(f"/career/{token}/dismissals/{u['id']}", data={"csrf_token": "tok", "decision": "dismiss"}).status_code == 403
+    master_client.post(f"/career/{token}/dismissals/{u['id']}", data={"csrf_token": "tok", "decision": "dismiss"})
+    with storage.session(token) as conn:
+        assert a not in S.driver_seats(conn, sid) and S.grid_map(conn, sid)[team]     # an AI driver took the seat
+        assert seats.state(conn, sid, a)["kind"] == "released" and not seats.problems(conn, sid)
+        assert conn.execute("SELECT COUNT(*) FROM results r JOIN events e ON e.id = r.event_id WHERE r.driver_id = ? "
+                            "AND e.status = 'Complete'", (a,)).fetchone()[0] == 5          # history kept
+        assert [n["title"] for n in impacts.pending(conn, a, "ana")] == ["Dropped by your team"]
+
+
+def test_overrule_needs_a_note_and_dnf_voids_the_warning(app, master_client, monkeypatch):
+    from f1tracker import ultimatums
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        evs = S.events(conn, sid)
+        for e in evs[:4]:
+            run_event(conn, e, order=_order(conn, e, a, 20))
+        _at_risk(conn, monkeypatch, a)
+        ultimatums.after_race(conn, evs[3]["id"])
+        run_event(conn, evs[4], overrides={a: "DNF"})                   # doesn't count either way
+        ultimatums.after_race(conn, evs[4]["id"])
+        statuses = [u["status"] for u in ultimatums.for_season(conn, sid, a)]
+        assert statuses == ["Issued", "Void"]                            # a fresh one for the next race
+        run_event(conn, evs[5], order=_order(conn, evs[5], a, 22))
+        ultimatums.after_race(conn, evs[5]["id"])
+        u = ultimatums.active(conn, sid, a)
+    res = master_client.post(f"/career/{token}/dismissals/{u['id']}", data={"csrf_token": "tok", "decision": "overrule"},
+                             follow_redirects=True)
+    assert "Add a note" in res.get_data(as_text=True)
+    master_client.post(f"/career/{token}/dismissals/{u['id']}",
+                       data={"csrf_token": "tok", "decision": "overrule", "note": "The car kept breaking, not his fault"})
+    with storage.session(token) as conn:
+        assert a in S.driver_seats(conn, sid)
+        assert ultimatums.for_season(conn, sid, a)[0]["status"] == "Overruled"
+        run_event(conn, evs[6], order=_order(conn, evs[6], a, 22))
+        ultimatums.after_race(conn, evs[6]["id"])
+        assert not ultimatums.active(conn, sid, a)                       # one decision per season
+
+
+def test_meeting_the_target_saves_the_seat_and_the_setting_turns_it_off(app, master_client, monkeypatch):
+    from f1tracker import ultimatums
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players(conn)[0]
+        S.place_players(conn, sid, {a: (1, 1)})
+        evs = S.events(conn, sid)
+        for e in evs[:4]:
+            run_event(conn, e, order=_order(conn, e, a, 20))
+        _at_risk(conn, monkeypatch, a)
+        ultimatums.after_race(conn, evs[3]["id"])
+        run_event(conn, evs[4], order=_order(conn, evs[4], a, 1))
+        ultimatums.after_race(conn, evs[4]["id"])
+        assert ultimatums.for_season(conn, sid, a)[0]["status"] == "Met"
+        assert conn.execute("SELECT warning_level FROM team_relations WHERE driver_id = ?", (a,)).fetchone()[0] == 2
+    master_client.post(f"/career/{token}/settings", data={"csrf_token": "tok", "team_life": "1", "difficulty_recs": "1"})
+    with storage.session(token) as conn:
+        assert not ultimatums.enabled(conn)
+        conn.execute("UPDATE team_relations SET warning_level = 3 WHERE driver_id = ?", (a,))
+        run_event(conn, evs[5], order=_order(conn, evs[5], a, 20))
+        ultimatums.after_race(conn, evs[5]["id"])
+        assert not ultimatums.active(conn, sid, a)

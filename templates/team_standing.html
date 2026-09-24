@@ -83,6 +83,10 @@
     </div>
   </section>
 </div>
+{% if ultimatum %}
+<div class="banner banner-danger" role="alert"><b>{{ 'Final warning' if ultimatum.status == 'Issued' else 'Awaiting a decision' }}:</b>
+  {{ ultimatum.label }}.{% if ultimatum.status == 'Awaiting decision' %} The target was missed; the Race Master will confirm whether you keep your seat.{% endif %}</div>
+{% endif %}
 <div class="grid-2">
   <section class="card">
     <h2>Season goals <span class="info-dot" title="Each goal on track adds to the relationship, each one behind takes away. The effect grows as the season goes on."><a href="{{ url_for('help_page') }}#goals">ⓘ</a></span></h2>

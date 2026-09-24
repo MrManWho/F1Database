@@ -21,7 +21,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import announcements, impacts, stats
+from . import announcements, impacts, stats, ultimatums
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -1714,6 +1714,8 @@ def register_routes(app):
         sid = ctx["season"]["id"]
         seats_ = S.driver_seats(conn, sid)
         return page("grid.html", ctx, grid=S.grid(conn, sid), players=S.player_drivers(conn), seats=seats_,
+                    dismissals=[u for u in ultimatums.for_season(conn, sid) if u["status"] != "Void"],
+                    dmap=S.driver_map(conn), tmap=S.team_map(conn),
                     all_drivers=S.drivers(conn, active_only=True), states=seats.season_states(conn, sid),
                     contract_rows=seats.contract_list(conn, sid))
 
@@ -2259,6 +2261,7 @@ def register_routes(app):
                     notes=relations.notes(conn, sid, driver["id"]), teammate=teammate,
                     contract=market.current_contract(conn, driver["id"]),
                     next_event=S.next_incomplete_event(conn, ctx["current_season_id"]),
+                    ultimatum=ultimatums.active(conn, sid, driver["id"]),
                     own=bool(ctx["my_driver"] and ctx["my_driver"]["id"] == driver["id"]))
 
     @app.route("/career/<token>/team-standing/<int:driver_id>/goals", methods=["POST"])
@@ -2362,6 +2365,33 @@ def register_routes(app):
             return set(lineup)
         mine = real.get("my_driver")
         return {t for t, ds in lineup.items() if mine and any(d["id"] == mine["id"] for d in ds)}
+
+    @app.route("/career/<token>/dismissals/<int:ultimatum_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def dismissal_decide(conn, ctx, ultimatum_id):
+        """Race Master: confirm a team's mid-season dismissal, or overrule it with a note."""
+        dismiss = request.form.get("decision") == "dismiss"
+        row = conn.execute("SELECT driver_id FROM ultimatums WHERE id = ?", (ultimatum_id,)).fetchone() \
+            if conn.execute("SELECT name FROM sqlite_master WHERE name = 'ultimatums'").fetchone() else None
+        if not row:
+            abort(404)
+        name = S.driver_map(conn)[row["driver_id"]]["name"]
+        if dismiss:
+            result = {}
+
+            def act(c):
+                result["r"] = ultimatums.decide(c, ultimatum_id, True, g.user["username"], request.form.get("note"))
+                return {row["driver_id"]: ["You lost your race seat mid-season. Your results and points stay yours."]}
+            impacts.record_change(conn, f"dismissed-{ultimatum_id}", "Dropped by your team",
+                                  "Your team set a final target and it was missed, and the Race Master confirmed the "
+                                  "decision. You're free to talk to other teams.", act)
+            g.audit_summary = f"confirmed {name}'s mid-season dismissal"
+            flash(f"{name} has been dropped. The best available reserve takes the seat.", "success")
+        else:
+            ultimatums.decide(conn, ultimatum_id, False, g.user["username"], request.form.get("note"))
+            g.audit_summary = f"overruled {name}'s mid-season dismissal: {request.form.get('note', '').strip()[:120]}"
+            flash(f"{name} keeps the seat.", "success")
+        return redirect(url_for("grid_page", token=ctx["token"]) + "#dismissals")
 
     @app.route("/career/<token>/team-goals")
     @career_page()
@@ -3369,7 +3399,7 @@ def register_routes(app):
                       "discord": discord.settings(conn), "window": ctx["race_window"], "tz": ctx["timezone"],
                       "life": teamlife.settings(conn), "name": ctx["career_name"],
                       "vis": league_profile.visibility(conn), "recs": storage.get_meta(conn, "difficulty_recs", "1"),
-                      "goals": teamgoals.enabled(conn)}
+                      "goals": teamgoals.enabled(conn), "sackings": ultimatums.enabled(conn)}
             community.set_features(conn, {k for k in C.FEATURES if request.form.get(f"feature_{k}")})
             if request.form.get("feature_public") and "visibility" not in request.form:   # older forms
                 request_form = request.form.copy()
@@ -3384,6 +3414,7 @@ def register_routes(app):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
                 teamgoals.set_enabled(conn, bool(request.form.get("team_goal_choice")))
+                ultimatums.set_enabled(conn, bool(request.form.get("midseason_sackings")))
             if league_profile.is_public(conn):
                 community.public_key(conn)
             if request.form.get("team_life") == "1":
@@ -3411,6 +3442,8 @@ def register_routes(app):
             if vis != before["vis"]:
                 changes.append(f"changed visibility from {league_profile.VISIBILITY[before['vis']][0]} to "
                                f"{league_profile.VISIBILITY[vis][0]}")
+            if ultimatums.enabled(conn) != before["sackings"]:
+                changes.append("turned mid-season dismissals " + ("on" if ultimatums.enabled(conn) else "off"))
             if teamgoals.enabled(conn) != before["goals"]:
                 changes.append("turned selectable team goals " + ("on" if teamgoals.enabled(conn) else "off"))
             if storage.get_meta(conn, "difficulty_recs", "1") != before["recs"]:
@@ -3437,7 +3470,7 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
-                    team_goal_choice=teamgoals.enabled(conn),
+                    team_goal_choice=teamgoals.enabled(conn), midseason_sackings=ultimatums.enabled(conn),
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
                     and S.get_season(conn, ctx["current_season_id"])["status"] != C.SEASON_COMPLETE)
 
