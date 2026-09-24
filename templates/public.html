@@ -1,52 +1,144 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, avatar, race_clock, pattrs with context %}
-{% block title %}{{ name }}{% endblock %}
+{% from "_macros.html" import team_dot, avatar, race_clock with context %}
+{% set P = pub.profile %}
+{% block title %}{{ pub.name }}{% endblock %}
+{% block meta %}
+  <meta name="description" content="{{ (P.league_description or (pub.name ~ ': standings, results and records.'))[:180] }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Paddock Legacy">
+  <meta property="og:title" content="{{ pub.name }}{{ ' · ' ~ pub.season.year ~ ' season' if pub.season }}">
+  <meta property="og:description" content="{{ (P.league_description or 'Standings, results, drivers and records.')[:180] }}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) }}">
+  <meta name="twitter:card" content="summary">
+{% endblock %}
 {% block plain %}
-<div class="page-head"><div><div class="kicker">{{ season.year }} season · public results</div><h1>{{ name }}</h1></div>
-  {% if not user %}<a class="btn btn-ghost" href="{{ url_for('login') }}">Log in</a>{% endif %}</div>
-
-{% if next_event %}
-<section class="card hero">
-  <div class="kicker">Next up · Round {{ next_event.round_number }}</div>
-  <h2 class="hero-title">{{ next_event.name }}</h2>
-  <div class="hero-meta"><span>{{ next_event.location }}</span>{% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
-  {% if next_event.race_at %}{{ race_clock(next_event, big=True) }}{% endif %}
-</section>
-{% endif %}
-
-{% if story and story.podium %}
-<section class="card">
-  <h2>Latest: R{{ last.round_number }} {{ last.name }}</h2>
-  <div class="podium">
-    {% for r in story.podium %}<div class="podium-step p{{ loop.index }}" style="--team: {{ r.team.color }}"><span class="podium-pos">P{{ loop.index }}</span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small></div>{% endfor %}
+{% macro dlink(d) -%}<a href="{{ pub.base }}/driver/{{ d.id }}">{{ d.name }}</a>{%- endmacro %}
+<div class="public" style="--accent: {{ pub.accent }}; --on-accent: {{ pub.on_accent }};">
+<header class="public-head">
+  <div class="public-title">
+    <span class="league-mark" style="--accent: {{ pub.accent }}" aria-hidden="true">{{ pub.name[:2]|upper }}</span>
+    <div><div class="kicker">{{ pub.season.year }} season · public results</div><h1><a href="{{ pub.base }}">{{ pub.name }}</a></h1>
+      <p class="muted small">{% for bit in [P.league_region, P.league_platform, P.league_schedule] if bit %}{{ bit }}{{ ' · ' if not loop.last }}{% endfor %}</p></div>
   </div>
-</section>
+  {% if not user %}<a class="btn btn-ghost btn-sm" href="{{ url_for('login') }}">Log in</a>{% endif %}
+</header>
+<nav class="public-nav" aria-label="{{ pub.name }}">
+  {% for v, label, href in [('home', 'Home', pub.base), ('calendar', 'Calendar', pub.base ~ '/calendar'), ('standings', 'Standings', pub.base ~ '/standings'),
+     ('records', 'Records', pub.base ~ '/records'), ('news', 'News', pub.base ~ '/news')] %}
+  <a href="{{ href }}" {% if view == v %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  {% if pub.public_incidents %}<a href="{{ pub.base }}/incidents" {% if view == 'incidents' %}aria-current="page"{% endif %}>Incidents</a>{% endif %}
+</nav>
+
+{% if view == 'home' %}
+  {% if P.league_description %}<p class="public-lead">{{ P.league_description }}</p>{% endif %}
+  {% if next_event %}
+  <section class="card hero">
+    <div class="kicker">Next up · Round {{ next_event.round_number }}</div>
+    <h2 class="hero-title">{{ next_event.name }}</h2>
+    <div class="hero-meta"><span>{{ next_event.location }}</span>{% if next_event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
+    {% if next_event.race_at %}{{ race_clock(next_event, big=True) }}{% endif %}
+  </section>
+  {% endif %}
+  {% if story and story.podium %}
+  <section class="card">
+    <h2>Latest: <a href="{{ pub.base }}/round/{{ last.id }}">R{{ last.round_number }} {{ last.name }}</a></h2>
+    <div class="podium">
+      {% for r in story.podium %}<div class="podium-step p{{ loop.index }}" style="--team: {{ r.team.color }}"><span class="podium-pos">P{{ loop.index }}</span><strong>{{ r.driver.name }}</strong><small>{{ r.team.name }}</small></div>{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  <div class="grid-2">
+    <section class="card table-card">
+      <div class="card-head"><h2>Drivers</h2><a class="small" href="{{ pub.base }}/standings">Full standings →</a></div>
+      <table class="data-table compact"><caption class="sr-only">Drivers' championship</caption><tbody>
+      {% for d in drivers if d.has_results %}{% if loop.index <= 10 %}
+        <tr><td class="num">{{ d.position }}</td>
+          <td class="driver-cell">{{ avatar(token, d.driver, profiles.get(d.driver_id), 'sm', key) }}<span><strong>{{ dlink(d.driver) }}</strong><small>{{ d.team.name if d.team else '' }}</small></span></td>
+          <td class="num">{{ d.wins }} W</td><td class="num"><b>{{ d.points }}</b></td></tr>
+      {% endif %}{% else %}<tr><td class="muted">No results yet.</td></tr>{% endfor %}</tbody></table>
+    </section>
+    <section class="card table-card">
+      <h2>Constructors</h2>
+      <table class="data-table compact"><caption class="sr-only">Constructors' championship</caption><tbody>{% for t in constructors %}
+        <tr><td class="num">{{ t.position }}</td><td>{{ team_dot(t.team) }}<a href="{{ pub.base }}/team/{{ t.team.id }}">{{ t.team.name }}</a></td><td class="num"><b>{{ t.points }}</b></td></tr>
+      {% endfor %}</tbody></table>
+    </section>
+  </div>
+  {% if news %}<section class="card"><div class="card-head"><h2>News</h2><a class="small" href="{{ pub.base }}/news">All news →</a></div>
+    <ul class="plain-list">{% for n in news %}<li><b>{{ n.headline }}</b> <small class="muted">{{ n.created_at|day }}</small></li>{% endfor %}</ul></section>{% endif %}
+  {% if P.links %}<p class="small">{% for l in P.links %}<a href="{{ l }}" rel="noopener nofollow" target="_blank">{{ l.split('//')[1].split('/')[0] }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% if P.league_rules %}<section class="card"><h2>Rules &amp; assists</h2><p class="small">{{ P.league_rules }}</p></section>{% endif %}
+
+{% elif view == 'calendar' %}
+  <section class="card table-card">
+    <div class="card-head"><h2>{{ pub.season.year }} calendar</h2><a class="btn btn-sm btn-ghost" href="{{ pub.base }}/calendar.ics" download>📅 Calendar file</a></div>
+    <table class="data-table compact"><caption class="sr-only">Rounds</caption><tbody>{% for e in events %}
+      <tr><td class="num">R{{ e.round_number }}</td>
+        <td>{% if e.status == 'Complete' %}<a href="{{ pub.base }}/round/{{ e.id }}"><strong>{{ e.name }}</strong></a>{% else %}<strong>{{ e.name }}</strong>{% endif %}{% if e.is_sprint %} <span class="pill pill-sprint">Sprint</span>{% endif %}<br><small class="muted">{{ e.location }}</small></td>
+        <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}{{ e.race_at|race_time }} {{ e.race_at|zone_label }}{% else %}{% set st = e|race_status %}<span class="muted">{{ st[1] }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody></table>
+  </section>
+
+{% elif view == 'standings' %}
+  <div class="page-head"><div><h2>{{ season.year }} standings{{ ' (archived)' if season.status == 'Complete' }}</h2>
+    <p class="muted small">Submitted rounds only.</p></div>
+    {% if pub.seasons|length > 1 %}<nav class="button-row tight" aria-label="Seasons">{% for s in pub.seasons %}<a class="btn btn-sm {{ 'btn-primary' if s.id == season.id else 'btn-ghost' }}" href="{{ pub.base }}/season/{{ s.id }}">{{ s.year }}</a>{% endfor %}</nav>{% endif %}</div>
+  <div class="grid-2">
+    <section class="card table-card"><h2>Drivers</h2>
+      <table class="data-table compact"><caption class="sr-only">Drivers</caption><thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Wins</th><th scope="col" class="num">Pts</th></tr></thead><tbody>
+      {% for d in drivers if d.has_results %}<tr><td class="num">{{ d.position }}</td><td>{{ dlink(d.driver) }}{% if d.driver.is_player %} <span class="player-badge">Player</span>{% endif %}<br><small class="muted">{{ d.team.name if d.team else '' }}</small></td><td class="num">{{ d.wins }}</td><td class="num"><b>{{ d.points }}</b></td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No submitted results yet.</td></tr>{% endfor %}</tbody></table></section>
+    <section class="card table-card"><h2>Constructors</h2>
+      <table class="data-table compact"><caption class="sr-only">Constructors</caption><thead><tr><th scope="col">Pos</th><th scope="col">Team</th><th scope="col" class="num">Pts</th></tr></thead><tbody>
+      {% for t in constructors %}<tr><td class="num">{{ t.position }}</td><td>{{ team_dot(t.team) }}<a href="{{ pub.base }}/team/{{ t.team.id }}">{{ t.team.name }}</a></td><td class="num"><b>{{ t.points }}</b></td></tr>{% endfor %}</tbody></table></section>
+  </div>
+
+{% elif view == 'round' %}
+  <section class="card table-card">
+    <div class="card-head"><h2>{{ season.year }} R{{ event.round_number }} {{ event.name }}</h2>{% if event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
+    <table class="data-table compact"><caption class="sr-only">Grand Prix result</caption>
+      <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col">Team</th><th scope="col" class="num">Grid</th><th scope="col" class="num">Pts</th></tr></thead><tbody>
+      {% for r in rows if r.result_status != 'Not Run' %}<tr><td class="num">{{ 'P' ~ r.race_position if r.result_status == 'Finished' else r.result_status }}</td>
+        <td>{{ dlink(r.driver) }}{% if r.fastest_lap %} <span title="Fastest Lap">⏱</span>{% endif %}{% if r.driver_of_day %} <span title="Driver of the Day">★</span>{% endif %}</td>
+        <td>{{ team_dot(r.team) }}{{ r.team.name }}</td><td class="num">{{ 'P' ~ r.qualifying_position if r.qualifying_position else '—' }}</td><td class="num">{{ r.gp_points + r.sprint_pts }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+
+{% elif view == 'driver' %}
+  <section class="card">
+    <h2>{{ driver.name }}{% if driver.is_player %} <span class="player-badge">Player driver</span>{% endif %}</h2>
+    {% if profile and profile.bio %}<p>{{ profile.bio }}</p>{% endif %}
+    <div class="stat-grid">{% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Poles', totals.poles), ('Starts', totals.starts), ('Championships', totals.titles)] %}
+      <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>{% endfor %}</div>
+    <table class="data-table compact"><caption class="sr-only">Seasons</caption><thead><tr><th scope="col">Season</th><th scope="col">Team</th><th scope="col" class="num">Pos</th><th scope="col" class="num">Pts</th></tr></thead><tbody>
+      {% for t in timeline %}<tr><td>{{ t.season.year }}</td><td>{{ t.team.name if t.team else '—' }}</td><td class="num">P{{ t.position }}</td><td class="num">{{ t.points }}</td></tr>{% endfor %}</tbody></table>
+  </section>
+
+{% elif view == 'team' %}
+  <section class="card" style="--team: {{ team.color }}">
+    <h2>{{ team_dot(team) }}{{ team.name }}</h2>
+    <p class="small">{{ pub.season.year }} line-up: {% for d in lineup if d %}{{ dlink(d) }}{{ ', ' if not loop.last }}{% else %}<span class="muted">none</span>{% endfor %}</p>
+    <div class="stat-grid">{% for label, value in [('Points', totals.points), ('Wins', totals.wins), ('Podiums', totals.podiums), ('Championships', totals.titles)] %}
+      <div class="stat card"><small>{{ label }}</small><strong>{{ value }}</strong></div>{% endfor %}</div>
+    <table class="data-table compact"><caption class="sr-only">Seasons</caption><thead><tr><th scope="col">Season</th><th scope="col" class="num">Pos</th><th scope="col" class="num">Pts</th></tr></thead><tbody>
+      {% for a in archive %}<tr><td>{{ a.season.year }}</td><td class="num">P{{ a.position }}</td><td class="num">{{ a.points }}</td></tr>{% endfor %}</tbody></table>
+  </section>
+
+{% elif view == 'records' %}
+  <section class="card table-card"><h2>All-time</h2>
+    <table class="data-table compact"><caption class="sr-only">All-time table</caption><thead><tr><th scope="col" class="num">#</th><th scope="col">Driver</th><th scope="col" class="num">Pts</th><th scope="col" class="num">Wins</th><th scope="col" class="num">Titles</th></tr></thead><tbody>
+      {% for r in rows[:20] %}<tr><td class="num">{{ r.rank }}</td><td>{{ dlink(r.driver) }}</td><td class="num">{{ r.points }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.titles }}</td></tr>{% endfor %}</tbody></table></section>
+  {% if records %}<section class="card"><h2>Records</h2><ul class="plain-list">{% for r in records %}<li><b>{{ r.title }}</b>: {{ r.driver.name }}, {{ r.value }} <small class="muted">{{ r.note }}</small></li>{% endfor %}</ul></section>{% endif %}
+
+{% elif view == 'news' %}
+  <section class="card"><h2>News</h2>
+    <ul class="plain-list news-plain">{% for n in news %}<li><b>{{ n.headline }}</b> <small class="muted">{{ n.created_at|day }}</small>{% if n.body %}<br><span class="small">{{ n.body }}</span>{% endif %}</li>{% else %}<li class="muted">No news yet.</li>{% endfor %}</ul></section>
+
+{% elif view == 'incidents' %}
+  <section class="card"><h2>Incident rulings</h2>
+    <ul class="plain-list">{% for i in incidents %}<li><b>{{ i.accused.name if i.accused else 'A driver' }}</b> · R{{ i.round_number }} {{ i.event_name }} · <b>{{ i.ruling_label }}</b>{% if i.ruling_note %}<br><span class="small">{{ i.ruling_note }}</span>{% endif %}</li>{% else %}<li class="muted">No rulings have been published.</li>{% endfor %}</ul></section>
 {% endif %}
-
-<div class="grid-2">
-  <section class="card table-card">
-    <h2>Drivers</h2>
-    <table class="data-table compact"><tbody>
-    {% for d in drivers if d.has_results or d.seat %}
-      <tr {{ pattrs(d.driver) }}><td class="num">{{ d.position }}</td>
-        <td class="driver-cell">{{ avatar(token, d.driver, profiles.get(d.driver_id), 'sm', key) }}<span><strong>{{ d.driver.name }}</strong><small>{{ d.team.name if d.team else '' }}</small></span></td>
-        <td class="num">{{ d.wins }} W</td><td class="num"><b>{{ d.points }}</b></td></tr>
-    {% endfor %}</tbody></table>
-  </section>
-  <section class="card table-card">
-    <h2>Constructors</h2>
-    <table class="data-table compact"><tbody>{% for t in constructors %}
-      <tr><td class="num">{{ t.position }}</td><td>{{ team_dot(t.team) }}{{ t.team.name }}</td><td class="num"><b>{{ t.points }}</b></td></tr>
-    {% endfor %}</tbody></table>
-  </section>
+<p class="muted small public-foot">A public page of {{ pub.name }}, powered by Paddock Legacy v{{ APP_VERSION }}. Only submitted results are shown.</p>
 </div>
-
-<section class="card table-card">
-  <h2>Calendar</h2>
-  <table class="data-table compact"><tbody>{% for e in events %}
-    <tr><td class="num">R{{ e.round_number }}</td><td><strong>{{ e.name }}</strong>{% if e.is_sprint %} <span class="pill pill-sprint">Sprint</span>{% endif %}<br><small class="muted">{{ e.location }}</small></td>
-      <td>{% if winners.get(e.id) %}🏆 {{ winners[e.id][0].driver.name }}{% elif e.race_at %}{{ e.race_at|race_time }}{% else %}<span class="muted">{{ e.status }}</span>{% endif %}</td></tr>
-  {% endfor %}</tbody></table>
-</section>
-<p class="muted small">Powered by Paddock Legacy v{{ APP_VERSION }}.</p>
 {% endblock %}

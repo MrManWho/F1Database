@@ -109,6 +109,21 @@
   </details>
 </section>
 
+{% set others = rows|rejectattr('username', 'equalto', user.username)|rejectattr('site_master')|list %}
+{% if others %}
+<section class="card" id="handover">
+  <h2>Hand the league over</h2>
+  <p class="muted small">Make another member this league's Race Master{% if not user.is_master %} and step down to Member yourself{% endif %}.
+    Results, drivers and settings don't change. They're told in the app.</p>
+  <form method="post" action="{{ url_for('ownership_transfer', token=ctx.token) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>New Race Master<select name="username" required>{% for m in others %}<option value="{{ m.username }}">{{ m.display_name }} ({{ m.username }})</option>{% endfor %}</select></label>
+    <label>Type their username to confirm<input name="confirm_name" autocomplete="off" required></label>
+    <button class="btn">Hand over</button>
+  </form>
+</section>
+{% endif %}
+
 {% if free_drivers %}
 <section class="card">
   <h2>Player drivers without a login</h2>

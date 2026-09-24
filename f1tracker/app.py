@@ -6,7 +6,9 @@ import io
 import os
 import secrets
 import sys
+import sqlite3
 import tempfile
+import time
 from functools import wraps
 from pathlib import Path
 
@@ -18,7 +20,7 @@ import random
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
-               ratelimit, seats)
+               ratelimit, seats, security)
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -32,7 +34,8 @@ def _base_dir():
 
 
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
-                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar", "unsubscribe",
+                    "reset_password", "login_code", "privacy_page", "terms_page", "public_page", "public_calendar", "public_calendar_ics", "public_standings", "public_round",
+                    "public_driver", "public_team", "public_records", "public_news", "public_incidents", "service_worker", "web_manifest", "avatar", "unsubscribe",
                     "home", "directory", "report_league", "help_page", "changelog_page", "demo_start"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
@@ -56,9 +59,10 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
     "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
-    "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract", "notify_prefs": "Changed their notifications",
+    "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
+    "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"view_mode", "league_pin", "league_order", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"view_mode", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -87,6 +91,17 @@ def create_app(config=None):
 
 # --------------------------------------------------------------------------- hooks & helpers
 
+INVITE_LIMIT = 20     # invitations a Race Master can send per hour
+JOIN_LIMIT = 5        # join requests an account can send per hour (across leagues)
+
+
+def sign_in(username):
+    """Start a signed-in session (registered, so it can be listed and ended from Account)."""
+    session.clear()
+    session["user"] = username
+    session["sid"] = security.start_session(username, request.headers.get("User-Agent", ""))
+
+
 def csrf_token():
     if "csrf" not in session:
         session["csrf"] = secrets.token_hex(16)
@@ -106,6 +121,13 @@ def register_hooks(app):
             return None if endpoint == "setup" else redirect(url_for("setup"))
         if session.get("user"):
             g.user = auth.get_user(session["user"])
+            if g.user and not session.get("sid"):
+                # Signed in before sessions were registered (v2.0): register it rather than signing them out.
+                session["sid"] = security.start_session(g.user["username"], request.headers.get("User-Agent", ""))
+            elif g.user and not security.check_session(session["sid"], g.user["username"]):
+                session.clear()
+                g.user = None
+                flash("You were signed out of this device from another one.", "info")
             if not g.user:
                 session.clear()
             elif g.user["is_steward"]:  # an old account-wide Scorekeeper: move it into their leagues first
@@ -359,7 +381,9 @@ def career_page(master_only=False, ops_only=False):
 # Demo guests can explore their own copy of the demo league but never change an account or reach anyone.
 DEMO_BLOCKED = {"accounts_page", "account_email", "account_self_password", "career_join", "invitation_answer",
                 "league_new_page", "career_new", "career_import", "push_subscribe", "push_test", "settings_save",
-                "member_invite", "discord_test", "restore_upload", "save_as", "export", "backup"}
+                "member_invite", "discord_test", "restore_upload", "save_as", "export", "backup",
+                "account_session_end", "account_sessions_end_others", "account_two_step", "account_export",
+                "account_delete_self", "league_leave", "ownership_transfer"}
 
 # Display modes: how a page is shown, never what the account may do. Server checks always use the real role.
 VIEW_MODES = {"race_master": "Race Master", "scorekeeper": "Scorekeeper", "driver": "Driver", "spectator": "Spectator preview"}
@@ -413,7 +437,7 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
-                     "league_pin", "league_order"}
+                     "league_pin", "league_order", "league_leave"}
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
                  "help_page"}
@@ -528,7 +552,7 @@ def _describe_targets(conn, kwargs):
         o = conn.execute("SELECT * FROM offers WHERE id = ?", (kwargs["offer_id"],)).fetchone()
         if o:
             parts.append(f"{S.team_map(conn)[o['team_id']]['name']}'s offer to {S.driver_map(conn)[o['driver_id']]['name']}")
-    if "username" in kwargs:
+    if kwargs.get("username"):
         u = auth.get_user(kwargs["username"])
         parts.append(u["display_name"] if u else kwargs["username"]); link = link or "members"
     if "season_id" in kwargs:
@@ -588,8 +612,7 @@ def register_routes(app):
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("setup"))
-            session.clear()
-            session["user"] = username
+            sign_in(username)
             flash("Race Master account created. Add logins for the other player in Accounts.", "success")
             return redirect(url_for("home"))
         return render_template("login.html", mode="setup", needs_code=bool(os.environ.get("F1_TRACKER_SETUP_CODE")))
@@ -602,13 +625,37 @@ def register_routes(app):
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("login", next=request.args.get("next", "")))
-            session.clear()
-            session["user"] = user["username"]
             target = request.args.get("next") or ""
             if not target.startswith("/") or target.startswith("//"):
                 target = url_for("home")
+            if security.totp_status(user["username"])["enabled"]:
+                # Password was right; the second step (a code from their authenticator app) comes next.
+                session.clear()
+                session["2fa_user"], session["2fa_at"], session["2fa_next"] = user["username"], time.time(), target
+                return redirect(url_for("login_code"))
+            sign_in(user["username"])
             return redirect(target)
         return render_template("login.html", mode="login", signups=auth.signups_allowed())
+
+    @app.route("/login/code", methods=["GET", "POST"])
+    def login_code():
+        """Two-step sign-in: the 6-digit code from the person's authenticator app."""
+        username = session.get("2fa_user")
+        if not username or time.time() - session.get("2fa_at", 0) > 300:
+            session.clear()
+            flash("Please log in again.", "info")
+            return redirect(url_for("login"))
+        if request.method == "POST":
+            if not ratelimit.allow("2fa", username, 6, 600):
+                session.clear()
+                flash("Too many wrong codes. Wait a few minutes and log in again.", "error")
+                return redirect(url_for("login"))
+            if security.verify_code(security.totp_status(username)["secret"], request.form.get("code")):
+                target = session.get("2fa_next") or url_for("home")
+                sign_in(username)
+                return redirect(target)
+            flash("That code didn't match. Use the newest code from your authenticator app.", "error")
+        return render_template("login.html", mode="code")
 
     def _send_signup_code(email, code, display_name):
         mailer.send([email], f"Your Paddock Legacy code: {code}",
@@ -656,8 +703,7 @@ def register_routes(app):
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("register_verify"))
-            session.clear()
-            session["user"] = username
+            sign_in(username)
             flash("Email confirmed and account created. Pick an open league below and ask to join.", "success")
             return redirect(url_for("home"))
         email = pending["email"]
@@ -795,6 +841,8 @@ def register_routes(app):
 
     @app.route("/accounts")
     def accounts_page():
+        me = g.user["username"]
+        totp = security.totp_status(me)
         memberships = {}
         if is_master():
             for c in storage.list_careers():
@@ -815,7 +863,11 @@ def register_routes(app):
                                reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
                                delisted=moderation.delisted() if is_master() else set(), signups=auth.signups_allowed(),
                                mail=mailer.config(), mail_ready=mailer.configured(),
-                               pw_min=auth.PASSWORD_MIN)
+                               pw_min=auth.PASSWORD_MIN, devices=security.sessions(me),
+                               current_sid=session.get("sid"), totp=totp,
+                               otpauth=security.otpauth_uri(me, totp["secret"]) if totp["secret"] and not totp["enabled"] else None,
+                               two_step_users={u["username"] for u in auth.list_users() if security.totp_status(u["username"])["enabled"]}
+                               if is_master() else set())
 
     @app.route("/accounts/new", methods=["POST"])
     @master_required
@@ -871,10 +923,131 @@ def register_routes(app):
         try:
             auth.change_password(g.user["username"], request.form.get("current_password"),
                                  request.form.get("password"), request.form.get("confirm_password"))
-            flash("Password changed. Use your new password next time you log in.", "success")
+            n = security.end_other_sessions(g.user["username"], session.get("sid"))
+            flash("Password changed." + (f" {n} other device{'s were' if n != 1 else ' was'} signed out." if n else ""),
+                  "success")
         except AuthError as exc:
             flash(str(exc), "error")
         return redirect(url_for("accounts_page") + "#password")
+
+    @app.route("/account/sessions/<sid>/end", methods=["POST"])
+    def account_session_end(sid):
+        security.end_session(g.user["username"], sid)
+        if sid == session.get("sid"):
+            session.clear()
+            return redirect(url_for("login"))
+        flash("That device is signed out.", "success")
+        return redirect(url_for("accounts_page") + "#security")
+
+    @app.route("/account/sessions/end-others", methods=["POST"])
+    def account_sessions_end_others():
+        n = security.end_other_sessions(g.user["username"], session.get("sid"))
+        flash(f"Signed out {n} other device{'s' if n != 1 else ''}.", "success")
+        return redirect(url_for("accounts_page") + "#security")
+
+    @app.route("/account/two-step", methods=["POST"])
+    def account_two_step():
+        """Turn two-step sign-in on (scan/enter a key, confirm a code) or off (password and a code)."""
+        me = g.user["username"]
+        action = request.form.get("action")
+        try:
+            if action == "start":
+                security.begin_totp(me)
+                flash("Add the key below to your authenticator app, then enter the code it shows to finish.", "info")
+            elif action == "confirm":
+                security.enable_totp(me, request.form.get("code"))
+                flash("Two-step sign-in is on. You'll be asked for a code each time you log in.", "success")
+            elif action == "disable":
+                if not auth.verify(me, request.form.get("password") or ""):
+                    raise AuthError("That password isn't right")
+                if not security.verify_code(security.totp_status(me)["secret"], request.form.get("code")):
+                    raise AuthError("That code didn't match")
+                security.disable_totp(me)
+                flash("Two-step sign-in is off.", "success")
+        except AuthError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("accounts_page") + "#security")
+
+    @app.route("/accounts/<username>/two-step-reset", methods=["POST"])
+    @master_required
+    def account_two_step_reset(username):
+        """Site admins: switch off two-step sign-in for someone who lost their phone."""
+        security.disable_totp(auth.normalise(username))
+        security.end_other_sessions(auth.normalise(username))
+        flash(f"Two-step sign-in is off for {username}, and their devices were signed out.", "success")
+        return redirect(url_for("accounts_page"))
+
+    @app.route("/account/export")
+    def account_export():
+        """Everything this account holds, as JSON: profile, memberships, notification choices and, per league, the
+        driver they control and what they did. Never a password hash, session or other people's details."""
+        import json as _json
+        me = g.user["username"]
+        user = auth.get_user(me)
+        out = {"format": "paddock-legacy-account", "version": 1, "exported_at": storage.now_iso(),
+               "account": {k: user.get(k) for k in ("username", "display_name", "email", "created_at", "email_paused")},
+               "two_step_sign_in": security.totp_status(me)["enabled"],
+               "signed_in_devices": [{k: r[k] for k in ("created_at", "last_seen", "agent")} for r in security.sessions(me)],
+               "leagues": []}
+        for c in storage.list_careers():
+            if me not in c["members"]:
+                continue
+            with storage.session(c["token"]) as conn:
+                row = conn.execute("SELECT * FROM career_members WHERE username = ?", (me,)).fetchone()
+                driver = S.driver_map(conn).get(row["driver_id"]) if row else None
+                entry = {"league": c["name"], "role": row["role"] if row else None, "joined_at": row["joined_at"] if row else None,
+                         "notifications": notices.prefs(conn, me),
+                         "activity": [{k: a[k] for k in ("created_at", "action", "summary")}
+                                      for a in community.audit_entries(conn, 500, username=me)]}
+                if driver:
+                    tl = S.driver_timeline(conn, driver["id"])
+                    entry["driver"] = {"name": driver["name"], "career": S.career_totals(tl),
+                                       "seasons": [{"year": t["season"]["year"], "team": t["team"]["name"] if t["team"] else None,
+                                                    "position": t["position"], "points": t["points"]} for t in tl]}
+                entry["notifications"].pop("stored", None)
+                out["leagues"].append(entry)
+        body = _json.dumps(out, indent=2, default=str)
+        return send_file(io.BytesIO(body.encode("utf-8")), as_attachment=True, mimetype="application/json",
+                         download_name=f"paddock-legacy-{me}.json")
+
+    @app.route("/account/delete", methods=["POST"])
+    def account_delete_self():
+        """Delete this account. Leagues keep their results and drivers; this login just leaves them all."""
+        me = g.user["username"]
+        if not auth.verify(me, request.form.get("password") or "") or request.form.get("confirm") != me:
+            flash("Type your username and password to delete your account. Nothing was deleted.", "error")
+            return redirect(url_for("accounts_page") + "#your-data")
+        blocking = []
+        for c in storage.list_careers():
+            if me in c["members"]:
+                with storage.session(c["token"]) as conn:
+                    row = conn.execute("SELECT role FROM career_members WHERE username = ?", (me,)).fetchone()
+                    if row and row["role"] == "race_master" and roles.race_master_count(conn, excluding=me) == 0:
+                        blocking.append(c["name"])
+        if g.user["is_master"] and sum(1 for u in auth.list_users() if u["is_master"]) <= 1:
+            blocking.append("this site (you're its only administrator)")
+        if blocking:
+            flash("Hand over first: you're the only Race Master of " + ", ".join(blocking) +
+                  ". Make someone else Race Master (Members & roles), then delete your account.", "error")
+            return redirect(url_for("accounts_page") + "#your-data")
+        for c in storage.list_careers():
+            if me in c["members"]:
+                with storage.session(c["token"]) as conn:
+                    roles.remove_member(conn, me)
+                    community.audit(conn, me, "Left the league", "", summary="deleted their account and left the league")
+        security.end_other_sessions(me)
+        auth.delete_user(me)
+        session.clear()
+        flash("Your account is deleted. Leagues keep their results; nobody can log in as you any more.", "success")
+        return redirect(url_for("home"))
+
+    @app.route("/privacy")
+    def privacy_page():
+        return render_template("legal.html", kind="privacy")
+
+    @app.route("/terms")
+    def terms_page():
+        return render_template("legal.html", kind="terms")
 
     # ---------------------------------------------------------------- career library
     @app.route("/")
@@ -920,6 +1093,8 @@ def register_routes(app):
                         raise ValidationError("Choose a driver name")
                     if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
                         raise ValidationError("There's already a driver with that name in this league")
+                if not ratelimit.allow("join-request", me, JOIN_LIMIT, 3600):
+                    raise ValidationError("You've sent a lot of join requests. Try again in an hour.")
                 conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at, role, notify_preset) "
                              "VALUES(?,?,?,?,?,?)", (me, driver_name, (request.form.get("message") or "").strip()[:300],
                                                      storage.now_iso(), role, _preset()))
@@ -967,8 +1142,7 @@ def register_routes(app):
         if g.get("user") and g.user.get("is_demo"):   # restarting: the old copy and guest go straight away
             demo.discard(g.user["username"], session.get("demo"))
         username, token = demo.start()
-        session.clear()
-        session["user"] = username
+        sign_in(username)
         session["demo"] = token
         return redirect(url_for("dashboard", token=token))
 
@@ -1131,6 +1305,35 @@ def register_routes(app):
     @app.route("/careers/import", methods=["POST"])
     @master_required
     def career_import():
+        """Two steps: upload (checked and summarised, nothing registered yet), then confirm. It always becomes a new
+        league with a new ID, so an import can never overwrite an existing one."""
+        staging = storage.data_dir() / "imports"
+        staging.mkdir(exist_ok=True)
+        for old in staging.glob("*" + storage.CAREER_EXT):        # abandoned previews
+            if time.time() - old.stat().st_mtime > 3600:
+                old.unlink(missing_ok=True)
+        staged_id = session.get("import_id")
+        if request.form.get("confirm") and staged_id:
+            staged = staging / (storage.sanitize_token(staged_id) + storage.CAREER_EXT)
+            session.pop("import_id", None)
+            if not staged.exists():
+                flash("That upload has expired. Choose the file again.", "error")
+                return redirect(url_for("home"))
+            try:
+                token = storage.import_career(str(staged))
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("home"))
+            finally:
+                staged.unlink(missing_ok=True)
+            flash("League imported as a new league.", "success")
+            return redirect(url_for("dashboard", token=token))
+        if request.form.get("cancel"):
+            if staged_id:
+                (staging / (storage.sanitize_token(staged_id) + storage.CAREER_EXT)).unlink(missing_ok=True)
+            session.pop("import_id", None)
+            flash("Import cancelled. Nothing was added.", "info")
+            return redirect(url_for("home"))
         upload = request.files.get("file")
         if not upload or not upload.filename:
             flash("Choose a .f1career file to import.", "error")
@@ -1138,18 +1341,17 @@ def register_routes(app):
         if not upload.filename.lower().endswith(storage.CAREER_EXT):
             flash("Only .f1career files can be imported.", "error")
             return redirect(url_for("home"))
-        fd, tmp = tempfile.mkstemp(suffix=storage.CAREER_EXT)
-        os.close(fd)
+        staged_id = secrets.token_urlsafe(12)
+        staged = staging / (staged_id + storage.CAREER_EXT)
+        upload.save(str(staged))
         try:
-            upload.save(tmp)
-            token = storage.import_career(tmp)
-        except ValueError as exc:
-            flash(str(exc), "error")
+            summary = storage.import_preview(str(staged))
+        except (ValueError, sqlite3.DatabaseError) as exc:
+            staged.unlink(missing_ok=True)
+            flash(str(exc) if isinstance(exc, ValueError) else "That file is not a valid .f1career database", "error")
             return redirect(url_for("home"))
-        finally:
-            os.unlink(tmp)
-        flash("League imported.", "success")
-        return redirect(url_for("dashboard", token=token))
+        session["import_id"] = staged_id
+        return render_template("import_preview.html", summary=summary, filename=upload.filename)
 
     # ---------------------------------------------------------------- main pages
     @app.route("/career/<token>/dashboard")
@@ -2262,7 +2464,8 @@ def register_routes(app):
             path = storage.auto_backup_path(token, name)
         except CareerNotFound:
             abort(404)
-        return send_file(path, as_attachment=True, download_name=path.name)
+        return send_file(io.BytesIO(storage.redacted_copy(path)), as_attachment=True, download_name=path.name,
+                         mimetype="application/octet-stream")
 
     @app.route("/career/<token>/members", methods=["GET", "POST"])
     @career_page(master_only=True)
@@ -2442,6 +2645,8 @@ def register_routes(app):
             raise ValidationError("This league is closed to new members. Change the join setting first.")
         if conn.execute("SELECT 1 FROM career_members WHERE username = ?", (user["username"],)).fetchone():
             raise ValidationError(f"{user['display_name']} is already in this league")
+        if not ratelimit.allow("invite", g.user["username"], INVITE_LIMIT, 3600):
+            raise ValidationError("That's a lot of invitations in one hour. Try again later.")
         conn.execute("""INSERT INTO invitations(username, role, invited_by, status, created_at) VALUES(?,?,?,'Pending',?)
                         ON CONFLICT(username) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by,
                         status = 'Pending', created_at = excluded.created_at, decided_at = NULL""",
@@ -2752,6 +2957,45 @@ def register_routes(app):
         elif action in ("hide", "unhide"):
             library.hide(me, ctx["token"], action == "hide")
         return _back(ctx)
+
+    @app.route("/career/<token>/leave", methods=["POST"])
+    @career_page()
+    def league_leave(conn, ctx):
+        """Leave this league (the account and every other league are untouched)."""
+        me = g.user["username"]
+        if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
+            raise ValidationError("You aren't a member of this league")
+        if request.form.get("confirm_name") != ctx["career_name"]:
+            raise ValidationError("Type the league's name to confirm you want to leave")
+        roles.remove_member(conn, me)   # refuses if you're the last Race Master
+        community.audit(conn, me, "Left the league", "", summary="left the league")
+        flash(f"You left {ctx['career_name']}. Your driver and results stay in the league.", "success")
+        return redirect(url_for("home"))
+
+    @app.route("/career/<token>/members/transfer", methods=["POST"], defaults={"username": None})
+    @app.route("/career/<token>/members/<username>/transfer", methods=["POST"])
+    @career_page(master_only=True)
+    def ownership_transfer(conn, ctx, username):
+        """Make another member Race Master and step down to Member yourself, in one confirmed step."""
+        target = auth.get_user(username or request.form.get("username") or "")
+        me = g.user["username"]
+        if not target or not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (target["username"],)).fetchone():
+            raise ValidationError("Choose a member of this league")
+        if target["username"] == me:
+            raise ValidationError("You already run this league")
+        if (request.form.get("confirm_name") or "").strip().lower() != target["username"]:
+            raise ValidationError(f"Type {target['username']} to confirm the handover")
+        row = conn.execute("SELECT driver_id FROM career_members WHERE username = ?", (target["username"],)).fetchone()
+        roles.set_member(conn, target["username"], "race_master", row["driver_id"])
+        mine = conn.execute("SELECT driver_id FROM career_members WHERE username = ?", (me,)).fetchone()
+        if mine and not g.user["is_master"]:
+            roles.set_member(conn, me, "member", mine["driver_id"])
+        feed.notify(conn, None, f"You're now the Race Master of {ctx['career_name']}", "dashboard", category="roles",
+                    username=target["username"])
+        g.audit_summary = f"handed {ctx['career_name']} over to {target['display_name']} (now Race Master)" + \
+            ("" if g.user["is_master"] else "; stepped down to Member")
+        flash(f"{target['display_name']} now runs {ctx['career_name']}.", "success")
+        return redirect(url_for("dashboard", token=ctx["token"]))
 
     @app.route("/career/<token>/order", methods=["POST"])
     @career_page()
@@ -3136,27 +3380,121 @@ def register_routes(app):
             return False
 
     # ---------------------------------------------------------------- public page
+    def public_view(fn):
+        """Public pages: only for leagues set to Public or Discoverable, with the right link. Everything shown is
+        built from submitted rounds only; drafts, notes, emails, roles and settings are never read here."""
+        @wraps(fn)
+        def wrapper(token, key, *args, **kwargs):
+            try:
+                with storage.session(token) as conn:
+                    if storage.get_meta(conn, "demo") == "1" or not league_profile.is_public(conn) \
+                            or not hmac.compare_digest(str(key), community.public_key(conn)):
+                        abort(404)
+                    g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
+                    g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
+                    prof = league_profile.profile(conn)
+                    accent, on_accent = _accent(prof["accent"])
+                    pub = {"token": token, "key": key, "name": prof["name"], "profile": prof, "accent": accent,
+                           "on_accent": on_accent, "season": S.get_season(conn, S.current_season_id(conn)),
+                           "seasons": S.list_seasons(conn), "public_incidents": prof["public_incidents"],
+                           "base": url_for("public_page", token=token, key=key)}
+                    return fn(conn, pub, *args, **kwargs)
+            except CareerNotFound:
+                abort(404)
+        return wrapper
+
+    def _public_render(view, pub, **kwargs):
+        return render_template("public.html", view=view, pub=pub, token=pub["token"], key=pub["key"], **kwargs)
+
     @app.route("/public/<token>/<key>")
-    def public_page(token, key):
-        try:
-            with storage.session(token) as conn:
-                if not community.features(conn)["public"] or not hmac.compare_digest(key, community.public_key(conn)):
-                    abort(404)
-                g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
-                g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
-                sid = S.current_season_id(conn)
-                evs = S.events(conn, sid)
-                done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]
-                last = done[-1] if done else None
-                return render_template(
-                    "public.html", name=storage.get_meta(conn, "career_name", "F1 League"), season=S.get_season(conn, sid),
-                    drivers=S.driver_standings(conn, sid), constructors=S.constructor_standings(conn, sid), events=evs,
-                    winners={e["id"]: community.race_story(conn, e["id"])["podium"][:1] for e in done},
-                    last=last, story=community.race_story(conn, last["id"]) if last else None,
-                    profiles=community.profiles(conn), token=token, key=key,
-                    next_event=S.next_incomplete_event(conn, sid))
-        except CareerNotFound:
+    @public_view
+    def public_page(conn, pub):
+        sid = pub["season"]["id"]
+        evs = S.events(conn, sid)
+        done = [e for e in evs if e["status"] == C.EVENT_COMPLETE]
+        last = done[-1] if done else None
+        return _public_render("home", pub, drivers=S.driver_standings(conn, sid, completed_only=True),
+                              constructors=S.constructor_standings(conn, sid, completed_only=True), events=evs,
+                              winners={e["id"]: community.race_story(conn, e["id"])["podium"][:1] for e in done},
+                              last=last, story=community.race_story(conn, last["id"]) if last else None,
+                              profiles=community.profiles(conn), next_event=S.next_incomplete_event(conn, sid),
+                              news=feed.latest(conn, 5))
+
+    @app.route("/public/<token>/<key>/calendar")
+    @public_view
+    def public_calendar(conn, pub):
+        evs = S.events(conn, pub["season"]["id"])
+        done = {e["id"] for e in evs if e["status"] == C.EVENT_COMPLETE}
+        return _public_render("calendar", pub, events=evs, winners={e: community.race_story(conn, e)["podium"][:1] for e in done})
+
+    @app.route("/public/<token>/<key>/calendar.ics")
+    @public_view
+    def public_calendar_ics(conn, pub):
+        return _ics_response(pub["name"], pub["season"], S.events(conn, pub["season"]["id"]),
+                             url_for("public_page", token=pub["token"], key=pub["key"], _external=True) + "/round")
+
+    @app.route("/public/<token>/<key>/standings")
+    @app.route("/public/<token>/<key>/season/<int:season_id>")
+    @public_view
+    def public_standings(conn, pub, season_id=None):
+        season = S.get_season(conn, season_id) if season_id else pub["season"]
+        if not season:
             abort(404)
+        return _public_render("standings", pub, season=season,
+                              drivers=S.driver_standings(conn, season["id"], completed_only=True),
+                              constructors=S.constructor_standings(conn, season["id"], completed_only=True))
+
+    @app.route("/public/<token>/<key>/round/<int:event_id>")
+    @public_view
+    def public_round(conn, pub, event_id):
+        event = S.get_event(conn, event_id)
+        if not event or event["status"] != C.EVENT_COMPLETE:   # never an unsubmitted round
+            abort(404)
+        rows = sorted(S.weekend_rows(conn, event_id), key=lambda r: (r["result_status"] != C.STATUS_FINISHED,
+                                                                     r["race_position"] or 99))
+        return _public_render("round", pub, event=event, rows=rows, story=community.race_story(conn, event_id),
+                              season=S.get_season(conn, event["season_id"]))
+
+    @app.route("/public/<token>/<key>/driver/<int:driver_id>")
+    @public_view
+    def public_driver(conn, pub, driver_id):
+        driver = S.driver_map(conn).get(driver_id)
+        if not driver:
+            abort(404)
+        timeline = S.driver_timeline(conn, driver_id, S.all_season_standings(conn, completed_only=True))
+        return _public_render("driver", pub, driver=driver, timeline=timeline, totals=S.career_totals(timeline),
+                              profile=community.profile(conn, driver_id))
+
+    @app.route("/public/<token>/<key>/team/<int:team_id>")
+    @public_view
+    def public_team(conn, pub, team_id):
+        team = S.team_map(conn).get(team_id)
+        if not team:
+            abort(404)
+        archive, totals = S.team_history(conn, team_id, completed_only=True)
+        gmap = S.grid_map(conn, pub["season"]["id"])
+        dmap = S.driver_map(conn)
+        return _public_render("team", pub, team=team, archive=archive, totals=totals,
+                              lineup=[dmap.get(gmap.get((team_id, s))) for s in (1, 2)])
+
+    @app.route("/public/<token>/<key>/records")
+    @public_view
+    def public_records(conn, pub):
+        return _public_render("records", pub, rows=S.hall_of_records(conn, completed_only=True),
+                              records=insights.all_time_records(conn, completed_only=True))
+
+    @app.route("/public/<token>/<key>/news")
+    @public_view
+    def public_news(conn, pub):
+        return _public_render("news", pub, news=feed.latest(conn, 40))
+
+    @app.route("/public/<token>/<key>/incidents")
+    @public_view
+    def public_incidents(conn, pub):
+        if not pub["public_incidents"]:
+            abort(404)
+        decided = [i for i in community.incidents(conn) if i["status"] != "Open"]
+        return _public_render("incidents", pub, incidents=decided)
 
     @app.route("/help")
     def help_page():
@@ -3260,7 +3598,8 @@ def register_routes(app):
             path = storage.make_backup(token)
         except CareerNotFound:
             abort(404)
-        return send_file(path, as_attachment=True, download_name=path.name)
+        return send_file(io.BytesIO(storage.redacted_copy(path)), as_attachment=True, download_name=path.name,
+                         mimetype="application/octet-stream")
 
     @app.route("/career/<token>/export")
     @master_required

@@ -56,6 +56,72 @@
   </section>
   {% endif %}
 </div>
+<div class="grid-2">
+  <section class="card" id="security">
+    <h2>Security</h2>
+    <h3 class="mini-head">Signed-in devices</h3>
+    {% if devices %}
+    <ul class="plain-list device-list">
+      {% for d in devices %}<li><span><b>{{ d.agent or 'Browser' }}</b>{% if d.sid == current_sid %} <span class="pill">This device</span>{% endif %}
+        <small class="muted">signed in {{ d.created_at|stamp }} · last used {{ d.last_seen|stamp }}</small></span>
+        <form method="post" action="{{ url_for('account_session_end', sid=d.sid) }}" class="inline-form tight">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost">{{ 'Sign out' if d.sid == current_sid else 'End' }}</button></form></li>{% endfor %}
+    </ul>
+    {% if devices|length > 1 %}
+    <form method="post" action="{{ url_for('account_sessions_end_others') }}" class="inline-form tight">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm">Sign out every other device</button></form>
+    {% endif %}
+    {% else %}<p class="muted small">No devices recorded yet.</p>{% endif %}
+    <p class="muted small">Changing your password signs out every other device.</p>
+
+    <h3 class="mini-head">Two-step sign-in</h3>
+    {% if totp.enabled %}
+    <p class="small"><span class="pill pill-good">On</span> You're asked for a code from your authenticator app each time you log in.</p>
+    <form method="post" action="{{ url_for('account_two_step') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="disable">
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <label>Current code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></label>
+      <button class="btn btn-ghost">Turn off two-step sign-in</button>
+    </form>
+    {% elif otpauth %}
+    <p class="small">Add this key to an authenticator app (Google Authenticator, Authy, 1Password, Bitwarden…), then enter the 6-digit code it shows.</p>
+    <p><code class="secret-key" aria-label="Setup key">{{ totp.secret }}</code></p>
+    <p class="muted small">On a phone you can tap <a href="{{ otpauth }}">open in authenticator app</a>. Keep this key private.</p>
+    <form method="post" action="{{ url_for('account_two_step') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="confirm">
+      <label>Code from the app<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></label>
+      <button class="btn btn-primary">Turn on two-step sign-in</button>
+    </form>
+    {% else %}
+    <p class="muted small">Optional. After your password you'll also enter a code from an app on your phone. Free, and works offline.
+      If you lose your phone, a site admin can switch it off for you.</p>
+    <form method="post" action="{{ url_for('account_two_step') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn" name="action" value="start">Set up two-step sign-in</button>
+    </form>
+    {% endif %}
+  </section>
+  <section class="card" id="your-data">
+    <h2>Your data</h2>
+    <p class="small">Download everything your account holds: your profile, the leagues you're in, your notification choices,
+      your driver's career and what you did in each league. Passwords and other people's details are never included.</p>
+    <p><a class="btn" href="{{ url_for('account_export') }}" download>Download my data (JSON)</a></p>
+    <p class="muted small"><a href="{{ url_for('privacy_page') }}">Privacy</a> · <a href="{{ url_for('terms_page') }}">Terms</a></p>
+    <h3 class="mini-head">Delete my account</h3>
+    <p class="muted small">Your login is removed and you leave every league. Leagues keep their results and drivers, so standings don't change.
+      If you're the only Race Master of a league, hand it over first.</p>
+    <form method="post" action="{{ url_for('account_delete_self') }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Type your username (<b>{{ user.username }}</b>)<input name="confirm" autocomplete="off" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn btn-danger">Delete my account</button>
+    </form>
+  </section>
+</div>
 {% if user.is_master %}
 <section class="card" id="moderation">
   <h2>Reports about public leagues</h2>
@@ -143,6 +209,12 @@
           </form>
         </td>
         <td>
+          {% if u.username in two_step_users %}
+          <form method="post" action="{{ url_for('account_two_step_reset', username=u.username) }}" onsubmit="return confirm('Turn off two-step sign-in for {{ u.username }} and sign out their devices?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-ghost">Reset two-step</button>
+          </form>
+          {% endif %}
           {% if u.username != user.username %}
           <form method="post" action="{{ url_for('account_delete', username=u.username) }}" onsubmit="return confirm('Delete login {{ u.username }}?');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

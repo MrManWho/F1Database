@@ -1521,3 +1521,26 @@ p a, li a:not(.btn), dd a, .small a:not(.btn), td a.driver-link:not(.is-player) 
 .cs-historical { color: var(--faint); } .cs-mismatch { color: var(--danger-text); }
 tr.contract-historical { opacity: .75; }
 .notify-preview { margin-top: -.4rem; }
+
+/* Public league pages */
+.public { max-width: 1100px; margin: 0 auto; padding: 1rem 1rem 3rem; }
+.public-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1rem 0 .5rem; }
+.public-title { display: flex; gap: .8rem; align-items: center; }
+.public-title .league-mark { width: 48px; height: 48px; font-size: 1.05rem; border-radius: 12px; }
+.public-title h1 a { color: var(--text); text-decoration: none; }
+.public-nav { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.public-nav a { padding: .5rem .8rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+.public-nav a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
+.public-lead { font-size: 1.05rem; color: var(--muted); max-width: 70ch; }
+.public-foot { margin-top: 2rem; text-align: center; }
+
+/* v2.0 account security */
+.pill-good { color: var(--green, #3ddc84); border-color: rgba(61, 220, 132, .45); }
+.device-list li { display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .4rem .6rem; background: var(--panel-2); border-radius: 8px; margin-bottom: .35rem; }
+.device-list small { display: block; }
+.secret-key { font-size: 1rem; letter-spacing: .12em; word-break: break-all; user-select: all; }
+.legal { max-width: 46rem; }
+.legal h2 { margin-top: 1.4rem; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; margin: .6rem 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }

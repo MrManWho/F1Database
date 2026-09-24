@@ -224,13 +224,14 @@ def _result_has_data(r):
         r["sprint_status"] != C.STATUS_NOT_RUN
 
 
-def season_stats(conn, season_id, upto_round=None):
-    """Raw per-driver statistics for one season, keyed by driver id (optionally only up to a round)."""
+def season_stats(conn, season_id, upto_round=None, completed_only=False):
+    """Raw per-driver statistics for one season, keyed by driver id (optionally only up to a round).
+    completed_only: leave out rounds that haven't been submitted (public pages never show drafts)."""
     out = {}
     rows = _rows(conn, """
         SELECT r.*, e.is_sprint, e.round_number FROM results r JOIN events e ON e.id = r.event_id
-        WHERE e.season_id = ? AND e.round_number <= ? ORDER BY e.round_number""",
-                 (season_id, upto_round if upto_round is not None else 10 ** 6))
+        WHERE e.season_id = ? AND e.round_number <= ?""" + (" AND e.status = 'Complete'" if completed_only else "") +
+        " ORDER BY e.round_number", (season_id, upto_round if upto_round is not None else 10 ** 6))
     for r in rows:
         if not _result_has_data(r):
             continue
@@ -416,8 +417,8 @@ def place_players(conn, season_id, targets):
 
 # --------------------------------------------------------------------------- standings
 
-def driver_standings(conn, season_id, upto_round=None):
-    stats = season_stats(conn, season_id, upto_round)
+def driver_standings(conn, season_id, upto_round=None, completed_only=False):
+    stats = season_stats(conn, season_id, upto_round, completed_only)
     tmap = team_map(conn)
     dmap = driver_map(conn)
     seats = driver_seats(conn, season_id)
@@ -449,12 +450,12 @@ def driver_standings(conn, season_id, upto_round=None):
     return rows
 
 
-def constructor_standings(conn, season_id, upto_round=None):
+def constructor_standings(conn, season_id, upto_round=None, completed_only=False):
     tmap = team_map(conn)
     totals = {tid: {"team": t, "points": 0, "wins": 0, "podiums": 0, "fastest_laps": 0, "dnfs": 0}
               for tid, t in tmap.items() if t["active"]}
     rows = _rows(conn, """SELECT r.*, e.is_sprint FROM results r JOIN events e ON e.id = r.event_id
-                          WHERE e.season_id = ? AND e.round_number <= ?""",
+                          WHERE e.season_id = ? AND e.round_number <= ?""" + (" AND e.status = 'Complete'" if completed_only else ""),
                  (season_id, upto_round if upto_round is not None else 10 ** 6))
     for r in rows:
         t = totals.setdefault(r["team_id"], {"team": tmap[r["team_id"]], "points": 0, "wins": 0,
@@ -1135,11 +1136,11 @@ def contracts(conn, season_id):
 
 # --------------------------------------------------------------------------- careers, profiles, records
 
-def all_season_standings(conn):
+def all_season_standings(conn, completed_only=False):
     out = {}
     for s in list_seasons(conn):
-        out[s["id"]] = {"season": s, "drivers": driver_standings(conn, s["id"]),
-                        "teams": constructor_standings(conn, s["id"])}
+        out[s["id"]] = {"season": s, "drivers": driver_standings(conn, s["id"], completed_only=completed_only),
+                        "teams": constructor_standings(conn, s["id"], completed_only=completed_only)}
     return out
 
 
@@ -1187,8 +1188,8 @@ def career_totals(timeline):
     return totals
 
 
-def hall_of_records(conn):
-    cache = all_season_standings(conn)
+def hall_of_records(conn, completed_only=False):
+    cache = all_season_standings(conn, completed_only)
     rows = []
     for d in drivers(conn):
         timeline = driver_timeline(conn, d["id"], cache)
@@ -1201,9 +1202,9 @@ def hall_of_records(conn):
     return rows
 
 
-def team_history(conn, team_id):
+def team_history(conn, team_id, completed_only=False):
     archive = []
-    for sid, data in all_season_standings(conn).items():
+    for sid, data in all_season_standings(conn, completed_only).items():
         row = next((t for t in data["teams"] if t["team"]["id"] == team_id), None)
         if row:
             archive.append({"season": data["season"], **row})

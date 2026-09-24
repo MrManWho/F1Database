@@ -290,7 +290,7 @@ def driver_card(conn, season_id, driver_id):
     return {"row": row, "form": form, "driver": S.driver_map(conn)[driver_id]}
 
 
-def all_time_records(conn):
+def all_time_records(conn, completed_only=False):
     """Single-season and single-race bests, plus streaks, across every season of the league."""
     dmap = S.driver_map(conn)
     records = []
@@ -299,7 +299,7 @@ def all_time_records(conn):
         if driver_id in dmap:
             records.append({"title": title, "driver": dmap[driver_id], "value": value, "note": note})
 
-    cache = S.all_season_standings(conn)
+    cache = S.all_season_standings(conn, completed_only)
     season_rows = [(data["season"], r) for data in cache.values() for r in data["drivers"] if r.get("has_results", True)]
     for key, title, unit in (("points", "Most points in a season", "pts"), ("wins", "Most wins in a season", "wins"),
                              ("poles", "Most poles in a season", "poles"), ("podiums", "Most podiums in a season", "podiums")):

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Import a league{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Import</div><h1>Check before importing</h1>
+  <p class="page-purpose">{{ filename }} looks like a valid Paddock Legacy save. Nothing has been added yet.</p></div></div>
+<section class="card">
+  <h2>{{ summary.name }}</h2>
+  <dl class="kv">
+    <dt>Seasons</dt><dd>{{ summary.seasons|join(', ') if summary.seasons else 'None' }}</dd>
+    <dt>Rounds</dt><dd>{{ summary.rounds }} ({{ summary.completed }} with results)</dd>
+    <dt>Drivers</dt><dd>{{ summary.drivers }}</dd>
+    <dt>Teams</dt><dd>{{ summary.teams }}</dd>
+    <dt>Members</dt><dd>{{ summary.members }}</dd>
+  </dl>
+  {% if summary.upgrade %}<p class="muted small">This save is from an older version. It will be upgraded when it's imported; results don't change.</p>{% endif %}
+  <p class="small">It becomes a <b>new league</b> with its own ID. No existing league is changed or overwritten.</p>
+  <form method="post" action="{{ url_for('career_import') }}" class="button-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary" name="confirm" value="1">Import as a new league</button>
+    <button class="btn btn-ghost" name="cancel" value="1">Cancel</button>
+  </form>
+</section>
+{% endblock %}

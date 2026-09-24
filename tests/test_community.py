@@ -239,7 +239,8 @@ def test_public_page_needs_the_feature_and_the_key(app, master_client):
     settings = master_client.get(f"/career/{token}/settings").get_data(as_text=True)
     assert f"/public/{token}/{key}" in settings
     page = anon.get(f"/public/{token}/{key}").get_data(as_text=True)
-    assert "Club League" in page and "Constructors" in page and "🏆" in page and "Garage" not in page
+    assert "Club League" in page and "Constructors" in page and "Latest: " in page and "Garage" not in page
+    assert "🏆" in anon.get(f"/public/{token}/{key}/calendar").get_data(as_text=True)   # v2.0: its own page
     assert anon.get(f"/public/{token}/wrong").status_code == 404
     master_client.post(f"/career/{token}/settings/public-link", data={"csrf_token": "tok"})
     assert anon.get(f"/public/{token}/{key}").status_code == 404

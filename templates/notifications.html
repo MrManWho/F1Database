@@ -49,5 +49,16 @@
     Every email names the league it came from and links back here.</p>
   <div><button class="btn btn-primary">Save for {{ ctx.career_name }}</button></div>
 </form>
+
+<section class="card" id="leave">
+  <h2>Leave {{ ctx.career_name }}</h2>
+  <p class="muted small">You stop being a member and get nothing more from this league. Your driver, results and history stay in the league,
+    and your other leagues aren't affected. If you're its only Race Master, hand it over first.</p>
+  <form method="post" action="{{ url_for('league_leave', token=ctx.token) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Type <b>{{ ctx.career_name }}</b> to confirm<input name="confirm_name" autocomplete="off" required></label>
+    <button class="btn btn-danger">Leave league</button>
+  </form>
+</section>
 {% endif %}
 {% endblock %}

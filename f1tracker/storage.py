@@ -6,6 +6,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -364,12 +365,49 @@ def integrity_check(token):
     return out
 
 
+# Never in a download: the Discord webhook (anyone holding it can post as the league) and the public-link key.
+SECRET_META = {"discord_webhook", "public_key"}
+# Not exported: delivery bookkeeping (who was emailed) and per-device read markers.
+EXPORT_SKIP = {"deliveries", "notification_reads"}
+
+
 def export_json(token):
+    """The whole league as JSON, one key per table, plus an `_export` header saying what this is. Secrets are left
+    out (see SECRET_META); everything else a Race Master can see in the app is included."""
     with session(token) as conn:
-        data = {}
-        for table in EXPORT_TABLES:
-            data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        data = {"_export": {"format": "paddock-legacy-league", "version": 2, "exported_at": now_iso(),
+                            "schema_version": get_meta(conn, "schema_version"),
+                            "redacted": sorted(SECRET_META)}}
+        for table in EXPORT_TABLES + [t for t in tables if t not in EXPORT_TABLES]:
+            if table in EXPORT_SKIP or table not in tables:
+                continue
+            rows = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
+            if table == "meta":
+                rows = [r for r in rows if r["key"] not in SECRET_META]
+            data[table] = rows
     return json.dumps(data, indent=2, ensure_ascii=False, default=str)
+
+
+def redacted_copy(path):
+    """A copy of a save with the secrets blanked, for downloading. The backup on the server keeps them, so a restore
+    there loses nothing; someone restoring a downloaded file re-enters the Discord webhook."""
+    fd, tmp = tempfile.mkstemp(suffix=CAREER_EXT)
+    os.close(fd)
+    src = sqlite3.connect(str(path))
+    dst = sqlite3.connect(tmp)
+    try:
+        src.backup(dst)
+        dst.execute(f"DELETE FROM meta WHERE key IN ({','.join('?' * len(SECRET_META))})", tuple(SECRET_META))
+        dst.commit()
+    finally:
+        src.close()
+        dst.close()
+    with open(tmp, "rb") as fh:
+        data = fh.read()
+    os.unlink(tmp)
+    return data
 
 
 def _validate_save(file_path):
@@ -404,6 +442,34 @@ def restore(token, file_path):
     with session(token) as conn:
         set_meta(conn, "career_id", token)
     return safety
+
+
+def import_preview(file_path):
+    """What's in an uploaded save, read from a throwaway copy (the upload is never changed or registered)."""
+    _validate_save(file_path)
+    fd, tmp = tempfile.mkstemp(suffix=CAREER_EXT)
+    os.close(fd)
+    try:
+        shutil.copyfile(file_path, tmp)
+        conn = _connect(Path(tmp))
+        try:
+            before = get_meta(conn, "schema_version")
+            migrate(conn)
+            conn.commit()
+            q = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+            seasons = [r[0] for r in conn.execute("SELECT year FROM seasons ORDER BY year")]
+            return {"name": get_meta(conn, "career_name") or "Imported league", "seasons": seasons,
+                    "drivers": q("SELECT COUNT(*) FROM drivers"), "teams": q("SELECT COUNT(*) FROM teams"),
+                    "rounds": q("SELECT COUNT(*) FROM events"),
+                    "completed": q("SELECT COUNT(*) FROM events WHERE status = 'Complete'"),
+                    "members": q("SELECT COUNT(*) FROM career_members"),
+                    "upgrade": str(before or "") != str(SCHEMA_VERSION)}
+        finally:
+            conn.close()
+    finally:
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            if os.path.exists(tmp + suffix):
+                os.unlink(tmp + suffix)
 
 
 def import_career(file_path):

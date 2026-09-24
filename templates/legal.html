@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Privacy' if kind == 'privacy' else 'Terms' }}{% endblock %}
+{% block plain %}
+<article class="card legal">
+{% if kind == 'privacy' %}
+  <div class="kicker">Paddock Legacy</div>
+  <h1>Privacy</h1>
+  <p class="muted small">A plain-language summary for the people who host and use this site. Whoever runs this copy of Paddock Legacy
+    should replace or extend it to suit where they are.</p>
+  <h2>What's stored</h2>
+  <ul>
+    <li>Your username, display name, a salted password hash and, if you add one, your email address.</li>
+    <li>For each league you join: your role, the driver you control, your notification choices and what you did (the league's activity log).</li>
+    <li>A list of your signed-in devices (browser name and when it was last used) so you can sign them out.</li>
+  </ul>
+  <h2>What isn't</h2>
+  <ul>
+    <li>Screenshots you import are read in your own browser. They're never uploaded, stored or sent to any AI or paid text-recognition service.</li>
+    <li>No advertising, tracking or analytics services.</li>
+    <li>Nobody else sees your email address. League emails are sent only for the categories you choose, per league.</li>
+  </ul>
+  <h2>Public leagues</h2>
+  <p>A league's Race Master can make it public. Public pages show completed results, standings and driver names only: never emails,
+    usernames, private notes, drafts or rounds still in progress.</p>
+  <h2>Your choices</h2>
+  <p>From <a href="{{ url_for('accounts_page') if user else url_for('login') }}">your account</a> you can download everything your
+    account holds, sign out devices, pause every email, leave a league or delete your account. Deleting your account removes your
+    login; leagues keep their results so everyone else's standings stay correct.</p>
+{% else %}
+  <div class="kicker">Paddock Legacy</div>
+  <h1>Terms</h1>
+  <p class="muted small">A plain-language summary. Whoever runs this copy of Paddock Legacy should replace or extend it.</p>
+  <h2>Using the site</h2>
+  <ul>
+    <li>Paddock Legacy is a free tool for tracking fan-run racing game leagues. It isn't affiliated with Formula 1, the FIA or any game publisher.</li>
+    <li>Be decent to the people in your league. Don't post anything hateful, harassing or illegal in league names, descriptions, news or comments.</li>
+    <li>Public leagues can be reported. Site admins may remove a league from the directory.</li>
+    <li>Keep your password to yourself. Turn on two-step sign-in if you run a league.</li>
+  </ul>
+  <h2>Your league data</h2>
+  <p>Race Masters are responsible for their league's data. Download a backup from the league's Backups page regularly.
+    The site is provided as-is, without guarantees.</p>
+{% endif %}
+</article>
+{% endblock %}
