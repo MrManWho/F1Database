@@ -342,6 +342,27 @@ CREATE TABLE IF NOT EXISTS weekend_targets (
     PRIMARY KEY (event_id, driver_id)
 );
 
+CREATE TABLE IF NOT EXISTS member_notify (
+    username TEXT PRIMARY KEY,
+    muted INTEGER NOT NULL DEFAULT 0,
+    email TEXT,
+    push TEXT,
+    legacy INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS deliveries (
+    id INTEGER PRIMARY KEY,
+    key TEXT NOT NULL,
+    category TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    recipients INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (key, channel)
+);
+
 CREATE TABLE IF NOT EXISTS gate_bypasses (
     event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
     username TEXT NOT NULL,
@@ -447,6 +468,9 @@ def migrate(conn):
     v16 -> v17: weekend targets and Race Master gate bypasses (new tables, created empty) and events.press_required
                (the round's post-race press questions stay open until answered). Rounds completed before this
                version keep press_required = 0, so nothing already finished becomes a requirement.
+    v17 -> v18: notification preferences per league membership (member_notify) and a delivery log (deliveries:
+               category, channel, count and outcome only). Existing memberships are marked legacy so they keep
+               exactly what they had; notifications.category and notifications.username (who a notice is for).
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -457,7 +481,7 @@ def migrate(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "press_required" in _columns(conn, "events"):
+        if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
             return
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
@@ -522,6 +546,18 @@ def migrate(conn):
         conn.execute("ALTER TABLE audit_log ADD COLUMN link TEXT")
     if "postponed" not in _columns(conn, "events"):
         conn.execute("ALTER TABLE events ADD COLUMN postponed INTEGER NOT NULL DEFAULT 0")
+    if "member_notify" not in tables:
+        # v2.0: preferences are per league. Everyone already in this league keeps what they had (resolved on
+        # first use from their account's old race-result email switch); nobody new inherits anything.
+        conn.execute("INSERT OR IGNORE INTO member_notify(username, legacy, updated_at) "
+                     "SELECT username, 1, NULL FROM career_members")
+    if "notify_preset" not in _columns(conn, "join_requests"):
+        conn.execute("ALTER TABLE join_requests ADD COLUMN notify_preset TEXT")   # v2.0: chosen when asking to join
+    note_cols = _columns(conn, "notifications")
+    if "category" not in note_cols:
+        conn.execute("ALTER TABLE notifications ADD COLUMN category TEXT")
+    if "username" not in note_cols:
+        conn.execute("ALTER TABLE notifications ADD COLUMN username TEXT")
     if "press_required" not in _columns(conn, "events"):
         # v1.20: round gates. Only rounds first submitted from now on can require press answers.
         conn.execute("ALTER TABLE events ADD COLUMN press_required INTEGER NOT NULL DEFAULT 0")

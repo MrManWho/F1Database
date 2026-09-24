@@ -16,7 +16,7 @@ import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
-from . import battle, circuits, gates
+from . import battle, circuits, delivery, gates, notices
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -30,7 +30,7 @@ def _base_dir():
 
 
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
-                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar"}
+                    "reset_password", "public_page", "service_worker", "web_manifest", "avatar", "unsubscribe"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
 AUDIT_LABELS = {
@@ -53,7 +53,7 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
     "target_ack": "Accepted a weekend target", "gate_bypass": "Opened a round early", "gate_remind": "Sent a round reminder",
-    "target_excuse": "Changed a weekend target ruling",
+    "target_excuse": "Changed a weekend target ruling", "notify_prefs": "Changed their notifications",
 }
 QUIET_ENDPOINTS = {"timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
@@ -138,11 +138,13 @@ def register_hooks(app):
         if news and response.status_code < 400 and not app.config.get("TESTING"):
             _discord_news(news)
         items = feed.take_outbox()
-        if items and response.status_code < 400 and not app.config.get("TESTING"):
+        if items and response.status_code < 400:
             try:
-                push.dispatch(items, request.host_url.rstrip("/"), exclude=g.user["username"] if g.get("user") else None)
+                delivery.dispatch(items, request.host_url.rstrip("/"),
+                                  exclude=g.user["username"] if g.get("user") else None,
+                                  background=not app.config.get("TESTING"))
             except Exception:
-                app.logger.exception("push alerts failed")
+                app.logger.exception("notification delivery failed")
         return response
 
     def _tz():
@@ -333,7 +335,7 @@ def career_page(master_only=False, ops_only=False):
 
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
-SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect"}
+SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs"}
 
 PLEDGE_EXEMPT = {"pledge_page", "pledge_save", "api_notifications", "notifications_read", "notifications_clear",
                  "help_page"}
@@ -605,12 +607,14 @@ def register_routes(app):
     @app.route("/account/email", methods=["POST"])
     def account_email():
         try:
-            saved = auth.set_email(g.user["username"], request.form.get("email"), request.form.get("email_results"))
-            if saved:
-                flash("Email settings saved." + (" Race results will be emailed to you." if request.form.get("email_results")
-                                                 else ""), "success")
+            saved = auth.set_email(g.user["username"], request.form.get("email"), g.user.get("email_results"))
+            auth.set_email_paused(g.user["username"], request.form.get("email_paused"))
+            if not saved:
+                flash("Email address removed. No league can email you until you add one.", "success")
+            elif request.form.get("email_paused"):
+                flash("Email saved. Every league's emails are paused; your choices in each league are kept.", "success")
             else:
-                flash("Email address removed. Race-result emails are off until you add one.", "success")
+                flash("Email saved. Each league emails you according to its own notification settings.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
         return redirect(url_for("accounts_page"))
@@ -666,8 +670,17 @@ def register_routes(app):
             for c in storage.list_careers():
                 for username in c["members"]:
                     memberships.setdefault(username, []).append(c["name"])
+        mine = []
+        for c in storage.list_careers():
+            if g.user["username"] in c["members"]:
+                try:
+                    with storage.session(c["token"]) as conn:
+                        mine.append({"token": c["token"], "name": c["name"],
+                                     "prefs": notices.summary(notices.prefs(conn, g.user["username"]))})
+                except storage.CareerNotFound:
+                    continue
         return render_template("accounts.html", users=auth.list_users() if is_master() else [],
-                               memberships=memberships, signups=auth.signups_allowed(),
+                               memberships=memberships, my_leagues=mine, signups=auth.signups_allowed(),
                                mail=mailer.config(), mail_ready=mailer.configured(),
                                pw_min=auth.PASSWORD_MIN)
 
@@ -740,7 +753,7 @@ def register_routes(app):
         joinable = [c for c in outside if c["join_mode"] == "requests" and me not in c["invited"]]
         invited = [c for c in outside if me in c["invited"]]
         return render_template("home.html", careers=careers, joinable=joinable, invited=invited,
-                               join_modes=storage.JOIN_MODES,
+                               join_modes=storage.JOIN_MODES, notify_presets=notices.PRESETS,
                                users=auth.list_users() if is_master() else [], default_year=2026)
 
     @app.route("/career/<token>/join", methods=["POST"])
@@ -768,12 +781,14 @@ def register_routes(app):
                         raise ValidationError("Choose a driver name")
                     if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
                         raise ValidationError("There's already a driver with that name in this league")
-                conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at, role) VALUES(?,?,?,?,?)",
-                             (me, driver_name, (request.form.get("message") or "").strip()[:300], storage.now_iso(), role))
+                conn.execute("INSERT INTO join_requests(username, driver_name, message, created_at, role, notify_preset) "
+                             "VALUES(?,?,?,?,?,?)", (me, driver_name, (request.form.get("message") or "").strip()[:300],
+                                                     storage.now_iso(), role, _preset()))
                 what = f"as {driver_name}" if drives else f"as {C.LEAGUE_ROLES[role]}"
                 if role == "driver_scorekeeper":
                     what += " (and Scorekeeper)"
-                feed.notify(conn, None, f"{g.user['display_name']} asked to join {what}", "members")
+                feed.notify(conn, None, f"{g.user['display_name']} asked to join {what}", "members",
+                            category="join_requests")
         except CareerNotFound:
             abort(404)
         except ValidationError as exc:
@@ -805,6 +820,10 @@ def register_routes(app):
                     user = auth.get_user(username) if username else None
                     if user:
                         roles.set_member(conn, username, "race_master" if user["is_master"] else "member", driver["id"])
+                creator = g.user["username"]
+                if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (creator,)).fetchone():
+                    roles.set_member(conn, creator, "race_master", None)
+                notices.save(conn, creator, preset=_preset())
                 if request.form.get("rookie_market") and players:
                     market.open_window(conn, S.current_season_id(conn), kind="Rookie Draft")
         except (ValidationError, ValueError) as exc:
@@ -1800,6 +1819,10 @@ def register_routes(app):
             changes.append(f"changed {user['display_name']}'s driver from {name(old['driver_id'])} to {name(new_driver)}")
         g.audit_summary = "; ".join(changes) or f"saved {user['display_name']}'s membership without changes"
         g.audit_link = "members"
+        if changes and user["username"] != g.user["username"]:
+            feed.notify(conn, None, f"Your role in {ctx['career_name']} is now {C.ACCESS_ROLES[role]}"
+                        + (f", driving {dmap[new_driver]['name']}" if new_driver in dmap else ""),
+                        "dashboard", category="roles", username=user["username"])
         flash(f"{user['display_name']} is now {C.ACCESS_ROLES[role]}.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
@@ -1864,13 +1887,15 @@ def register_routes(app):
             changed = role != (req["role"] or "driver")
             flash(f"{req['username']} joined {what}." + (" (Role changed from their request.)" if changed else ""),
                   "success")
-            user = auth.get_user(req["username"])
-            if user["email"]:
-                mailer.send_later([user["email"]], f"You're in: {ctx['career_name']}",
-                                  f"Your request to join {ctx['career_name']} was approved. You joined {what}."
-                                  + (f" The Race Master changed your role from what you asked for "
-                                     f"({C.LEAGUE_ROLES.get(req['role'], 'Driver')})." if changed else "")
-                                  + f"\n\n{url_for('dashboard', token=ctx['token'], _external=True)}")
+            # The notification choices they made when asking to join apply to this league only.
+            notices.save(conn, req["username"], preset=req["notify_preset"] or "important")
+            delivery.send_email(conn, ctx["token"], "roles", [req["username"]], f"joined:{req['username']}:{request_id}",
+                                f"You're in: {ctx['career_name']}",
+                                f"Your request to join {ctx['career_name']} was approved. You joined {what}."
+                                + (f" The Race Master changed your role from what you asked for "
+                                   f"({C.LEAGUE_ROLES.get(req['role'], 'Driver')})." if changed else "")
+                                + f"\n\n{url_for('dashboard', token=ctx['token'], _external=True)}", None,
+                                request.host_url.rstrip("/"), "Join request approved")
         else:
             flash(f"Request from {req['username']} declined.", "success")
         conn.execute("UPDATE join_requests SET status = ?, decided_at = ? WHERE id = ?",
@@ -1898,11 +1923,14 @@ def register_routes(app):
                      (user["username"], role, g.user["username"], storage.now_iso()))
         community.audit(conn, g.user["username"], "Invited", f"{user['username']} as {C.ACCESS_ROLES[role]}",
                         summary=f"invited {user['display_name']} to join as {C.ACCESS_ROLES[role]}", link="members")
-        if user["email"]:
-            mailer.send_later([user["email"]], f"You're invited to {ctx['career_name']}",
-                              f"{g.user['display_name']} invited you to join {ctx['career_name']} as "
-                              f"{C.ACCESS_ROLES[role]}. Accept it from your League Library:\n\n"
-                              f"{url_for('home', _external=True)}")
+        if user["email"] and not user.get("email_paused"):
+            # Not a member yet, so no league preferences apply: one invitation email naming the league and role.
+            mailer.send_later([user["email"]], f"You're invited to {ctx['career_name']} as {C.ACCESS_ROLES[role]}",
+                              f"{g.user['display_name']} invited you to join the league \"{ctx['career_name']}\" as "
+                              f"{C.ACCESS_ROLES[role]}. Accept it from your League Library, where you'll also choose "
+                              f"what this league may notify you about:\n\n{url_for('home', _external=True)}\n\n"
+                              f"—\nSent by Paddock Legacy for the league \"{ctx['career_name']}\". You won't get "
+                              f"emails from it unless you join and choose to.")
         flash(f"Invitation sent to {user['display_name']}. They'll see it in their League Library.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
@@ -1929,7 +1957,9 @@ def register_routes(app):
                         raise ValidationError("This league is closed to new members right now, so the invitation can't be accepted")
                     if not conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone():
                         roles.set_member(conn, me, "race_master" if g.user["is_master"] else inv["role"], None)
-                    feed.notify(conn, None, f"{g.user['display_name']} accepted an invitation and joined", "members")
+                        notices.save(conn, me, preset=_preset())
+                    feed.notify(conn, None, f"{g.user['display_name']} accepted an invitation and joined", "members",
+                                category="join_requests")
                 conn.execute("UPDATE invitations SET status = ?, decided_at = ? WHERE username = ?",
                              ("Accepted" if decision == "accept" else "Declined", storage.now_iso(), me))
         except CareerNotFound:
@@ -1967,15 +1997,17 @@ def register_routes(app):
 
     # ---------------------------------------------------------------- race API
     def _email_results(token, event_id):
+        """The results email goes only to members of THIS league whose preferences here want it; the dedupe
+        key means a retried or repeated submission never sends it twice."""
         if not mailer.configured():
-            return
+            return 0
         with storage.session(token) as conn:
-            usernames = [r["username"] for r in conn.execute("SELECT username FROM career_members")]
+            usernames = notices.audience(conn, "results")
             url = url_for("weekend", token=token, event_id=event_id, _external=True)
             subject, text, html = feed.results_email(conn, event_id, url)
-        recipients = [u["email"] for u in (auth.get_user(n) for n in usernames)
-                      if u and u["email"] and u["email_results"]]
-        mailer.send_later(recipients, subject, text, html)
+            ev = S.get_event(conn, event_id)
+            return delivery.send_email(conn, token, "results", usernames, f"results-email:{event_id}", subject, text,
+                                       html, request.host_url.rstrip("/"), f"Results: R{ev['round_number']} {ev['name']}")
 
     def _may_enter_results(token):
         if not g.user:
@@ -2162,6 +2194,67 @@ def register_routes(app):
                 hub["reacts"] = community.reactions(conn, [target], me)[target]
         return hub
 
+    @app.route("/career/<token>/notifications", methods=["GET", "POST"])
+    @career_page()
+    def notify_prefs(conn, ctx):
+        """This member's notification choices for THIS league only."""
+        me = g.user["username"]
+        member = bool(conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone())
+        if request.method == "POST" and not member:
+            raise ValidationError("You can open this league as a site admin but aren't a member, so it never notifies "
+                                  "you. Add yourself in Members & Roles to choose notifications.")
+        if request.method == "POST":
+            before = notices.summary(notices.prefs(conn, me))
+            if request.form.get("preset") in notices.PRESETS:
+                p = notices.save(conn, me, preset=request.form.get("preset"))
+            else:
+                p = notices.save(conn, me, muted=bool(request.form.get("muted")),
+                                 email=set(request.form.getlist("email")), push=set(request.form.getlist("push")))
+            g.audit_summary = f"changed their {ctx['career_name']} notifications from {before} to {notices.summary(p)}"
+            flash(f"Saved. These settings only apply to {ctx['career_name']}.", "success")
+            return redirect(url_for("notify_prefs", token=ctx["token"]))
+        role = g.league_role
+        cats = {k: v for k, v in notices.CATEGORIES.items() if v[2] == "all" or role == "race_master"}
+        return page("notifications.html", ctx, prefs=notices.prefs(conn, me), cats=cats, member=member,
+                    presets=notices.PRESETS, email=g.user.get("email"), paused=g.user.get("email_paused"),
+                    mail_ready=mailer.configured())
+
+    @app.route("/career/<token>/deliveries")
+    @career_page(master_only=True)
+    def delivery_log_page(conn, ctx):
+        """What this league sent: category, channel, how many people and the outcome. Never content or addresses."""
+        return page("deliveries.html", ctx, rows=notices.delivery_log(conn), cats=notices.CATEGORIES)
+
+    @app.route("/unsubscribe/<sig>", methods=["GET", "POST"])
+    def unsubscribe(sig):
+        """One-click links in league emails. A GET only shows the choice (mail scanners open links); POST acts."""
+        username, token = delivery.read_unsubscribe(sig)
+        user = auth.get_user(username) if username else None
+        if not user:
+            return render_template("unsubscribe.html", error=True), 400
+        try:
+            with storage.session(token) as conn:
+                league = notices.league_name(conn)
+                done = None
+                if request.method == "POST":
+                    if request.form.get("scope") == "all":
+                        auth.set_email_paused(username, True)
+                        done = "all"
+                    else:
+                        notices.save(conn, username, email=set())
+                        done = "league"
+                    community.audit(conn, username, "Changed their notifications", "",
+                                    summary=("paused every email from every league" if done == "all" else
+                                             f"turned off emails from {league} (unsubscribe link)"))
+        except CareerNotFound:
+            return render_template("unsubscribe.html", error=True), 404
+        return render_template("unsubscribe.html", league=league, done=done, sig=sig, user=g.get("user"))
+
+    def _preset():
+        """The notification choice made on a create/join/accept form (defaults to Important only)."""
+        value = request.form.get("notify_preset")
+        return value if value in notices.PRESETS else "important"
+
     def _need(ctx, feature):
         if not ctx["features"][feature]:
             raise ValidationError("The Race Master has switched that off for this league")
@@ -2273,13 +2366,14 @@ def register_routes(app):
         if request.form.get("postponed"):
             event = S.get_event(conn, event_id)
             feed.notify(conn, None, f"R{event['round_number']} {event['name']} has been postponed", f"weekend/{event_id}",
-                        ref=f"racetime:{event_id}")
+                        ref=f"racetime:{event_id}", category="schedule")
             flash("Round marked as postponed.", "success")
             return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
         if when:
             event = S.get_event(conn, event_id)
-            feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']}", f"weekend/{event_id}",
-                        ref=f"racetime:{event_id}")
+            feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']} · "
+                        f"{timefmt.race_at(when, ctx['timezone'])} {timefmt.zone_label(when, ctx['timezone'])}",
+                        f"weekend/{event_id}", ref=f"racetime:{event_id}", category="schedule")
         flash("Race time saved." if when else "Race time cleared.", "success")
         return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
 

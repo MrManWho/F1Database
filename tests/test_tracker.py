@@ -905,8 +905,11 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
     auth.set_email("quiet", "quiet@example.com", False)
     res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    from f1tracker import notices
     with storage.session(token) as conn:
         conn.execute("INSERT INTO career_members(username, driver_id) VALUES('quiet', NULL)")
+        # v2.0: result emails are chosen per league; a new membership doesn't inherit an account-wide switch.
+        notices.save(conn, "carson", email={"results"})
         event = S.events(conn, S.current_season_id(conn))[0]
         rows = S.weekend_rows(conn, event["id"])
     payload = {"mark_complete": True, "ai_untracked": True, "results": [
@@ -916,6 +919,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
     to, subject, text = outbox[0]
     assert to == ["carson@example.com"] and "Australian GP" in subject
     assert rows[0]["driver"]["name"] in text and "Championship" in text
+    assert 'for the league "Mail"' in text and f"/career/{token}/notifications" in text
 
 
 def test_race_master_can_delete_a_transfer_window_and_its_trail(db, rng):
@@ -924,7 +928,8 @@ def test_race_master_can_delete_a_transfer_window_and_its_trail(db, rng):
     david, carson = players(db)
     feed.post(db, sid, "result", "An unrelated headline")
     assert db.execute("SELECT COUNT(*) FROM news WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 1
-    assert db.execute("SELECT COUNT(*) FROM notifications WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 2
+    # Two offer notices plus (v2.0) the league-wide "market is open" notice.
+    assert db.execute("SELECT COUNT(*) FROM notifications WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 3
     assert market.delete_window(db, window) == 0
     assert market.offers(db) == [] and market.windows(db) == []
     assert db.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == 0
@@ -1133,7 +1138,7 @@ def test_join_requests_carry_a_role_the_race_master_can_change(app, master_clien
         f"keeper_{members['lee']['driver_id']}": "1", "member_kim": "spectator", "csrf_token": "tok"})
     with storage.session(token) as conn:
         flags = {r["username"]: r["scorekeeper"] for r in conn.execute("SELECT * FROM career_members")}
-    assert flags == {"sam": 0, "lee": 1, "kim": 0}
+    assert flags == {"david": 0, "sam": 0, "lee": 1, "kim": 0}   # david: the creator is a member since v2.0
     # A spectator role needs no driver name; declining still works.
     auth.create_user("viv", "Viv", "password1")
     viv = app.test_client()

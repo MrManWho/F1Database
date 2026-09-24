@@ -170,6 +170,8 @@ def test_role_rules_and_final_race_master_protection(app, master_client):
     with auth.accounts() as accts:
         accts.execute("UPDATE users SET is_master = 0")
     with storage.session(token) as conn:
+        # Since v2.0 whoever creates a league is also its (league) Race Master; take them out to test the rule.
+        conn.execute("DELETE FROM career_members WHERE username = 'david'")
         assert roles.race_master_count(conn) == 1
         with pytest.raises(roles.RoleError, match="at least one Race Master"):
             roles.set_member(conn, "rita", "scorekeeper")

@@ -81,7 +81,7 @@ def _check_driver(conn, username, driver_id):
     return driver_id
 
 
-def set_member(conn, username, role, driver_id=None):
+def set_member(conn, username, role, driver_id=None, notify_preset=None):
     """Add someone to the league or change their role/driver. Validates everything; applies at once."""
     user = auth.get_user(username)
     if not user:
@@ -97,6 +97,8 @@ def set_member(conn, username, role, driver_id=None):
             race_master_count(conn, excluding=user["username"]) == 0:
         raise RoleError("A league needs at least one Race Master")
     driver_id = _check_driver(conn, user["username"], driver_id)
+    from . import notices
+    notices.ensure_member(conn, user["username"], notify_preset or "important")
     if current:
         conn.execute("UPDATE career_members SET role = ?, driver_id = ?, scorekeeper = ? WHERE username = ?",
                      (role, driver_id, int(role == "scorekeeper"), user["username"]))
@@ -113,6 +115,8 @@ def remove_member(conn, username):
     if row["role"] == "race_master" and race_master_count(conn, excluding=username) == 0:
         raise RoleError("A league needs at least one Race Master")
     conn.execute("DELETE FROM career_members WHERE username = ?", (username,))
+    from . import notices
+    notices.forget_member(conn, username)   # leaving a league ends its emails; other leagues are untouched
 
 
 def touch(conn, username):

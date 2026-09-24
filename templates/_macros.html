@@ -179,3 +179,12 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {% elif t.acknowledged_at %}<span class="target-pill tp-ok">Accepted</span>
 {% else %}<span class="target-pill tp-wait">Not accepted yet</span>{% endif %}
 {%- endmacro %}
+
+{# What a league may notify you about, asked when creating, joining or accepting (per league, never inherited). #}
+{% macro notify_choice(presets, label='Notifications from this league') -%}
+<label>{{ label }}
+  <select name="notify_preset">
+    {% for key, (name, desc) in presets.items() %}<option value="{{ key }}" {{ 'selected' if key == 'important' }}>{{ name }}: {{ desc }}</option>{% endfor %}
+  </select></label>
+<p class="muted small">Only for this league. You can change it any time on the league's Notifications page.</p>
+{%- endmacro %}

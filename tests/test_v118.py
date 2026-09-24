@@ -305,17 +305,17 @@ def test_grid_names_are_neutral_and_players_highlighted(app, master_client):
 def test_results_email_needs_an_address(app, master_client):
     auth.create_user("pat", "Pat", "password1")
     pat = _client(app, "pat")
-    pat.post("/account/email", data={"email": "", "email_results": "1", "csrf_token": "tok"})
-    assert not auth.get_user("pat")["email_results"]
+    pat.post("/account/email", data={"email": "", "csrf_token": "tok"})
+    assert not auth.get_user("pat")["email"]
     page = pat.get("/accounts").get_data(as_text=True)
-    assert "Add an email address to enable race-result emails." in page
-    assert 'name="email_results" value="1"  disabled' in page or ('name="email_results"' in page and "disabled aria-describedby" in page)
+    # v2.0: what each league emails is chosen per league; the account only has an address and a pause switch.
+    assert "Pause every email from every league" in page and "Notifications by league" in page
     res = pat.post("/account/email", data={"email": "not-an-email", "email_results": "1", "csrf_token": "tok"}, follow_redirects=True)
     assert "doesn&#39;t look right" in res.get_data(as_text=True) or "look right" in res.get_data(as_text=True)
     assert auth.get_user("pat")["email"] is None
     pat.post("/account/email", data={"email": "pat@example.com", "email_results": "1", "csrf_token": "tok"})
     u = auth.get_user("pat")
-    assert u["email"] == "pat@example.com" and u["email_results"]
+    assert u["email"] == "pat@example.com" and not u["email_paused"]
     # Other people never see it.
     auth.create_user("other", "Other", "password1")
     assert "pat@example.com" not in _client(app, "other").get("/accounts").get_data(as_text=True)

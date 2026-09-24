@@ -116,33 +116,3 @@ def send(usernames, title, body, url=None):
         except Exception:  # never let one bad endpoint stop the rest
             log.exception("push failed")
     return sent
-
-
-def recipients(token, driver_id):
-    """Who should hear about a notification: that driver's login, or everyone in the league."""
-    with closing(storage.open_db(token)) as conn:
-        rows = conn.execute("SELECT username, driver_id FROM career_members").fetchall()
-    if driver_id is None:
-        names = {r["username"] for r in rows}
-        names |= {u["username"] for u in auth.list_users() if u["is_master"]}
-    else:
-        names = {r["username"] for r in rows if r["driver_id"] == driver_id}
-    return names
-
-
-def dispatch(items, base_url="", exclude=None):
-    """Send queued notifications in the background: items are (token, driver_id, text, link)."""
-    if not items or not available():
-        return
-
-    def run():
-        time.sleep(0.2)  # let the request's own commit settle
-        for token, driver_id, text, link in items:
-            try:
-                names = recipients(token, driver_id) - {exclude}
-                url = f"{base_url}/career/{token}/{link}" if link else f"{base_url}/career/{token}/dashboard"
-                send(names, "Paddock Legacy", text, url)
-            except Exception:
-                log.exception("push dispatch failed")
-
-    threading.Thread(target=run, daemon=True).start()

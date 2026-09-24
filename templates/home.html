@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import notify_choice %}
 {% block title %}League Library{% endblock %}
 {% block plain %}
 <div class="page-head">
@@ -54,7 +55,8 @@
     <p class="muted small">This league is closed to new members right now, so the invitation can't be accepted yet.</p>
     {% else %}
     <div class="button-row tight">
-      <form method="post" action="{{ url_for('invitation_answer', token=c.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <form method="post" action="{{ url_for('invitation_answer', token=c.token) }}" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {{ notify_choice(notify_presets) }}
         <button class="btn btn-primary btn-sm" name="decision" value="accept">Accept and join</button></form>
       <form method="post" action="{{ url_for('invitation_answer', token=c.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-ghost btn-sm" name="decision" value="decline">Decline</button></form>
@@ -85,6 +87,7 @@
         </select></label>
       <label data-driver-field>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
       <label>Message (optional)<input name="message" maxlength="300" placeholder="Say hi to the Race Master"></label>
+      {{ notify_choice(notify_presets, 'If you\'re approved, notify me about') }}
       <button class="btn btn-primary btn-sm">Ask to join</button>
     </form>
     {% endif %}
@@ -122,6 +125,8 @@
       <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> <span><b>{{ label }}</b> <small class="muted">· {{ desc }}</small></span></label>
       {% endfor %}
     </fieldset>
+    {{ notify_choice(notify_presets, 'What should this league notify you (the Race Master) about?') }}
+    <p class="muted small">Nobody else gets anything until they join and choose for themselves.</p>
     <button class="btn btn-primary">Create league</button>
   </form>
 </dialog>

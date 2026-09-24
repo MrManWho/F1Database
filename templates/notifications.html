@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>Notifications for this league</h1>
+  <p class="page-purpose">What {{ ctx.career_name }} may send you. These choices apply to this league only; your other leagues keep their own.</p></div></div>
+
+{% if not member %}
+<section class="card empty-state">
+  <h2>You're not a member of this league</h2>
+  <p class="muted">You can open it as a site admin, but it never emails or alerts you. Add yourself in Members &amp; Roles if you want notifications from it.</p>
+</section>
+{% else %}
+{% if not email %}<div class="banner banner-warn" role="note">You haven't added an email address, so no league can email you. <a href="{{ url_for('accounts_page') }}#email">Add one in your account</a>.</div>
+{% elif paused %}<div class="banner banner-warn" role="note">You've paused every email from every league. Your choices below are kept for when you turn emails back on in <a href="{{ url_for('accounts_page') }}#email">your account</a>.</div>{% endif %}
+{% if not mail_ready %}<p class="muted small">Email isn't set up on this site yet, so only in-app and phone alerts are sent for now.</p>{% endif %}
+
+<section class="card">
+  <h2>Quick choice</h2>
+  <form method="post" class="preset-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for key, (label, desc) in presets.items() %}
+    <button class="preset-btn" name="preset" value="{{ key }}"><b>{{ label }}</b><small class="muted">{{ desc }}</small></button>
+    {% endfor %}
+  </form>
+</section>
+
+<form method="post" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Choose by category</h2>
+  <label class="toggle-row">
+    <input type="checkbox" name="muted" value="1" {{ 'checked' if prefs.muted }}>
+    <span class="switch"></span>
+    <span><b>Mute {{ ctx.career_name }}</b><small class="muted">No emails or phone alerts from this league. You stay in it and still see notifications here.</small></span>
+  </label>
+  <div class="table-wrap">
+  <table class="data-table compact prefs-table">
+    <caption class="sr-only">Notification categories for {{ ctx.career_name }}</caption>
+    <thead><tr><th scope="col">What</th><th scope="col" class="center">Email</th><th scope="col" class="center">Phone alert</th></tr></thead>
+    <tbody>
+    {% for key, (label, desc, audience) in cats.items() %}
+      <tr><th scope="row"><b>{{ label }}</b><small class="muted d-block">{{ desc }}</small></th>
+        <td class="center"><input type="checkbox" name="email" value="{{ key }}" {{ 'checked' if prefs.email[key] }} aria-label="Email: {{ label }}"></td>
+        <td class="center"><input type="checkbox" name="push" value="{{ key }}" {{ 'checked' if prefs.push[key] }} aria-label="Phone alert: {{ label }}"></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">In-app notifications (the bell) always show. Phone alerts need alerts turned on for your device in the account menu.
+    Every email names the league it came from and links back here.</p>
+  <div><button class="btn btn-primary">Save for {{ ctx.career_name }}</button></div>
+</form>
+{% endif %}
+{% endblock %}

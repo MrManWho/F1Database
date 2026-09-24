@@ -309,9 +309,9 @@ def test_install_files_and_push_subscriptions(app, master_client):
 
 
 def test_notifications_are_queued_for_phone_alerts(career, monkeypatch):
-    from f1tracker import push
-    sent = []
-    monkeypatch.setattr(push, "send", lambda names, title, body, url=None: sent.append((sorted(names), body)) or 1)
+    """Alerts go to members of this league only (a site admin who isn't a member no longer gets them: v2.0)."""
+    from f1tracker import delivery, push
+    monkeypatch.setattr(push, "available", lambda: True)
     auth.create_user("boss", "Boss", "password1", is_master=True)
     auth.create_user("carson", "Carson", "password1")
     with storage.session(career) as conn:
@@ -321,7 +321,8 @@ def test_notifications_are_queued_for_phone_alerts(career, monkeypatch):
         feed.notify(conn, carson, "New offer from Cadillac", "garage")
         feed.notify(conn, None, "Round 1 results are in")
     items = feed.take_outbox()
-    assert [(t, d) for t, d, *_ in items] == [(career, carson), (career, None)]
-    for token, did, text, link in items:
-        push.send(push.recipients(token, did), "t", text)
-    assert sent == [(["carson"], "New offer from Cadillac"), (["boss", "carson"], "Round 1 results are in")]
+    assert [(i["token"], i["driver_id"]) for i in items] == [(career, carson), (career, None)]
+    sends = delivery.plan(items)
+    assert [(c, sorted(n), p["text"]) for c, n, p in sends] == [
+        ("push", ["carson"], "New offer from Cadillac"), ("push", ["carson"], "Round 1 results are in")]
+    assert delivery.plan(items) == []      # the same notifications are never delivered twice

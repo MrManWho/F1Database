@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Delivery log{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">Manage · {{ ctx.career_name }}</div><h1>Delivery log</h1>
+  <p class="page-purpose">Emails and phone alerts this league sent. It shows the kind of message and how many people it reached, never the message itself or anyone's address.</p></div></div>
+<section class="card table-card">
+  {% if rows %}
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <thead><tr><th scope="col">When</th><th scope="col">Kind</th><th scope="col">Channel</th><th scope="col" class="num">People</th><th scope="col">Outcome</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.created_at|stamp }}</td><td>{{ r.label or cats.get(r.category, (r.category,))[0] }}</td>
+      <td>{{ 'Email' if r.channel == 'email' else 'Phone alert' }}</td><td class="num">{{ r.recipients }}</td>
+      <td>{% if r.status == 'held' %}<span class="status-pill st-dns" title="Held back: this league was sending unusually often">Held (rate limit)</span>{% else %}{{ r.status|capitalize }}{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><p>Nothing has been sent yet. Emails only go to members who chose them in their notification settings for this league.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

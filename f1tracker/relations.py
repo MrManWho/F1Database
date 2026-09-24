@@ -208,7 +208,7 @@ def note(conn, season_id, driver_id, team_id, tone, text, notify=True):
     conn.execute("INSERT INTO team_notes(season_id, driver_id, team_id, tone, text, created_at) VALUES(?,?,?,?,?,?)",
                  (season_id, driver_id, team_id, tone, text, now_iso()))
     if notify:
-        feed.notify(conn, driver_id, text, "team-standing")
+        feed.notify(conn, driver_id, text, "team-standing", category="career")
 
 
 def review(conn, season_id):

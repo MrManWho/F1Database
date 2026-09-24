@@ -20,11 +20,19 @@
     <form method="post" action="{{ url_for('account_email') }}" class="stack" data-email-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Email address<input name="email" type="email" value="{{ user.email or '' }}" autocomplete="email" placeholder="you@example.com" maxlength="254"></label>
-      <label class="check {{ 'is-disabled' if not user.email }}"><input type="checkbox" name="email_results" value="1" {{ 'checked' if user.email_results and user.email }} {{ 'disabled' if not user.email }} aria-describedby="email-results-hint"> Email me the results after every race weekend</label>
-      <p class="muted small" id="email-results-hint" {{ 'hidden' if user.email }}>Add an email address to enable race-result emails.</p>
-      <p class="muted small">Your email is used for "Forgot password?" links and, if ticked, race results. Nobody else sees it.</p>
+      <label class="check"><input type="checkbox" name="email_paused" value="1" {{ 'checked' if user.email_paused }}> Pause every email from every league</label>
+      <p class="muted small">Your email is used for "Forgot password?" links and for the league emails you choose below. Nobody else sees it.
+        Pausing stops all league emails at once and keeps each league's choices for when you turn them back on.</p>
       <button class="btn">Save email</button>
     </form>
+    <h3 class="mini-head">Notifications by league</h3>
+    {% if my_leagues %}
+    <ul class="league-prefs">
+      {% for l in my_leagues %}<li><span><b>{{ l.name }}</b> <small class="muted">{{ 'Emails paused (all leagues)' if user.email_paused and l.prefs != 'Muted' else l.prefs }}</small></span>
+        <a class="btn btn-sm btn-ghost" href="{{ url_for('notify_prefs', token=l.token) }}">Change</a></li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted small">You're not in any league yet.</p>{% endif %}
+    <p class="muted small">Each league has its own settings. Muting one league never changes another.</p>
   </section>
   {% if user.is_master %}
   <section class="card">

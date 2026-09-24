@@ -54,6 +54,9 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_results" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
+    if "email_paused" not in columns:
+        # v2.0: one switch to stop every email from every league (league choices are kept separately).
+        conn.execute("ALTER TABLE users ADD COLUMN email_paused INTEGER NOT NULL DEFAULT 0")
     # v1.19: screenshot import no longer uses a paid AI service, so a previously saved API key is removed.
     conn.execute("DELETE FROM settings WHERE key = 'anthropic_api_key'")
     # v1.18: race-result emails need an address; switch the option off where there's none to send to.
@@ -368,6 +371,12 @@ def finish_signup(pending_id, code):
 
 
 # --------------------------------------------------------------------------- email & password resets
+
+def set_email_paused(username, paused):
+    """Pause (or resume) every email from every league for this account. League choices are kept."""
+    with accounts() as conn:
+        conn.execute("UPDATE users SET email_paused = ? WHERE username = ?", (int(bool(paused)), normalise(username)))
+
 
 def set_email(username, email, email_results):
     """Save an address (validated) and the race-results preference, which is only possible with an address."""

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Email preferences{% endblock %}
+{% block plain %}
+<section class="auth-card card">
+  <div class="kicker">Email preferences</div>
+  {% if error %}
+  <h1>This link doesn't work</h1>
+  <p class="muted">It may be incomplete, or the league no longer exists. You can change what each league emails you after logging in: Account → Notifications by league.</p>
+  <a class="btn" href="{{ url_for('login') }}">Log in</a>
+  {% elif done == 'league' %}
+  <h1>Emails from {{ league }} are off</h1>
+  <p>You won't get emails from <b>{{ league }}</b> any more. You're still in the league, and your other leagues are unchanged.</p>
+  <p class="muted small">Changed your mind? Turn them back on in the league's Notifications page.</p>
+  {% elif done == 'all' %}
+  <h1>All emails paused</h1>
+  <p>No league will email you until you turn emails back on in your account. Each league's choices are kept.</p>
+  {% else %}
+  <h1>Stop emails from {{ league }}?</h1>
+  <p>This only affects <b>{{ league }}</b>. You stay in the league and your other leagues keep emailing you as before.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary" name="scope" value="league">Stop emails from {{ league }}</button>
+    <button class="btn btn-ghost" name="scope" value="all">Pause every email from every league instead</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

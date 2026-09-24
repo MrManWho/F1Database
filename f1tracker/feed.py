@@ -28,15 +28,27 @@ def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, te
 _outbox = threading.local()
 
 
-def notify(conn, driver_id, text, link=None, ref=None):
-    """driver_id None = everyone in the career."""
-    conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref) VALUES(?,?,?,?,?)",
-                 (driver_id, text, link, now_iso(), ref))
+# Old notification texts -> preference category, for callers that don't say (see notices.CATEGORIES).
+KIND_TO_CATEGORY = {"Race": "results", "Market": "contracts", "Team": "career", "Press": "career",
+                    "Stewards": "career", "Season": "season", "Comment": "announcements", "League": "join_requests",
+                    "Update": "career"}
+
+
+def notify(conn, driver_id, text, link=None, ref=None, category=None, username=None, email=True, dedupe=None):
+    """driver_id None and username None = everyone in the league (Race Masters only for masters-only categories).
+    category decides which preference controls email and phone alerts; email=False when a richer email is
+    sent separately (race results). dedupe: a key for things that must only ever go out once (a round's
+    results, a season starting), so a retry or a second background job can't send them again."""
+    category = category or KIND_TO_CATEGORY.get(notify_kind(text)[1], "career")
+    cur = conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref, category, username) "
+                       "VALUES(?,?,?,?,?,?,?)", (driver_id, text, link, now_iso(), ref, category, username))
     token = _token(conn)
     if token:
         if not hasattr(_outbox, "items"):
             _outbox.items = []
-        _outbox.items.append((token, driver_id, text, link))
+        _outbox.items.append({"token": token, "driver_id": driver_id, "username": username, "text": text,
+                              "link": link, "category": category, "ref": ref, "id": f"n{cur.lastrowid}",
+                              "email": email, "key": dedupe})
 
 
 def take_outbox():
@@ -124,10 +136,20 @@ def decorate(conn, rows):
     return rows
 
 
-def _visible(driver_id):
-    if driver_id is None:
-        return "driver_id IS NULL", ()
-    return "(driver_id IS NULL OR driver_id = ?)", (driver_id,)
+MASTER_ONLY = ("join_requests", "admin")
+
+
+def _visible(driver_id, username=None):
+    """League-wide notices (except Race-Master-only ones), plus anything for this person's driver or login."""
+    everyone = "(driver_id IS NULL AND username IS NULL AND COALESCE(category, '') NOT IN ('join_requests', 'admin'))"
+    parts, params = [everyone], []
+    if driver_id is not None:
+        parts.append("driver_id = ?")
+        params.append(driver_id)
+    if username:
+        parts.append("username = ?")
+        params.append(username)
+    return "(" + " OR ".join(parts) + ")", tuple(params)
 
 
 NOTIFY_KINDS = [  # (words in the text, icon, category)
@@ -152,7 +174,7 @@ def notify_kind(text):
 
 def notifications_for(conn, username, driver_id, is_master=False, limit=15):
     """Recent notifications for this person. "Clear" only hides older ones from the panel; nothing is deleted."""
-    where, params = ("1=1", ()) if is_master else _visible(driver_id)
+    where, params = ("(username IS NULL OR username = ?)", (username,)) if is_master else _visible(driver_id, username)
     seen = conn.execute("SELECT last_seen_id, cleared_id FROM notification_reads WHERE username = ?", (username,)).fetchone()
     cleared = seen["cleared_id"] if seen else 0
     seen = seen["last_seen_id"] if seen else 0
@@ -228,7 +250,8 @@ def on_weekend_complete(conn, event_id, link):
             headline = f"{name} charges from P{r['qualifying_position']} to P{pos}"
         if headline:
             post(conn, sid, "player", headline, f"{title}, round {event['round_number']}.", link, r["driver_id"], r["team_id"])
-    notify(conn, None, f"Results are in: {title}" + (f", won by {winner['driver']['name']}" if winner else ""), link)
+    notify(conn, None, f"Results are in: {title}" + (f", won by {winner['driver']['name']}" if winner else ""), link,
+           ref=f"results:{event_id}", category="results", email=False, dedupe=f"results-notice:{event_id}")   # the full results email is sent separately
 
 
 def on_window_opened(conn, window_id, link):
@@ -236,12 +259,14 @@ def on_window_opened(conn, window_id, link):
     ref = f"window:{window_id}"
     post(conn, window["season_id"], "market", f"{window['kind']} opens: teams are shopping for {window['target_year']}",
          "Offers are going out to the player drivers.", link, ref=ref)
+    notify(conn, None, f"The {window['kind']} is open: teams are shopping for {window['target_year']}", "market",
+           ref=ref, category="market", dedupe=f"{ref}:open")
     for p in S.player_drivers(conn):
         n = conn.execute("SELECT COUNT(*) FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
                          (window_id, p["id"], C.OFFER_PENDING)).fetchone()[0]
         if n:
             notify(conn, p["id"], f"{n} team{'s' if n != 1 else ''} made you an offer for {window['target_year']}", link,
-                   ref=ref)
+                   ref=ref, category="contracts")
 
 
 def on_signed(conn, offer, link):
@@ -292,7 +317,11 @@ def on_new_season(conn, old_id, new_id, car_changes, link):
         if worst["change"] < 0:
             post(conn, new_id, "tech", f"Trouble at {worst['team']['name']}: new car is off the pace ({worst['change']:+.1f})",
                  f"Rated {worst['rating']:.1f} for {new['year']}.", link, team_id=worst["team"]["id"])
-    notify(conn, None, f"The {new['year']} season has begun", link)
+    old = conn.execute("SELECT year FROM seasons WHERE id = ?", (old_id,)).fetchone()
+    if old:
+        notify(conn, None, f"The {old['year']} season is complete. See the season review.", link, category="season",
+               dedupe=f"season-complete:{old_id}")
+    notify(conn, None, f"The {new['year']} season has begun", link, category="season", dedupe=f"season-start:{new_id}")
 
 
 # --------------------------------------------------------------------------- race results email
@@ -322,8 +351,7 @@ def results_email(conn, event_id, url):
             q = f"Q P{r['qualifying_position']}" if r["qualifying_position"] else "Q —"
             lines.append(f"  {r['driver']['name']}: {q} → {fin(r)}, {r['gp_points'] + r['sprint_pts']} pts")
     lines += ["", "Championship:"] + [f"  {r['position']}. {r['driver']['name']} {r['points']}" for r in board]
-    lines += ["", f"Full results: {url}", "", "You get these because race-result emails are on in your account. "
-              "Turn them off in Accounts."]
+    lines += ["", f"Full results: {url}"]
 
     def row_html(r, extra=""):
         return (f"<tr><td style='padding:4px 8px;font-weight:700'>{escape(fin(r))}</td>"
@@ -344,6 +372,5 @@ def results_email(conn, event_id, url):
         html.append("</ul>")
     html.append("<h2 style='font-size:16px;margin:20px 0 8px'>Championship</h2><ol style='padding-left:20px'>")
     html += [f"<li value='{r['position']}'>{escape(r['driver']['name'])}: <b>{r['points']}</b></li>" for r in board]
-    html.append(f"</ol><p><a href='{escape(url)}' style='color:#ff5a4f'>Open the full results →</a></p>"
-                "<p style='color:#8d97a8;font-size:12px'>Turn these emails off in Accounts.</p></div>")
+    html.append(f"</ol><p><a href='{escape(url)}' style='color:#ff5a4f'>Open the full results →</a></p></div>")
     return f"🏁 {title}: results are in", "\n".join(lines), "".join(html)
