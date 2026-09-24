@@ -248,7 +248,7 @@ def test_activity_log_is_readable_and_private(app, master_client):
 def test_members_page_shows_join_state_but_settings_owns_it(master_client):
     token, _ = _league(master_client)
     page = master_client.get(f"/career/{token}/members").get_data(as_text=True)
-    assert "Join requests are currently enabled" in page and "Manage this in League Settings" in page
+    assert "Join requests are currently enabled" in page and "Manage this in League settings" in page
     assert 'name="join_mode"' not in page
     assert 'name="join_mode"' in master_client.get(f"/career/{token}/settings").get_data(as_text=True)
 

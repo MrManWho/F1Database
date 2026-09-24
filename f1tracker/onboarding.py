@@ -1,6 +1,6 @@
 """New-league presets and the rules for who may create a league.
 
-A preset only chooses sensible starting settings; every one can be changed later in League Settings.
+A preset only chooses sensible starting settings; every one can be changed later in League settings.
 """
 
 from datetime import datetime, timedelta

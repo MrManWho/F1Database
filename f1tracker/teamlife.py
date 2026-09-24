@@ -4,7 +4,7 @@ Press: after each race every player driver who raced gets two questions picked f
 went. Each answer nudges the relationship with their team (a small, capped bonus) and some make headlines.
 Only the latest completed race has an open press pen; unanswered questions simply lapse.
 
-Team orders (League Settings, off by default): after a race, a player driver on a No. 2 contract may be told
+Team orders (League settings, off by default): after a race, a player driver on a No. 2 contract may be told
 to let their teammate through at the next race. "On" judges it from the finishing order (finishing ahead of
 the teammate means the order was ignored, unless either of them didn't finish); "Advisory" shows the order
 but it has no effect and makes no headlines; "Off" issues none and cancels any still waiting, without penalty.
@@ -190,7 +190,7 @@ DEFAULTS = {"team_orders": "off", "weekend_targets": "1", "round_gates": "1", "g
 
 
 def settings(conn):
-    """Team-life switches for this league (League Settings). Missing values are the defaults."""
+    """Team-life switches for this league (League settings). Missing values are the defaults."""
     from .storage import get_meta
     val = {k: get_meta(conn, k, d) for k, d in DEFAULTS.items()}
     return {"orders": val["team_orders"] if val["team_orders"] in C.TEAM_ORDER_MODES else "off",

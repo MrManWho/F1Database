@@ -37,7 +37,7 @@
   {% if user.is_master %}
   <section class="card">
     <h2>Add a login</h2>
-    <p class="muted small">People can also sign up themselves from the login page. Link a login to a driver in each league's <em>Players &amp; Logins</em> page.</p>
+    <p class="muted small">People can also sign up themselves from the login page. Link a login to a driver in each league's <em>Members &amp; roles</em> page.</p>
     <form method="post" action="{{ url_for('account_new') }}" class="stack" data-password-form novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="username"></label>
@@ -171,7 +171,7 @@
     <p><b>Race Master</b>: full admin of every league. Manages logins, saves and backups, and can see every garage, offer and negotiation.
       A Race Master only drives if you link them to a player driver in a league.</p>
     <p><b>Member</b>: a normal login. What they can do in each league (Race Master, Scorekeeper, Member or Spectator, and which driver they
-      control) is set in one place: that league's <b>Players &amp; Logins</b> page. There's no separate Scorekeeper switch here any more.</p>
+      control) is set in one place: that league's <b>Members &amp; roles</b> page. There's no separate Scorekeeper switch here any more.</p>
   </div>
   <div class="table-wrap">
   <table class="data-table">

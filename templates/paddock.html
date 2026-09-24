@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_dot, pattrs with context %}
-{% block title %}Paddock Admin{% endblock %}
+{% block title %}Drivers & teams{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">{{ ctx.role }} · {{ season.year }}</div><h1>Paddock admin</h1></div></div>
 
@@ -45,7 +45,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Name<input name="name" required maxlength="60" placeholder="A new F2 graduate"></label>
       <p class="muted small">Every new driver starts at {{ '%.0f'|format(C.ROOKIE_REPUTATION) }} Reputation, like any rookie, with no seat.
-        Put them in a car from Grid &amp; Transfers. Human players are added in <em>Players &amp; Logins</em>.</p>
+        Put them in a car from Grid &amp; contracts. Human players are added in <em>Members &amp; roles</em>.</p>
       <button class="btn btn-primary">Add driver</button>
     </form>
   </section>

@@ -152,7 +152,7 @@ def test_leaving_one_league_leaves_the_others_alone(app, master_client):
         assert "left the league" in community.audit_entries(conn)[0]["summary"]
     with storage.session(b) as conn:
         assert conn.execute("SELECT 1 FROM career_members WHERE username = 'ana'").fetchone()
-    assert "Leave League B" in ana.get(f"/career/{b}/notifications").get_data(as_text=True)
+    assert "Leave League B" in ana.get(f"/career/{b}/me").get_data(as_text=True)
 
 
 def test_handing_a_league_over(app, master_client):

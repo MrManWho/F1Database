@@ -3,7 +3,7 @@
 {% block plain %}
 <div class="wizard-wrap">
 <div class="page-head"><div><div class="kicker">New league</div><h1>Set up your league</h1>
-  <p class="page-purpose">Eight short steps. Every choice can be changed later in League Settings, and nothing is sent to anyone until you create the league.</p></div>
+  <p class="page-purpose">Eight short steps. Every choice can be changed later in League settings, and nothing is sent to anyone until you create the league.</p></div>
   <a class="btn btn-ghost" href="{{ url_for('home') }}">Cancel</a></div>
 
 <ol class="wizard-steps" id="wizard-steps" aria-label="Setup steps">
@@ -118,7 +118,7 @@
   <fieldset class="card wizard-step" data-step="7">
     <legend><h2>8 · Review and create</h2></legend>
     <dl class="review-list" id="review-list"><div><dt>League</dt><dd class="muted">Fill in the steps above.</dd></div></dl>
-    <label class="check"><input type="checkbox" name="send_invites" value="1"> Email the people I invited (they'll see the invitation in their League Library either way)</label>
+    <label class="check"><input type="checkbox" name="send_invites" value="1"> Email the people I invited (they'll see the invitation in their league list either way)</label>
     <p class="muted small">Creating the league makes you its Race Master. It's private until you choose otherwise, and you can change every setting later.</p>
   </fieldset>
 

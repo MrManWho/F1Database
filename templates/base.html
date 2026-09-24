@@ -100,6 +100,7 @@
       </div>
       {% endif %}
       <div class="nav-group nav-bottom">
+        {{ item(url_for('my_settings', token=t), 'My settings', 'settings', ep == 'my_settings') }}
         {{ item(url_for('home'), 'All my leagues', 'library', false) }}
         {{ item(url_for('help_page'), 'Help', 'help', false) }}
       </div>

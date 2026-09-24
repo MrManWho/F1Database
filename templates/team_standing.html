@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_dot with context %}
-{% block title %}Team Standing{% endblock %}
+{% block title %}Relationships{% endblock %}
 {% block content %}
 {% set team = rel.team if rel else none %}
 <div class="profile-head" style="--team: {{ team.color if team else '#e10600' }}">

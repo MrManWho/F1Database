@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import notify_choice %}
-{% block title %}League Library{% endblock %}
+{% block title %}My leagues{% endblock %}
 {% block plain %}
 <div class="page-head">
   <div><div class="kicker">Paddock Legacy</div><h1>Your leagues</h1>
@@ -140,7 +140,7 @@
     <label>How people join
       <select name="join_mode">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == 'requests' }}>{{ label }}</option>{% endfor %}</select></label>
     <fieldset>
-      <legend>Extras (change any time in League Settings)</legend>
+      <legend>Extras (change any time in League settings)</legend>
       {% for key, (label, desc, default) in C.FEATURES.items() %}
       <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> <span><b>{{ label }}</b> <small class="muted">· {{ desc }}</small></span></label>
       {% endfor %}

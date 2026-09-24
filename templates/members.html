@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Players & Logins{% endblock %}
+{% block title %}Members & roles{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="kicker">League access</div><h1>Players &amp; Logins</h1></div>
+<div class="page-head"><div><div class="kicker">League access</div><h1>Members &amp; roles</h1></div>
   <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}">Manage accounts →</a></div>
 
 {% if requests %}
@@ -150,10 +150,10 @@
   <section class="card">
     <h2>Joining</h2>
     <p class="join-current"><span class="join-status join-{{ join_mode }}">{{ join_modes[join_mode] }}</span></p>
-    <p class="small">{{ {'requests': 'Join requests are currently enabled: people can ask from their League Library and you approve each one below.',
+    <p class="small">{{ {'requests': 'Join requests are currently enabled: people can ask from their league list and you approve each one below.',
       'invite': 'The league is invite only: people join when they accept an invitation.',
       'closed': 'The league is closed to new members: no requests, and invitations can\'t be accepted.'}[join_mode] }}
-      <a href="{{ url_for('league_settings', token=ctx.token) }}#joining">Manage this in League Settings →</a></p>
+      <a href="{{ url_for('league_settings', token=ctx.token) }}#joining">Manage this in League settings →</a></p>
     <h3>Invite someone</h3>
     <form method="post" action="{{ url_for('member_invite', token=ctx.token) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

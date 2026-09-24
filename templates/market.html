@@ -26,7 +26,7 @@
       <form method="post" action="{{ url_for('market_delete', token=ctx.token, window_id=w.id) }}"
             data-confirm='{{ {"title": "Delete the " ~ w.kind ~ " window for " ~ w.target_year ~ "?", "target": w.kind ~ " · for " ~ w.target_year,
               "what": "Deletes the window with every offer, conversation, headline and notification it created.",
-              "history": "Race results aren't affected. Seats already changed by signings stay as they are; fix them in Grid & Transfers if needed.",
+              "history": "Race results aren't affected. Seats already changed by signings stay as they are; fix them in Grid & contracts if needed.",
               "backup": "No new backup is made; use Backups & data to roll back.", "undo": "No, except by restoring a backup.",
               "ok": "Delete window"}|tojson }}'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Delete</button>

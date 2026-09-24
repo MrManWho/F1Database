@@ -25,7 +25,7 @@
   <p class="muted">Sign-ups need email to be set up on this tracker first (so we can send you a confirmation code).
     Ask the Race Master to set up email, or to create your login for you.</p>
   {% elif signups %}
-  <p class="muted">We'll email you a 6-digit code to confirm your address. After signing up you can ask to join any open league from the League Library. A Race Master approves your driver.</p>
+  <p class="muted">We'll email you a 6-digit code to confirm your address. After signing up you can ask to join any open league from the league list. A Race Master approves your driver.</p>
   <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>

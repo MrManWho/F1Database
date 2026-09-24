@@ -488,3 +488,28 @@ def test_meeting_the_target_saves_the_seat_and_the_setting_turns_it_off(app, mas
         run_event(conn, evs[5], order=_order(conn, evs[5], a, 20))
         ultimatums.after_race(conn, evs[5]["id"])
         assert not ultimatums.active(conn, sid, a)
+
+
+# --------------------------------------------------------------------------- personal settings
+
+def test_every_member_has_a_my_settings_page(app, master_client):
+    from f1tracker import roles
+    auth.create_user("ana", "Ana", "password1")
+    auth.create_user("sam", "Sam", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        roles.set_member(conn, "sam", "spectator")
+    pledge_all(token)
+    for name in ("ana", "sam"):
+        c = _client(app, name)
+        page = c.get(f"/career/{token}/me").get_data(as_text=True)
+        assert "My settings" in page and "Choose notifications" in page and "Leave Issue League" in page
+        assert f'href="/career/{token}/me"' in c.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    ana = _client(app, "ana")
+    assert "Open my driver profile" in ana.get(f"/career/{token}/me").get_data(as_text=True)
+    ana.post(f"/career/{token}/pin", data={"csrf_token": "tok", "action": "hide"})
+    assert "Show in my list" in ana.get(f"/career/{token}/me").get_data(as_text=True)
+    sam = _client(app, "sam")
+    sam.post(f"/career/{token}/leave", data={"csrf_token": "tok", "confirm_name": "Issue League"})
+    with storage.session(token) as conn:
+        assert not conn.execute("SELECT 1 FROM career_members WHERE username = 'sam'").fetchone()

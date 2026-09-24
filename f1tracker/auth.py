@@ -131,7 +131,7 @@ def role_of(user):
 
 def set_role(username, role):
     if role == "steward":
-        raise AuthError("Scorekeeper access is set per league now: open the league's Players & Logins page")
+        raise AuthError("Scorekeeper access is set per league now: open the league's Members & roles page")
     if role not in ROLES:
         raise AuthError("Unknown role")
     with accounts() as conn:

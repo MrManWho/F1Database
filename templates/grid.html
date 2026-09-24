@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_dot, driver_link, seat_badge with context %}
-{% block title %}Grid & Transfers{% endblock %}
+{% block title %}Grid & contracts{% endblock %}
 {% block content %}
 {% set ro = not ctx.is_master %}
-<div class="page-head"><div><div class="kicker">Grid &amp; Transfers · {{ ctx.season.year }}</div><h1>The {{ ctx.season.year }} grid</h1></div>
+<div class="page-head"><div><div class="kicker">Grid &amp; contracts · {{ ctx.season.year }}</div><h1>The {{ ctx.season.year }} grid</h1></div>
   {% if ro %}<span class="view-only-badge">View only</span>{% endif %}</div>
 
 {% if dismissals %}

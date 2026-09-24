@@ -1,6 +1,6 @@
 """Optional Discord posts for a league: race results and paddock headlines, sent to a channel webhook.
 
-Off unless the Race Master pastes a webhook URL in League Settings. Private things (garages, offers,
+Off unless the Race Master pastes a webhook URL in League settings. Private things (garages, offers,
 team warnings) are never posted. Sending happens in the background and failures are only logged.
 """
 

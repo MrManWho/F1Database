@@ -1,4 +1,4 @@
-# Paddock Legacy 2.0: admin guide
+# Paddock Legacy 2.x: admin guide
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
@@ -48,6 +48,20 @@ All of these affect one league only.
   and public-link key.
 - **Import** (League library → *Import .f1career*, site admins): a file is checked and summarised first and always becomes a new league.
 - **Activity log**: every league action as a sentence. It never records passwords, codes, sessions, OCR text or webhooks.
+
+## New in 2.1
+
+- **Change notices.** Anything that changes a player driver's numbers (an update, switching team orders off, re-issuing
+  season goals, a dismissal) is shown to that driver with before/after and a reason, and they must agree before using
+  the league. You can see every notice and who agreed on *Changes to your driver* (linked from My settings).
+- **Mid-season dismissals** (League settings, on by default). Decisions appear on the Control Room and in *Grid &
+  contracts → Final warnings & dismissals*. Overruling needs a note.
+- **Goal controls.** Team goals page: *Re-push targets* and *Reset and let them choose again*. Relationships page:
+  *Re-issue season goals*, *Re-issue for everyone*, *Re-issue R{n} target*.
+- **AI difficulty** recommendations now adapt from every round (see Help → AI difficulty).
+- **Team orders Off** removes all orders and undoes their effects (with change notices).
+- New tables, created when first needed: `impact_notices`, `impact_acks`, `ultimatums`. New meta keys: `calc_version`,
+  `calc_snapshot`, `calc_snapshot_stale`, `midseason_sackings`, `team_goal_reopen_*`. No schema version change.
 
 ## Accounts and security
 

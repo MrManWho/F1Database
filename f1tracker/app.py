@@ -441,7 +441,9 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
                ("visibility", "Public visibility"), ("backups", "Backups and recovery"), ("targets", "Weekend targets"),
                ("gates", "Round gates"), ("contracts", "Contracts and seats"), ("modes", "View modes"),
                ("statistics", "Statistics"), ("team-goals", "Team goals"), ("announcements", "Announcements"),
-               ("security", "Account security and two-step sign-in"), ("your-data", "Your data and leaving a league")]
+               ("security", "Account security and two-step sign-in"), ("your-data", "Your data and leaving a league"),
+               ("talks", "Talking to teams and interviews"), ("dismissals", "Final warnings and mid-season dismissals"),
+               ("my-settings", "My settings"), ("updates", "Updates and change notices")]
 
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
@@ -483,7 +485,7 @@ def _pledge_gate(conn, ctx, master_only):
 
 
 def _settings_changes(conn, before):
-    """League Settings changes as a sentence, e.g. "changed join requests from Off to On". No private values."""
+    """League settings changes as a sentence, e.g. "changed join requests from Off to On". No private values."""
     changes = []
     after = community.features(conn)
     for key, (label, _desc, _default) in C.FEATURES.items():
@@ -1316,9 +1318,9 @@ def register_routes(app):
                 if user and user.get("email") and not user.get("email_paused"):
                     mailer.send_later([user["email"]], f"You're invited to {name}",
                                       f"{g.user['display_name']} invited you to join the league \"{name}\" {what}. "
-                                      f"Accept it from your League Library:\n\n{url_for('home', _external=True)}\n\n"
+                                      f"Accept it from your league list:\n\n{url_for('home', _external=True)}\n\n"
                                       f"—\nSent by Paddock Legacy for the league \"{name}\".")
-        flash("League created." + (f" {len(invites_to_mail)} invitation(s) are waiting in people's League Library"
+        flash("League created." + (f" {len(invites_to_mail)} invitation(s) are waiting in people's league list"
                                    + (" and were emailed." if request.form.get("send_invites") else ".")
                                    if invites_to_mail else "")
               + (" Rookie offers are waiting in each player's garage." if request.form.get("rookie_market") and rows else ""),
@@ -1891,7 +1893,7 @@ def register_routes(app):
         review = seats.rollover_review(conn, latest["id"], year)
         if review["conflicts"]:
             raise ValidationError("Some teams have more signed drivers than seats for " + str(year) + ". Resolve them "
-                                  "in Grid & Transfers first: " + "; ".join(c["team"]["name"] for c in review["conflicts"]))
+                                  "in Grid & contracts first: " + "; ".join(c["team"]["name"] for c in review["conflicts"]))
         decisions = {}
         for r in review["rows"]:
             if r["needs_decision"]:
@@ -2032,6 +2034,22 @@ def register_routes(app):
             out[team["id"]] = [relations.targets_for(conn, season_id, driver_id, team["id"], i, ranks)
                                for i in range(len(C.GROWTH_LEVELS))]
         return out
+
+    @app.route("/career/<token>/me")
+    @career_page()
+    def my_settings(conn, ctx):
+        """Settings that belong to you in this league, whatever your role: notifications, your driver, how the
+        league appears in your list, change notices, and leaving."""
+        me = g.user["username"]
+        member = conn.execute("SELECT * FROM career_members WHERE username = ?", (me,)).fetchone()
+        mine = ctx.get("real", ctx).get("my_driver")
+        lib = next((c for c in library.user_leagues(g.user, include_hidden=True) if c["token"] == ctx["token"]), None)
+        return page("my_settings.html", ctx, member=member, mine=mine,
+                    notify=notices.summary(notices.prefs(conn, me)) if member else None,
+                    pinned=bool(lib and lib.get("pinned")), hidden=bool(lib and lib.get("hidden")),
+                    notices_waiting=len(impacts.pending(conn, mine["id"], me)) if mine else 0,
+                    notices_total=len(impacts.history(conn, mine["id"])) if mine else 0,
+                    access_help=C.ACCESS_HELP.get(g.league_role, ""))
 
     @app.route("/career/<token>/changes", methods=["GET", "POST"])
     @career_page()
@@ -2478,7 +2496,7 @@ def register_routes(app):
     def market_delete(conn, ctx, window_id):
         applied = market.delete_window(conn, window_id)
         flash("Transfer window deleted, with its offers, talks, news and notifications."
-              + (f" {applied} signing(s) had already moved a driver; fix seats in Grid & Transfers if needed."
+              + (f" {applied} signing(s) had already moved a driver; fix seats in Grid & contracts if needed."
                  if applied else ""), "success")
         return redirect(url_for("market_page", token=ctx["token"]))
 
@@ -2705,7 +2723,7 @@ def register_routes(app):
             S.add_driver(conn, request.form.get("name"), C.ROOKIE_REPUTATION, sid)
             feed.post(conn, sid, "paddock", f"New face in the paddock: {request.form.get('name', '').strip()}",
                       "Available to teams from today.", "drivers")
-            flash("Driver added. Put them in a seat from Grid & Transfers.", "success")
+            flash("Driver added. Put them in a seat from Grid & contracts.", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/driver/<int:driver_id>/delete", methods=["POST"])
@@ -2733,7 +2751,7 @@ def register_routes(app):
             S.add_team(conn, request.form.get("name"), request.form.get("abbreviation"), request.form.get("color"), sid)
             feed.post(conn, sid, "paddock", f"{request.form.get('name', '').strip()} join the grid",
                       "Two new seats are open.", "teams")
-            flash("Team added with two empty seats. Fill them in Grid & Transfers.", "success")
+            flash("Team added with two empty seats. Fill them in Grid & contracts.", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/cars", methods=["POST"])
@@ -2904,7 +2922,7 @@ def register_routes(app):
         name = _add_player(conn, ctx, auth.normalise(request.form.get("username")), request.form.get("driver_name"),
                            bool(request.form.get("send_offers")))
         flash(f"{name} added" + (" and teams have sent rookie offers." if request.form.get("send_offers") else
-                                 ". Place them in a seat from Grid & Transfers or send offers later."), "success")
+                                 ". Place them in a seat from Grid & contracts or send offers later."), "success")
         return redirect(url_for("members", token=ctx["token"]))
 
     @app.route("/career/<token>/members/request/<int:request_id>/<decision>", methods=["POST"])
@@ -2976,11 +2994,11 @@ def register_routes(app):
             # Not a member yet, so no league preferences apply: one invitation email naming the league and role.
             mailer.send_later([user["email"]], f"You're invited to {ctx['career_name']} as {C.ACCESS_ROLES[role]}",
                               f"{g.user['display_name']} invited you to join the league \"{ctx['career_name']}\" as "
-                              f"{C.ACCESS_ROLES[role]}. Accept it from your League Library, where you'll also choose "
+                              f"{C.ACCESS_ROLES[role]}. Accept it from your league list, where you'll also choose "
                               f"what this league may notify you about:\n\n{url_for('home', _external=True)}\n\n"
                               f"—\nSent by Paddock Legacy for the league \"{ctx['career_name']}\". You won't get "
                               f"emails from it unless you join and choose to.")
-        flash(f"Invitation sent to {user['display_name']}. They'll see it in their League Library.", "success")
+        flash(f"Invitation sent to {user['display_name']}. They'll see it in their league list.", "success")
         return redirect(url_for("members", token=ctx["token"]))
 
     @app.route("/career/<token>/members/invite/<username>/cancel", methods=["POST"])
@@ -2993,7 +3011,7 @@ def register_routes(app):
 
     @app.route("/career/<token>/invitation", methods=["POST"])
     def invitation_answer(token):
-        """Someone invited to a league accepts or declines from their League Library."""
+        """Someone invited to a league accepts or declines from their league list."""
         decision = request.form.get("decision")
         try:
             with storage.session(token) as conn:
@@ -3455,7 +3473,7 @@ def register_routes(app):
                     {"league_description": "description", "league_region": "region", "league_platform": "platform",
                      "league_rules": "rules summary", "league_schedule": "schedule", "links": "links",
                      "accent": "accent colour", "public_incidents": "public incidents setting"}.get(f, f) for f in other)))
-            g.audit_summary = "; ".join(changes) or "saved League Settings without changes"
+            g.audit_summary = "; ".join(changes) or "saved League settings without changes"
             flash("League settings saved.", "success")
             return redirect(url_for("league_settings", token=ctx["token"]))
         feats = community.features(conn)

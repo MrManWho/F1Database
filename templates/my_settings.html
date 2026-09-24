@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}My settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>My settings</h1>
+  <p class="page-purpose">Everything here is yours and applies to {{ ctx.career_name }} only. Your other leagues keep their own.</p></div></div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>You in this league</h2>
+    <dl class="kv">
+      <dt>Role</dt><dd>{{ ctx.role }}</dd>
+      {% if access_help %}<dt></dt><dd class="muted small">{{ access_help }}</dd>{% endif %}
+      <dt>Driver</dt><dd>{% if mine %}<a href="{{ url_for('driver_profile', token=ctx.token, driver_id=mine.id) }}">{{ mine.name }}</a>{% else %}None{% endif %}</dd>
+    </dl>
+    {% if mine %}<p><a class="btn btn-sm" href="{{ url_for('driver_profile', token=ctx.token, driver_id=mine.id) }}">Open my driver profile</a>
+      <span class="muted small">Use <b>Edit profile</b> there for car number, nationality, helmet colour, photo and bio.</span></p>{% endif %}
+    <p class="muted small">Only a Race Master can change roles or which driver you control.</p>
+  </section>
+
+  <section class="card">
+    <h2>Notifications</h2>
+    {% if member %}
+    <p>Currently: <b>{{ notify }}</b></p>
+    <p><a class="btn btn-sm" href="{{ url_for('notify_prefs', token=ctx.token) }}">Choose notifications</a></p>
+    <p class="muted small">Email and phone alerts by category, or mute this league. Your email address and "pause every email" are in <a href="{{ url_for('accounts_page') }}#email">your account</a>.</p>
+    {% else %}<p class="muted small">You can open this league as a site admin but aren't a member, so it never notifies you.</p>{% endif %}
+  </section>
+
+  {% if mine %}
+  <section class="card">
+    <h2>Changes to your driver</h2>
+    <p class="small">{% if notices_waiting %}<b>{{ notices_waiting }} waiting for you to agree.</b>{% elif notices_total %}{{ notices_total }} change notice{{ 's' if notices_total != 1 }}, all agreed.{% else %}Nothing has changed your numbers yet.{% endif %}</p>
+    <p><a class="btn btn-sm btn-ghost" href="{{ url_for('impact_page', token=ctx.token) }}">See change notices</a></p>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>In your league list</h2>
+    <form method="post" action="{{ url_for('league_pin', token=ctx.token) }}" class="button-row tight">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-ghost" name="action" value="{{ 'unpin' if pinned else 'pin' }}">{{ 'Unpin' if pinned else 'Pin to the top' }}</button>
+      <button class="btn btn-sm btn-ghost" name="action" value="{{ 'unhide' if hidden else 'hide' }}">{{ 'Show in my list' if hidden else 'Hide from my list' }}</button>
+    </form>
+    <p class="muted small">Only changes your own list. Hiding doesn't leave the league.</p>
+  </section>
+
+  <section class="card">
+    <h2>Account</h2>
+    <p class="small">Password, email, signed-in devices, two-step sign-in and your data are account-wide.</p>
+    <p><a class="btn btn-sm btn-ghost" href="{{ url_for('accounts_page') }}">Open my account</a></p>
+  </section>
+
+  {% if member %}
+  <section class="card" id="leave">
+    <h2>Leave {{ ctx.career_name }}</h2>
+    <p class="muted small">You stop being a member and get nothing more from this league. Your driver, results and history stay in the league,
+      and your other leagues aren't affected. If you're its only Race Master, hand it over first.</p>
+    <form method="post" action="{{ url_for('league_leave', token=ctx.token) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Type <b>{{ ctx.career_name }}</b> to confirm<input name="confirm_name" autocomplete="off" required></label>
+      <div><button class="btn btn-danger">Leave league</button></div>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

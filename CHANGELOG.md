@@ -3,6 +3,48 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.1 · Fixes from your list, team talks and final warnings
+_Released September 24, 2026_
+> Fixes and features from the post-2.0 feedback. You'll now be asked to agree to each update, and to any change
+> that affects your own driver's numbers.
+
+### Highlights
+- **Agree to updates.** This screen now needs a tick before you carry on. If an update or a Race Master action changes your driver's numbers, you'll see what changed, why and by how much, and agree to it too.
+- **Smarter AI difficulty.** No more "3 rounds, then 1 point". It learns from every round on the 0–110 scale, moves more when everyone is struggling (or flying) and only a little when results are mixed.
+- **Teams listen.** What you write to a team now counts, and you can ask for an interview. A good pitch can win over a team on the fence, but not a team far out of reach.
+- **Final warnings.** A team can put a struggling driver on a one-race ultimatum. Miss it and the Race Master decides whether they're dropped mid-season.
+- **Team orders really off.** With team orders off, every order is gone, including old ones, and any effect they had is undone.
+- **Your own pages.** Contracts & offers, Press and My progression are real pages, and every member has My settings in each league.
+
+### Added
+- **Change notices**: points, championship position, Reputation, Form, Driver Value or team relationship changed by an update or an admin action? The driver sees before/after and why, and ticks "I agree" before using the league. Race Masters see who agreed.
+- **Team talks**: messages to teams are read for commitment, development, results, teamwork, respect and your record, and for arrogance, blame and shouting (negation understood). Each team has its own taste. At most ±3 interest from a message; a well-received message keeps a team negotiating longer. Nothing is sent to any AI service.
+- **Interviews** (Contracts & offers): four questions and a goal you set with the team, checked against your last season. Uses one approach; up to ±5 interest.
+- **Final warnings and mid-season dismissals** (League settings → Mid-season dismissals, on): after 4+ rounds at "Seat at risk", a one-race target; met, void (DNF/DNS) or missed. The Race Master confirms or overrules (with a note) on Grid & contracts. A dropped driver keeps all results and Reputation and shows as "Released mid-season".
+- **Race Master goal controls**: re-push a team goal's targets, reset a team goal so they choose again (even mid-season), re-issue season goals for one driver or everyone, and re-issue the next weekend target.
+- **My settings** in every league for every role: your role and driver, notifications, change notices, pin/hide in your list, account links and leaving the league.
+- **Contracts & offers**, **Press** (open questions plus everything you've said) and **My progression** as their own pages.
+
+### Changed
+- **AI difficulty recommendation**: every tracked round counts at any level, recent rounds weigh most, each player driver is judged on their own; agreement moves it further, mixed results move it a little toward the struggling player, small steps while evidence is thin, never more than 5 at once. Recorded difficulties are unchanged.
+- **Team orders Off** now removes all orders (past ones too), their messages, headlines and alerts, and undoes penalties/credits from orders judged while On. Leagues where they're already off are cleaned up the first time they're opened.
+- **What's New** can't be skipped: no "Later" or "Don't show again", Escape doesn't close it.
+- **Help** rewritten and regrouped (Getting started, Race weekends, Your driver, Contracts and your team, League extras, Admin and account) with the same page names as the menu everywhere.
+
+### Fixed
+- The league list showed rounds from every season (e.g. "24/48" after a rollover); it now counts the current season.
+- Rounds further ahead no longer say "ready to start" because an earlier round's press questions were answered.
+- "Contracts & offers", "Press" and "Progression" in the menu opened other pages.
+- View-mode descriptions no longer describe a role with its own name.
+- Old page names ("Players & Logins", "Team Standing", "Paddock Admin", "League Library", "League Settings") replaced with the names in the menu.
+
+### Preserved
+- Results, standings, contracts, pledges, Reputation and settings are unchanged, except the team-order effects removed where orders are off (each affected driver gets a change notice).
+- No database format change: new tables (change notices, ultimatums) are added when first needed.
+
+### Tested
+- 279 automated tests, including change notices (explicit changes, formula changes, stale numbers never blamed on an update), removing team orders (advisory orders undo nothing), future-round gates, the agreement dialog in a real browser, team talks (themes, negation, a good pitch tips a team on the edge but not a hopeless case), interviews, final warnings (met, void, missed, dismissed, overruled), goal controls and My settings. Accessibility scan: 0 issues on the new pages.
+
 ## 2.0 · Paddock Legacy 2.0
 _Released September 24, 2026_
 > A new interface, notifications that stay in their own league, a safer season rollover and admin tools, and a

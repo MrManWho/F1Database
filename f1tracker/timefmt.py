@@ -3,7 +3,7 @@
 Two kinds of stored times exist:
   * race times (events.race_at) are UTC with an offset, e.g. "2026-09-23T15:30+00:00";
   * everything else (now_iso) is the server's local time without an offset, e.g. "2026-09-23 15:30:00".
-Both are converted to the league's configured time zone (League Settings) before display.
+Both are converted to the league's configured time zone (League settings) before display.
 """
 
 from datetime import datetime, timezone
@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TZ = "UTC"
 
-# The zones offered in League Settings (any valid IANA name also works).
+# The zones offered in League settings (any valid IANA name also works).
 COMMON_ZONES = [
     "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver", "America/Phoenix",
     "America/Chicago", "America/New_York", "America/Halifax", "America/Sao_Paulo", "UTC", "Europe/London",
