@@ -50,7 +50,7 @@
     <tbody>
     {% for m in rows %}
       <tr class="{{ 'player-row' if m.driver }}" {% if m.driver and m.driver.player_color %}style="--player: {{ m.driver.player_color }}"{% endif %}>
-        <td><strong>{{ m.display_name }}</strong><br><small class="muted">{{ m.username }}</small></td>
+        <td><strong>{{ m.display_name }}</strong><br><small class="muted">{{ m.username }}</small>{% if m.unclaimed %} <span class="pill pill-muted" title="Nobody has signed up with this username since the account reset. The person who had it can reclaim it with the same email.">Not signed up yet</span>{% endif %}</td>
         <td>
           <form id="m-{{ loop.index }}" method="post" action="{{ url_for('member_update', token=ctx.token, username=m.username) }}"
                 class="member-form" data-name="{{ m.display_name }}" data-role="{{ m.role }}">
@@ -93,15 +93,14 @@
   </div>
 
   <h3>Add someone</h3>
-  {% if outsiders %}
   <form method="post" action="{{ url_for('member_add', token=ctx.token) }}" class="inline-form member-add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Login<select name="username" required>{% for u in outsiders %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}</select></label>
+    <label>Their username<input name="username" required autocomplete="off" spellcheck="false" pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="username"></label>
     <label>Access<select name="role">{% for key, label in C.ACCESS_ROLES.items() %}<option value="{{ key }}" {{ 'selected' if key == 'member' }}>{{ label }}</option>{% endfor %}</select></label>
     <label>Player driver<select name="driver_id"><option value="">— No driver —</option>{% for p in free_drivers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
     <button class="btn btn-sm">Add to league</button>
   </form>
-  {% else %}<p class="muted small">Every login is already in this league.</p>{% endif %}
+  <p class="muted small">People create their own accounts from the sign-up page; ask them for their username. Or send an invitation, or let them ask to join.</p>
 
   <details class="role-explain" open>
     <summary>What each role can do</summary>
@@ -139,10 +138,7 @@
     <form method="post" action="{{ url_for('members_add_player', token=ctx.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
-      <label>Login
-        <select name="username"><option value="">— link later —</option>
-          {% for u in users if not (rows|selectattr('username', 'equalto', u.username)|selectattr('driver')|list) %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
-        </select></label>
+      <label>Their username <small class="muted">(optional: link later)</small><input name="username" autocomplete="off" spellcheck="false" placeholder="username"></label>
       <label class="check"><input type="checkbox" name="send_offers" value="1" checked> Send rookie offers straight away</label>
       <button class="btn btn-primary">Add player</button>
     </form>
@@ -157,8 +153,7 @@
     <h3>Invite someone</h3>
     <form method="post" action="{{ url_for('member_invite', token=ctx.token) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Login<select name="username" required><option value="">Choose…</option>
-        {% for u in outsiders %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}</select></label>
+      <label>Their username<input name="username" required autocomplete="off" spellcheck="false" placeholder="username"></label>
       <label>As<select name="role"><option value="member">Member</option><option value="scorekeeper">Scorekeeper</option><option value="spectator">Spectator</option></select></label>
       <button class="btn" {{ 'disabled' if join_mode == 'closed' }}>Send invitation</button>
     </form>

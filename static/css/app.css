@@ -1586,3 +1586,4 @@ tr.contract-historical { opacity: .75; }
 .impact-history summary .inline-h { display: inline; }
 .iv-q { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin: 0; display: grid; gap: .3rem; }
 .iv-q legend { font-weight: 600; padding: 0 .3rem; }
+.recovery-card { border: 1px solid var(--line); border-radius: 10px; padding: .8rem 1rem; margin-top: .8rem; }

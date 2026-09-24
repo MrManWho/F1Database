@@ -3,6 +3,33 @@
 Every version of Paddock Legacy, newest first. The same list is in the app under
 **account menu → What's new**.
 
+## 2.1.2 · One site owner, and everyone signs up themselves
+_Released September 24, 2026_
+> Accounts now work like a normal website: one owner account, made with the host's setup code, and everyone else
+> creates their own. There's no list of accounts anywhere. All logins were reset once; no league was touched.
+
+### Highlights
+- **Every login was reset once.** Leagues, drivers, results and memberships are exactly as they were. Sign up again with your old username (and the same email) to get your leagues straight back.
+- **The site owner** is made on first start with the setup code from the host's settings, and is the only one who can help with a lost account.
+- **No more list of accounts.** The owner looks up one account by exact username or email; league pages ask for a username instead of listing everyone.
+
+### Changed
+- **Accounts reset (once, on the first start of 2.1.2)**: every login, signed-in device, pending sign-up, password-reset link and account preference is removed. A copy of the accounts file is saved in the backups folder first. League files are not opened or changed; site settings (email, sign-ups, league creation) are kept.
+- **Old usernames are reserved**: nobody else can sign up with a name that's still a member of a league. The person who had it reclaims it by signing up with the same email (verified by a code), and their memberships come straight back. The owner can release a reserved name. Members & roles marks reserved members as "Not signed up yet".
+- **Site owner**: created on first start with `F1_TRACKER_SETUP_CODE` from the host's environment settings (required on a hosted site, so nobody else can claim it). The owner may take back their old username at setup.
+- **Sign-up**: always open to everyone (unless the owner turns it off). With email set up it confirms your address with a code; without it, the account is made straight away.
+- **Account recovery** (owner only) replaces the list of logins: find one account by exact username or email, then set a new password (signs them out everywhere), change their email, turn off two-step sign-in, sign them out everywhere, or delete the login (their leagues stay; the name is reserved for them).
+- **No account lists**: "Add a login", "All logins" and changing someone's site role are gone. Members & roles, the new-league form and invitations ask for a username.
+
+### Tested
+- 287 automated tests, including the reset leaving league files byte-for-byte identical, running only once, owner setup needing the code on a hosted site, reclaiming a name only with the same verified email, account recovery finding exact matches only, and no page listing accounts. A copy of real-shaped data was reset the way the server does it: 2 logins removed, both league files identical, backup written.
+
+## 2.1.1 · Predictions fix
+_Released September 24, 2026_
+
+### Fixed
+- **Predictions**: picks can be made straight from the Control Room and the Predictions page (not only the round page). A race time saved without a time zone by an older version could break the check that closes picks; it no longer does. When picks are closed, the page says why.
+
 ## 2.1 · Fixes from your list, team talks and final warnings
 _Released September 24, 2026_
 > Fixes and features from the post-2.0 feedback. You'll now be asked to agree to each update, and to any change
@@ -32,7 +59,6 @@ _Released September 24, 2026_
 - **Help** rewritten and regrouped (Getting started, Race weekends, Your driver, Contracts and your team, League extras, Admin and account) with the same page names as the menu everywhere.
 
 ### Fixed
-- **Predictions**: picks can now be made straight from the Control Room and the Predictions page (not only the round page). A race time saved without a time zone by an older version could break the check that closes picks; it no longer does. When picks are closed, the page says why.
 - The league list showed rounds from every season (e.g. "24/48" after a rollover); it now counts the current season.
 - Rounds further ahead no longer say "ready to start" because an earlier round's press questions were answered.
 - "Contracts & offers", "Press" and "Progression" in the menu opened other pages.

@@ -128,10 +128,7 @@
       <div id="player-rows" class="stack">
         <div class="grid-2 player-row">
           <label>Driver name<input name="player_name" maxlength="60" placeholder="First Last"></label>
-          <label>Login
-            <select name="player_login"><option value="">— link later —</option>
-              {% for u in users %}<option value="{{ u.username }}">{{ u.display_name }} ({{ u.username }})</option>{% endfor %}
-            </select></label>
+          <label>Their username <small class="muted">(optional)</small><input name="player_login" autocomplete="off" spellcheck="false" placeholder="link later"></label>
         </div>
       </div>
       <button type="button" class="btn btn-sm btn-ghost" id="add-player-row">+ Add another player</button>

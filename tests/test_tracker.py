@@ -614,7 +614,10 @@ def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client, 
     assert auth.get_user("carson")["is_master"] == 0
     assert token not in client.get("/").get_data(as_text=True)
     assert client.get(f"/career/{token}/dashboard").status_code == 403
-    assert "Waiting to be assigned" in master_client.get("/accounts").get_data(as_text=True)
+    # v2.1.2: there's no list of accounts; the owner finds one by exact username or email.
+    page = master_client.get("/accounts").get_data(as_text=True)
+    assert "carson" not in page and "All logins" not in page
+    assert "Carson" in master_client.get("/accounts?find=carson@example.com").get_data(as_text=True)
     with storage.session(token) as conn:
         carson = players(conn)[1]
     master_client.post(f"/career/{token}/members", data={f"user_{carson}": "carson", "csrf_token": "tok"})
@@ -1106,16 +1109,24 @@ def test_sign_up_needs_the_emailed_code(app, codes):
     assert auth.verify("nia", "password1")
 
 
-def test_sign_up_is_closed_until_email_is_set_up(app):
+def test_sign_up_works_without_email_but_never_takes_a_reserved_name(app):
+    """v2.1.2: without email set up there's no code step; the account is made straight away."""
     auth.create_user("admin", "Admin", "password1", is_master=True)
     client = app.test_client()
     page = client.get("/register").get_data(as_text=True)
-    assert "need email to be set up" in page
+    assert "Create my account" in page
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
-    client.post("/register", data={"username": "x1", "password": "password1", "confirm": "password1",
-                                   "email": "x@example.com", "csrf_token": "tok"})
-    assert auth.get_user("x1") is None
+    client.post("/register", data={"username": "x1", "password": "password1", "confirm": "password1", "csrf_token": "tok"})
+    assert auth.get_user("x1") is not None
+    with auth.accounts() as conn:
+        conn.execute("INSERT INTO reserved_usernames(username, email_hash, reserved_at) VALUES('oldname', NULL, 'x')")
+    other = app.test_client()
+    with other.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    res = other.post("/register", data={"username": "oldname", "password": "password1", "confirm": "password1",
+                                        "csrf_token": "tok"}, follow_redirects=True)
+    assert auth.get_user("oldname") is None and "belonged to someone" in res.get_data(as_text=True)
 
 
 # --------------------------------------------------------------------------- v1.12: join roles

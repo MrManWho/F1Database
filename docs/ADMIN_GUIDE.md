@@ -63,6 +63,21 @@ All of these affect one league only.
 - New tables, created when first needed: `impact_notices`, `impact_acks`, `ultimatums`. New meta keys: `calc_version`,
   `calc_snapshot`, `calc_snapshot_stale`, `midseason_sackings`, `team_goal_reopen_*`. No schema version change.
 
+## Accounts (2.1.2): one owner, everyone signs up
+
+- **First start after 2.1.2**: every login is removed once (a copy of `accounts.db` is saved in the backups folder as
+  `accounts-before-2.1.2-reset-*.db`). League files aren't touched. The site then shows **Create the site owner**.
+- **Making the owner**: on Render open your service → **Environment**, copy `F1_TRACKER_SETUP_CODE`, and enter it on the
+  setup page with your username and password. You can reuse your old username. (If the variable is missing, add one
+  with any long random value.) The owner is Race Master of every league.
+- **Everyone else** signs up from the login page. Old usernames are reserved: the person who had one gets it (and their
+  leagues) back by signing up with the same email, verified by a code. If email isn't set up on the site, release their
+  name in *My account → Account recovery* and have them sign up with it straight away.
+- **Account recovery** (owner only): type an exact username or email to find one account; set a new password, change
+  the email, turn off two-step sign-in, sign out everywhere, or delete the login (the name stays reserved for them).
+- **Rolling back from 2.1.2**: restore `accounts-before-2.1.2-reset-*.db` as `accounts.db` in the data folder while the
+  site is stopped, then deploy the earlier version.
+
 ## Accounts and security
 
 - **Signed-in devices** and **two-step sign-in** are in each person's account page. To help someone who lost their

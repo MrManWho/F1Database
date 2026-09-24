@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import pw_field, pw_help %}
-{% block title %}Accounts{% endblock %}
+{% block title %}My account{% endblock %}
 {% block plain %}
-<div class="page-head"><div><div class="kicker">Logins</div><h1>Accounts</h1></div></div>
+<div class="page-head"><div><div class="kicker">{{ 'Site owner' if user.is_owner else 'Account' }}</div><h1>My account</h1></div></div>
 <div class="grid-2">
   <section class="card" id="password">
     <h2>Change my password</h2>
@@ -34,27 +34,6 @@
     {% else %}<p class="muted small">You're not in any league yet.</p>{% endif %}
     <p class="muted small">Each league has its own settings. Muting one league never changes another.</p>
   </section>
-  {% if user.is_master %}
-  <section class="card">
-    <h2>Add a login</h2>
-    <p class="muted small">People can also sign up themselves from the login page. Link a login to a driver in each league's <em>Members &amp; roles</em> page.</p>
-    <form method="post" action="{{ url_for('account_new') }}" class="stack" data-password-form novalidate>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="username"></label>
-      <label>Display name<input name="display_name" maxlength="60" placeholder="Display name"></label>
-      <label>Email (optional)<input name="email" type="email"></label>
-      {{ pw_field('password', 'Password', 'new', 'new-password', pw_min) }}
-      {{ pw_field('confirm_password', 'Confirm password', 'confirm', 'new-password', pw_min) }}
-      {{ pw_help(pw_min) }}
-      <label>Role
-        <select name="role">
-          <option value="driver">Member: access is set in each league</option>
-          <option value="master">Race Master: site admin, runs every league</option>
-        </select></label>
-      <button class="btn btn-primary">Create login</button>
-    </form>
-  </section>
-  {% endif %}
 </div>
 <div class="grid-2">
   <section class="card" id="security">
@@ -165,68 +144,67 @@
   {% endif %}
 </section>
 
-<section class="card">
-  <h2>All logins</h2>
-  <div class="role-help small muted">
-    <p><b>Race Master</b>: full admin of every league. Manages logins, saves and backups, and can see every garage, offer and negotiation.
-      A Race Master only drives if you link them to a player driver in a league.</p>
-    <p><b>Member</b>: a normal login. What they can do in each league (Race Master, Scorekeeper, Member or Spectator, and which driver they
-      control) is set in one place: that league's <b>Members &amp; roles</b> page. There's no separate Scorekeeper switch here any more.</p>
+<section class="card" id="recovery">
+  <h2>Account recovery</h2>
+  <p class="muted small">For someone who's lost access. Look up one account by its exact username or email; there's no list of accounts.
+    People can also reset a forgotten password themselves from the login page if they added an email.</p>
+  <form method="get" action="{{ url_for('accounts_page') }}#recovery" class="inline-form">
+    <label>Username or email<input name="find" value="{{ query }}" required autocomplete="off" spellcheck="false"></label>
+    <button class="btn">Find</button>
+  </form>
+  {% if query and not found %}<p class="small">No account matches “{{ query }}”.</p>{% endif %}
+  {% if found %}
+  <div class="recovery-card">
+    <h3>{{ found.display_name }} <small class="muted">{{ found.username }}</small>{% if found.is_owner %} <span class="pill">Site owner</span>{% endif %}</h3>
+    <dl class="kv">
+      <dt>Email</dt><dd>{{ found.email or 'none' }}</dd>
+      <dt>Joined</dt><dd>{{ found.created_at|stamp }}</dd>
+      <dt>Leagues</dt><dd>{{ found_leagues|join(', ') or 'none' }}</dd>
+      <dt>Two-step sign-in</dt><dd>{{ 'On' if found.two_step else 'Off' }}</dd>
+      <dt>Signed-in devices</dt><dd>{{ found.devices }}</dd>
+    </dl>
+    {% if found.username != user.username %}
+    <div class="grid-2">
+      <form method="post" action="{{ url_for('account_reset', username=found.username) }}" class="stack" data-password-form novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4 class="mini-head">Set a new password</h4>
+        {{ pw_field('password', 'New password for ' ~ found.username, 'new', 'new-password', pw_min) }}
+        {{ pw_field('confirm_password', 'Confirm', 'confirm', 'new-password', pw_min) }}
+        {{ pw_help(pw_min) }}
+        <button class="btn btn-sm">Set password and sign them out</button>
+      </form>
+      <div class="stack">
+        <form method="post" action="{{ url_for('account_set_email', username=found.username) }}" class="inline-form tight">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Email<input name="email" type="email" value="{{ found.email or '' }}"></label>
+          <button class="btn btn-sm btn-ghost">Save email</button>
+        </form>
+        <form method="post" class="button-row tight">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if found.two_step %}<button class="btn btn-sm btn-ghost" formaction="{{ url_for('account_two_step_reset', username=found.username) }}">Turn off two-step sign-in</button>{% endif %}
+          <button class="btn btn-sm btn-ghost" formaction="{{ url_for('account_sign_out_everywhere', username=found.username) }}">Sign out everywhere</button>
+        </form>
+        {% if not found.is_owner %}
+        <form method="post" action="{{ url_for('account_delete', username=found.username) }}" onsubmit="return confirm('Delete the login {{ found.username }}? Their leagues, drivers and results stay; the username is kept for them.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-danger">Delete this login</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}<p class="muted small">That's you. Change your own details above.</p>{% endif %}
   </div>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Leagues</th><th>Role</th><th>Reset password</th><th></th></tr></thead>
-    <tbody>
-    {% for u in users %}
-      <tr>
-        <td><strong>{{ u.username }}</strong></td>
-        <td>{{ u.display_name }}</td>
-        <td>
-          <form method="post" action="{{ url_for('account_set_email', username=u.username) }}" class="inline-form tight">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input name="email" type="email" value="{{ u.email or '' }}" placeholder="none" class="email-input" aria-label="Email for {{ u.display_name }}">
-            <button class="btn btn-sm btn-ghost">Save</button>
-          </form>
-        </td>
-        <td>{% if memberships.get(u.username) %}{{ memberships[u.username]|join(', ') }}{% elif u.is_master %}<span class="muted">All (Race Master)</span>{% else %}<span class="pill pill-hot">Waiting to be assigned</span>{% endif %}</td>
-        <td>
-          <form method="post" action="{{ url_for('account_role', username=u.username) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select name="role" onchange="this.form.submit()" aria-label="Site role for {{ u.display_name }}">
-              {% for key, label in [('master', 'Race Master (site admin)'), ('driver', 'Member')] %}
-              <option value="{{ key }}" {{ 'selected' if u.role == key }}>{{ label }}</option>
-              {% endfor %}
-            </select>
-          </form>
-        </td>
-        <td>
-          <form method="post" action="{{ url_for('account_reset', username=u.username) }}" class="stack tight pw-reset" data-password-form novalidate>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            {{ pw_field('password', 'New password for ' ~ u.username, 'new', 'new-password', pw_min, placeholder='New password') }}
-            {{ pw_field('confirm_password', 'Confirm', 'confirm', 'new-password', pw_min, placeholder='Again') }}
-            {{ pw_help(pw_min) }}
-            <button class="btn btn-sm btn-ghost">Set password</button>
-          </form>
-        </td>
-        <td>
-          {% if u.username in two_step_users %}
-          <form method="post" action="{{ url_for('account_two_step_reset', username=u.username) }}" onsubmit="return confirm('Turn off two-step sign-in for {{ u.username }} and sign out their devices?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-ghost">Reset two-step</button>
-          </form>
-          {% endif %}
-          {% if u.username != user.username %}
-          <form method="post" action="{{ url_for('account_delete', username=u.username) }}" onsubmit="return confirm('Delete login {{ u.username }}?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-danger">Delete</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
+  {% endif %}
+  {% if reserved_count %}
+  <h3 class="mini-head">Reserved usernames</h3>
+  <p class="muted small">{{ reserved_count }} username{{ 's are' if reserved_count != 1 else ' is' }} kept from before the account reset (or from deleted logins), because {{ 'they are' if reserved_count != 1 else 'it is' }} still linked to leagues.
+    The person who had one gets it back by signing up with the same email{% if not mail_ready %} (needs email set up on the site){% endif %}. To hand one over yourself, release it and have them sign up with that name straight away.</p>
+  <form method="post" action="{{ url_for('account_release') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username to release<input name="username" required autocomplete="off"></label>
+    <button class="btn btn-sm btn-ghost">Release</button>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 {% endblock %}

@@ -83,6 +83,13 @@ def create_app(config=None):
 
     register_hooks(app)
     register_routes(app)
+    if not app.config.get("TESTING"):
+        try:   # v2.1.2, once per site: logins start again (leagues untouched; a copy of accounts.db is kept)
+            removed = auth.reset_all_accounts(storage.backups_dir())
+            if removed:
+                app.logger.warning("2.1.2 account reset: removed %s login(s); leagues untouched", removed)
+        except Exception:
+            app.logger.exception("account reset failed")
     try:
         roles.unify_legacy_scorekeepers()
     except Exception:  # never block start-up; it is retried whenever a legacy Scorekeeper signs in
@@ -443,7 +450,8 @@ HELP_TOPICS = [("roles", "Roles and permissions"), ("results", "Entering results
                ("statistics", "Statistics"), ("team-goals", "Team goals"), ("announcements", "Announcements"),
                ("security", "Account security and two-step sign-in"), ("your-data", "Your data and leaving a league"),
                ("talks", "Talking to teams and interviews"), ("dismissals", "Final warnings and mid-season dismissals"),
-               ("my-settings", "My settings"), ("updates", "Updates and change notices")]
+               ("my-settings", "My settings"), ("updates", "Updates and change notices"),
+               ("accounts", "Accounts and the site owner")]
 
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
@@ -620,12 +628,18 @@ def register_routes(app):
     def setup():
         if auth.user_count() > 0:
             return redirect(url_for("login"))
+        code = os.environ.get("F1_TRACKER_SETUP_CODE", "")
+        # Without a setup code anyone could claim the site, so it's required unless this is a copy running on
+        # this computer (the desktop app).
+        local = request.remote_addr in ("127.0.0.1", "::1") and not os.environ.get("RENDER")
+        blocked = not code and not local
+        if request.method == "POST" and blocked:
+            abort(403)
         if request.method == "POST":
             if not hmac.compare_digest(request.form.get("csrf_token", ""), session.get("csrf", "")) \
                     and app.config.get("CSRF_ENABLED"):
                 flash("Session expired. Please try again.", "error")
                 return redirect(url_for("setup"))
-            code = os.environ.get("F1_TRACKER_SETUP_CODE", "")
             if code and not hmac.compare_digest(request.form.get("setup_code", "").strip(), code):
                 flash("That setup code is wrong. It's in your host's environment settings (F1_TRACKER_SETUP_CODE).", "error")
                 return redirect(url_for("setup"))
@@ -633,16 +647,21 @@ def register_routes(app):
                 flash("The two passwords don't match.", "error")
                 return redirect(url_for("setup"))
             try:
+                # The owner proved it with the setup code, so they may take back a reserved (pre-reset) username.
+                auth.release_username(request.form.get("username"))
                 username = auth.create_user(request.form.get("username"), request.form.get("display_name"),
                                             request.form.get("password"), is_master=True,
                                             email=request.form.get("email"))
+                with auth.accounts() as aconn:
+                    aconn.execute("UPDATE users SET is_owner = 1 WHERE username = ?", (username,))
             except AuthError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("setup"))
             sign_in(username)
-            flash("Race Master account created. Add logins for the other player in Accounts.", "success")
+            flash("You're the site owner. Other people create their own accounts from the sign-up page.", "success")
             return redirect(url_for("home"))
-        return render_template("login.html", mode="setup", needs_code=bool(os.environ.get("F1_TRACKER_SETUP_CODE")))
+        return render_template("login.html", mode="setup", needs_code=bool(code), blocked=blocked,
+                               reserved_count=auth.reserved_count())
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -694,12 +713,21 @@ def register_routes(app):
     def register():
         email_ready = mailer.configured()
         if request.method == "POST":
-            if not email_ready:
-                flash("Sign-ups need email to be set up first. Ask the Race Master to create your login.", "error")
-                return redirect(url_for("register"))
             if request.form.get("password") != request.form.get("confirm"):
                 flash("The two passwords don't match.", "error")
                 return redirect(url_for("register"))
+            if not email_ready:
+                # This site can't send email, so there's no code step: the account is made now.
+                try:
+                    username = auth.signup_direct(request.form.get("username"), request.form.get("display_name"),
+                                                  request.form.get("password"), request.remote_addr,
+                                                  request.form.get("email"))
+                except AuthError as exc:
+                    flash(str(exc), "error")
+                    return redirect(url_for("register"))
+                sign_in(username)
+                flash("Welcome! Ask to join a league, or accept an invitation, from your league list.", "success")
+                return redirect(url_for("home"))
             try:
                 pending_id, code = auth.register(request.form.get("username"), request.form.get("display_name"),
                                                  request.form.get("password"), request.remote_addr,
@@ -815,7 +843,7 @@ def register_routes(app):
             flash("Email updated.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("accounts_page"))
+        return redirect(url_for("accounts_page", find=user["username"]) + "#recovery")
 
     @app.route("/settings/test-email", methods=["POST"])
     @master_required
@@ -870,11 +898,6 @@ def register_routes(app):
     def accounts_page():
         me = g.user["username"]
         totp = security.totp_status(me)
-        memberships = {}
-        if is_master():
-            for c in storage.list_careers():
-                for username in c["members"]:
-                    memberships.setdefault(username, []).append(c["name"])
         mine = []
         for c in storage.list_careers():
             if g.user["username"] in c["members"]:
@@ -884,8 +907,15 @@ def register_routes(app):
                                      "prefs": notices.summary(notices.prefs(conn, g.user["username"]))})
                 except storage.CareerNotFound:
                     continue
-        return render_template("accounts.html", users=auth.list_users() if is_master() else [],
-                               memberships=memberships, my_leagues=mine,
+        found, found_leagues, query = None, [], (request.args.get("find") or "").strip()
+        if is_master() and query:
+            # Account recovery: one account, looked up by its exact username or email. There is no list of accounts.
+            found = auth.find_user(query)
+            if found:
+                found["two_step"] = security.totp_status(found["username"])["enabled"]
+                found["devices"] = len(security.sessions(found["username"]))
+                found_leagues = [c["name"] for c in storage.list_careers() if found["username"] in c["members"]]
+        return render_template("accounts.html", my_leagues=mine,
                                anyone_creates=onboarding.creation_policy() == "everyone",
                                reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
                                delisted=moderation.delisted() if is_master() else set(), signups=auth.signups_allowed(),
@@ -893,23 +923,20 @@ def register_routes(app):
                                pw_min=auth.PASSWORD_MIN, devices=security.sessions(me),
                                current_sid=session.get("sid"), totp=totp,
                                otpauth=security.otpauth_uri(me, totp["secret"]) if totp["secret"] and not totp["enabled"] else None,
-                               two_step_users={u["username"] for u in auth.list_users() if security.totp_status(u["username"])["enabled"]}
-                               if is_master() else set())
+                               query=query, found=found, found_leagues=found_leagues,
+                               reserved_count=auth.reserved_count() if is_master() else 0)
 
-    @app.route("/accounts/new", methods=["POST"])
+    @app.route("/accounts/release", methods=["POST"])
     @master_required
-    def account_new():
-        try:
-            if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
-                raise AuthError("The two passwords don't match")
-            role = request.form.get("role", "driver")
-            auth.create_user(request.form.get("username"), request.form.get("display_name"),
-                             request.form.get("password"), is_master=role == "master",
-                             email=request.form.get("email"))
-            flash("Account created.", "success")
-        except AuthError as exc:
-            flash(str(exc), "error")
-        return redirect(url_for("accounts_page"))
+    def account_release():
+        """Owner: let a reserved (pre-2.1.2) username be signed up again."""
+        name = auth.normalise(request.form.get("username"))
+        if auth.release_username(name):
+            flash(f"{name} is released. Whoever signs up with it next gets it, including its league memberships, "
+                  "so only do this when that person is ready to sign up.", "success")
+        else:
+            flash(f"{name or 'That name'} isn't a reserved username.", "error")
+        return redirect(url_for("accounts_page") + "#recovery")
 
     @app.route("/accounts/<username>/password", methods=["POST"])
     @master_required
@@ -918,20 +945,11 @@ def register_routes(app):
             if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
                 raise AuthError("The two passwords don't match")
             auth.set_password(username, request.form.get("password"))
-            flash("Password updated.", "success")
+            security.end_other_sessions(auth.normalise(username))
+            flash("Password updated, and their devices were signed out. Give them the new password privately.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("accounts_page"))
-
-    @app.route("/accounts/<username>/role", methods=["POST"])
-    @master_required
-    def account_role(username):
-        try:
-            auth.set_role(username, request.form.get("role"))
-            flash("Role updated.", "success")
-        except AuthError as exc:
-            flash(str(exc), "error")
-        return redirect(url_for("accounts_page"))
+        return redirect(url_for("accounts_page", find=auth.normalise(username)) + "#recovery")
 
     @app.route("/accounts/<username>/delete", methods=["POST"])
     @master_required
@@ -939,8 +957,13 @@ def register_routes(app):
         try:
             if auth.normalise(username) == g.user["username"]:
                 raise AuthError("You cannot delete the account you are using")
-            auth.delete_user(username)
-            flash("Account deleted.", "success")
+            target = auth.get_user(username)
+            if target and target.get("is_owner"):
+                raise AuthError("The site owner's account can't be deleted here")
+            security.end_other_sessions(auth.normalise(username))
+            auth.delete_user(username, reserve=True)   # leagues untouched; the name stays theirs to reclaim
+            flash("Account deleted. Their leagues are untouched, and the username is reserved so only they can "
+                  "reclaim it (same email), unless you release it.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
         return redirect(url_for("accounts_page"))
@@ -1002,7 +1025,14 @@ def register_routes(app):
         security.disable_totp(auth.normalise(username))
         security.end_other_sessions(auth.normalise(username))
         flash(f"Two-step sign-in is off for {username}, and their devices were signed out.", "success")
-        return redirect(url_for("accounts_page"))
+        return redirect(url_for("accounts_page", find=auth.normalise(username)) + "#recovery")
+
+    @app.route("/accounts/<username>/sign-out", methods=["POST"])
+    @master_required
+    def account_sign_out_everywhere(username):
+        n = security.end_other_sessions(auth.normalise(username))
+        flash(f"Signed {username} out of {n} device{'s' if n != 1 else ''}.", "success")
+        return redirect(url_for("accounts_page", find=auth.normalise(username)) + "#recovery")
 
     @app.route("/account/export")
     def account_export():
@@ -1093,7 +1123,7 @@ def register_routes(app):
                                leagues=library.user_leagues(g.user, everything, include_hidden=True),
                                by_token={c["token"]: c for c in everything}, may_create=onboarding.may_create(g.user),
                                join_modes=storage.JOIN_MODES, notify_presets=notices.PRESETS,
-                               users=auth.list_users() if is_master() else [], default_year=2026)
+                               default_year=2026)
 
     @app.route("/career/<token>/join", methods=["POST"])
     def career_join(token):

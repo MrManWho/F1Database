@@ -56,6 +56,9 @@ def accounts():
         conn.execute("ALTER TABLE users ADD COLUMN email_results INTEGER NOT NULL DEFAULT 1")
     if "is_demo" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")   # v2.0: temporary demo guests
+    if "is_owner" not in columns:
+        # v2.1.2: the one site owner (made with the host's setup code); everyone else signs up themselves.
+        conn.execute("ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0")
     if "email_paused" not in columns:
         # v2.0: one switch to stop every email from every league (league choices are kept separately).
         conn.execute("ALTER TABLE users ADD COLUMN email_paused INTEGER NOT NULL DEFAULT 0")
@@ -73,6 +76,8 @@ def accounts():
         expires_at REAL NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0,
         sent_at REAL NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS reserved_usernames (
+        username TEXT PRIMARY KEY, email_hash TEXT, reserved_at TEXT NOT NULL)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS password_resets (
         token_hash TEXT PRIMARY KEY,
         username TEXT NOT NULL,
@@ -218,7 +223,8 @@ def set_master(username, is_master):
         conn.execute("UPDATE users SET is_master = ? WHERE username = ?", (int(bool(is_master)), normalise(username)))
 
 
-def delete_user(username):
+def delete_user(username, reserve=False):
+    """reserve=True keeps the username for its owner (its league memberships are still there)."""
     with accounts() as conn:
         user = conn.execute("SELECT * FROM users WHERE username = ?", (normalise(username),)).fetchone()
         if not user:
@@ -226,6 +232,9 @@ def delete_user(username):
         if user["is_master"] and conn.execute("SELECT COUNT(*) FROM users WHERE is_master = 1").fetchone()[0] <= 1:
             raise AuthError("You cannot delete the last Race Master")
         conn.execute("DELETE FROM users WHERE username = ?", (normalise(username),))
+        if reserve:
+            conn.execute("INSERT OR REPLACE INTO reserved_usernames(username, email_hash, reserved_at) VALUES(?,?,?)",
+                         (user["username"], _email_hash(user["email"]), now_iso()))
 
 
 # --------------------------------------------------------------------------- settings
@@ -309,7 +318,7 @@ def register(username, display_name, password, ip, email=None):
     New accounts are Drivers and see nothing until a Race Master links them.
     """
     if not signups_allowed():
-        raise AuthError("Sign-ups are turned off. Ask the Race Master to create your login.")
+        raise AuthError("Sign-ups are turned off on this site right now.")
     username = normalise(username)
     if not USERNAME_RE.match(username):
         raise AuthError("Usernames are 2-32 characters: letters, numbers, dot, dash or underscore")
@@ -325,6 +334,10 @@ def register(username, display_name, password, ip, email=None):
             raise AuthError("Too many sign-ups from this connection. Try again later.")
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
             raise AuthError("That username is taken")
+        r = conn.execute("SELECT email_hash FROM reserved_usernames WHERE username = ?", (username,)).fetchone()
+        if r and (not r["email_hash"] or _email_hash(email) != r["email_hash"]):
+            raise AuthError("That username belonged to someone before the site was reset. If it was yours, sign up "
+                            "with the same email you used then, or ask the site owner to release it.")
         conn.execute("DELETE FROM pending_signups WHERE expires_at < ? OR username = ?", (now, username))
         code = f"{secrets.randbelow(10 ** 6):06d}"
         pending_id = conn.execute(
@@ -378,6 +391,8 @@ def finish_signup(pending_id, code):
         conn.execute("""INSERT INTO users(username, display_name, password_hash, is_master, is_steward, email, created_at)
                         VALUES(?,?,?,0,0,?,?)""", (pending["username"], pending["display_name"],
                                                    pending["password_hash"], pending["email"], now_iso()))
+        # A verified email that matches a reserved (pre-reset) username: it's theirs again.
+        conn.execute("DELETE FROM reserved_usernames WHERE username = ?", (pending["username"],))
         conn.execute("DELETE FROM pending_signups WHERE id = ?", (pending_id,))
         _whats_new_seen(conn, pending["username"])
     return pending["username"]
@@ -467,3 +482,107 @@ def use_reset_token(token, password):
         conn.execute("UPDATE password_resets SET used = 1 WHERE token_hash = ?", (_hash(token),))
         conn.execute("DELETE FROM login_failures WHERE key = ?", (f"user:{username}",))
     return username
+
+
+# --------------------------------------------------------------------------- v2.1.2: owner model and account reset
+
+# Account tables in accounts.db. League files are never touched here.
+ACCOUNT_TABLES = ["users", "user_sessions", "pending_signups", "password_resets", "login_failures", "whats_new_seen",
+                  "user_leagues", "league_creations", "rate_hits", "push_subscriptions"]
+
+
+def owner():
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM users WHERE is_owner = 1 ORDER BY id LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def _email_hash(email):
+    email = (email or "").strip().lower()
+    return _hash("email:" + email) if email else None
+
+
+def reset_all_accounts(backup_dir):
+    """v2.1.2, once per site: delete every login so the site starts again with an owner made from the host's setup
+    code and people signing up themselves. League files (leagues, drivers, results, memberships) are untouched.
+    The old usernames are reserved, so nobody else can take a name that is still a member of a league; the person
+    who had it can reclaim it by signing up with the same (verified) email, or the owner can release it.
+    A copy of accounts.db is written to backup_dir first. Returns the number of logins removed."""
+    import shutil
+    from datetime import datetime
+    with accounts() as conn:
+        if conn.execute("SELECT value FROM settings WHERE key = 'accounts_reset_212'").fetchone():
+            return 0
+        users = [dict(r) for r in conn.execute("SELECT username, email, is_demo FROM users")]
+    if users:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.copyfile(data_dir() / "accounts.db", backup_dir / f"accounts-before-2.1.2-reset-{stamp}.db")
+    with accounts() as conn:
+        for u in users:
+            if not u["is_demo"]:
+                conn.execute("INSERT OR IGNORE INTO reserved_usernames(username, email_hash, reserved_at) VALUES(?,?,?)",
+                             (u["username"], _email_hash(u["email"]), now_iso()))
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        for table in ACCOUNT_TABLES:
+            if table in tables:
+                conn.execute(f"DELETE FROM {table}")
+        conn.execute("INSERT INTO settings(key, value) VALUES('accounts_reset_212', ?)", (now_iso(),))
+    return len(users)
+
+
+def reserved(username):
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM reserved_usernames WHERE username = ?", (normalise(username),)).fetchone()
+    return dict(row) if row else None
+
+
+def reserved_count():
+    with accounts() as conn:
+        return conn.execute("SELECT COUNT(*) FROM reserved_usernames").fetchone()[0]
+
+
+def release_username(username):
+    with accounts() as conn:
+        return conn.execute("DELETE FROM reserved_usernames WHERE username = ?", (normalise(username),)).rowcount
+
+
+def may_claim(username, email, verified):
+    """A reserved (pre-2.1.2) username can be taken again only by the same person: a verified sign-up with the email
+    that login had. Otherwise the owner has to release it."""
+    r = reserved(username)
+    if not r:
+        return True
+    return bool(verified and r["email_hash"] and _email_hash(email) == r["email_hash"])
+
+
+def find_user(query):
+    """Owner's account recovery: one account by exact username or email (never a list)."""
+    q = (query or "").strip().lower()
+    if not q:
+        return None
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM users WHERE (username = ? OR lower(email) = ?) AND is_demo = 0 LIMIT 1",
+                           (q, q)).fetchone()
+    return dict(row) if row else None
+
+
+def signup_direct(username, display_name, password, ip, email=None):
+    """Sign-up when the site can't send email: the account is made straight away (no code). Reserved usernames
+    can't be claimed this way, because nobody can prove the email is theirs; the owner can release one."""
+    if not signups_allowed():
+        raise AuthError("Sign-ups are turned off on this site.")
+    username = normalise(username)
+    if reserved(username):
+        raise AuthError("That username belonged to someone before the site was reset. Choose another, or ask the "
+                        "site owner to release it for you.")
+    key, now = f"signup:{ip or '?'}", time.time()
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
+        count = row["count"] if row and now - row["first_at"] < 3600 else 0
+        if count >= SIGNUPS_PER_IP_PER_HOUR:
+            raise AuthError("Too many sign-ups from this connection. Try again later.")
+        first = row["first_at"] if row and count else now
+        conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,0)
+                        ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
+                     (key, count + 1, first))
+    return create_user(username, display_name, password, email=email)

@@ -257,14 +257,10 @@ def test_members_page_shows_join_state_but_settings_owns_it(master_client):
 
 def test_password_forms_confirm_and_match(app, master_client):
     page = master_client.get("/accounts").get_data(as_text=True)
-    assert page.count("data-password-form") >= 3 and "Confirm password" in page and "Caps Lock" in page
-    res = master_client.post("/accounts/new", data={"username": "newp", "display_name": "N", "password": "abcdef",
-                                                     "confirm_password": "abcdeX", "role": "driver", "csrf_token": "tok"},
-                             follow_redirects=True).get_data(as_text=True)
-    assert "match" in res and auth.get_user("newp") is None
-    master_client.post("/accounts/new", data={"username": "newp", "display_name": "N", "password": "abcdef",
-                                              "confirm_password": "abcdef", "role": "driver", "csrf_token": "tok"})
-    assert auth.verify("newp", "abcdef")
+    assert "data-password-form" in page and "Confirm new password" in page and "Caps Lock" in page
+    auth.create_user("newp", "N", "abcdef")
+    found = master_client.get("/accounts?find=newp").get_data(as_text=True)     # v2.1.2: account recovery
+    assert found.count("data-password-form") >= 2 and "Set password and sign them out" in found
     master_client.post("/accounts/newp/password", data={"password": "zzzzzz", "confirm_password": "yyyyyy", "csrf_token": "tok"})
     assert auth.verify("newp", "abcdef")
     master_client.post("/accounts/newp/password", data={"password": "zzzzzz", "confirm_password": "zzzzzz", "csrf_token": "tok"})

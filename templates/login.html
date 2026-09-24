@@ -5,39 +5,44 @@
 <section class="auth-card card">
   <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
   {% if mode == 'setup' %}
-  <h1>Create the Race Master</h1>
-  <p class="muted">The Race Master enters qualifying, Sprint and race results, runs the calendar and opens the transfer market.
-    After this you can add a login for the other driver so each of you can check your own garage and offers.</p>
+  <h1>Create the site owner</h1>
+  <p class="muted">This is the one account that runs the whole site. The owner can create leagues, change site settings and
+    help anyone who's lost their login. Everyone else creates their own account from the sign-up page.</p>
+  {% if blocked %}
+  <div class="banner banner-warn" role="note">Set <code>F1_TRACKER_SETUP_CODE</code> in your host's environment settings first
+    (on Render: your service → <b>Environment</b>), then reload this page. It keeps anyone else from claiming the site.</div>
+  {% else %}
   <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if needs_code %}<label>Setup code (from your host's environment settings)<input name="setup_code" required autocomplete="off"></label>{% endif %}
+    {% if needs_code %}<label>Setup code <small class="muted">(Render: your service → Environment → F1_TRACKER_SETUP_CODE)</small><input name="setup_code" required autocomplete="off"></label>{% endif %}
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="Your name"></label>
-    <label>Email (optional; for password resets and race results)<input name="email" type="email" autocomplete="email"></label>
+    <label>Email (recommended: for password resets)<input name="email" type="email" autocomplete="email"></label>
     {{ pw_field('password', 'Password', 'new') }}
     {{ pw_field('confirm_password', 'Confirm password', 'confirm') }}
     {{ pw_help() }}
-    <button class="btn btn-primary">Create account</button>
+    <button class="btn btn-primary">Create owner account</button>
   </form>
+  {% if reserved_count %}<p class="muted small">You can reuse your old username here. It's still linked to your leagues.</p>{% endif %}
+  {% endif %}
   {% elif mode == 'register' %}
   <h1>Create your login</h1>
-  {% if signups and not email_ready %}
-  <p class="muted">Sign-ups need email to be set up on this tracker first (so we can send you a confirmation code).
-    Ask the Race Master to set up email, or to create your login for you.</p>
-  {% elif signups %}
-  <p class="muted">We'll email you a 6-digit code to confirm your address. After signing up you can ask to join any open league from the league list. A Race Master approves your driver.</p>
+  {% if signups %}
+  <p class="muted">{% if email_ready %}We'll email you a 6-digit code to confirm your address.{% else %}Your account is ready as soon as you press the button.{% endif %}
+    Then ask to join a league from your league list (or accept an invitation); its Race Master approves you and links your driver.</p>
   <form method="post" class="stack" data-password-form novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{2,32}" placeholder="yourname"></label>
     <label>Display name<input name="display_name" maxlength="60" placeholder="Your name"></label>
-    <label>Email<input name="email" type="email" autocomplete="email" required></label>
+    <label>Email{% if not email_ready %} (optional; lets you reset a forgotten password once email is set up){% endif %}<input name="email" type="email" autocomplete="email" {{ 'required' if email_ready }}></label>
     {{ pw_field('password', 'Password', 'new') }}
     {{ pw_field('confirm', 'Confirm password', 'confirm') }}
     {{ pw_help() }}
-    <button class="btn btn-primary">Email me a code</button>
+    <button class="btn btn-primary">{{ 'Email me a code' if email_ready else 'Create my account' }}</button>
   </form>
+  <p class="muted small">Had a login before the site was reset? Use the same username{% if email_ready %} and the same email{% endif %} to get your leagues back{% if not email_ready %}, once the site owner has released it for you{% endif %}.</p>
   {% else %}
-  <p class="muted">Sign-ups are turned off. Ask the Race Master to create your login.</p>
+  <p class="muted">Sign-ups are turned off on this site right now.</p>
   {% endif %}
   <p class="muted small">Already have a login? <a href="{{ url_for('login') }}">Log in</a></p>
   {% elif mode == 'verify' %}
@@ -70,7 +75,7 @@
     <label>Username or email<input name="login" required autofocus></label>
     <button class="btn btn-primary">Send reset link</button>
   </form>
-  <p class="muted small">No email on your account? The Race Master can set a new password for you in Accounts.
+  <p class="muted small">No email on your account? Ask the site owner: they can set a new password for you.
     <br><a href="{{ url_for('login') }}">Back to log in</a></p>
   {% elif mode == 'reset' %}
   <h1>Choose a new password</h1>

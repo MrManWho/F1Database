@@ -53,6 +53,7 @@ def members(conn):
         r["user"] = u
         r["display_name"] = u["display_name"] if u else r["username"]
         r["site_master"] = bool(u and u["is_master"])
+        r["unclaimed"] = u is None   # v2.1.2: the login was reset and nobody has signed up with this name yet
         r["role"] = "race_master" if r["site_master"] else (r["role"] if r["role"] in C.ACCESS_ROLES else "member")
         r["driver"] = dmap.get(r["driver_id"])
         out.append(r)
@@ -91,7 +92,7 @@ def set_member(conn, username, role, driver_id=None, notify_preset=None):
     if role == "spectator" and driver_id is not None:
         raise RoleError("Spectators can't have a driver. Make them a Member (or Scorekeeper) to assign one.")
     if user["is_master"] and role != "race_master":
-        raise RoleError(f"{user['display_name']} is a site Race Master. Change that in Accounts.")
+        raise RoleError(f"{user['display_name']} is the site owner, who is Race Master of every league.")
     current = conn.execute("SELECT * FROM career_members WHERE username = ?", (user["username"],)).fetchone()
     if current and current["role"] == "race_master" and role != "race_master" and \
             race_master_count(conn, excluding=user["username"]) == 0:

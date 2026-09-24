@@ -159,7 +159,7 @@ def test_role_rules_and_final_race_master_protection(app, master_client):
     with storage.session(token) as conn:
         with pytest.raises(roles.RoleError, match="Spectators can't have a driver"):
             roles.set_member(conn, "ana", "spectator", a)
-        with pytest.raises(roles.RoleError, match="site Race Master"):
+        with pytest.raises(roles.RoleError, match="site owner"):
             roles.set_member(conn, "david", "member")
         with pytest.raises(roles.RoleError, match="already assigned"):
             roles.set_member(conn, "rita", "race_master", a)
