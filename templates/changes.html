@@ -11,13 +11,16 @@
   {% if n.changes %}
   <div class="table-wrap"><table class="data-table compact impact-table">
     <caption class="sr-only">What changed</caption>
-    <thead><tr><th scope="col">What</th><th scope="col" class="num">Before</th><th scope="col" class="num">Now</th><th scope="col" class="num">Change</th></tr></thead>
+    <thead><tr><th scope="col">What</th><th scope="col">Before → now</th><th scope="col" class="num">Change</th></tr></thead>
     <tbody>{% for c in n.changes %}
-      {% set better = (c.change < 0) if c.stat == 'position' else (c.change > 0) %}
+      {% if c.change is none %}
+      <tr><th scope="row">{{ c.label }}</th><td>{{ c.before }} → <b>{{ c.after }}</b></td><td class="num muted">—</td></tr>
+      {% else %}
+      {% set better = (c.change < 0) if c.stat in ('position', 'warning') else (c.change > 0) %}
       <tr><th scope="row">{{ c.label }}</th>
-        <td class="num">{{ ('P%d'|format(c.before)) if c.stat == 'position' else c.before }}</td>
-        <td class="num"><b>{{ ('P%d'|format(c.after)) if c.stat == 'position' else c.after }}</b></td>
-        <td class="num {{ 'up' if better else 'down' }}">{{ '%+g'|format(c.change) }}</td></tr>{% endfor %}</tbody>
+        <td>{{ ('P%d'|format(c.before)) if c.stat == 'position' else c.before }} → <b>{{ ('P%d'|format(c.after)) if c.stat == 'position' else c.after }}</b></td>
+        <td class="num {{ 'up' if better else 'down' }}">{% if c.stat == 'position' %}{{ '%+d'|format((-c.change)|int) }} place{{ 's' if (c.change|abs) != 1 }}{% else %}{{ '%+g'|format(c.change) }}{% endif %}</td></tr>
+      {% endif %}{% endfor %}</tbody>
   </table></div>
   {% else %}<p class="muted small">None of your numbers moved.</p>{% endif %}
   {% if n.details %}<ul class="small">{% for d in n.details %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}

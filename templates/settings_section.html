@@ -67,6 +67,8 @@
       <label class="check"><input type="checkbox" name="gate_press" value="1" {{ 'checked' if life.gate_press }}> Press questions answered (post-race from the last round, and pre-race before lights out)</label>
       <label class="check"><input type="checkbox" name="gate_targets" value="1" {{ 'checked' if life.gate_targets }}> Weekend target chosen</label>
     </div>
+    <label>Minimum Sprint distance for Sprint points (%) <small class="muted">(Calculation Version 3; below this a Sprint scores nothing)</small>
+      <input type="number" name="sprint_min_distance" min="0" max="100" step="1" value="{{ sprint_min }}"></label>
     <label>How long a race shows "In progress" after its scheduled start
       <select name="race_window">
         {% for w in windows %}<option value="{{ w }}" {{ 'selected' if w == ctx.race_window }}>{{ (w // 60) }} hour{{ 's' if w != 60 }}</option>{% endfor %}
@@ -91,7 +93,8 @@
     <label>How each round is judged
       <select name="difficulty_mode">{% for key, label in C.DIFF_MODES.items() %}<option value="{{ key }}" {{ 'selected' if difficulty_mode == key }}>{{ label }}{{ ' (recommended)' if key == C.DIFF_MODE_DEFAULT }}</option>{% endfor %}</select>
       <small class="muted">Car only: finishing where your car should is "about right", even at the back. Overall: finishing near the back always reads as struggling. Blend: half of each. In every mode the level never goes up while a player driver is struggling or near the back of the grid.</small></label>
-    <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprint points in the recommendation (off: only the Grand Prix counts)</label>
+    <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprints in the recommendation (off: only the Grand Prix counts)</label>
+    {% if calc_engine >= 3 %}<p class="muted small">Calculation Version 3 compares each session with your AI teammate, cars of similar speed and (when entered) lap times; a Sprint counts as half a session. The judging setting below only applies to Version 2 seasons.</p>{% endif %}
   </section>
   <section class="card settings-section">
     <h2>Scoring</h2>
@@ -112,7 +115,7 @@
     <label class="toggle-row" id="team-goals">
       <input type="checkbox" name="team_goal_choice" value="1" {{ 'checked' if team_goal_choice }}>
       <span class="switch"></span>
-      <span><b>Selectable team goals</b><small class="muted">Each team with a player driver picks Safe, Competitive or Ambitious for the season. Met or missed changes next season's starting Reputation (Safe +1/0, Competitive +3/−1, Ambitious +6/−3).</small></span>
+      <span><b>Selectable team goals</b><small class="muted">Each team with a player driver picks Safe, Competitive or Ambitious for the season. Met or missed changes next season's starting Reputation ({% if calc_engine >= 3 %}Safe +1/0, Competitive +2/−1, Ambitious +3/−2; with the pledge, at most ±4 in total{% else %}Safe +1/0, Competitive +3/−1, Ambitious +6/−3{% endif %}).</small></span>
     </label>
     <label class="toggle-row" id="dismissals">
       <input type="checkbox" name="midseason_sackings" value="1" {{ 'checked' if midseason_sackings }}>
@@ -216,6 +219,11 @@
   <h2>Backups &amp; exports</h2>
   <p class="small">Automatic backups, restore, full download, JSON and CSV export, and an integrity check.</p>
   <a class="btn btn-sm btn-ghost" href="{{ url_for('backups_page', token=ctx.token) }}">Backups &amp; data →</a>
+</section>
+<section class="card settings-section" id="calculation">
+  <h2>Calculation version</h2>
+  <p class="small">This season: <b>{{ calc_label }}</b>. The Calculation Update page explains Version 3, lets you recalculate this season or use it from the next round, and keeps every update with its rollback reference and the notices drivers agreed to.</p>
+  <a class="btn btn-sm" href="{{ url_for('calc_update_page', token=ctx.token) }}">Calculation Update →</a>
 </section>
 <section class="card settings-section" id="recalculate">
   <h2>Recalculate everything</h2>

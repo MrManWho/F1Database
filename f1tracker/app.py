@@ -22,7 +22,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import announcements, impacts, stats, ultimatums
+from . import ai3, announcements, calc3, engine, impacts, migration, stats, ultimatums
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -409,6 +409,10 @@ def career_page(master_only=False, ops_only=False):
                     impacts.on_open(conn, is_api=request.path.startswith("/api/"))
                     g.ctx["league_notice"] = impacts.announcement_for(conn, g.user["username"]) \
                         if not request.path.startswith("/api/") else None
+                    g.ctx["calc_reminder"] = migration.reminder(conn) \
+                        if g.ctx["is_master"] and engine.choice(conn) == "later" \
+                        and not session.get(f"calc_reminder_hidden_{token}") else None
+                    g.ctx["calc_engine"] = engine.season_engine(conn, g.ctx["current_season_id"])
                     gate = _mandatory_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
@@ -521,18 +525,23 @@ SETTINGS_SECTIONS = {
 }
 
 
-MANDATORY_ENDPOINTS = {"impact_page", "pledge_page", "pledge_save", "team_goals_page", "team_goal_choose"}
+MANDATORY_ENDPOINTS = {"impact_page", "pledge_page", "pledge_save", "team_goals_page", "team_goal_choose",
+                       "calc_update_page", "calc_update_preview", "calc_update_full", "calc_update_future",
+                       "calc_update_later", "calc_update_rollback", "calc_reminder_hide"}
 
 
 def _mandatory_steps(conn, ctx, master_only=False):
     """Everything this person must do before using the league, in the order they'll be asked (v2.2):
     1. agree to changes to their driver, 2. choose a growth pledge, 3. choose their team's goal.
     Returns [(endpoint, message)] for the steps still open."""
+    steps = []
+    # v2.5: an existing league's Race Master answers the Calculation Update first (drivers never see it).
+    if ctx.get("real", ctx)["is_master"] and engine.choice(conn) == "pending" and S.current_season_id(conn):
+        steps.append(("calc_update_page", "Choose how this league moves to Calculation Version 3 first."))
     mine = ctx.get("real", ctx).get("my_driver")
     if not mine:
-        return []
+        return steps
     sid = ctx["current_season_id"]
-    steps = []
     if impacts.pending(conn, mine["id"], g.user["username"]):
         steps.append(("impact_page", "Please read and agree to the changes to your driver first."))
     if not (master_only and ctx.get("real", ctx)["is_master"]):
@@ -1137,7 +1146,7 @@ def register_routes(app):
                                       for a in community.audit_entries(conn, 500, username=me)]}
                 if driver:
                     tl = S.driver_timeline(conn, driver["id"])
-                    entry["driver"] = {"name": driver["name"], "career": S.career_totals(tl),
+                    entry["driver"] = {"name": driver["name"], "career": S.career_totals(tl, conn, driver["id"]),
                                        "seasons": [{"year": t["season"]["year"], "team": t["team"]["name"] if t["team"] else None,
                                                     "position": t["position"], "points": t["points"]} for t in tl]}
                 entry["notifications"].pop("stored", None)
@@ -1543,12 +1552,37 @@ def register_routes(app):
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
                     entrants=_entrants(conn, event_id),
-                    gp_points=C.GP_POINTS, sprint_points=C.SPRINT_POINTS, hub=_hub(conn, ctx, event, full=True),
+                    gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
+                    sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
+                    v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
+                    distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
+                    status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
+                    pace=_pace_panel(conn, ctx, event), hub=_hub(conn, ctx, event, full=True),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
                     gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id),
                     wk=_weekend_panel(conn, ctx, event), my_target=_my_target(conn, ctx, event),
                     can_reset=ctx["is_master"] and not raceweek.reset_blocker(conn, event))
+
+    def _sprint_min(conn):
+        try:
+            return int(storage.get_meta(conn, "sprint_min_distance", str(C.SPRINT_MIN_DISTANCE)))
+        except (TypeError, ValueError):
+            return C.SPRINT_MIN_DISTANCE
+
+    def _pace_panel(conn, ctx, event):
+        """v2.5: the optional lap-time evidence for each player driver on an engine 3 round."""
+        if not engine.round_v3(conn, event):
+            return None
+        rows = [r for r in S.weekend_rows(conn, event["id"]) if r["driver"]["is_player"]]
+        sessions = ["gp"] + (["sprint"] if event["is_sprint"] else [])
+        out = []
+        for r in rows:
+            for sess in sessions:
+                out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
+        return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
+                "drivers": [r for r in S.weekend_rows(conn, event["id"]) if not r["driver"]["is_player"]],
+                "fmt": ai3.format_time}
 
     def _my_target(conn, ctx, event):
         """v2.4: this driver's target at a round: what they chose, or the three to choose from."""
@@ -1825,7 +1859,7 @@ def register_routes(app):
                                          "live": t["season"]["status"] != C.SEASON_COMPLETE})
         owner = next((u for u, d in community.member_driver_ids(conn).items() if d == driver_id), None)
         return page("driver_profile.html", ctx, driver=driver, timeline=timeline,
-                    totals=S.career_totals(timeline), contract=market.current_contract(conn, driver_id),
+                    totals=S.career_totals(timeline, conn, driver_id), contract=market.current_contract(conn, driver_id),
                     trend=insights.driver_round_timeline(conn, driver_id), profile=community.profile(conn, driver_id),
                     contracts=community.contract_history(conn, driver_id), trophies=trophies,
                     can_edit=_may_edit_profile(ctx, driver_id), nationalities=community.NATIONALITIES,
@@ -1861,6 +1895,8 @@ def register_routes(app):
         seats_ = S.driver_seats(conn, sid)
         return page("grid.html", ctx, grid=S.grid(conn, sid), players=S.player_drivers(conn), seats=seats_,
                     dismissals=[u for u in ultimatums.for_season(conn, sid) if u["status"] != "Void"],
+                    free_agents=ultimatums.free_agents(conn, sid) if engine.is_v3(conn, sid) else [],
+                    v3=engine.is_v3(conn, sid),
                     dmap=S.driver_map(conn), tmap=S.team_map(conn),
                     all_drivers=S.drivers(conn, active_only=True), states=seats.season_states(conn, sid),
                     contract_rows=seats.contract_list(conn, sid))
@@ -2054,8 +2090,8 @@ def register_routes(app):
         released = relations.decide_releases(conn, latest["id"], final=True)
         relations.settle(conn, latest["id"])
         new_id = S.create_next_season(conn, latest["id"], year)
-        rewarded = relations.apply_rewards(conn, latest["id"], new_id)
-        goal_changes = teamgoals.apply_rewards(conn, latest["id"], new_id)
+        rewarded, goal_changes = relations.carry_rewards(conn, latest["id"], new_id)
+        rewarded = {d: v for d, v in rewarded.items() if v > 0}
         changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
         feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
@@ -2142,7 +2178,9 @@ def register_routes(app):
         signed_in_window = bool(window and conn.execute(
             "SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
             (window["id"], driver["id"], C.OFFER_ACCEPTED)).fetchone())
+        career_status = market.career_status(conn, sid, driver["id"]) if engine.is_v3(conn, sid) else None
         return page("garage.html", ctx, view=view, driver=driver, me=me, interest=interest, row=row,
+                    career_status=career_status,
                     seat_state=seats.state(conn, sid, driver["id"]),
                     team=S.team_map(conn).get(seat[0]) if seat else None, teammate=teammate,
                     rivals=rivals, recent=recent, players=players,
@@ -2194,6 +2232,114 @@ def register_routes(app):
                     notices_waiting=len(impacts.pending(conn, mine["id"], me)) if mine else 0,
                     notices_total=len(impacts.history(conn, mine["id"])) if mine else 0,
                     access_help=C.ACCESS_HELP.get(g.league_role, ""))
+
+    # ------------------------------------------------------------------ v2.5 Calculation Update
+
+    @app.route("/career/<token>/calculation-update")
+    @career_page(master_only=True)
+    def calc_update_page(conn, ctx):
+        """The Race Master's Calculation Update screen: choose, review what happened, roll back."""
+        sid = ctx["current_season_id"]
+        done = [e for e in S.events(conn, sid) if e["status"] == C.EVENT_COMPLETE] if sid else []
+        history = migration.migrations(conn)
+        for m in history:
+            m["notices"] = migration.notices_for(conn, m["id"])
+        return page("calc_update.html", ctx, choice=engine.choice(conn), league_engine=engine.league_engine(conn),
+                    label=engine.label(conn, sid), completed=len(done),
+                    cutoff=max((e["round_number"] for e in done), default=0), history=history)
+
+    def _calc_backup(ctx):
+        name = storage.auto_backup(ctx["token"], "before-calc-v3", force=True)
+        if not name:
+            raise ValidationError("Couldn't make a backup first, so nothing was changed. Try again.")
+        return getattr(name, "name", str(name))
+
+    @app.route("/career/<token>/calculation-update/preview", methods=["POST"])
+    @career_page(master_only=True)
+    def calc_update_preview(conn, ctx):
+        """Option A step 1: write a complete backup, then show exactly what a full recalculation would change."""
+        if engine.league_engine(conn) >= C.ENGINE_CURRENT:
+            flash("This league already uses Calculation Version 3.", "info")
+            return redirect(url_for("calc_update_page", token=ctx["token"]))
+        backup = _calc_backup(ctx)
+        result = migration.preview(conn)
+        g.audit_summary = "previewed the Calculation Update (full recalculation); nothing was changed"
+        return page("calc_update_preview.html", ctx, preview=result, backup=backup)
+
+    @app.route("/career/<token>/calculation-update/full", methods=["POST"])
+    @career_page(master_only=True)
+    def calc_update_full(conn, ctx):
+        if engine.league_engine(conn) >= C.ENGINE_CURRENT:
+            flash("This league already uses Calculation Version 3.", "info")
+            return redirect(url_for("calc_update_page", token=ctx["token"]))
+        if request.form.get("confirm") != "1":
+            raise ValidationError("Tick the box to confirm the full recalculation")
+        backup = request.form.get("backup") or ""
+        try:
+            storage.auto_backup_path(ctx["token"], backup)
+        except CareerNotFound:
+            backup = _calc_backup(ctx)
+        result = migration.apply_full(conn, g.user["username"], backup)
+        g.audit_summary = (f"moved the league to Calculation Version 3 and recalculated this season from round 1 "
+                           f"({result['notices']} driver notice(s); rollback backup {backup})")
+        flash(f"Done. This season now uses Calculation Version 3. {result['notices']} driver(s) will see what changed "
+              f"when they next open the league. Rollback reference: {backup}.", "success")
+        return redirect(url_for("calc_update_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/calculation-update/future", methods=["POST"])
+    @career_page(master_only=True)
+    def calc_update_future(conn, ctx):
+        if engine.league_engine(conn) >= C.ENGINE_CURRENT:
+            flash("This league already uses Calculation Version 3.", "info")
+            return redirect(url_for("calc_update_page", token=ctx["token"]))
+        if request.form.get("confirm") != "1":
+            raise ValidationError("Tick the box to confirm")
+        backup = _calc_backup(ctx)
+        result = migration.apply_future(conn, g.user["username"], backup)
+        g.audit_summary = (f"moved the league to Calculation Version 3 from round {result['cutoff'] + 1} (rounds "
+                           f"1-{result['cutoff']} stay as calculated; rollback backup {backup})")
+        flash(f"Done. Calculation Version 3 starts with round {result['cutoff'] + 1}; everything up to round "
+              f"{result['cutoff']} stays as it was. Rollback reference: {backup}.", "success")
+        return redirect(url_for("calc_update_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/calculation-update/later", methods=["POST"])
+    @career_page(master_only=True)
+    def calc_update_later(conn, ctx):
+        migration.decide_later(conn, g.user["username"])
+        g.audit_summary = "chose to decide on the Calculation Update later (the league stays on Version 2)"
+        flash("The league stays on Calculation Version 2 for now. You'll see a reminder until you choose.", "info")
+        return redirect(url_for("dashboard", token=ctx["token"]))
+
+    @app.route("/career/<token>/calculation-update/reminder", methods=["POST"])
+    @career_page(master_only=True)
+    def calc_reminder_hide(conn, ctx):
+        session[f"calc_reminder_hidden_{ctx['token']}"] = True
+        return _back(ctx, "")
+
+    @app.route("/career/<token>/calculation-update/rollback/<int:migration_id>", methods=["POST"])
+    @master_required
+    def calc_update_rollback(token, migration_id):
+        """Put the league back exactly as it was before a Calculation Update, from that update's own backup. The state
+        just before rolling back is saved too (storage.restore), so even the rollback can be undone."""
+        if request.form.get("confirm") != "1":
+            flash("Tick the box to confirm the rollback.", "error")
+            return redirect(url_for("calc_update_page", token=token))
+        try:
+            with storage.session(token) as conn:
+                row = conn.execute("SELECT * FROM calc_migrations WHERE id = ?", (migration_id,)).fetchone()
+                if not row or not row["backup"]:
+                    abort(404)
+                backup = row["backup"]
+            path = storage.auto_backup_path(token, backup)
+            storage.restore(token, path)
+        except CareerNotFound:
+            flash("That backup is no longer available, so the update can't be rolled back automatically.", "error")
+            return redirect(url_for("calc_update_page", token=token))
+        with storage.session(token) as conn:
+            community.audit(conn, g.user["username"], "Rolled back the Calculation Update", backup,
+                            summary=f"rolled back the Calculation Update (backup {backup})", link="calculation-update")
+        flash("Rolled back: the league is exactly as it was before the Calculation Update.", "success")
+        return redirect(url_for("calc_update_page", token=token))
 
     @app.route("/career/<token>/changes", methods=["GET", "POST"])
     @career_page()
@@ -2263,6 +2409,37 @@ def register_routes(app):
         g.audit_link = f"weekend/{event_id}"
         flash("The paddock is open. Drivers can answer pre-race press, choose their weekend targets and check in.", "success")
         return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#paddock")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/pace", methods=["POST"])
+    @career_page(ops_only=True)
+    def pace_save(conn, ctx, event_id):
+        """v2.5: optional lap-time evidence and session flags for the AI tracker (engine 3 rounds)."""
+        ev = S.get_event(conn, event_id)
+        if not ev or not engine.round_v3(conn, ev):
+            abort(404)
+        try:
+            driver_id = int(request.form.get("driver_id") or 0)
+        except ValueError:
+            abort(400)
+        if not conn.execute("SELECT 1 FROM results r JOIN drivers d ON d.id = r.driver_id WHERE r.event_id = ? "
+                            "AND r.driver_id = ? AND d.is_player = 1", (event_id, driver_id)).fetchone():
+            abort(404)
+        form = request.form.to_dict()
+        if not ctx["is_master"]:
+            form.pop("representative", None)      # only the Race Master decides what's representative
+            old = ai3.pace_input(conn, event_id, driver_id, request.form.get("session", "gp"))
+            if old and old["representative"] is not None:
+                form["representative"] = str(old["representative"])
+        try:
+            ai3.save_pace_input(conn, event_id, driver_id, request.form.get("session", "gp"), form, g.user["username"])
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+        if ev["status"] == C.EVENT_COMPLETE:
+            ai3.store(conn, event_id)
+        g.audit_summary = f"saved pace data for {S.driver_map(conn)[driver_id]['name']} at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
+        g.audit_link = f"weekend/{event_id}"
+        flash("Pace data saved. The AI recommendation uses it straight away.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#pace")
 
     @app.route("/career/<token>/weekend/<int:event_id>/start", methods=["POST"])
     @career_page(ops_only=True)
@@ -2393,7 +2570,11 @@ def register_routes(app):
                    "reopened": storage.get_meta(conn, teamgoals._reopen_key(sid, t)) == "1"}
                   for t, ds in teamgoals.player_teams(conn, sid).items()] if teamgoals.enabled(conn) else []
         last_rows = {r["driver_id"]: r for r in S.weekend_rows(conn, last["id"])} if last else {}
+        orders = [dict(o) for o in conn.execute("""SELECT o.*, e.round_number, e.name AS event_name FROM team_orders o
+                                                   JOIN events e ON e.id = o.event_id WHERE e.season_id = ?
+                                                   AND o.status = 'Awaiting ruling' ORDER BY e.round_number""", (sid,))]
         return page("team_admin.html", ctx, drivers=drivers_, teams=teams_, next_event=nxt, last_event=last,
+                    orders=orders, dmap=S.driver_map(conn), rulings=teamlife.ORDER_RULINGS,
                     last_rows=last_rows, targets_open=bool(nxt and nxt["status"] == C.EVENT_NOT_RUN and not nxt.get("lights_at")),
                     goals_on=teamgoals.enabled(conn), goals_locked=teamgoals.locked(conn, sid),
                     awaiting=ultimatums.awaiting(conn, sid) if ultimatums.enabled(conn) else [])
@@ -2739,7 +2920,8 @@ def register_routes(app):
             result = {}
 
             def act(c):
-                result["r"] = ultimatums.decide(c, ultimatum_id, True, g.user["username"], request.form.get("note"))
+                result["r"] = ultimatums.decide(c, ultimatum_id, True, g.user["username"], request.form.get("note"),
+                                                replacement_id=request.form.get("replacement") or None)
                 return {row["driver_id"]: ["You lost your race seat mid-season. Your results and points stay yours."]}
             impacts.record_change(conn, f"dismissed-{ultimatum_id}", "Dropped by your team",
                                   "Your team set a final target and it was missed, and the Race Master confirmed the "
@@ -2751,6 +2933,25 @@ def register_routes(app):
             g.audit_summary = f"overruled {name}'s mid-season dismissal: {request.form.get('note', '').strip()[:120]}"
             flash(f"{name} keeps the seat.", "success")
         return redirect(url_for("grid_page", token=ctx["token"]) + "#dismissals")
+
+    @app.route("/career/<token>/ultimatum/<int:ultimatum_id>/teammate", methods=["POST"])
+    @career_page(master_only=True)
+    def ultimatum_teammate(conn, ctx, ultimatum_id):
+        """v2.5: the Race Master turns an issued final warning into "finish ahead of your teammate"."""
+        label = ultimatums.use_teammate_target(conn, ultimatum_id, g.user["username"])
+        g.audit_summary = f"changed a final warning to a teammate target: {label}"
+        flash("The final warning now asks the driver to finish ahead of their teammate.", "success")
+        return redirect(url_for("grid_page", token=ctx["token"]) + "#dismissals")
+
+    @app.route("/career/<token>/weekend/<int:event_id>/order/<int:driver_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def order_rule(conn, ctx, event_id, driver_id):
+        """v2.5: the Race Master rules on a team order (engine 3 never infers it from the finishing order)."""
+        ruling = teamlife.rule_order(conn, event_id, driver_id, request.form.get("ruling"), g.user["username"],
+                                     request.form.get("reason", ""))
+        g.audit_summary = f"ruled a team order {ruling.lower()} for {S.driver_map(conn)[driver_id]['name']}"
+        flash(f"Team order ruled: {ruling}.", "success")
+        return _back(ctx, "#orders")
 
     @app.route("/career/<token>/team-goals")
     @career_page()
@@ -3490,12 +3691,12 @@ def register_routes(app):
                     return jsonify(ok=False, conflict=True, error="This round changed on the server since your edits.",
                                    server=S.weekend_snapshot(conn, event_id)), 409
                 if payload.get("mark_complete") and before["status"] != C.EVENT_COMPLETE:
-                    S.save_weekend(conn, event_id, {**payload, "mark_complete": False})
+                    S.save_weekend(conn, event_id, {**payload, "mark_complete": False}, allow_no_fault=is_master())
                     check = S.submission_check(conn, event_id)
                     if check["blocking"]:
                         return jsonify(ok=False, blocked=True, error="Fix the blocking problems before submitting.",
                                        checklist=check, revision=check["revision"]), 422
-                result = S.save_weekend(conn, event_id, payload)
+                result = S.save_weekend(conn, event_id, payload, allow_no_fault=is_master())
                 newly_complete = result["complete"] and before["status"] != C.EVENT_COMPLETE
                 label = event_label(before, S.get_season(conn, before["season_id"])["year"])
                 verb = ("submitted the results for" if newly_complete else
@@ -3509,12 +3710,21 @@ def register_routes(app):
                 if newly_complete:
                     conn.execute("UPDATE events SET submitted_at = COALESCE(submitted_at, ?) WHERE id = ?",
                                  (storage.now_iso(), event_id))
+                if result["complete"]:
+                    completed_event = S.get_event(conn, event_id)
+                    if engine.round_v3(conn, completed_event):
+                        # v2.5: remember the car ranks this round is judged with (only if not stored yet), then the
+                        # AI recommendation after it.
+                        if not conn.execute("SELECT 1 FROM round_ranks WHERE event_id = ?", (event_id,)).fetchone():
+                            calc3.store_round_ranks(conn, completed_event)
                 if first_submission:  # a reopened round doesn't repeat its headlines, team reactions or emails
                     feed.on_weekend_complete(conn, event_id, f"weekend/{event_id}")
                     teamlife.after_race(conn, event_id)
                     opened = market.maybe_open_silly_season(conn, before["season_id"])
                 elif result["complete"]:
                     teamlife.judge_targets(conn, event_id)   # a correction re-judges this round's weekend targets
+                if result["complete"] and engine.round_v3(conn, S.get_event(conn, event_id)):
+                    ai3.store(conn, event_id)
                 result["market_opened"] = bool(opened)
                 result["summary_url"] = url_for("race_summary", token=token, event_id=event_id) if result["complete"] else None
         except CareerNotFound:
@@ -3815,6 +4025,9 @@ def register_routes(app):
             if "team_life" in request.form and mine("weekends"):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
+                smd = (request.form.get("sprint_min_distance") or "").strip()
+                if smd.isdigit() and 0 <= int(smd) <= 100:
+                    storage.set_meta(conn, "sprint_min_distance", smd)
                 if request.form.get("difficulty_mode") in C.DIFF_MODES:
                     storage.set_meta(conn, "difficulty_mode", request.form["difficulty_mode"])
                 raceweek.set_enabled(conn, bool(request.form.get("race_weekends")))
@@ -3902,7 +4115,9 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
-                    difficulty_mode=S.difficulty_mode(conn),
+                    difficulty_mode=S.difficulty_mode(conn), sprint_min=_sprint_min(conn),
+                    calc_label=engine.label(conn, ctx["current_season_id"]),
+                    calc_engine=engine.season_engine(conn, ctx["current_season_id"]),
                     team_goal_choice=teamgoals.enabled(conn), midseason_sackings=ultimatums.enabled(conn),
                     recalculated_at=storage.get_meta(conn, "recalculated_at"),
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
@@ -4229,7 +4444,7 @@ def register_routes(app):
         if not driver:
             abort(404)
         timeline = S.driver_timeline(conn, driver_id, S.all_season_standings(conn, completed_only=True))
-        return _public_render("driver", pub, driver=driver, timeline=timeline, totals=S.career_totals(timeline),
+        return _public_render("driver", pub, driver=driver, timeline=timeline, totals=S.career_totals(timeline, conn, driver_id),
                               profile=community.profile(conn, driver_id))
 
     @app.route("/public/<token>/<key>/team/<int:team_id>")

@@ -1,5 +1,6 @@
 """Derived views: points progression, form/reputation timelines, the player rivalry and season awards."""
 
+from . import calc3, engine
 from . import constants as C
 from . import services as S
 
@@ -11,9 +12,9 @@ def _season_rows(conn, season_id):
                         (season_id, C.EVENT_NOT_RUN)).fetchall()
 
 
-def _points(r):
-    return S.gp_points(r["race_position"], r["result_status"]) + \
-        S.sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
+def _points(pts, r):
+    """Championship points for one result row (the round's distance rules included, v2.5)."""
+    return pts.total(r)
 
 
 def points_progression(conn, season_id, driver_ids, completed_only=False):
@@ -23,8 +24,9 @@ def points_progression(conn, season_id, driver_ids, completed_only=False):
     totals = {d: 0 for d in driver_ids}
     series = {d: [] for d in driver_ids}
     by_event = {}
+    pts = calc3.Points(conn)
     for r in _season_rows(conn, season_id):
-        by_event.setdefault(r["event_id"], {})[r["driver_id"]] = _points(r)
+        by_event.setdefault(r["event_id"], {})[r["driver_id"]] = _points(pts, r)
     for e in rounds:
         for d in driver_ids:
             totals[d] += by_event.get(e["id"], {}).get(d, 0)
@@ -113,18 +115,19 @@ def rivalry(conn, a_id, b_id):
            "tracks": {}, "timeline": [], "swing": [], "labels": [], "seasons": {}}
     run = [0, 0]
     swing = 0
+    pts = calc3.Points(conn)
     for eid, pair in events.items():
         a, b = pair.get(a_id), pair.get(b_id)
         for idx, r in ((0, a), (1, b)):
             if r is None:
                 continue
-            out["points"][idx] += _points(r)
+            out["points"][idx] += _points(pts, r)
             finished = r["result_status"] == C.STATUS_FINISHED
             out["wins"][idx] += int(finished and r["race_position"] == 1)
             out["podiums"][idx] += int(bool(finished and r["race_position"] and r["race_position"] <= 3))
             out["poles"][idx] += int(r["qualifying_position"] == 1)
             season = out["seasons"].setdefault(r["year"], {"points": [0, 0], "race": [0, 0], "quali": [0, 0]})
-            season["points"][idx] += _points(r)
+            season["points"][idx] += _points(pts, r)
         if not (a and b):
             continue
         season = out["seasons"][a["year"]]
@@ -166,7 +169,7 @@ def rivalry(conn, a_id, b_id):
 
 def _first_season_year(conn, driver_id):
     row = conn.execute("""SELECT MIN(s.year) FROM results r JOIN events e ON e.id = r.event_id
-                          JOIN seasons s ON s.id = e.season_id WHERE r.driver_id = ? AND r.result_status IN (?,?,?)""",
+                          JOIN seasons s ON s.id = e.season_id WHERE r.driver_id = ? AND r.result_status IN (?,?,?,?)""",
                        (driver_id, *sorted(C.START_STATUSES))).fetchone()
     return row[0]
 
@@ -220,8 +223,13 @@ def season_review(conn, season_id):
         if delta > 0:
             award("Most improved", r, f"+{delta:.1f}", "Reputation gained")
     rows_all = _season_rows(conn, season_id)
-    iron = [(sum(1 for x in rows_all if x["driver_id"] == r["driver_id"] and x["result_status"] == C.STATUS_FINISHED), r)
-            for r in table if r["starts"] >= 3 and r["dnfs"] == 0]
+    if engine.is_v3(conn, season_id):
+        # v2.5: Iron man needs no unexcused DNF and no DSQ (a verified no-fault retirement doesn't count against it)
+        iron = [(sum(1 for x in rows_all if x["driver_id"] == r["driver_id"] and x["result_status"] in C.CLASSIFIED_STATUSES), r)
+                for r in table if r["starts"] >= 3 and r["dnfs"] - r.get("no_fault_dnfs", 0) == 0 and r.get("dsqs", 0) == 0]
+    else:
+        iron = [(sum(1 for x in rows_all if x["driver_id"] == r["driver_id"] and x["result_status"] == C.STATUS_FINISHED), r)
+                for r in table if r["starts"] >= 3 and r["dnfs"] == 0]
     if iron:
         n, r = max(iron, key=lambda x: (x[0], x[1]["points"]))
         award("Iron man", r, f"{n} finishes", "not a single DNF")

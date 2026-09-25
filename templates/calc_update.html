@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Calculation Update{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">Calculation Update</span></nav>
+<div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }}</div><h1>Calculation Update</h1>
+  <p class="page-purpose">Paddock Legacy 2.5 brings <b>Calculation Version 3</b>: fairer standings (full countback, classified retirements,
+    shortened races), Form that measures recent races, Reputation that rises and falls with how you actually drive, relationships
+    that sit near 60 when you simply meet expectations, capped team goals, achievable season goals, a transfer market where
+    experienced drivers can end up unsigned, and a new AI tracker. Only you see this page. Nothing changes until you choose.</p></div></div>
+
+<section class="card calc-status">
+  <h2>Where this league is now</h2>
+  <p><b>{{ label }}</b>{% if choice == 'later' %} · you chose to decide later{% elif choice == 'full' %} · recalculated from round 1{% elif choice == 'future' %} · Version 3 from the next round{% elif choice == 'new' %} · created on Version 3{% endif %}.</p>
+  <p class="muted small">{{ completed }} round{{ 's' if completed != 1 }} of this season {{ 'is' if completed == 1 else 'are' }} complete. Earlier seasons always keep the version they were played under.</p>
+</section>
+
+{% if league_engine < C.ENGINE_CURRENT %}
+<div class="calc-options">
+<section class="card calc-option" id="option-a">
+  <h2>A. Recalculate this season</h2>
+  <p>“Version 2.5 can recalculate this season from Round 1 using the new fairness, performance, relationship, market and AI
+    formulas. Original race results will not change, but calculated ratings, standings, goals, relationships, warnings and
+    recommendations may change.”</p>
+  <ul class="small">
+    <li>A complete backup of the league is saved first, and you get its name to roll back with.</li>
+    <li>You see a preview of every driver whose numbers or status would change before anything is saved.</li>
+    <li>Signed contracts and completed transfer decisions stay. Nobody is dismissed automatically: a driver who lands at
+      “Seat at risk” becomes a review for you.</li>
+    <li>Every affected player driver sees exactly what changed for them, and agrees before carrying on.</li>
+  </ul>
+  <form method="post" action="{{ url_for('calc_update_preview', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary">Back up and preview the recalculation</button>
+  </form>
+</section>
+
+<section class="card calc-option" id="option-b">
+  <h2>B. Use Version 3 from the next round</h2>
+  <p>“Everything already calculated through the current completed round will remain unchanged. Version 2.5 rules will begin
+    with the next round.”</p>
+  <ul class="small">
+    <li>Cutoff: round {{ cutoff }}{% if cutoff == 0 %} (no round is complete yet, so this season is Version 3 from round 1 with nothing to recalculate){% endif %}.
+      Form, Reputation, Driver Value, relationships, warnings, team interest, car strength, the AI recommendation, season
+      goals, team goals and pledges are frozen as they are now.</li>
+    <li>Nothing moves when you choose this. New numbers start after the next round's results go in, and blend in over
+      {{ C.ENGINE_BLEND_ROUNDS }} rounds.</li>
+    <li>Season goals, the chosen team goal, pledges and signed contracts stay for the rest of the season. Next season is fully Version 3.</li>
+  </ul>
+  <form method="post" action="{{ url_for('calc_update_future', token=ctx.token) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> Back up the league and use Version 3 from round {{ cutoff + 1 }}</label>
+    <div><button class="btn">Use Version 3 from the next round</button></div>
+  </form>
+</section>
+
+<section class="card calc-option" id="option-c">
+  <h2>C. Decide later</h2>
+  <p>The league keeps using Calculation Version 2. You'll see a reminder you can hide; drivers never see this choice.</p>
+  <form method="post" action="{{ url_for('calc_update_later', token=ctx.token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost">Decide later</button>
+  </form>
+</section>
+</div>
+{% endif %}
+
+{% if history %}
+<section class="card" id="history">
+  <h2>Calculation Updates in this league</h2>
+  {% for m in history %}
+  <article class="calc-migration">
+    <h3>{{ 'Full recalculation' if m.option == 'full' else 'Version 3 from round ' ~ (m.cutoff_round + 1) }}
+      <small class="muted">· Version {{ m.old_engine }} → {{ m.new_engine }} · {{ m.created_at|stamp }} · approved by {{ m.approved_by }}</small></h3>
+    <p class="small">Rollback reference: <code>{{ m.backup or 'none' }}</code></p>
+    {% if m.notices %}
+    <details><summary class="small">{{ m.notices|length }} driver notice{{ 's' if m.notices|length != 1 }}</summary>
+      <ul class="small">{% for n in m.notices %}<li><b>{{ n.driver.name if n.driver else '?' }}</b>: {% for c in n.changes %}{{ c.label }} {{ c.before }} → {{ c.after }}{{ ('' if c.change is none else ' (' ~ ('%+g'|format(c.change)) ~ ')') }}{{ '; ' if not loop.last }}{% endfor %}
+        · {{ ('agreed by ' ~ (n.acked|map(attribute='username')|join(', ')) ~ ' at ' ~ (n.acked|map(attribute='acked_at')|join(', '))) if n.acked else 'not agreed yet' }}</li>{% endfor %}</ul>
+    </details>
+    {% elif m.option == 'full' %}<p class="muted small">Nobody's numbers changed, so there were no notices.</p>{% endif %}
+    {% if m.backup %}
+    <form method="post" action="{{ url_for('calc_update_rollback', token=ctx.token, migration_id=m.id) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="check small"><input type="checkbox" name="confirm" value="1" required> Put the league back exactly as it was before this update (anything since is lost; the current state is backed up first)</label>
+      <div><button class="btn btn-sm btn-danger">Roll back this update</button></div>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

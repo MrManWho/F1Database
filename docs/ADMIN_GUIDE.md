@@ -89,6 +89,30 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## New in 2.5: Calculation Version 3
+
+- **Upgrade**: leagues move to schema 21 when first opened (a `before-v21-upgrade` backup is written). Nothing is
+  recalculated: an existing league stays on calculation engine 2 until its Race Master answers the Calculation
+  Update (the Race Master is sent to it first; drivers never see it). New leagues start on engine 3.
+- **Calculation Update** (`/career/<token>/calculation-update`): A = recalculate the active season (backup
+  `before-calc-v3`, a savepoint preview that is rolled back, explicit confirmation, one personalised notice per
+  affected player driver); B = Future only (cutoff = last completed round, frozen values in `season_calc.frozen`,
+  engine 3 from the next round, blended in over 6 rounds); C = later (reminder banner, hideable per session).
+  Every update is a `calc_migrations` row with before/after values, approver and backup; the page lists each
+  notice and who agreed. **Rollback** restores that update's backup (the state just before is backed up too).
+- **Engine selection**: `meta.calc_engine` / `meta.calc_choice`, `season_calc(season_id, engine, cutoff_round,
+  frozen)`. Completed seasons keep their engine. `engine.round_v3(event)` decides per round.
+- **Formulas**: all in `docs/CALCULATION_V3.md`; code in `calc3.py` (standings, ranks, Form, Reputation, value),
+  `relations.py` (`_assess_v3`, `goals_v3`, `_pace_v3`, `carry_rewards`), `teamgoals.py`, `teamlife.py`
+  (targets, `rule_order`), `ultimatums.py`, `market.py` (emergency offer, negotiation), `pitch.py`, `ai3.py`.
+- **New data**: `results.no_fault`, `points_override`; `events.gp_distance`, `sprint_distance`, `cancelled`;
+  `drivers.career_status`; `team_orders.ruled_by/ruled_at/reason`; `team_goals.position`; `ultimatums.kind`;
+  tables `round_ranks`, `pace_inputs`, `ai_recs`, `season_calc`, `calc_migrations`. League setting
+  `sprint_min_distance` (default 50).
+- **Race Master jobs on engine 3**: tick *No fault* on a mechanical DNF (results page); rule team orders (Team
+  management); optionally switch a final warning to a teammate target and pick a free agent as replacement (Grid &
+  contracts); mark AI sessions representative or not (round page → Pace & conditions).
+
 ## New in 2.4.1: AI difficulty blend
 
 - **Formula** (`services.player_event_score`): each finishing player driver gets a car reading (expected finish

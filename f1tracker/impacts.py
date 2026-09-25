@@ -21,7 +21,11 @@ from .storage import get_meta, now_iso, set_meta
 
 STATS = {"points": ("Championship points", 0), "position": ("Championship position", 0),
          "reputation": ("Reputation", 1), "form": ("Form", 1), "value": ("Driver Value", 1),
-         "relationship": ("Team relationship", 1)}
+         "relationship": ("Team relationship", 1), "warning": ("Warning level", 0),
+         "ai": ("AI recommendation", 0), "sweet_spot": ("Your AI sweet spot", 1)}
+# v2.5: changes that aren't numbers (shown as "before → now").
+TEXT_STATS = {"band": "Relationship", "goals": "Season goals", "team_goal": "Team goal", "interest": "Your team's interest",
+              "contract": "Contract and market status", "ultimatum": "Final warning"}
 
 # Formula changes by version: shown as the "why" when numbers differ after an update.
 CALC_NOTES = {
@@ -46,8 +50,9 @@ def _tables(conn):
         notice_id INTEGER NOT NULL, username TEXT NOT NULL, acked_at TEXT NOT NULL, PRIMARY KEY (notice_id, username))""")
 
 
-def snapshot(conn, season_id=None):
-    """{driver_id: {stat: value}} for every player driver, this season."""
+def snapshot(conn, season_id=None, full=True):
+    """{driver_id: {stat: value}} for every player driver, this season. full (v2.5): also the relationship band,
+    warning level, goal states, team interest, contract status, final warning and the AI recommendation."""
     from . import market, relations
     sid = season_id or S.current_season_id(conn)
     if not sid:
@@ -55,6 +60,7 @@ def snapshot(conn, season_id=None):
     standings = {r["driver_id"]: r for r in S.driver_standings(conn, sid)}
     ranks = S.team_strength_ranks(conn, sid)
     has_rel = conn.execute("SELECT name FROM sqlite_master WHERE name = 'team_relations'").fetchone()
+    extra = _extras(conn, sid, standings) if full else {}
     out = {}
     for p in S.player_drivers(conn):
         row = standings.get(p["id"])
@@ -71,7 +77,52 @@ def snapshot(conn, season_id=None):
             a = relations.assess(conn, sid, p["id"], standings)
             if a:
                 stats["relationship"] = a["score"]
+                if full:
+                    stats["band"] = a["status"]
+                    stats["warning"] = a["warning_level"]
+                    stats["goals"] = "; ".join(f"{g['label']}: {g['state']}" for g in a["goals"]) or None
+        stats.update(extra.get(p["id"], {}))
         out[str(p["id"])] = stats
+    return out
+
+
+def _extras(conn, sid, standings):
+    """The league-wide and per-driver extras for a full snapshot (never fails the snapshot)."""
+    from . import market, teamgoals, ultimatums
+    out = {}
+    try:
+        rec = S.difficulty_recommendation(conn)
+    except Exception:       # a partly set-up league: the AI numbers just aren't compared
+        rec = {}
+    spots = {p["driver_id"]: p.get("sweet_spot") for p in rec.get("players", []) if p.get("sweet_spot") is not None}
+    goals = {}
+    if conn.execute("SELECT name FROM sqlite_master WHERE name = 'team_goal_choices'").fetchone():
+        goals = {g["team_id"]: f"{g['label']}: {g['state']}" for g in teamgoals.progress(conn, sid)}
+    seats = S.driver_seats(conn, sid)
+    for p in S.player_drivers(conn):
+        d = {}
+        seat = seats.get(p["id"])
+        if rec.get("recommended") is not None and seat:     # the AI level only matters to someone racing
+            d["ai"] = rec["recommended"]
+        if p["id"] in spots:
+            d["sweet_spot"] = spots[p["id"]]
+        if seat and seat[0] in goals:
+            d["team_goal"] = goals[seat[0]]
+        try:
+            if seat:
+                me, teams = market.team_interest(conn, sid, p["id"])
+                mine = next((t for t in teams if t["current"]), None)
+                if mine:
+                    d["interest"] = mine["label"]
+            status = market.career_status(conn, sid, p["id"]) if hasattr(market, "career_status") else None
+            deal = market.locked_in(conn, sid, p["id"], S.get_season(conn, sid)["year"] + 1)
+            d["contract"] = status or (f"Contracted with {deal['team']['name']} through {deal['end_year']}" if deal
+                                        else ("Seated" if seat else "No seat"))
+            u = ultimatums.active(conn, sid, p["id"])
+            d["ultimatum"] = u["status"] if u else "None"
+        except Exception:
+            pass
+        out[p["id"]] = d
     return out
 
 
@@ -86,6 +137,11 @@ def diff(before, after):
             if a is None or b is None or abs(float(b) - float(a)) < 0.05:
                 continue
             rows.append({"stat": key, "label": label, "before": a, "after": b, "change": round(float(b) - float(a), 1)})
+        for key, label in TEXT_STATS.items():
+            a, b = was.get(key), now.get(key)
+            if a is None or b is None or a == b:
+                continue
+            rows.append({"stat": key, "label": label, "before": a, "after": b, "change": None})
         if rows:
             out[int(did)] = rows
     return out

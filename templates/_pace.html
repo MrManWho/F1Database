@@ -1,0 +1,41 @@
+{# v2.5: optional lap-time evidence for the AI tracker. Needs: ctx, event, pace. #}
+{% if pace %}
+<section class="card pace-card" id="pace" aria-labelledby="pace-title">
+  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">(optional, for the AI recommendation)</small></h2></div>
+  <p class="muted small">Lap times make the AI recommendation much sharper: it compares you with your AI teammate (or cars of similar speed), not just finishing positions.
+    Leave anything blank you don't have. Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+  {% for item in pace.entries %}{% set r = item.row %}{% set p = item.input %}
+  <details class="pace-item" {{ 'open' if loop.first and not p }}>
+    <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
+      {% if p %}<span class="muted small">· {% if p.untracked %}not tracked{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· nothing entered</span>{% endif %}</summary>
+    {% if pace.can_edit %}
+    <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="driver_id" value="{{ r.driver_id }}"><input type="hidden" name="session" value="{{ item.session }}">
+      <div class="form-grid">
+        {% if item.session == 'gp' %}
+        <label>Your qualifying time <input name="quali_time" value="{{ pace.fmt(p.quali_time) if p }}" placeholder="1:23.456" inputmode="decimal"></label>
+        <label>AI teammate's qualifying time <input name="mate_quali_time" value="{{ pace.fmt(p.mate_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal"></label>
+        <label>Or compare with <select name="comp_driver_id"><option value="">—</option>{% for d in pace.drivers %}<option value="{{ d.driver_id }}" {{ 'selected' if p and p.comp_driver_id == d.driver_id }}>{{ d.driver.name }} ({{ d.team.name }})</option>{% endfor %}</select></label>
+        <label>Their qualifying time <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.300" inputmode="decimal"></label>
+        {% endif %}
+        <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+        <label>Laps you completed <input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}"></label>
+      </div>
+      <fieldset class="flag-grid"><legend class="small">Anything unusual?</legend>
+        {% for key, f in pace.flags.items() %}<label class="check small"><input type="checkbox" name="flag_{{ key }}" value="1" {{ 'checked' if p and key in p.flag_list }}> {{ f[0] }}</label>{% endfor %}
+        <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Do not track this session</label>
+      </fieldset>
+      {% if ctx.is_master %}
+      <label class="small">Representative? <select name="representative">
+        <option value="auto" {{ 'selected' if not p or p.representative is none }}>Decide from the flags</option>
+        <option value="1" {{ 'selected' if p and p.representative == 1 }}>Yes: it still shows the level is too hard/easy (counts at half weight)</option>
+        <option value="0" {{ 'selected' if p and p.representative == 0 }}>No: leave it out</option></select></label>
+      {% endif %}
+      <div><button class="btn btn-sm btn-primary">Save pace data</button></div>
+    </form>
+    {% endif %}
+  </details>
+  {% endfor %}
+</section>
+{% endif %}

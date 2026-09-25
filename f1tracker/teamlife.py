@@ -19,6 +19,7 @@ miss unless the Race Master marks it "not the driver's fault". Corrections re-ju
 import math
 import random
 
+from . import engine
 from . import constants as C
 from . import feed
 from . import relations
@@ -383,6 +384,8 @@ def issue_orders(conn, season_id, rng=None):
         mine, theirs = standings.get(rel["driver_id"]), standings.get(mate)
         ahead = bool(theirs and mine and theirs["points"] > mine["points"])
         chance = 0.4 if ahead else 0.2
+        if engine.round_v3(conn, nxt) and not order_reason_v3(conn, season_id, nxt, mine, theirs, team_id):
+            continue
         roll = (rng or random.Random(nxt["id"] * 7919 + rel["driver_id"])).random()
         if roll >= chance:
             continue
@@ -401,12 +404,67 @@ def issue_orders(conn, season_id, rng=None):
     return issued
 
 
+ORDER_MEANINGFUL_GAP = 10     # points the teammate must lead by (engine 3)
+
+
+def order_reason_v3(conn, season_id, event, mine, theirs, team_id):
+    """Engine 3: an order is only issued from half-way through the season, when the teammate leads by a meaningful
+    margin (10+ points) and there's a championship or team-goal reason. Returns the reason, or None."""
+    evs = S.events(conn, season_id)
+    done = sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE)
+    if done * 2 < len(evs) or not (mine and theirs) or theirs["points"] - mine["points"] < ORDER_MEANINGFUL_GAP:
+        return None
+    if theirs["position"] <= 5:
+        return f"their teammate is P{theirs['position']} in the championship"
+    try:
+        from . import teamgoals
+        goal = next((g for g in teamgoals.progress(conn, season_id) if g["team_id"] == team_id), None)
+    except Exception:
+        goal = None
+    if goal and goal["state"] not in ("Met", "Secured", "Missed", "Impossible"):
+        return "the team goal is still open"
+    return None
+
+
+ORDER_RULINGS = {"Obeyed": "Obeyed", "Ignored": "Ignored", "Not actionable": "Not actionable", "Void": "Void"}
+
+
+def rule_order(conn, event_id, driver_id, ruling, username, reason=""):
+    """Engine 3: the Race Master says what happened (finishing ahead on merit doesn't prove an order was ignored).
+    Obeyed +1, Ignored -2, Not actionable / Void 0."""
+    if ruling not in ORDER_RULINGS:
+        raise S.ValidationError("Choose Obeyed, Ignored, Not actionable or Void")
+    o = conn.execute("SELECT * FROM team_orders WHERE event_id = ? AND driver_id = ?", (event_id, driver_id)).fetchone()
+    if not o:
+        raise S.ValidationError("There's no team order for that driver at that round")
+    event = S.get_event(conn, event_id)
+    conn.execute("UPDATE team_orders SET status = ?, ruled_by = ?, ruled_at = ?, reason = ? WHERE event_id = ? AND driver_id = ?",
+                 (ruling, username, now_iso(), (reason or "")[:300], event_id, driver_id))
+    rel = conn.execute("SELECT team_id FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (event["season_id"], driver_id)).fetchone()
+    if rel and ruling in ("Obeyed", "Ignored") and settings(conn)["orders"] == "on":
+        name = S.driver_map(conn)[o["beneficiary_id"]]["name"]
+        relations.note(conn, event["season_id"], driver_id, rel["team_id"], "good" if ruling == "Obeyed" else "warning",
+                       f"R{event['round_number']} {event['name']}: the team order with {name} was ruled "
+                       f"{ruling.lower()}.", notify=ruling == "Ignored")
+    return ruling
+
+
 def resolve_orders(conn, event_id):
-    """After the race: was the order followed? Judged from the finishing order."""
+    """After the race: was the order followed? Judged from the finishing order (engine 2). Engine 3 never infers it:
+    the order waits for the Race Master's ruling."""
     event = S.get_event(conn, event_id)
     mode = settings(conn)["orders"]
     if mode == "off":
         cancel_open_orders(conn)
+        return []
+    if engine.round_v3(conn, event):
+        conn.execute("UPDATE team_orders SET status = 'Awaiting ruling' WHERE event_id = ? AND status = 'Issued'",
+                     (event_id,))
+        if mode == "on" and conn.execute("SELECT 1 FROM team_orders WHERE event_id = ? AND status = 'Awaiting ruling'",
+                                         (event_id,)).fetchone():
+            feed.notify(conn, None, f"Rule on the team order from R{event['round_number']} {event['name']} "
+                        "(Team management).", "team-management", category="admin")
         return []
     out = []
     for o in conn.execute("SELECT * FROM team_orders WHERE event_id = ? AND status = 'Issued'", (event_id,)).fetchall():
@@ -556,6 +614,25 @@ def target_options(conn, event, driver_id, team_id, ranks=None, rng=None):
         stretch = _finish_target(max(1, p_std - gap), field)
     if safe["label"] == std["label"]:
         safe = _finish_target(field, field)
+    if engine.round_v3(conn, event):
+        # v2.5: Safe is never harder than Standard, and Standard never harder than Stretch. A teammate or rival-team
+        # target is read as the finishing position it roughly needs; if the order can't be guaranteed, use positions.
+        ranks = ranks or S.team_strength_ranks(conn, event["season_id"])
+        rank = ranks.get(team_id, len(ranks) or 11)
+        implied = {"teammate": relations.expected_finish(rank),
+                   "beat_team": relations.expected_finish(rank + 1) - 1.5}
+
+        def need(t):
+            return implied[t["kind"]] if t["kind"] in implied else (t["target"] or field)
+        if std["kind"] in implied and not (need(stretch) <= need(std) <= need(safe)):
+            std = _finish_target(p_std, field)
+        if stretch["kind"] in implied and not need(stretch) < need(std):
+            stretch = _finish_target(max(1, p_std - gap), field)
+        if not need(stretch) <= need(std) <= need(safe):
+            safe, std, stretch = (_finish_target(min(field, p_std + gap), field), _finish_target(p_std, field),
+                                  _finish_target(max(1, p_std - gap), field))
+            if safe["label"] == std["label"]:
+                safe = _finish_target(field, field)
     out = {}
     for tier, t in (("safe", safe), ("standard", std), ("stretch", stretch)):
         info = C.TARGET_TIERS[tier]
@@ -738,17 +815,23 @@ def acknowledge(conn, event_id, driver_id):
 
 
 def _position(r):
-    """Finishing order for comparisons: a finisher's position, anyone who started but didn't finish is behind."""
+    """Finishing order for comparisons: a classified position, anyone who started but wasn't classified is behind."""
     if not r or r["result_status"] not in C.START_STATUSES:
         return None
-    return r["race_position"] if r["result_status"] == C.STATUS_FINISHED and r["race_position"] else 99
+    return r["race_position"] if r["result_status"] in C.CLASSIFIED_STATUSES and r["race_position"] else 99
 
 
 def _judge(conn, event, t):
     row = _result(conn, event["id"], t["driver_id"])
     if event["postponed"] or not row or row["result_status"] not in C.START_STATUSES:
         return "Void", "didn't take part"
-    if row["result_status"] != C.STATUS_FINISHED or not row["race_position"]:
+    if engine.round_v3(conn, event):
+        # v2.5: a classified retirement keeps its classified position; a verified no-fault DNF is Void.
+        if row["result_status"] == "DNF" and (row["no_fault"] or t["excused"]):
+            return "Void", "not the driver's fault"
+        if row["result_status"] not in C.CLASSIFIED_STATUSES or not row["race_position"]:
+            return "Missed", row["result_status"]
+    elif row["result_status"] != C.STATUS_FINISHED or not row["race_position"]:
         return ("Void", "not the driver's fault") if t["excused"] else ("Missed", row["result_status"])
     mine = row["race_position"]
     kind = t["kind"]

@@ -39,7 +39,7 @@ POST = {
         ("best", "One of the best laps of my life", 0, None),
         ("sunday", "It's only a lap. Sunday is what counts", 1, None)]),
     "fastest": ("You set the fastest lap. Worth the risk?", [
-        ("points", "Every point counts in this championship", 1, None),
+        ("points", "Every tenth matters when you're chasing performance", 1, None),
         ("show", "Just showing what we could have done all race", -1, None),
         ("call", "The team called for it and it was the right call", 2, None)]),
     "sprint_good": ("P{sprint} in the Sprint. Did it set up your weekend?", [
@@ -168,6 +168,21 @@ PRE = {
 }
 
 ALL = {**POST, **PRE}
+
+# v2.5 (engine 3): a negative effect is for arrogance, blame or damaging the team in public, never for an honest
+# assessment. These answers are re-rated (the headlines stay); everything else keeps its effect. Engine 3 then
+# counts every press effect at C.V3_PRESS_SHARE (50%).
+V3_EFFECTS = {
+    ("fastest", "show"): 0, ("first_points", "time"): 0, ("solid", "more"): 0, ("title", "develop"): 0,
+    ("pre_expect", "struggle"): 0, ("pre_target", "stretch"): 0, ("pre_mood", "race"): 0,
+    ("pre_opener", "behind"): -1, ("pre_setup", "wrong"): -1,
+}
+
+
+def effect_v3(question, answer, stored):
+    """The relationship effect of a press answer under engine 3 (re-rated where needed, then halved)."""
+    base = V3_EFFECTS.get((question, answer), stored or 0)
+    return base * C.V3_PRESS_SHARE
 # Stories that can come round again week after week; the big ones (a win, a DNF) are always asked about.
 REPEATABLE_LEADS = {"drought", "wrong", "solid", "credit", "last"}
 PRE_PER_DRIVER = 2
@@ -194,11 +209,11 @@ def _season_rounds(conn, event):
                                           (event["season_id"],))]
 
 
-def _points(row, event):
+def _points(conn, row, event):
     if not row:
         return 0
-    return (S.gp_points(row["race_position"], row["result_status"]) +
-            S.sprint_points(row["sprint_position"], row["sprint_status"], bool(event["is_sprint"])))
+    from . import calc3
+    return calc3.Points(conn).total(row)
 
 
 def _facts(conn, event, driver_id, before=False):
@@ -294,7 +309,7 @@ def pre_keys(conn, event, driver_id):
             first.append("pre_bounce")
         elif last["race_position"] and last["race_position"] <= 3:
             first.append("pre_momentum")
-        if len(recent) >= 3 and all(_points(r, e) == 0 for e, r in recent[:3]):
+        if len(recent) >= 3 and all(_points(conn, r, e) == 0 for e, r in recent[:3]):
             first.append("pre_drought")
     if facts["mate_id"]:
         ahead, behind = _mate_record(conn, event, driver_id, facts["mate_id"])
@@ -344,8 +359,8 @@ def post_keys(conn, event, driver_id):
     runners = [r["race_position"] for r in conn.execute(
         "SELECT race_position FROM results WHERE event_id = ? AND result_status = ? AND race_position IS NOT NULL",
         (event["id"], C.STATUS_FINISHED))]
-    pts_now = _points(row, event)
-    earlier_pts = sum(_points(r, e) for e, r in _recent(conn, event, driver_id, count=99))
+    pts_now = _points(conn, row, event)
+    earlier_pts = sum(_points(conn, r, e) for e, r in _recent(conn, event, driver_id, count=99))
     # The headline question: the biggest story of this driver's race.
     if not finished:
         lead = "dnf_again" if any(r["result_status"] != C.STATUS_FINISHED for _e, r in recent[:2]) else "dnf"
@@ -359,7 +374,7 @@ def post_keys(conn, event, driver_id):
         lead = "lost"
     elif pts_now and not earlier_pts and event["round_number"] > 1:
         lead = "first_points"
-    elif not pts_now and len(recent) >= 2 and all(_points(r, e) == 0 for e, r in recent[:2]):
+    elif not pts_now and len(recent) >= 2 and all(_points(conn, r, e) == 0 for e, r in recent[:2]):
         lead = "drought"
     elif runners and pos == max(runners) and len(runners) > 5:
         lead = "last"

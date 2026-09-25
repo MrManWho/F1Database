@@ -65,7 +65,7 @@ def analyse(message):
     shouting = len(letters) >= 12 and sum(1 for c in letters if c.isupper()) / len(letters) > 0.6 or "!!!" in raw
     words = len(raw.split())
     return {"themes": sorted(found), "arrogant": arrogant, "blame": blame, "shouting": bool(shouting),
-            "words": words, "empty": words < 4}
+            "words": words, "empty": words < 4, "meaningful": meaningful(raw)}
 
 
 def taste(conn, team_id, rank, teams_total):
@@ -79,12 +79,34 @@ def taste(conn, team_id, rank, teams_total):
     return {"tier": tier, "weights": weights, "favourite": favourite}
 
 
-def score(reading, team_taste):
+FUNCTION_WORDS = {"i", "i'm", "im", "i've", "ive", "i'd", "id", "we", "we're", "my", "our", "you", "your", "me", "us",
+                  "want", "will", "would", "can", "could", "am", "is", "are", "was", "have", "has", "be", "to", "the",
+                  "a", "and", "for", "with", "of", "in", "this", "that", "it", "so", "because"}
+
+
+def meaningful(message):
+    """v2.5: at least one real sentence (5+ words, 2+ ordinary words like "I", "want", "the"), and not a pile of
+    keywords: a bare keyword list scores nothing."""
+    raw = (message or "").lower()
+    for sentence in re.split(r"[.!?;\n]+", raw):
+        words = re.sub(r"[^a-z' ]", " ", sentence).split()
+        if len(words) >= 5 and sum(1 for w in words if w in FUNCTION_WORDS) >= 2:
+            return True
+    return False
+
+
+def score(reading, team_taste, v3=False):
     """-1..1: how well the message landed with this team."""
     if reading["empty"]:
         return 0.0
+    if v3 and not reading.get("meaningful", True):
+        return 0.0
     w = team_taste["weights"]
-    good = sum(w.get(t, 0.2) for t in reading["themes"])
+    themes = reading["themes"]
+    if v3:
+        # v2.5: only the two strongest themes count (for this team), so stuffing in every theme doesn't pay.
+        themes = sorted(themes, key=lambda t: -w.get(t, 0.2))[:2]
+    good = sum(w.get(t, 0.2) for t in themes)
     s = min(1.0, good / 2.2)
     s -= 0.45 * min(2, reading["arrogant"]) + 0.35 * min(2, reading["blame"]) + (0.25 if reading["shouting"] else 0)
     if not reading["themes"] and not (reading["arrogant"] or reading["blame"]):
@@ -112,11 +134,11 @@ def reaction(team, reading, s, team_taste):
     return ""
 
 
-def message_effect(conn, team_id, rank, teams_total, message, team_name):
+def message_effect(conn, team_id, rank, teams_total, message, team_name, v3=False):
     """(interest change, score, reaction sentence, reading) for a message sent to a team."""
     reading = analyse(message)
     t = taste(conn, team_id, rank, teams_total)
-    s = score(reading, t)
+    s = score(reading, t, v3)
     return round(s * PITCH_MAX, 2), s, reaction(team_name, reading, s, t), reading
 
 

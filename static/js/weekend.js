@@ -4,8 +4,16 @@
   if (!table) return;
   const readOnly = table.dataset.readonly === "1";
   const isSprint = table.dataset.sprint === "1";
-  const GP = JSON.parse(table.dataset.gp);
+  let GP = JSON.parse(table.dataset.gp);
   const SP = JSON.parse(table.dataset.sprintPoints);
+  // v2.5: shortened races use a reduced scale (engine 3 rounds); "manual" uses points typed in per driver.
+  const DISTANCES = table.dataset.distances ? JSON.parse(table.dataset.distances) : null;
+  const gpDistance = document.getElementById("gp-distance");
+  const sprintDistance = document.getElementById("sprint-distance");
+  const SPRINT_MIN = parseInt(table.dataset.sprintMin || "50", 10);
+  const SP_FULL = table.dataset.sprintFull ? JSON.parse(table.dataset.sprintFull) : SP;
+  let SPR = SP;
+  function scored(status) { return status === "Finished" || status === "Classified"; }
   const stateEl = document.getElementById("save-state");
   const statusEl = document.getElementById("event-status");
   const diffInput = document.getElementById("ai-difficulty");
@@ -43,19 +51,26 @@
         if (list.length > 1) { list.forEach(function (i) { i.classList.add("dup"); }); problems++; }
       });
     });
+    if (DISTANCES && gpDistance) GP = DISTANCES[gpDistance.value] || {};
+    if (sprintDistance) SPR = (parseInt(sprintDistance.value || "100", 10) >= SPRINT_MIN) ? SP_FULL : {};
+    const manual = gpDistance && gpDistance.value === "manual";
     rows.forEach(function (tr) {
       const race = parsePos(tr.querySelector('[data-field="race_position"]').value);
       const status = resolve(tr.querySelector('[data-field="status_override"]').value, race);
-      const gp = status === "Finished" && race ? (GP[race] || 0) : 0;
+      const overrideEl = tr.querySelector('[data-field="points_override"]');
+      let gp = scored(status) && race ? (GP[race] || 0) : 0;
+      if (manual) gp = scored(status) && overrideEl ? (parseFloat(overrideEl.value) || 0) : 0;
       let sp = 0;
       if (isSprint) {
         const spos = parsePos(tr.querySelector('[data-field="sprint_position"]').value);
         const sstatus = resolve(tr.querySelector('[data-field="sprint_status_override"]').value, spos);
-        sp = sstatus === "Finished" && spos ? (SP[spos] || 0) : 0;
+        sp = scored(sstatus) && spos ? (SPR[spos] || 0) : 0;
         tr.querySelector(".sp-pts").textContent = sp;
       }
       tr.querySelector(".gp-pts").textContent = gp;
       tr.querySelector(".tot-pts").innerHTML = "<strong>" + (gp + sp) + "</strong>";
+      const nf = tr.querySelector(".nofault");
+      if (nf) nf.hidden = status !== "DNF";     // v2.5: "no fault" only applies to a DNF
       const out = ["DNF", "DNS", "DSQ"].indexOf(status) >= 0;
       tr.classList.toggle("row-out", out);
       tr.dataset.points = gp + sp;
@@ -72,6 +87,8 @@
       ai_difficulty: diffInput.value === "" ? null : diffInput.value,
       ai_untracked: diffInput.value === "" && untracked,
       event_notes: notesEl.value,
+      gp_distance: gpDistance ? gpDistance.value : undefined,
+      sprint_distance: sprintDistance ? sprintDistance.value : undefined,
       results: rows.map(function (tr) {
         const get = function (f) { const el = tr.querySelector('[data-field="' + f + '"]'); return el ? el : null; };
         return {
@@ -81,6 +98,8 @@
           sprint_status_override: isSprint ? get("sprint_status_override").value : "Auto",
           race_position: get("race_position").value.trim(),
           status_override: get("status_override").value,
+          no_fault: get("no_fault") ? get("no_fault").checked : undefined,
+          points_override: get("points_override") ? get("points_override").value.trim() : undefined,
           fastest_lap: get("fastest_lap").checked,
           driver_of_day: get("driver_of_day").checked,
           notes: get("notes").value
@@ -568,6 +587,19 @@
     }
   });
   [diffInput, notesEl].forEach(function (el) { el.addEventListener("input", schedule); });
+  const manualAtLoad = gpDistance && gpDistance.value === "manual";
+  [gpDistance, sprintDistance].forEach(function (el) {
+    if (!el) return;
+    el.addEventListener("change", function () {
+      recalc(); schedule();
+      // Switching to or from manual points adds or removes the points column: save first, then reload.
+      // A completed round being corrected is never reloaded (its edits wait for "Save corrections").
+      const needsColumn = el === gpDistance && ((gpDistance.value === "manual") !== manualAtLoad);
+      if (needsColumn && !correcting) {
+        save(false).then(function (ok) { if (ok !== false) window.location.reload(); });
+      }
+    });
+  });
 
   table.addEventListener("keydown", function (e) {
     const inp = e.target;

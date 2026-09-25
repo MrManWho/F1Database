@@ -1641,3 +1641,20 @@ tr.contract-historical { opacity: .75; }
 .round-tabs [role=tab][aria-selected=true] { color: var(--text, inherit); border-bottom-color: var(--accent, #e10600); }
 .round-panel > .card + .card, .round-panel > section + section { margin-top: .9rem; }
 @media (max-width: 720px) { .round-hero { grid-template-columns: auto 1fr; } .round-nav { grid-column: 1 / -1; justify-content: flex-start; } }
+
+/* v2.5: row headings inside a table body never stick to the top (they stacked on the changes page), and the
+   before -> after tables wrap long text (season goals) instead of pushing the change column out of view. */
+.data-table tbody th:not(.sticky-col) { position: static; background: transparent; text-transform: none;
+  letter-spacing: normal; font-size: .85rem; color: var(--text, inherit); }
+.impact-table td, .impact-table th { white-space: normal; vertical-align: top; }
+.impact-table td:nth-child(2) { min-width: 14rem; }
+.calc-options { display: grid; gap: 0; }
+.pace-item { border-top: 1px solid var(--line); padding: .5rem 0; }
+.pace-item summary { cursor: pointer; }
+.pace-form .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .5rem .8rem; margin: .5rem 0; }
+.flag-grid { display: flex; flex-wrap: wrap; gap: .3rem 1rem; border: 1px solid var(--line); border-radius: 8px; padding: .4rem .7rem; }
+.distance-input { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-top: .6rem; }
+.nofault { display: inline-flex; gap: .25rem; align-items: center; margin-left: .35rem; }
+.status-pill.st-classified { background: rgba(74, 163, 255, .15); color: var(--blue, #4aa3ff); }
+.flag-grid label.check { display: inline-flex; width: auto; gap: .3rem; align-items: center; margin: 0; }
+.nofault[hidden] { display: none; }

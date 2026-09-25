@@ -11,6 +11,7 @@
       {% if teammate %}<span>Teammate: {{ teammate.name }}</span>{% endif %}
       <span>{{ seat_badge(seat_state) }}{% if seat_state.kind == 'confirmed' and seat_state.contract %} · {{ seat_state.contract.role }}{% endif %}</span>
       {% if rookie %}<span class="pill pill-hot">Rookie</span>{% endif %}
+      {% if career_status %}<span class="pill">{{ career_status }}</span>{% endif %}
     </div>
   </div>
   {% if ctx.is_master and players|length > 1 %}

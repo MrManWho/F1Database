@@ -20,6 +20,7 @@ After three rounds the targets are re-based on how the car is really performing 
 The team also sets season goals, and press answers and team orders add a small bonus (+/-15).
 """
 
+from . import calc3, engine
 from . import constants as C
 from . import feed
 from . import services as S
@@ -72,6 +73,8 @@ def targets_for(conn, season_id, driver_id, team_id, growth, ranks=None):
 
 def pace(conn, season_id, driver_id, team_id=None):
     """Average finishing position in completed rounds (DNF/DSQ = last; worst weekend dropped from round 5)."""
+    if engine.is_v3(conn, season_id):
+        return _pace_v3(conn, season_id, driver_id, team_id)
     field = max(2, 2 * len(S.teams(conn)))
     sql = """SELECT r.race_position, r.result_status FROM results r JOIN events e ON e.id = r.event_id
              WHERE e.season_id = ? AND e.status = ? AND r.driver_id = ?"""
@@ -88,6 +91,32 @@ def pace(conn, season_id, driver_id, team_id=None):
     counted = sorted(finishes)[:-1] if len(finishes) >= C.PLEDGE_DROP_AFTER else finishes
     return {"average": round(sum(counted) / len(counted), 2) if counted else None, "rounds": len(finishes),
             "dropped": len(finishes) - len(counted), "field": field}
+
+
+def _pace_v3(conn, season_id, driver_id, team_id=None):
+    """Engine 3 pledge pace: a classified finish counts its position; an unexcused DNF or a DSQ counts as last; a
+    verified no-fault retirement is left out, at most 10% of the season's rounds (rounded down); the worst weekend
+    is dropped from round 5 as before."""
+    field = max(2, 2 * len(S.teams(conn)))
+    total = len(S.events(conn, season_id)) or 1
+    allowed = engine.floor_int(C.V3_NOFAULT_SHARE * total)
+    sql = """SELECT r.race_position, r.result_status, r.no_fault FROM results r JOIN events e ON e.id = r.event_id
+             WHERE e.season_id = ? AND e.status = ? AND r.driver_id = ?"""
+    params = [season_id, C.EVENT_COMPLETE, driver_id]
+    if team_id is not None:
+        sql += " AND r.team_id = ?"
+        params.append(team_id)
+    finishes, excused = [], 0
+    for r in conn.execute(sql + " ORDER BY e.round_number", params):
+        if r["result_status"] in C.CLASSIFIED_STATUSES and r["race_position"]:
+            finishes.append(r["race_position"])
+        elif r["result_status"] == "DNF" and r["no_fault"] and excused < allowed:
+            excused += 1
+        elif r["result_status"] in ("DNF", "DSQ"):
+            finishes.append(field)
+    counted = sorted(finishes)[:-1] if len(finishes) >= C.PLEDGE_DROP_AFTER else finishes
+    return {"average": round(sum(counted) / len(counted), 2) if counted else None, "rounds": len(finishes) + excused,
+            "dropped": len(finishes) - len(counted), "field": field, "excused": excused}
 
 
 def band(score):
@@ -159,6 +188,8 @@ def ensure(conn, season_id):
 
 def assess(conn, season_id, driver_id, standings=None):
     """The live picture: targets, progress and the team's rating. None if the driver has no seat."""
+    if engine.is_v3(conn, season_id):
+        return _assess_v3(conn, season_id, driver_id, standings)
     rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ?",
                        (season_id, driver_id)).fetchone()
     if not rel:
@@ -197,6 +228,94 @@ def assess(conn, season_id, driver_id, standings=None):
             "reward_if_kept": growth_level(rel["growth"])["reward"], "h2h": h2h, "score": score, "status": status, "done": done,
             "total": total, "confidence": confidence, "live_status": band(score), "goals": goals,
             "role": _role(conn, rel)}
+
+
+def extras_v3(conn, season_id, driver_id, team_id):
+    """Engine 3 relationship extras: press (re-rated, 50%), weekend targets (full) and ruled team orders from the six
+    most recent weekends only, summed and kept within +/-10. Returns (total, [(round, effect, what)])."""
+    from . import press
+    last = conn.execute("SELECT MAX(round_number) FROM events WHERE season_id = ? AND status = ?",
+                        (season_id, C.EVENT_COMPLETE)).fetchone()[0] or 0
+    first = last - C.V3_EXTRA_ROUNDS + 1       # rounds first..last, plus the next round's pre-race press
+    since = get_since(conn, season_id, driver_id)
+    seat = S.driver_seats(conn, season_id).get(driver_id)
+    current = seat[0] if seat else None
+    items = []
+    for r in conn.execute("""SELECT p.question, p.answer, p.effect, p.created_at, e.round_number, r.team_id AS raced_for
+                             FROM press_answers p JOIN events e ON e.id = p.event_id
+                             LEFT JOIN results r ON r.event_id = p.event_id AND r.driver_id = p.driver_id
+                             WHERE e.season_id = ? AND p.driver_id = ? AND e.round_number >= ?""",
+                          (season_id, driver_id, first)):
+        if (r["raced_for"] or current) == team_id and r["created_at"] >= since:
+            eff = press.effect_v3(r["question"], r["answer"], r["effect"])
+            if eff:
+                items.append((r["round_number"], eff, "press"))
+    for r in conn.execute("""SELECT t.effect, t.judged_at, e.round_number FROM weekend_targets t
+                             JOIN events e ON e.id = t.event_id WHERE e.season_id = ? AND t.driver_id = ? AND t.team_id = ?
+                             AND t.effect != 0 AND e.round_number >= ?""", (season_id, driver_id, team_id, first)):
+        if (r["judged_at"] or "") >= since:
+            items.append((r["round_number"], r["effect"], "weekend target"))
+    for r in conn.execute("""SELECT o.status, o.ruled_at, e.round_number FROM team_orders o JOIN events e ON e.id = o.event_id
+                             WHERE e.season_id = ? AND o.driver_id = ? AND e.round_number >= ?
+                             AND o.status IN ('Obeyed', 'Ignored')""", (season_id, driver_id, first)):
+        if (r["ruled_at"] or "9") >= since:
+            items.append((r["round_number"], C.V3_ORDER_OBEYED if r["status"] == "Obeyed" else C.V3_ORDER_IGNORED,
+                          "team order"))
+    total = sum(x[1] for x in items)
+    return max(-C.V3_EXTRA_CAP, min(C.V3_EXTRA_CAP, total)), items
+
+
+def get_since(conn, season_id, driver_id):
+    from .storage import get_meta
+    return get_meta(conn, f"bonus_since_{season_id}_{driver_id}") or ""
+
+
+def _assess_v3(conn, season_id, driver_id, standings=None):
+    """Engine 3 relationship: 60 + confidence x (pace + head-to-head + goals) + recent extras, 0-100. A driver who
+    simply meets expectations stays close to 60."""
+    rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (season_id, driver_id)).fetchone()
+    if not rel:
+        return None
+    rel = dict(rel)
+    evs = S.events(conn, season_id)
+    total = len(evs) or 1
+    done = sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE)
+    standings = standings if standings is not None else {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
+    row = standings.get(driver_id)
+    has = bool(row and row["has_results"])
+    form = row["form"] if has else rel["form_base"]
+    rep = row["reputation"] if row else rel["rep_start"]
+    h2h = calc3.head_to_head(conn, season_id, driver_id)
+    h2h_part = S.clamp((h2h["race_won"] / h2h["race_total"] - 0.5) * 10, -5, 5) \
+        if h2h["race_total"] >= C.V3_H2H_MIN else 0.0
+    if rel["finish_target"] is None:
+        t = targets_for(conn, season_id, driver_id, rel["team_id"], rel["growth"])
+        rel["finish_base"], rel["finish_target"] = t["finish_base"], t["finish_target"]
+    p = pace(conn, season_id, driver_id, rel["team_id"])
+    pace_gap = (rel["finish_target"] - p["average"]) if p["average"] is not None else 0.0
+    pace_part = S.clamp(pace_gap / pace_unit(rel["finish_base"]) * 6, -30, 30)
+    confidence = min(1.0, done / max(3.0, total * 0.3))
+    goals = goal_progress(conn, season_id, driver_id, row, h2h, done, total)
+    goal_part = sum(C.V3_GOAL_EFFECT.get(g["state"], 0.0) for g in goals)
+    extras, items = extras_v3(conn, season_id, driver_id, rel["team_id"])
+    raw = pace_part + h2h_part + goal_part
+    score = S.clamp(C.RELATION_START + confidence * raw + extras, 0, 100)
+    if engine.mixed(conn, season_id):
+        fz = (engine.frozen(conn, season_id).get("drivers", {}).get(str(driver_id)) or {}).get("relationship")
+        score = engine.blend(fz, score, engine.blend_weight(conn, season_id))
+    score = engine.round_half_up(score, 1)
+    status = "Released" if rel["released"] else band(score)
+    return {**rel, "team": S.team_map(conn).get(rel["team_id"]), "level": growth_level(rel["growth"]),
+            "form": form, "rep": rep, "rep_change": round(rep - rel["rep_start"], 1), "pace": p["average"],
+            "pace_rounds": p["rounds"], "pace_dropped": p["dropped"], "pace_excused": p.get("excused", 0),
+            "field": p["field"], "pace_gap": round(pace_gap, 2),
+            "on_pledge": p["average"] is not None and p["average"] <= rel["finish_target"] + 1e-9,
+            "reward_if_kept": growth_level(rel["growth"])["reward"], "h2h": h2h, "score": score, "status": status,
+            "done": done, "total": total, "confidence": confidence, "live_status": band(score), "goals": goals,
+            "role": _role(conn, rel), "bonus": extras, "extras": items, "engine": 3,
+            "parts": {"pace": round(pace_part, 1), "h2h": round(h2h_part, 1), "goals": goal_part,
+                      "extras": round(extras, 1)}}
 
 
 WARNINGS = {
@@ -279,6 +398,14 @@ def interest_bonus(conn, season_id, driver_id, team_id):
     """How a driver's current team feels when a window opens: -10 (fed up) to +7 (delighted)."""
     rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ? AND team_id = ?",
                        (season_id, driver_id, team_id)).fetchone()
+    if engine.is_v3(conn, season_id):
+        # v2.5: no automatic +3; a relationship of exactly 60 adds nothing (clamp((score - 60) / 5, -8, +6)).
+        if not rel:
+            return 0.0
+        if rel["released"]:
+            return None
+        a = assess(conn, season_id, driver_id)
+        return calc3.interest_bonus(a["score"] if a else rel["score"])
     if not rel:
         return 3.0
     if rel["released"]:
@@ -387,6 +514,11 @@ def set_goals(conn, season_id, driver_id, team_id, role, ranks=None, replace=Fal
     if not replace and conn.execute("SELECT 1 FROM team_goals WHERE season_id = ? AND driver_id = ?",
                                     (season_id, driver_id)).fetchone():
         return
+    if engine.is_v3(conn, season_id):
+        if replace and engine.mixed(conn, season_id) and conn.execute(
+                "SELECT 1 FROM team_goals WHERE season_id = ? AND driver_id = ?", (season_id, driver_id)).fetchone():
+            return      # Future-only: the goals already set stay for the rest of this season
+        return _set_goals_v3(conn, season_id, driver_id, team_id, role, ranks)
     conn.execute("DELETE FROM team_goals WHERE season_id = ? AND driver_id = ?", (season_id, driver_id))
     ranks = ranks or S.team_strength_ranks(conn, season_id)
     rank = ranks.get(team_id, len(ranks) or 11)
@@ -405,7 +537,44 @@ def set_goals(conn, season_id, driver_id, team_id, role, ranks=None, replace=Fal
                      (season_id, driver_id, kind, target, label))
 
 
+V3_POINTS_SHARE = {1: 0.75, 2: 0.70, 3: 0.60, 4: 0.50}
+V3_FINISH_SHARE = 0.30
+
+
+def goals_v3(rank, total, field):
+    """Engine 3 season goals for a car of this rank: [(kind, target, position, label)]."""
+    goals = []
+    if rank <= 4:
+        n = max(1, engine.ceil_int(total * V3_POINTS_SHARE[rank]))
+        goals.append(("points", n, None, f"Score points in {n} race{'s' if n != 1 else ''}"))
+    else:
+        pos = int(max(10, min(field - 2, engine.floor_int(expected_finish(rank) - 1))))
+        n = max(1, engine.ceil_int(total * V3_FINISH_SHARE))
+        goals.append(("finish", n, pos, f"Finish P{pos} or better in {n} race{'s' if n != 1 else ''}"))
+    wdc = min(20, 2 * rank + 1)
+    goals.append(("championship", wdc, None, f"Finish P{wdc} or better in the championship"))
+    return goals
+
+
+def _set_goals_v3(conn, season_id, driver_id, team_id, role, ranks=None):
+    conn.execute("DELETE FROM team_goals WHERE season_id = ? AND driver_id = ?", (season_id, driver_id))
+    ranks = ranks or S.team_strength_ranks(conn, season_id)
+    rank = ranks.get(team_id, len(ranks) or 11)
+    total = len(S.events(conn, season_id)) or 1
+    field = max(2, 2 * len(S.teams(conn)))
+    goals = goals_v3(rank, total, field)
+    if role == "No. 1":
+        goals.append(("teammate", 1, None, "Beat your teammate in more than half your races (you're the No. 1)"))
+    elif role == "Equal Status":
+        goals.append(("teammate", 1, None, "Beat your teammate in at least half your races"))
+    for kind, target, pos, label in goals:
+        conn.execute("INSERT INTO team_goals(season_id, driver_id, kind, target, label, position) VALUES(?,?,?,?,?,?)",
+                     (season_id, driver_id, kind, target, label, pos))
+
+
 def goal_progress(conn, season_id, driver_id, row, h2h, done, total):
+    if engine.is_v3(conn, season_id):
+        return _goal_progress_v3(conn, season_id, driver_id, row, h2h, done, total)
     frac = done / (total or 1)
     out = []
     for g in conn.execute("SELECT * FROM team_goals WHERE season_id = ? AND driver_id = ? ORDER BY id",
@@ -435,6 +604,49 @@ def goal_progress(conn, season_id, driver_id, row, h2h, done, total):
     return out
 
 
+def _goal_progress_v3(conn, season_id, driver_id, row, h2h, done, total):
+    """Engine 3: Met / On track / Behind, or Not evaluated for a teammate goal with fewer than three comparisons."""
+    frac = done / (total or 1)
+    rel = conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND driver_id = ?",
+                       (season_id, driver_id)).fetchone()
+    role = _role(conn, rel) if rel else "Equal Status"
+    out = []
+    for g in conn.execute("SELECT * FROM team_goals WHERE season_id = ? AND driver_id = ? ORDER BY id",
+                          (season_id, driver_id)).fetchall():
+        g = dict(g)
+        if g["kind"] in ("points", "finish"):
+            limit = 10 if g["kind"] == "points" else (g.get("position") or 10)
+            count = conn.execute("""SELECT COUNT(*) FROM results r JOIN events e ON e.id = r.event_id
+                                    WHERE e.season_id = ? AND r.driver_id = ? AND e.status = ?
+                                    AND r.result_status IN (?, ?) AND r.race_position <= ?""",
+                                 (season_id, driver_id, C.EVENT_COMPLETE, C.STATUS_FINISHED, C.STATUS_CLASSIFIED,
+                                  limit)).fetchone()[0]
+            g["now"] = f"{count} of {g['target']}"
+            g["state"] = "Met" if count >= g["target"] else \
+                "On track" if count >= g["target"] * frac - 0.5 else "Behind"
+        elif g["kind"] == "championship":
+            pos = row["position"] if row and row["has_results"] else None
+            g["now"] = f"P{pos}" if pos else "—"
+            if not pos:
+                g["state"] = "Not started"
+            elif pos <= g["target"]:
+                g["state"] = "Met" if done == total else "On track"
+            else:
+                g["state"] = "Behind"
+        else:
+            won, raced = h2h["race_won"], h2h["race_total"]
+            g["now"] = f"{won}–{raced - won}"
+            needs_more = won * 2 > raced if role == "No. 1" else won * 2 >= raced
+            if raced < C.V3_H2H_MIN:
+                g["state"] = "Not evaluated"      # zero (or too few) comparisons never count as Met
+            elif needs_more:
+                g["state"] = "Met" if done == total else "On track"
+            else:
+                g["state"] = "Behind"
+        out.append(g)
+    return out
+
+
 def settle(conn, season_id):
     """End of season: record whether each pledge was kept. Returns {driver_id: reward} for kept pledges."""
     ensure(conn, season_id)
@@ -442,14 +654,17 @@ def settle(conn, season_id):
     rewards = {}
     for rel in conn.execute("SELECT * FROM team_relations WHERE season_id = ?", (season_id,)).fetchall():
         if rel["outcome"]:
-            if rel["outcome"] == "Kept":
+            if rel["outcome"] == "Kept" or (rel["reward"] or 0) < 0:
                 rewards[rel["driver_id"]] = rel["reward"]
             continue
         a = assess(conn, season_id, rel["driver_id"], standings)
         if not a or not a["pace_rounds"] or not rel["pledged"]:
             continue
         kept = a["on_pledge"]
-        reward = a["reward_if_kept"] if kept else 0.0
+        # v2.5 (engine 3, full season): a missed pledge costs Reputation (Steady 0, Solid -0.5, Strong -1,
+        # Breakout -1.5). A Future-only season keeps the pledge's original terms (no penalty).
+        full_v3 = engine.is_v3(conn, season_id) and not engine.mixed(conn, season_id)
+        reward = a["reward_if_kept"] if kept else (C.V3_PLEDGE_FAIL.get(rel["growth"] or 0, 0.0) if full_v3 else 0.0)
         conn.execute("UPDATE team_relations SET outcome = ?, reward = ? WHERE season_id = ? AND driver_id = ?",
                      ("Kept" if kept else "Missed", reward, season_id, rel["driver_id"]))
         team = a["team"]["name"] if a["team"] else "Your team"
@@ -460,8 +675,11 @@ def settle(conn, season_id):
                  f"Pledge kept: you averaged P{a['pace']:.1f} against a {level} target of P{a['finish_target']:.1f}. "
                  f"{team} are telling everyone: +{reward} Reputation to start next season.")
         else:
+            if reward:
+                rewards[rel["driver_id"]] = reward
             note(conn, season_id, rel["driver_id"], rel["team_id"], "concerned",
-                 f"Pledge missed: you averaged P{a['pace']:.1f} against a {level} target of P{a['finish_target']:.1f}.")
+                 f"Pledge missed: you averaged P{a['pace']:.1f} against a {level} target of P{a['finish_target']:.1f}."
+                 + (f" {reward:+g} Reputation to start next season." if reward else ""))
     return rewards
 
 
@@ -472,3 +690,23 @@ def apply_rewards(conn, old_season_id, new_season_id):
         conn.execute("UPDATE season_driver_state SET starting_reputation = MIN(100, starting_reputation + ?) "
                      "WHERE season_id = ? AND driver_id = ?", (reward, new_season_id, driver_id))
     return rewards
+
+
+def carry_rewards(conn, old_season_id, new_season_id):
+    """Season rollover: pledge and team-goal Reputation into next season's start. Returns (pledges, team goals).
+
+    Engine 2 applies them one after the other exactly as before. Engine 3 (a full engine 3 season) adds them up per
+    driver and keeps the total within +/-4 (C.V3_ROLLOVER_CAP) before applying it (kept between 0 and 100)."""
+    from . import teamgoals
+    if not (engine.is_v3(conn, old_season_id) and not engine.mixed(conn, old_season_id)):
+        return apply_rewards(conn, old_season_id, new_season_id), teamgoals.apply_rewards(conn, old_season_id, new_season_id)
+    pledges = settle(conn, old_season_id)
+    goals = {}
+    if conn.execute("SELECT name FROM sqlite_master WHERE name = 'team_goal_choices'").fetchone():
+        goals = teamgoals.settle(conn, old_season_id)
+    for did in set(pledges) | set(goals):
+        delta = S.clamp(pledges.get(did, 0) + goals.get(did, 0), -C.V3_ROLLOVER_CAP, C.V3_ROLLOVER_CAP)
+        if delta:
+            conn.execute("UPDATE season_driver_state SET starting_reputation = MAX(0, MIN(100, starting_reputation + ?)) "
+                         "WHERE season_id = ? AND driver_id = ?", (delta, new_season_id, did))
+    return pledges, goals

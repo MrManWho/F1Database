@@ -3,6 +3,7 @@
 import math
 import re
 
+from . import calc3, engine
 from . import constants as C
 from .storage import get_meta, now_iso, set_meta
 
@@ -93,6 +94,9 @@ def seed_career(conn, token, name, year, player_names=None):
     set_meta(conn, "current_season_id", season_id)
     set_meta(conn, "join_open", "1")
     set_meta(conn, "join_mode", "requests")
+    # v2.5: a new league starts on the current calculation engine; there's nothing to migrate.
+    set_meta(conn, "calc_engine", str(C.NEW_LEAGUE_ENGINE))
+    set_meta(conn, "calc_choice", "new")
     sync_not_run_results(conn, season_id)
     return season_id
 
@@ -155,11 +159,13 @@ def season_started(conn, season_id):
 # --------------------------------------------------------------------------- scoring
 
 def gp_points(position, status):
-    return C.GP_POINTS.get(position, 0) if status == C.STATUS_FINISHED else 0
+    """Full-distance Grand Prix points. A classified retirement (engine 3 rounds only) scores like a finisher.
+    For a round's own distance rules and manual points use calc3.Points(conn).gp(row)."""
+    return C.GP_POINTS.get(position, 0) if status in C.CLASSIFIED_STATUSES else 0
 
 
 def sprint_points(position, status, is_sprint=True):
-    return C.SPRINT_POINTS.get(position, 0) if is_sprint and status == C.STATUS_FINISHED else 0
+    return C.SPRINT_POINTS.get(position, 0) if is_sprint and status in C.CLASSIFIED_STATUSES else 0
 
 
 def _blank_stats():
@@ -418,6 +424,8 @@ def place_players(conn, season_id, targets):
 # --------------------------------------------------------------------------- standings
 
 def driver_standings(conn, season_id, upto_round=None, completed_only=False):
+    if engine.is_v3(conn, season_id):
+        return calc3.driver_standings(conn, season_id, upto_round, completed_only)
     stats = season_stats(conn, season_id, upto_round, completed_only)
     tmap = team_map(conn)
     dmap = driver_map(conn)
@@ -451,6 +459,8 @@ def driver_standings(conn, season_id, upto_round=None, completed_only=False):
 
 
 def constructor_standings(conn, season_id, upto_round=None, completed_only=False):
+    if engine.is_v3(conn, season_id):
+        return calc3.constructor_standings(conn, season_id, upto_round, completed_only)
     tmap = team_map(conn)
     totals = {tid: {"team": t, "points": 0, "wins": 0, "podiums": 0, "fastest_laps": 0, "dnfs": 0}
               for tid, t in tmap.items() if t["active"]}
@@ -501,6 +511,8 @@ def team_strength_ranks(conn, season_id):
     slow car doesn't make the car look fast. Before that it follows the season's car ratings, which
     develop over each winter (and which the Race Master can edit to match the game).
     """
+    if engine.is_v3(conn, season_id):
+        return calc3.effective_ranks(conn, season_id)
     default = [t["id"] for t in teams(conn)]
     ratings = car_ratings(conn, season_id)
     by_rating = sorted(default, key=lambda t: (-ratings.get(t, {"rating": 0})["rating"], default.index(t)))
@@ -597,14 +609,15 @@ def weekend_rows(conn, event_id):
     tmap = team_map(conn)
     dmap = driver_map(conn)
     rows = []
+    pts = calc3.Points(conn)
     for r in _rows(conn, "SELECT * FROM results WHERE event_id = ?", (event_id,)):
         r = dict(r)
         r["driver"] = dmap[r["driver_id"]]
         r["team"] = tmap[r["team_id"]]
         seat = order.get(r["driver_id"])
         r["sort"] = seat if seat and seat[0] == r["team_id"] else (r["team_id"], 3)
-        r["gp_points"] = gp_points(r["race_position"], r["result_status"])
-        r["sprint_pts"] = sprint_points(r["sprint_position"], r["sprint_status"], bool(event["is_sprint"]))
+        r["gp_points"] = pts.gp(r)
+        r["sprint_pts"] = pts.sprint(r)
         rows.append(r)
     rows.sort(key=lambda r: (r["sort"], r["driver"]["name"]))
     return rows
@@ -616,11 +629,28 @@ def _resolve(override, position):
     return C.STATUS_FINISHED if position else C.STATUS_NOT_RUN
 
 
-def save_weekend(conn, event_id, payload):
+def save_weekend(conn, event_id, payload, allow_no_fault=True):
+    """Save a round's results. v2.5 (engine 3 rounds): Classified retirements, a verified no-fault DNF (Race Master
+    only: allow_no_fault), the Grand Prix distance with manual points, and the Sprint distance."""
     event = get_event(conn, event_id)
     if not event:
         raise ValidationError("Event not found")
     is_sprint = bool(event["is_sprint"])
+    v3 = engine.round_v3(conn, event)
+    allowed = C.OVERRIDE_STATUSES if v3 else C.OVERRIDE_STATUSES_V2
+    gp_distance = event.get("gp_distance") or "full"
+    sprint_distance = event.get("sprint_distance") or 100
+    if v3 and payload.get("gp_distance") is not None:
+        if payload["gp_distance"] not in C.GP_DISTANCES:
+            raise ValidationError("Unknown Grand Prix distance")
+        gp_distance = payload["gp_distance"]
+    if v3 and is_sprint and payload.get("sprint_distance") not in (None, ""):
+        try:
+            sprint_distance = int(payload["sprint_distance"])
+        except (TypeError, ValueError):
+            raise ValidationError("Sprint distance is a percentage from 0 to 100")
+        if not 0 <= sprint_distance <= 100:
+            raise ValidationError("Sprint distance is a percentage from 0 to 100")
     existing = {r["driver_id"]: dict(r) for r in _rows(conn, "SELECT * FROM results WHERE event_id = ?",
                                                        (event_id,))}
     entries = payload.get("results") or []
@@ -640,9 +670,24 @@ def save_weekend(conn, event_id, payload):
         row["race_position"] = parse_position(item.get("race_position"), "Race position", max_pos)
         override = item.get("status_override") or "Auto"
         s_override = item.get("sprint_status_override") or "Auto"
-        if override not in C.OVERRIDE_STATUSES or s_override not in C.OVERRIDE_STATUSES:
+        if override not in allowed or s_override not in allowed:
             raise ValidationError("Unknown result status")
         row["result_status"] = _resolve(override, row["race_position"])
+        if v3:
+            if allow_no_fault and item.get("no_fault") is not None:
+                row["no_fault"] = int(bool(item.get("no_fault")))
+            if row["result_status"] != "DNF":
+                row["no_fault"] = 0
+            if gp_distance == "manual" and item.get("points_override") not in (None, ""):
+                try:
+                    pts = float(item.get("points_override"))
+                except (TypeError, ValueError):
+                    raise ValidationError("Manual points must be a number")
+                if not 0 <= pts <= 50:
+                    raise ValidationError("Manual points run from 0 to 50")
+                row["points_override"] = pts
+            elif gp_distance != "manual":
+                row["points_override"] = None
         if is_sprint:
             row["sprint_position"] = parse_position(item.get("sprint_position"), "Sprint position", max_pos)
             row["sprint_status"] = _resolve(s_override, row["sprint_position"])
@@ -685,11 +730,15 @@ def save_weekend(conn, event_id, payload):
     stamp = now_iso()
     for did, r in final.items():
         conn.execute("""UPDATE results SET qualifying_position=?, sprint_position=?, sprint_status=?,
-                        race_position=?, result_status=?, fastest_lap=?, driver_of_day=?, notes=?, updated_at=?
+                        race_position=?, result_status=?, fastest_lap=?, driver_of_day=?, notes=?, updated_at=?,
+                        no_fault=?, points_override=?
                         WHERE event_id=? AND driver_id=?""",
                      (r["qualifying_position"], r["sprint_position"], r["sprint_status"], r["race_position"],
                       r["result_status"], r["fastest_lap"], r["driver_of_day"], r["notes"], stamp,
-                      event_id, did))
+                      r.get("no_fault") or 0, r.get("points_override"), event_id, did))
+    if v3:
+        conn.execute("UPDATE events SET gp_distance = ?, sprint_distance = ? WHERE id = ?",
+                     (gp_distance, sprint_distance, event_id))
     any_data = any(_result_has_data(r) for r in final.values())
     if complete_all and (payload.get("mark_complete") or event["status"] == C.EVENT_COMPLETE):
         status = C.EVENT_COMPLETE
@@ -717,10 +766,12 @@ def weekend_snapshot(conn, event_id):
             "qualifying_position": r["qualifying_position"], "race_position": r["race_position"],
             "sprint_position": r["sprint_position"],
             "status_override": r["result_status"] if r["result_status"] in C.OVERRIDE_STATUSES else "Auto",
+            "no_fault": bool(r["no_fault"]), "points_override": r["points_override"],
             "sprint_status_override": r["sprint_status"] if r["sprint_status"] in C.OVERRIDE_STATUSES else "Auto",
             "fastest_lap": bool(r["fastest_lap"]), "driver_of_day": bool(r["driver_of_day"]), "notes": r["notes"] or ""}
     return {"revision": event["revision"], "status": event["status"], "ai_difficulty": event["ai_difficulty"],
-            "ai_untracked": bool(event["ai_untracked"]),
+            "ai_untracked": bool(event["ai_untracked"]), "gp_distance": event.get("gp_distance") or "full",
+            "sprint_distance": event.get("sprint_distance") or 100,
             "event_notes": event["notes"] or "", "results": rows}
 
 
@@ -784,6 +835,16 @@ def submission_check(conn, event_id):
                 blocking.append(f"{label} positions skip " + ", ".join(f"P{p}" for p in missing[:6])
                                 + ("…" if len(missing) > 6 else "") + " (positions must run 1, 2, 3… without gaps)")
     for r in rows:
+        if r["result_status"] == C.STATUS_CLASSIFIED and not r["race_position"]:
+            blocking.append(f"{name(r)} is a classified retirement but has no classified position")
+        if sprint and r["sprint_status"] == C.STATUS_CLASSIFIED and not r["sprint_position"]:
+            blocking.append(f"{name(r)} is classified in the Sprint but has no Sprint position")
+    if event.get("gp_distance") == "manual":
+        missing = [name(r) for r in rows if r["result_status"] in C.CLASSIFIED_STATUSES and r["points_override"] is None
+                   and r["race_position"] and r["race_position"] <= 10]
+        if missing:
+            warnings.append("Manual points: no points typed in for " + ", ".join(missing[:6]) + " (they score 0)")
+    for r in rows:
         if r["result_status"] in ("DNF", "DSQ") and r["race_position"]:
             warnings.append(f"{name(r)} is {r['result_status']} with a position (P{r['race_position']}); they score no points")
     if not (event["notes"] or "").strip():
@@ -804,8 +865,8 @@ def submission_check(conn, event_id):
             player_issues.append({"name": name(r), "color": r["driver"]["player_color"], "missing": gaps})
 
     def finisher(field, status_field, pos):
-        return next((r for r in rows if r[field] == pos and r[status_field] == C.STATUS_FINISHED), None)
-    order = sorted((r for r in rows if r["result_status"] == C.STATUS_FINISHED and r["race_position"]),
+        return next((r for r in rows if r[field] == pos and r[status_field] in C.CLASSIFIED_STATUSES), None)
+    order = sorted((r for r in rows if r["result_status"] in C.CLASSIFIED_STATUSES and r["race_position"]),
                    key=lambda r: r["race_position"])
     summary = {
         "round": event["round_number"], "event": event["name"], "sprint": sprint,
@@ -941,6 +1002,10 @@ def sweet_spot(history):
 
 
 def difficulty_recommendation(conn, before=None):
+    sid = current_season_id(conn)
+    if sid and engine.is_v3(conn, sid):
+        from . import ai3
+        return ai3.recommendation(conn, before)
     history = difficulty_history(conn, before)
     rec = {"current": None, "recommended": None, "direction": None, "average": None, "sample": [],
            "sweet_spot": sweet_spot(history), "note": None, "history_rounds": len(history)}
@@ -1294,7 +1359,7 @@ def drivers_off_grid(conn, season_id, standings=None):
             continue
         timeline = driver_timeline(conn, d["id"], cache)
         last = timeline[-1] if timeline else None
-        out.append({"driver": d, "totals": career_totals(timeline), "seasons": len(timeline),
+        out.append({"driver": d, "totals": career_totals(timeline, conn, d["id"]), "seasons": len(timeline),
                     "last_year": last["season"]["year"] if last else None,
                     "last_team": last["team"] if last else None,
                     "reputation": starting_reputation(conn, season_id, d["id"]),
@@ -1303,9 +1368,21 @@ def drivers_off_grid(conn, season_id, standings=None):
     return out
 
 
-def career_totals(timeline):
+def career_totals(timeline, conn=None, driver_id=None):
     keys = ["points", "wins", "podiums", "poles", "fastest_laps", "dotds", "starts", "dnfs"]
     totals = {k: sum(t[k] for t in timeline) for k in keys}
+    if conn is not None and driver_id is not None and engine.league_engine(conn) >= C.ENGINE_CURRENT:
+        # v2.5: the career average straight from every classified finish (not an average of rounded averages)
+        rows = [r[0] for r in conn.execute("""SELECT r.race_position FROM results r JOIN events e ON e.id = r.event_id
+                                              WHERE r.driver_id = ? AND e.status = 'Complete' AND r.result_status IN (?, ?)
+                                              AND r.race_position IS NOT NULL""",
+                                           (driver_id, C.STATUS_FINISHED, C.STATUS_CLASSIFIED))]
+        totals["titles"] = sum(1 for t in timeline if t["position"] == 1 and t["points"] > 0
+                               and t["season"]["status"] == C.SEASON_COMPLETE)
+        totals["best_championship"] = min((t["position"] for t in timeline), default=None)
+        totals["avg_finish"] = engine.round_half_up(sum(rows) / len(rows), 2) if rows else None
+        totals["seasons"] = len(timeline)
+        return totals
     totals["titles"] = sum(1 for t in timeline if t["position"] == 1 and t["points"] > 0
                            and t["season"]["status"] == C.SEASON_COMPLETE)
     totals["best_championship"] = min((t["position"] for t in timeline), default=None)
@@ -1323,7 +1400,7 @@ def hall_of_records(conn, completed_only=False):
         timeline = driver_timeline(conn, d["id"], cache)
         if not timeline:
             continue
-        rows.append({"driver": d, **career_totals(timeline)})
+        rows.append({"driver": d, **career_totals(timeline, conn, d["id"])})
     rows.sort(key=lambda r: (-r["points"], -r["wins"], r["driver"]["name"]))
     for pos, r in enumerate(rows, start=1):
         r["rank"] = pos
@@ -1573,8 +1650,7 @@ def results_transfer_preview(conn, from_id, to_id, season_id):
         if not _result_has_data(r):
             continue
         clash = _row(conn, "SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (r["event_id"], to_id))
-        pts = gp_points(r["race_position"], r["result_status"]) + \
-            sprint_points(r["sprint_position"], r["sprint_status"], bool(r["is_sprint"]))
+        pts = calc3.Points(conn).total(r)
         rounds.append({"event_id": r["event_id"], "round": r["round_number"], "name": r["event_name"],
                        "team": tmap.get(r["team_id"]), "points": pts, "status": r["event_status"],
                        "result": f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"]

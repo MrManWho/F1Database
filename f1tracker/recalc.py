@@ -75,7 +75,7 @@ def _carried_rewards(conn, season_id):
     out = {}
     for r in conn.execute("SELECT driver_id, reward FROM team_relations WHERE season_id = ? AND outcome IS NOT NULL",
                           (season_id,)):
-        if r["reward"]:
+        if r["reward"]:     # a kept pledge's reward, or (engine 3) a missed pledge's penalty
             out[r["driver_id"]] = out.get(r["driver_id"], 0) + r["reward"]
     if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'team_goal_choices'").fetchone():
         from . import teamgoals
@@ -84,6 +84,9 @@ def _carried_rewards(conn, season_id):
             delta = g["reward"] if g["outcome"] == "Met" else g["penalty"]
             for d in lineup.get(g["team_id"], []):
                 out[d["id"]] = out.get(d["id"], 0) + delta
+    from . import engine
+    if engine.is_v3(conn, season_id) and not engine.mixed(conn, season_id):
+        out = {d: max(-C.V3_ROLLOVER_CAP, min(C.V3_ROLLOVER_CAP, v)) for d, v in out.items()}
     return out
 
 
@@ -127,6 +130,21 @@ def recalculate(conn, history=True):
     if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'team_relations'").fetchone():
         summary["relationships"] = len(rebuild_bonus(conn, sid))
         relations.review(conn, sid)
+    from . import engine
+    if engine.is_v3(conn, sid):
+        # v2.5: engine 3 rounds keep the car ranks they were judged with (only missing ones are filled in), and the
+        # AI recommendation after each round is worked out again in order.
+        from . import ai3, calc3
+        season = S.get_season(conn, sid)
+        for e in S.events(conn, sid):
+            if e["status"] != C.EVENT_COMPLETE or not engine.round_v3(conn, e):
+                continue
+            if not conn.execute("SELECT 1 FROM round_ranks WHERE event_id = ?", (e["id"],)).fetchone():
+                calc3.store_round_ranks(conn, e)
+            rec = ai3.recommendation(conn, (season["year"], e["round_number"] + 1))
+            conn.execute("""INSERT OR REPLACE INTO ai_recs(event_id, engine, current, recommended, direction, detail,
+                            created_at) VALUES(?,?,?,?,?,?,?)""", (e["id"], 3, rec["current"], rec["recommended"],
+                                                                   rec["direction"], "{}", now_iso()))
     if history:
         reputation_chain(conn)
         summary["seasons"] = len(S.list_seasons(conn))

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Preview: recalculate this season{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('calc_update_page', token=ctx.token) }}">Calculation Update</a> <span aria-hidden="true">›</span> <span aria-current="page">Preview</span></nav>
+<div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Preview: recalculate this season</h1>
+  <p class="page-purpose">This is what Calculation Version 3 would change if this season were recalculated from round 1. Nothing has
+    been saved: this was worked out and thrown away. Race results are never changed.</p></div></div>
+
+<section class="card">
+  <p><b>Backup saved first:</b> <code>{{ backup }}</code> (your rollback reference).</p>
+  <p class="small">{{ preview.rows|length }} player driver{{ 's' if preview.rows|length != 1 }} would see changes · {{ preview.standings_moves }} championship position change{{ 's' if preview.standings_moves != 1 }}
+    {% if preview.unchanged %}· unchanged: {{ preview.unchanged|map(attribute='name')|join(', ') }}{% endif %}</p>
+  {% if preview.reviews %}<p class="banner banner-warn small">Would be at “Seat at risk”: {{ preview.reviews|map(attribute='name')|join(', ') }}. Nobody is dismissed automatically; you'd review it on Team management.</p>{% endif %}
+</section>
+
+{% for r in preview.rows %}
+<section class="card preview-driver" style="--player: {{ r.driver.player_color or 'var(--blue)' }}">
+  <h2>{{ r.driver.name }}</h2>
+  <div class="table-wrap"><table class="data-table compact impact-table">
+    <thead><tr><th scope="col">What</th><th scope="col">Before → after</th><th scope="col" class="num">Change</th></tr></thead>
+    <tbody>{% for c in r.changes %}
+      <tr><th scope="row">{{ c.label }}</th>
+        <td>{{ ('P%d'|format(c.before)) if c.stat == 'position' else c.before }} → <b>{{ ('P%d'|format(c.after)) if c.stat == 'position' else c.after }}</b></td>
+        <td class="num">{% if c.change is none %}—{% elif c.stat == 'position' %}{{ '%+d'|format((-c.change)|int) }} place{{ 's' if (c.change|abs) != 1 }}{% else %}{{ '%+g'|format(c.change) }}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% else %}
+<section class="card"><p>Nobody's numbers would change.</p></section>
+{% endfor %}
+
+<form method="post" action="{{ url_for('calc_update_full', token=ctx.token) }}" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="backup" value="{{ backup }}">
+  <label class="check"><input type="checkbox" name="confirm" value="1" required> Recalculate this season from round 1 with Calculation Version 3. I understand the changes above and that each driver affected will be shown theirs.</label>
+  <div class="button-row"><button class="btn btn-primary">Recalculate this season</button>
+    <a class="btn btn-ghost" href="{{ url_for('calc_update_page', token=ctx.token) }}">Back</a></div>
+</form>
+{% endblock %}

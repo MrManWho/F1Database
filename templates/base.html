@@ -195,6 +195,11 @@
         <button class="btn btn-sm" name="mode" value="{{ ctx.modes[0][0] }}">Back to {{ ctx.modes[0][1] }}</button></form></div>
     {% endif %}
     <main class="content" id="main" tabindex="-1">
+      {% if ctx.calc_reminder %}
+      <div class="banner banner-warn calc-reminder" role="status"><span aria-hidden="true">🧮</span>
+        <b>Calculation Update waiting.</b> {{ ctx.calc_reminder }} <a href="{{ url_for('calc_update_page', token=ctx.token) }}">Choose now →</a>
+        <form method="post" action="{{ url_for('calc_reminder_hide', token=ctx.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Hide for now</button></form></div>
+      {% endif %}
       {% if ctx.league_notice %}
       <div class="banner banner-info league-notice" role="status"><span aria-hidden="true">🔄</span>
         <b>{{ ctx.league_notice.title }}.</b> {{ ctx.league_notice.text }}

@@ -3,6 +3,68 @@
 from .constants import SCHEMA_VERSION
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS season_calc (
+    season_id INTEGER PRIMARY KEY,
+    engine INTEGER NOT NULL,
+    cutoff_round INTEGER NOT NULL DEFAULT 0,
+    frozen TEXT,
+    migration_id INTEGER,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS calc_migrations (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER,
+    option TEXT NOT NULL,
+    old_engine INTEGER NOT NULL,
+    new_engine INTEGER NOT NULL,
+    cutoff_round INTEGER NOT NULL DEFAULT 0,
+    before TEXT NOT NULL DEFAULT '{}',
+    after TEXT NOT NULL DEFAULT '{}',
+    backup TEXT,
+    approved_by TEXT,
+    created_at TEXT NOT NULL,
+    rolled_back_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS round_ranks (
+    event_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    rank INTEGER NOT NULL,
+    score REAL,
+    source TEXT NOT NULL DEFAULT 'v3',
+    PRIMARY KEY (event_id, team_id)
+);
+
+CREATE TABLE IF NOT EXISTS pace_inputs (
+    event_id INTEGER NOT NULL,
+    driver_id INTEGER NOT NULL,
+    session TEXT NOT NULL DEFAULT 'gp',
+    quali_time REAL,
+    mate_quali_time REAL,
+    comp_driver_id INTEGER,
+    comp_quali_time REAL,
+    race_gap REAL,
+    gap_to TEXT,
+    laps INTEGER,
+    representative INTEGER,
+    flags TEXT NOT NULL DEFAULT '',
+    untracked INTEGER NOT NULL DEFAULT 0,
+    updated_by TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (event_id, driver_id, session)
+);
+
+CREATE TABLE IF NOT EXISTS ai_recs (
+    event_id INTEGER PRIMARY KEY,
+    engine INTEGER NOT NULL,
+    current INTEGER,
+    recommended INTEGER,
+    direction TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -506,6 +568,12 @@ def migrate(conn):
     v19 -> v20: weekend targets are chosen (v2.4): target_options (three per driver per round: safe, standard,
                stretch) and weekend_targets.tier / hit / miss (the choice and its reward and penalty). Targets set
                before this version have no tier and keep the old +2 / -1.5.
+    v20 -> v21: the 2.5 calculation engine (see constants.ENGINE_*): season_calc (which engine each season uses and
+               the Future-only cutoff), calc_migrations (every Calculation Update, with before/after values and the
+               backup), round_ranks (the car rank used to judge each round), pace_inputs (optional lap-time evidence
+               for the AI tracker), ai_recs (the recommendation after each round); results.no_fault /
+               points_override / sprint_points_override, events.gp_distance / sprint_distance / cancelled,
+               drivers.career_status, team_orders.ruled_by / ruled_at / reason. Nothing existing changes.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -606,6 +674,28 @@ def migrate(conn):
     for col, ddl in (("tier", "TEXT"), ("hit", "REAL"), ("miss", "REAL")):
         if col not in target_cols:
             conn.execute(f"ALTER TABLE weekend_targets ADD COLUMN {col} {ddl}")   # v2.4: chosen targets
+    # v2.5 (schema 21): classified retirements, verified no-fault retirements, shortened races and manual points,
+    # Sprint distance, driver career status, explicit team-order rulings and ultimatum details. Everything new is
+    # blank or neutral, so existing leagues calculate exactly as before (engine 2) until the Race Master chooses.
+    result_cols = _columns(conn, "results")
+    for col, ddl in (("no_fault", "INTEGER NOT NULL DEFAULT 0"), ("points_override", "REAL"),
+                     ("sprint_points_override", "REAL")):
+        if col not in result_cols:
+            conn.execute(f"ALTER TABLE results ADD COLUMN {col} {ddl}")
+    event_cols = _columns(conn, "events")
+    for col, ddl in (("gp_distance", "TEXT NOT NULL DEFAULT 'full'"), ("sprint_distance", "INTEGER NOT NULL DEFAULT 100"),
+                     ("cancelled", "INTEGER NOT NULL DEFAULT 0")):
+        if col not in event_cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col} {ddl}")
+    if "position" not in _columns(conn, "team_goals"):
+        conn.execute("ALTER TABLE team_goals ADD COLUMN position INTEGER")   # engine 3 finishing goals
+    if "career_status" not in _columns(conn, "drivers"):
+        conn.execute("ALTER TABLE drivers ADD COLUMN career_status TEXT")
+    if "team_orders" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}:
+        order_cols = _columns(conn, "team_orders")
+        for col in ("ruled_by", "ruled_at", "reason"):
+            if col not in order_cols:
+                conn.execute(f"ALTER TABLE team_orders ADD COLUMN {col} TEXT")
     mode = conn.execute("SELECT value FROM meta WHERE key = 'join_mode'").fetchone()
     if not mode:
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()

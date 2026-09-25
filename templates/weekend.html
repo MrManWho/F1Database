@@ -69,10 +69,26 @@
     </div>
     {% endif %}
   </div>
+  {% if v3_round %}
+  <div class="distance-input">
+    {% if ro %}
+    <div class="ro-value"><small>Grand Prix distance</small><strong>{{ C.GP_DISTANCES[event.gp_distance or 'full'][0] }}</strong></div>
+    {% if event.is_sprint %}<div class="ro-value"><small>Sprint distance</small><strong>{{ event.sprint_distance }}%</strong></div>{% endif %}
+    {% else %}
+    <label>Grand Prix distance
+      <select id="gp-distance" data-no-dirty-reload>{% for key, d in C.GP_DISTANCES.items() %}<option value="{{ key }}" {{ 'selected' if (event.gp_distance or 'full') == key }}>{{ d[0] }}</option>{% endfor %}</select>
+    </label>
+    {% if event.is_sprint %}<label>Sprint distance completed (%)
+      <input type="number" id="sprint-distance" min="0" max="100" step="1" value="{{ event.sprint_distance }}">
+    </label>{% endif %}
+    <p class="muted small">A shortened race uses the reduced points scale; "Manual points" lets you type each driver's points. Sprint points need at least the league's minimum distance.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 
 {% macro pos(v) %}{{ 'P' ~ v if v else '—' }}{% endmacro %}
-{% macro status_text(st) %}{% if st in ('DNF', 'DNS', 'DSQ') %}<span class="status-pill st-{{ st|lower }}">{{ st }}</span>{% elif st == 'Finished' %}<span class="muted">Finished</span>{% else %}<span class="muted">—</span>{% endif %}{% endmacro %}
+{% macro status_text(st) %}{% if st in ('DNF', 'DNS', 'DSQ') %}<span class="status-pill st-{{ st|lower }}">{{ C.STATUS_LABELS[st] if v3_round else st }}</span>{% elif st == 'Classified' %}<span class="status-pill st-classified">Classified retirement</span>{% elif st == 'Finished' %}<span class="muted">Finished</span>{% else %}<span class="muted">—</span>{% endif %}{% endmacro %}
 
 <section class="card table-card">
   <div class="card-head">
@@ -139,7 +155,8 @@
          data-summary-url="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}"
          data-scope="{{ user.username }}|{{ ctx.token }}|{{ event.season_id }}|{{ event.id }}"
          data-max="{{ [rows|length, C.MAX_POSITION]|max }}"
-         data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'>
+         data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'
+         {% if v3_round %}data-distances='{{ distance_tables|tojson }}' data-sprint-full='{{ C.SPRINT_POINTS|tojson }}' data-sprint-min="{{ sprint_min }}"{% endif %}>
     <thead>
       <tr class="group-row">
         <th rowspan="2" class="sticky-col">Driver</th>
@@ -169,12 +186,12 @@
         {% if ro %}
         <td class="grp-q num" data-label="Quali">{{ pos(r.qualifying_position) }}</td>
         {% if event.is_sprint %}
-        <td class="grp-s num" data-label="Sprint">{{ pos(r.sprint_position) if r.sprint_status == 'Finished' else '—' }}</td>
+        <td class="grp-s num" data-label="Sprint">{{ pos(r.sprint_position) if r.sprint_status in ('Finished', 'Classified') else '—' }}</td>
         <td class="grp-s" data-label="Sprint status">{{ status_text(r.sprint_status) }}</td>
         <td class="grp-s num" data-label="Sprint pts">{{ r.sprint_pts }}</td>
         {% endif %}
-        <td class="grp-r num" data-label="Race">{{ pos(r.race_position) if r.result_status == 'Finished' else '—' }}</td>
-        <td class="grp-r" data-label="GP status">{{ status_text(r.result_status) }}</td>
+        <td class="grp-r num" data-label="Race">{{ pos(r.race_position) if r.result_status in ('Finished', 'Classified') else '—' }}</td>
+        <td class="grp-r" data-label="GP status">{{ status_text(r.result_status) }}{% if r.no_fault %} <span class="muted small">(no fault)</span>{% endif %}</td>
         <td class="grp-r num" data-label="Race pts">{{ r.gp_points }}</td>
         <td class="grp-b center" data-label="Fastest lap">{% if r.fastest_lap %}<span class="award-icon" title="Fastest Lap">⏱<span class="sr-only">Fastest Lap</span></span>{% endif %}</td>
         <td class="grp-b center" data-label="Driver of the Day">{% if r.driver_of_day %}<span class="award-icon" title="Driver of the Day">★<span class="sr-only">Driver of the Day</span></span>{% endif %}</td>
@@ -185,14 +202,15 @@
         {% if event.is_sprint %}
         <td class="grp-s" data-label="Sprint"><input class="pos-input" data-field="sprint_position" inputmode="numeric" value="{{ r.sprint_position or '' }}" aria-label="{{ r.driver.name }} Sprint"></td>
         <td class="grp-s" data-label="Sprint status"><select data-field="sprint_status_override" aria-label="{{ r.driver.name }} Sprint status">
-          {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.sprint_status) or (s == 'Auto' and r.sprint_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
+          {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if (s == r.sprint_status) or (s == 'Auto' and r.sprint_status in ('Finished', 'Not Run')) }}>{{ C.STATUS_LABELS[s] if v3_round else s }}</option>{% endfor %}
         </select></td>
         <td class="grp-s num sp-pts" data-label="Sprint pts">{{ r.sprint_pts }}</td>
         {% endif %}
         <td class="grp-r" data-label="Race"><input class="pos-input" data-field="race_position" inputmode="numeric" value="{{ r.race_position or '' }}" aria-label="{{ r.driver.name }} race"></td>
         <td class="grp-r" data-label="GP status"><select data-field="status_override" aria-label="{{ r.driver.name }} race status">
-          {% for s in C.OVERRIDE_STATUSES %}<option {{ 'selected' if (s == r.result_status) or (s == 'Auto' and r.result_status in ('Finished', 'Not Run')) }}>{{ s }}</option>{% endfor %}
-        </select></td>
+          {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if (s == r.result_status) or (s == 'Auto' and r.result_status in ('Finished', 'Not Run')) }}>{{ C.STATUS_LABELS[s] if v3_round else s }}</option>{% endfor %}
+        </select>{% if v3_round %}<label class="nofault small" {{ 'hidden' if r.result_status != 'DNF' }} title="Race Master: a retirement that wasn't the driver's fault (mechanical). Voids weekend targets and ultimatums and leaves it out of pledge pace."><input type="checkbox" data-field="no_fault" {{ 'checked' if r.no_fault }} {{ 'disabled' if not ctx.is_master }}> No fault</label>{% endif %}
+        {% if v3_round and event.gp_distance == 'manual' %}<input class="pos-input" data-field="points_override" inputmode="decimal" value="{{ r.points_override if r.points_override is not none }}" placeholder="pts" aria-label="{{ r.driver.name }} manual points">{% endif %}</td>
         <td class="grp-r num gp-pts" data-label="Race pts">{{ r.gp_points }}</td>
         <td class="grp-b center" data-label="Fastest lap"><input type="radio" name="fastest_lap" data-field="fastest_lap" {{ 'checked' if r.fastest_lap }} aria-label="{{ r.driver.name }} fastest lap"></td>
         <td class="grp-b center" data-label="Driver of the Day"><input type="radio" name="driver_of_day" data-field="driver_of_day" {{ 'checked' if r.driver_of_day }} aria-label="{{ r.driver.name }} Driver of the Day"></td>
@@ -222,6 +240,7 @@
     {% endif %}
   </div>
 </section>
+{% include "_pace.html" with context %}
 {% if share %}
 <section class="card share-strip">
   <div><b>Share this result</b> <span class="muted small">A picture of the podium{{ ' and your weekend' if share.me }} for your group chat.</span></div>

@@ -9,6 +9,7 @@ Beating your teammate is never punished. Headlines: a new leader in the race bat
 season verdict, only for pairings with at least one player driver, once each.
 """
 
+from . import calc3, engine
 from . import constants as C
 from . import feed
 from . import services as S
@@ -20,9 +21,8 @@ def _race_order(r):
     return r["race_position"] if r["result_status"] == C.STATUS_FINISHED and r["race_position"] else 99
 
 
-def _points(r, is_sprint):
-    return S.gp_points(r["race_position"], r["result_status"]) + \
-        S.sprint_points(r["sprint_position"], r["sprint_status"], bool(is_sprint))
+def _points(pts, r):
+    return pts.total(r)
 
 
 def pairings(conn, season_id, driver_id, upto_round=None):
@@ -33,6 +33,8 @@ def pairings(conn, season_id, driver_id, upto_round=None):
                         (season_id, driver_id, C.EVENT_COMPLETE, upto_round if upto_round is not None else 10 ** 6))
     dmap = S.driver_map(conn)
     tmap = S.team_map(conn)
+    pts = calc3.Points(conn)
+    v3 = engine.is_v3(conn, season_id)
     out, by_mate = [], {}
     for r in rows.fetchall():
         m = conn.execute("SELECT * FROM results WHERE event_id = ? AND team_id = ? AND driver_id != ?",
@@ -52,13 +54,19 @@ def pairings(conn, season_id, driver_id, upto_round=None):
         if r["qualifying_position"] and m["qualifying_position"]:
             won = r["qualifying_position"] < m["qualifying_position"]
             p["quali_won" if won else "quali_lost"] += 1
-        mine, theirs = _race_order(r), _race_order(m)
-        if mine is not None and theirs is not None and not (mine == 99 and theirs == 99) and mine != theirs:
-            won = mine < theirs
-            p["race_won" if won else "race_lost"] += 1
-            p["races"].append((r["round_number"], won))
-        p["points"] += _points(r, r["is_sprint"])
-        p["mate_points"] += _points(m, r["is_sprint"])
+        if v3:
+            won = calc3.compare(r, m)      # v2.5: the shared head-to-head rules (DNS never counts)
+            if won is not None:
+                p["race_won" if won else "race_lost"] += 1
+                p["races"].append((r["round_number"], won))
+        else:
+            mine, theirs = _race_order(r), _race_order(m)
+            if mine is not None and theirs is not None and not (mine == 99 and theirs == 99) and mine != theirs:
+                won = mine < theirs
+                p["race_won" if won else "race_lost"] += 1
+                p["races"].append((r["round_number"], won))
+        p["points"] += _points(pts, r)
+        p["mate_points"] += _points(pts, m)
     for p in out:
         p["gap"] = p["points"] - p["mate_points"]
         p["human"] = bool(p["driver"] and p["mate"] and p["driver"]["is_player"] and p["mate"]["is_player"])

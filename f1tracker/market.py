@@ -14,6 +14,7 @@ their own: the player accepts one from their own login, and the signing is then 
 import math
 import random
 
+from . import calc3, engine
 from . import constants as C
 from . import feed
 from . import relations
@@ -49,6 +50,8 @@ def _season_results(conn, season_id, driver_id, upto_round=None):
 
 def head_to_head(conn, season_id, driver_id, upto_round=None):
     """Race and qualifying head-to-heads against whoever shared the car in each event."""
+    if engine.is_v3(conn, season_id):
+        return calc3.head_to_head(conn, season_id, driver_id, upto_round)
     h2h = {"race_won": 0, "race_total": 0, "quali_won": 0, "quali_total": 0}
     for r in _season_results(conn, season_id, driver_id, upto_round):
         mates = conn.execute("SELECT * FROM results WHERE event_id = ? AND team_id = ? AND driver_id != ?",
@@ -78,6 +81,8 @@ def car_adjusted_rating(conn, season_id, driver_id, ranks, upto_round=None):
 
 
 def driver_value(conn, season_id, driver_id, standings=None, ranks=None, upto_round=None):
+    if engine.is_v3(conn, season_id):
+        return calc3.driver_value(conn, season_id, driver_id, standings, ranks, upto_round)
     standings = standings if standings is not None else \
         {r["driver_id"]: r for r in S.driver_standings(conn, season_id, upto_round)}
     ranks = ranks or S.team_strength_ranks(conn, season_id)
@@ -127,7 +132,7 @@ def _renewal_interest(interest, bonus):
 
 
 def career_starts(conn, driver_id):
-    return conn.execute("SELECT COUNT(*) FROM results WHERE driver_id = ? AND result_status IN (?,?,?)",
+    return conn.execute("SELECT COUNT(*) FROM results WHERE driver_id = ? AND result_status IN (?,?,?,?)",
                         (driver_id, *sorted(C.START_STATUSES))).fetchone()[0]
 
 
@@ -145,7 +150,12 @@ def team_interest(conn, season_id, driver_id):
         rank = ranks.get(team["id"], len(ranks))
         interest = me["value"] - team_bar(rank)
         if team["id"] == my_team:
-            interest = -20.0 if bonus is None else _renewal_interest(interest + bonus, bonus)
+            if bonus is None:
+                interest = -20.0
+            elif engine.is_v3(conn, season_id):
+                interest += bonus      # v2.5: a good relationship helps but never guarantees a renewal
+            else:
+                interest = _renewal_interest(interest + bonus, bonus)
         if rookie and rank > len(ranks) - 5:
             interest = max(interest, 1.0 + (rank - (len(ranks) - 5)))
         released = team["id"] == my_team and bonus is None
@@ -399,6 +409,7 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
     rookie = career_starts(conn, player["id"]) == 0
     my_team = seats.get(player["id"], (None,))[0]
     order = sorted(ranks, key=lambda t: ranks[t])
+    v3 = engine.is_v3(conn, season_id)
     candidates = []
     if rookie:
         pool = [t for t in order[-5:] if not _full_of_players(conn, season_id, t, signed)]
@@ -418,7 +429,7 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
                 continue  # released: no renewal
             interest = me["value"] - team_bar(ranks[tid]) + rng.uniform(-JITTER, JITTER)
             if tid == my_team:
-                interest = _renewal_interest(interest + bonus, bonus)
+                interest = interest + bonus if v3 else _renewal_interest(interest + bonus, bonus)
             if interest >= 0:
                 candidates.append((tid, interest, False))
         # Players hear from the best cars that want them; a renewal offer is always kept.
@@ -427,7 +438,16 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
         candidates = candidates[:C.MAX_OFFERS_PER_WINDOW]
         if renewal and renewal[0] not in candidates:
             candidates[-1] = renewal[0]
-        if not candidates:
+        if not candidates and v3:
+            # v2.5: no unconditional last chance for an experienced driver. One emergency offer at most, and only
+            # when it's realistic; otherwise the driver can finish the window without a seat.
+            emergency = emergency_team(conn, window_id, season_id, player["id"], me, ranks, signed, my_team, bonus)
+            if emergency:
+                candidates.append((emergency[0], emergency[1], True))
+            else:
+                feed.notify(conn, player["id"], "No team made you an offer this window. You can still approach teams; "
+                            "if nothing comes of it you'll finish the window unsigned.", "offers", ref=f"window:{window_id}")
+        elif not candidates:
             fallback = my_team if my_team and bonus is not None else next(
                 (t for t in reversed(order) if t != my_team and not _full_of_players(conn, season_id, t, signed)),
                 order[-1])
@@ -435,7 +455,12 @@ def _generate_for(conn, window_id, season_id, player, standings, ranks, seats, s
     tmap = S.team_map(conn)
     for tid, interest, last_chance in candidates:
         reason = _reason(rng, tmap[tid], me, ranks[tid], rookie, tid == my_team)
-        if last_chance:
+        if last_chance and v3:
+            reason = f"{tmap[tid]['name']} have one seat left and will talk, on their terms."
+            offer_id = _create_offer(conn, window_id, season_id, player["id"], tid, interest, reason, rng,
+                                     standings, ranks, rookie=rookie, stage="Emergency offer", final=True,
+                                     lifeline=True, terms=("No. 2", 1, 2))
+        elif last_chance:
             reason = f"{tmap[tid]['name']} will give you one more chance to prove yourself."
             offer_id = _create_offer(conn, window_id, season_id, player["id"], tid, interest, reason, rng,
                                      standings, ranks, rookie=rookie, stage="Last-chance offer", final=True,
@@ -536,12 +561,22 @@ def _evaluate(conn, offer, role, years, growth, rng, pitch_score=0.0, heard=""):
 
     greedy = role_gap >= 2 or years < lo - 1 or years > hi + 1 or growth < need - 1
     cost = 2 if greedy else 1
+    v3 = engine.is_v3(conn, offer["window_season"]) if offer.get("window_season") else False
+    patience_now = offer["patience"] or 0
+    if v3:
+        # v2.5: every counter costs at least one patience point; a message that lands well adds one patience point
+        # once per offer (never a free counter); a poor message costs one more.
+        if pitch_score >= 0.35 and not _bonus_used(conn, offer["id"]):
+            patience_now += 1
+            _log(conn, offer["id"], "system", "patience", "The team liked what you said: one more round of talks.")
+        if pitch_score <= -0.35:
+            cost += 1
     # v2.1: a message that lands well keeps them at the table a little longer; a bad one wears them out.
-    if pitch_score >= 0.35 and not greedy:
+    elif pitch_score >= 0.35 and not greedy:
         cost = 0
     elif pitch_score <= -0.35:
         cost += 1
-    patience = (offer["patience"] or 0) - cost
+    patience = patience_now - cost
     if patience < 0:
         conn.execute("UPDATE offers SET status=?, stage=?, patience=0, responded_at=? WHERE id=?",
                      (C.OFFER_COLLAPSED, "Talks collapsed", now_iso(), offer["id"]))
@@ -581,11 +616,23 @@ def _evaluate(conn, offer, role, years, growth, rng, pitch_score=0.0, heard=""):
     return "final" if final else "countered"
 
 
+def _bonus_used(conn, offer_id):
+    return bool(conn.execute("SELECT 1 FROM offer_messages WHERE offer_id = ? AND action = 'patience'",
+                             (offer_id,)).fetchone())
+
+
+def counters_used(conn, offer_id):
+    return conn.execute("SELECT COUNT(*) FROM offer_messages WHERE offer_id = ? AND author = 'driver' AND action = 'counter'",
+                        (offer_id,)).fetchone()[0]
+
+
 def counter_offer(conn, offer_id, role, years, growth, message="", rng=None):
     rng = rng or random.Random()
     offer = _open_offer(conn, offer_id)
     if offer["final"]:
         raise S.ValidationError("This is a final offer. You can sign it or walk away, but not counter.")
+    if engine.is_v3(conn, offer["window_season"]) and counters_used(conn, offer_id) >= C.V3_MAX_COUNTERS:
+        raise S.ValidationError(f"You've made {C.V3_MAX_COUNTERS} counter-offers on this deal. Sign it or walk away.")
     role, years, growth = parse_terms(role, years, growth)
     _log(conn, offer_id, "driver", "counter", (message or "").strip()[:500], role, years, growth)
     conn.execute("UPDATE offers SET stage = ? WHERE id = ?", ("Negotiating", offer_id))
@@ -593,7 +640,7 @@ def counter_offer(conn, offer_id, role, years, growth, message="", rng=None):
     ranks = S.team_strength_ranks(conn, offer["window_season"])
     team = S.team_map(conn)[offer["team_id"]]["name"]
     _b, score, heard, _r = pitch.message_effect(conn, offer["team_id"], ranks.get(offer["team_id"], len(ranks)),
-                                                len(ranks), message, team)
+                                                len(ranks), message, team, v3=engine.is_v3(conn, offer["window_season"]))
     result = _evaluate(conn, get_offer(conn, offer_id), role, years, growth, rng, pitch_score=score, heard=heard)
     if result == "collapsed":
         feed.on_talks_collapsed(conn, offer_id, "news")
@@ -657,10 +704,13 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
     team = S.team_map(conn)[team_id]["name"]
     note = (message or "").strip()[:500] or "Is there a seat for me?"
     from . import pitch
-    heard_bonus, _heard, heard, _reading = pitch.message_effect(conn, team_id, rank, len(ranks), message, team)
-    interest += heard_bonus
+    heard_bonus, _heard, heard, _reading = pitch.message_effect(conn, team_id, rank, len(ranks), message, team,
+                                                                v3=engine.is_v3(conn, season_id))
+    talk = heard_bonus + (interview["bonus"] if interview else 0)
+    if engine.is_v3(conn, season_id):
+        talk = S.clamp(talk, -C.V3_TALK_CAP, C.V3_TALK_CAP)    # v2.5: message + interview together, +/-5
+    interest += talk
     if interview:
-        interest += interview["bonus"]
         heard = " ".join(x for x in [heard, interview["summary"]] if x)
 
     def said(text):
@@ -716,6 +766,28 @@ def approach_team(conn, window_id, driver_id, team_id, role=None, years=None, gr
     return offer_id, "offer"
 
 
+def emergency_team(conn, window_id, season_id, driver_id, me, ranks, signed, my_team, bonus):
+    """Engine 3: the one emergency offer. Needs Driver Value >= (slowest eligible team's bar - 8), a team with an
+    open seat that hasn't turned the driver away for a serious reason (released them, walked out of talks or
+    rejected an approach this window), and a final interest of at least -6. Returns (team_id, interest) or None."""
+    serious = {r[0] for r in conn.execute(
+        "SELECT team_id FROM offers WHERE window_id = ? AND driver_id = ? AND status IN (?, ?)",
+        (window_id, driver_id, C.OFFER_COLLAPSED, C.OFFER_REJECTED))}
+    if my_team and bonus is None:
+        serious.add(my_team)
+    eligible = [t for t in sorted(ranks, key=lambda t: -ranks[t])
+                if not _full_of_players(conn, season_id, t, signed) and t not in serious]
+    if not eligible:
+        return None
+    if me["value"] < team_bar(ranks[eligible[0]]) - C.V3_EMERGENCY_MARGIN:
+        return None
+    for t in eligible:             # slowest first
+        interest = me["value"] - team_bar(ranks[t]) + (bonus if t == my_team and bonus else 0)
+        if interest >= -6:
+            return t, interest
+    return None
+
+
 def ensure_lifeline(conn, window_id, driver_id, rng=None):
     """When a driver has run out of options, the weakest team with room offers one final seat.
 
@@ -733,6 +805,28 @@ def ensure_lifeline(conn, window_id, driver_id, rng=None):
         return None
     window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
     season_id = window["season_id"]
+    if engine.is_v3(conn, season_id) and experience(conn, driver_id) != "Rookie":
+        # v2.5: experienced drivers only get the conditional emergency offer, never an unconditional lifeline.
+        ranks = S.team_strength_ranks(conn, season_id)
+        me = driver_value(conn, season_id, driver_id, None, ranks)
+        seat = S.driver_seats(conn, season_id).get(driver_id)
+        my_team = seat[0] if seat else None
+        bonus = relations.interest_bonus(conn, season_id, driver_id, my_team) if my_team else 0
+        found = emergency_team(conn, window_id, season_id, driver_id, me, ranks,
+                               signed_team_ids(conn, window["target_year"]), my_team, bonus)
+        if not found:
+            feed.notify(conn, driver_id, "No team has a seat for you this window. You'll finish it unsigned and can "
+                        "come back as a free agent.", "offers", ref=f"window:{window_id}")
+            return None
+        team = S.team_map(conn)[found[0]]["name"]
+        reason = f"{team} have one seat left and will talk, on their terms."
+        offer_id = _create_offer(conn, window_id, season_id, driver_id, found[0], found[1], reason, rng, None, ranks,
+                                 stage="Emergency offer", final=True, lifeline=True, terms=("No. 2", 1, 2))
+        o = get_offer(conn, offer_id)
+        _log(conn, offer_id, "team", "offer", reason, o["role"], o["years"], o["growth"])
+        feed.notify(conn, driver_id, f"Emergency offer: {team} have a seat if you want it", "offers",
+                    ref=f"window:{window_id}")
+        return offer_id
     ranks = S.team_strength_ranks(conn, season_id)
     signed = signed_team_ids(conn, window["target_year"])
     burned = {r[0] for r in conn.execute(
@@ -862,7 +956,45 @@ def on_new_season(conn, season_id, previous_id=None):
                 team = S.team_map(conn)[rel["team_id"]]["name"]
                 feed.notify(conn, did, f"{team} released you. You're a reserve driver until a team signs you.",
                             "team-standing")
+    if engine.is_v3(conn, season_id):
+        update_career_status(conn, season_id)
     relations.ensure(conn, season_id)
+
+
+CAREER_STATUSES = ("Free Agent", "Returning Driver", "Mid-season Replacement")
+
+
+def update_career_status(conn, season_id):
+    """v2.5: a player driver without a seat is a Free Agent (they keep their Reputation and can sign later or step in
+    for a dismissed driver); a Free Agent who gets a seat again is a Returning Driver for that season."""
+    seats = S.driver_seats(conn, season_id)
+    for p in S.player_drivers(conn):
+        was = p["career_status"] if "career_status" in p.keys() else None
+        if p["id"] not in seats:
+            if was != "Free Agent":
+                conn.execute("UPDATE drivers SET career_status = 'Free Agent' WHERE id = ?", (p["id"],))
+                feed.notify(conn, p["id"], "You're a free agent this season: no race seat, your Reputation is kept, and "
+                            "you can sign in the next window or step in if a team drops a driver.", "team-standing")
+        elif was == "Free Agent":
+            conn.execute("UPDATE drivers SET career_status = 'Returning Driver' WHERE id = ?", (p["id"],))
+        elif was in ("Returning Driver", "Mid-season Replacement"):
+            conn.execute("UPDATE drivers SET career_status = NULL WHERE id = ?", (p["id"],))
+
+
+def career_status(conn, season_id, driver_id):
+    """Free Agent / Returning Driver / Mid-season Replacement (stored), or Unsigned (an experienced driver with no deal
+    for next season while a window is open and nothing is pending)."""
+    row = conn.execute("SELECT career_status FROM drivers WHERE id = ?", (driver_id,)).fetchone()
+    if row and row["career_status"]:
+        return row["career_status"]
+    window = conn.execute("SELECT * FROM market_windows WHERE status = ? ORDER BY id DESC LIMIT 1",
+                          (C.WINDOW_OPEN,)).fetchone()
+    if window and not locked_in(conn, season_id, driver_id, window["target_year"]):
+        live = conn.execute("SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status IN (?, ?)",
+                            (window["id"], driver_id, C.OFFER_PENDING, C.OFFER_ACCEPTED)).fetchone()
+        if not live and approaches_left(conn, window["id"], driver_id) == 0:
+            return "Unsigned"
+    return None
 
 
 def maybe_open_silly_season(conn, season_id):

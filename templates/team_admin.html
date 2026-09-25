@@ -16,6 +16,21 @@
 </section>
 {% endif %}
 
+{% if orders %}
+<section class="card" id="orders">
+  <h2>Team orders to rule on</h2>
+  <p class="small">Calculation Version 3 never guesses from the finishing order whether an order was followed (finishing ahead on merit isn't ignoring it). Say what happened: Obeyed +1, Ignored −2, Not actionable or Void 0.</p>
+  {% for o in orders %}
+  <form method="post" action="{{ url_for('order_rule', token=ctx.token, event_id=o.event_id, driver_id=o.driver_id) }}" class="admin-row stack tight">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="admin"><input type="hidden" name="anchor" value="#orders">
+    <div><b>{{ dmap[o.driver_id].name }}</b> · R{{ o.round_number }} {{ o.event_name }}: let {{ dmap[o.beneficiary_id].name }} through if racing them</div>
+    <div class="button-row tight">{% for key, label in rulings.items() %}<button class="btn btn-sm {{ 'btn-danger' if key == 'Ignored' else '' }}" name="ruling" value="{{ key }}">{{ label }}</button>{% endfor %}
+      <input name="reason" maxlength="300" placeholder="Why (optional)"></div>
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section class="card" id="drivers">
   <div class="card-head"><h2>Pledges and season goals</h2>
     <form method="post" action="{{ url_for('goals_reissue', token=ctx.token, driver_id=drivers[0].driver.id if drivers else 0) }}" class="inline"

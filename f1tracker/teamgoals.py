@@ -19,6 +19,7 @@ settled. The choice can be changed until the season's first round is complete; a
 (a Race Master can clear it, which is logged).
 """
 
+from . import engine
 from . import constants as C
 from . import services as S
 from .storage import get_meta, now_iso, set_meta
@@ -139,7 +140,7 @@ def options(conn, season_id, team_id):
     guess = base + lineup
     if current is not None:
         guess = (1 - blend) * guess + blend * current
-    expected = max(1, min(n, round(guess)))
+    expected = max(1, min(n, engine.round_half_up(guess) if engine.is_v3(conn, season_id) else round(guess)))
     why = [f"car strength: #{rank} of {n}"]
     why.append(f"last season: P{prev} in the Constructors'" if prev else "no previous Constructors' result")
     if abs(lineup) >= 0.25:
@@ -150,6 +151,13 @@ def options(conn, season_id, team_id):
     if n_done:
         why.append(f"{earned:g} point{'s' if earned != 1 else ''} already scored in {n_done} round{'s' if n_done != 1 else ''} "
                    f"(pace {pace:.1f} a round, counted {round(blend * 100)}%) with {len(evs) - n_done} to go")
+    v3 = engine.is_v3(conn, season_id)
+    if v3:
+        # v2.5: the most still available (a 1-2 finish every Grand Prix and Sprint left) and the 90% cap.
+        max_left = sum(C.GP_POINTS[1] + C.GP_POINTS[2] + ((C.SPRINT_POINTS[1] + C.SPRINT_POINTS[2]) if e["is_sprint"] else 0)
+                       for e in evs if e["status"] != C.EVENT_COMPLETE)
+        cap = earned + engine.floor_int(0.90 * max_left)
+        why.append(f"at most {cap:g} points (what's scored plus 90% of the {max_left} still available)")
     out, floor = {}, earned
     for key, t in TIERS.items():
         wanted = expected + t["shift"]
@@ -163,16 +171,23 @@ def options(conn, season_id, team_id):
             gain = max(gain, 1.0, 0.25 * w_left)
         else:
             gain = max(gain, (floor - earned) + max(MIN_GAP[0], MIN_GAP[1] * (floor - earned)))
-        pts = max(1, round(earned + gain)) if w_left else max(1, round(earned))
+        if v3:
+            pts = max(1, engine.round_half_up(earned + gain)) if w_left else max(1, engine.round_half_up(earned))
+            pts = min(pts, max(1, cap))
+        else:
+            pts = max(1, round(earned + gain)) if w_left else max(1, round(earned))
         floor = pts
-        if pos != wanted or pos >= n:
+        if v3 and wanted < 1:
+            pass        # v2.5: a target that improves past P1 is clamped to P1 and P1 stays a way to complete it
+        elif pos != wanted or pos >= n:
             # The position can't move any further (already P1, or already last), or it's last place, which every
             # team reaches: a position route would be free or no harder than the next tier, so it's points alone.
             pos = 0
         text = (f"Finish P{pos} or better in the Constructors' Championship or score {pts} points" if pos
                 else f"Score {pts} points in the Constructors' Championship")
+        reward, penalty = C.V3_TEAM_GOALS[key] if v3 else (t["reward"], t["penalty"])
         out[key] = {"tier": key, "label": t["label"], "target_position": pos, "target_points": pts,
-                    "reward": t["reward"], "penalty": t["penalty"], "text": text}
+                    "reward": reward, "penalty": penalty, "text": text}
     return {"expected": expected, "why": "; ".join(why), "options": out, "earned": earned, "rounds_done": n_done}
 
 
@@ -283,6 +298,10 @@ def progress(conn, season_id, standings=None):
         g["text"] = describe(g)
         now = standings.get(g["team_id"])
         g["position"], g["points"] = now if now else (None, 0)
+        if engine.is_v3(conn, season_id):
+            _progress_v3(g, evs, done)
+            out.append(g)
+            continue
         if g["outcome"]:
             g["state"] = g["outcome"]
         elif done == 0:
@@ -295,6 +314,34 @@ def progress(conn, season_id, standings=None):
             g["state"] = "Behind"
         out.append(g)
     return out
+
+
+def _progress_v3(g, evs, done):
+    """Engine 3: progress detail and state. Points goals are Secured once reached; a position route is only final at
+    the end of the season; a goal whose points can no longer be reached (and has no position route) is Impossible."""
+    left = [e for e in evs if e["status"] != C.EVENT_COMPLETE]
+    max_left = sum(C.GP_POINTS[1] + C.GP_POINTS[2] + ((C.SPRINT_POINTS[1] + C.SPRINT_POINTS[2]) if e["is_sprint"] else 0)
+                   for e in left)
+    need = max(0, g["target_points"] - (g["points"] or 0))
+    g["needed"] = need
+    g["weekends_left"] = len(left)
+    g["per_weekend"] = round(need / len(left), 1) if left and need else 0
+    g["secured"] = need == 0
+    g["impossible"] = need > max_left and not g["target_position"]
+    if g["outcome"]:
+        g["state"] = g["outcome"]
+    elif g["secured"]:
+        g["state"] = "Secured"
+    elif done == 0:
+        g["state"] = "Not started"
+    elif not left:
+        g["state"] = "Met" if _by_position(g, g["position"]) else "Missed"
+    elif g["impossible"]:
+        g["state"] = "Impossible"
+    else:
+        frac = done / (len(evs) or 1)
+        on = _by_position(g, g["position"]) or (g["points"] or 0) >= g["target_points"] * frac - 0.5
+        g["state"] = "On track" if on else "Behind"
 
 
 def settle(conn, season_id):

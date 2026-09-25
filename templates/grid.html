@@ -14,10 +14,17 @@
     <li class="dismissal dismissal-{{ u.status|lower|replace(' ', '-') }}">
       <b>{{ dmap[u.driver_id].name }}</b> · {{ tmap[u.team_id].name }} · R{{ u.round_number }} {{ u.event_name }}: {{ u.label }}
       <span class="pill">{{ u.status }}</span>{% if u.note %} <small class="muted">“{{ u.note }}”</small>{% endif %}
+      {% if v3 and u.status == 'Issued' and ctx.is_master and u.kind != 'teammate' %}
+      <form method="post" action="{{ url_for('ultimatum_teammate', token=ctx.token, ultimatum_id=u.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost" title="For when a finishing position wouldn't mean much, e.g. in the slowest car">Use a teammate target instead</button></form>
+      {% endif %}
       {% if u.status == 'Awaiting decision' and ctx.is_master %}
       <form method="post" action="{{ url_for('dismissal_decide', token=ctx.token, ultimatum_id=u.id) }}" class="stack tight">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Note <small class="muted">(required to overrule)</small><input name="note" maxlength="500" placeholder="e.g. The car failed him, not the other way round"></label>
+        {% if free_agents %}<label>Who steps in? <select name="replacement"><option value="">The best unseated AI driver</option>
+          {% for f in free_agents %}<option value="{{ f.id }}">{{ f.name }} (free agent)</option>{% endfor %}</select></label>{% endif %}
         <div class="button-row tight">
           <button class="btn btn-sm btn-danger" name="decision" value="dismiss">Confirm: drop {{ dmap[u.driver_id].name }}</button>
           <button class="btn btn-sm" name="decision" value="overrule">Overrule: they keep the seat</button>

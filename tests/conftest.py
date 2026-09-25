@@ -20,6 +20,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "gates: run with round gates at their real default (on)")
     config.addinivalue_line("markers", "whatsnew: show the real What's New popup (hidden in other tests)")
     config.addinivalue_line("markers", "weekends: run with race weekends at their real default (on)")
+    config.addinivalue_line("markers", "engine3: new leagues use the real default calculation engine (3)")
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +46,15 @@ def race_weekends_default(request, monkeypatch):
     from f1tracker import weekend
     if not request.node.get_closest_marker("weekends"):
         monkeypatch.setitem(weekend.DEFAULTS, "race_weekends", "0")
+
+
+@pytest.fixture(autouse=True)
+def calc_engine_default(request, monkeypatch):
+    """Tests written before 2.5 check the engine 2 formulas: their leagues are created on engine 2 (which also makes
+    them the proof that engine 2 stays reproducible). Mark @pytest.mark.engine3 for the real default."""
+    from f1tracker import constants
+    if not request.node.get_closest_marker("engine3"):
+        monkeypatch.setattr(constants, "NEW_LEAGUE_ENGINE", constants.ENGINE_LEGACY)
 
 
 @pytest.fixture
@@ -159,3 +169,19 @@ def open_browser():
         pw.stop()
         pytest.skip(f"no browser: {exc}")
     return pw, browser
+
+
+def after_submit(conn, event, first=True):
+    """What the app does when a round is submitted (v2.5): the car ranks it's judged with (engine 3), the follow-up
+    (targets, press, relationships, ultimatums) and the AI recommendation after it."""
+    from f1tracker import ai3, calc3, engine, teamlife
+    ev = S.get_event(conn, event["id"])
+    if engine.round_v3(conn, ev) and not conn.execute("SELECT 1 FROM round_ranks WHERE event_id = ?",
+                                                      (ev["id"],)).fetchone():
+        calc3.store_round_ranks(conn, ev)
+    if first:
+        teamlife.after_race(conn, ev["id"])
+    else:
+        teamlife.judge_targets(conn, ev["id"])
+    if engine.round_v3(conn, ev):
+        ai3.store(conn, ev["id"])

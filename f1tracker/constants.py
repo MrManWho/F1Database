@@ -1,11 +1,11 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.5"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 3
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -87,9 +87,25 @@ SPRINT_POINTS = {1: 8, 2: 7, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1}
 
 STATUS_NOT_RUN = "Not Run"
 STATUS_FINISHED = "Finished"
-RESULT_STATUSES = [STATUS_NOT_RUN, STATUS_FINISHED, "DNF", "DNS", "DSQ"]
-OVERRIDE_STATUSES = ["Auto", "DNF", "DNS", "DSQ"]
-START_STATUSES = {STATUS_FINISHED, "DNF", "DSQ"}
+STATUS_CLASSIFIED = "Classified"   # v2.5: a classified retirement (retired, but classified on distance: may score)
+RESULT_STATUSES = [STATUS_NOT_RUN, STATUS_FINISHED, STATUS_CLASSIFIED, "DNF", "DNS", "DSQ"]
+OVERRIDE_STATUSES = ["Auto", STATUS_CLASSIFIED, "DNF", "DNS", "DSQ"]
+OVERRIDE_STATUSES_V2 = ["Auto", "DNF", "DNS", "DSQ"]          # what rounds judged by calculation version 2 offer
+START_STATUSES = {STATUS_FINISHED, STATUS_CLASSIFIED, "DNF", "DSQ"}
+CLASSIFIED_STATUSES = {STATUS_FINISHED, STATUS_CLASSIFIED}   # a classified position: may score points
+STATUS_LABELS = {STATUS_FINISHED: "Finished", STATUS_CLASSIFIED: "Classified retirement", "DNF": "DNF (unclassified)",
+                 "DNS": "DNS", "DSQ": "DSQ", STATUS_NOT_RUN: "Not run", "Auto": "Auto"}
+
+# v2.5: points for a Grand Prix stopped early, by distance completed (the current F1 scale), plus a manual option.
+GP_DISTANCES = {
+    "full": ("Full points (75% or more)", GP_POINTS),
+    "75": ("50–75% distance", {1: 19, 2: 14, 3: 12, 4: 9, 5: 8, 6: 6, 7: 5, 8: 3, 9: 2, 10: 1}),
+    "50": ("25–50% distance", {1: 13, 2: 10, 3: 8, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2, 9: 1}),
+    "25": ("Two laps to 25% distance", {1: 6, 2: 4, 3: 3, 4: 2, 5: 1}),
+    "none": ("No points (under two laps)", {}),
+    "manual": ("Manual points (typed in per driver)", None),
+}
+SPRINT_MIN_DISTANCE = 50       # % of the Sprint that must be completed for Sprint points (league setting)
 
 EVENT_NOT_RUN = "Not Run"
 EVENT_IN_PROGRESS = "In Progress"
@@ -269,3 +285,51 @@ RESULT_ROLES = {"race_master", "scorekeeper"}
 # Chosen to stay distinguishable from each other on the dark and light themes, not just by red vs green.
 PLAYER_COLORS = ["#4aa3ff", "#ffb020", "#c07cff", "#2ec4b6", "#ff6fae", "#9bd14b", "#ff8a3d", "#6d8bff",
                  "#e8d44d", "#48d1f0", "#f2789a", "#b8b8ff"]
+
+
+# --------------------------------------------------------------------------- v2.5 calculation engine
+# The calculation engine is separate from CALC_VERSION (an update counter that makes leagues refresh once).
+# Engine 2: every formula as of 2.4.1. Engine 3: the 2.5 rules. Existing leagues stay on engine 2 until the Race
+# Master chooses; new leagues start on engine 3. Completed seasons keep the engine they were played under.
+ENGINE_LEGACY = 2
+ENGINE_CURRENT = 3
+NEW_LEAGUE_ENGINE = ENGINE_CURRENT
+ENGINE_BLEND_ROUNDS = 6          # Future-only: rounds after the cutoff before the new numbers fully take over
+
+# Engine 3 constants (see docs/CALCULATION_V3.md for every formula)
+V3_RANK_PRIOR = 6                # car-strength: weight of the rating rank, in AI Grand Prix entries
+V3_RANK_EVIDENCE_CAP = 12        # at most this many AI entries count as evidence
+V3_FORM_WINDOW = 6               # recent started rounds in Form and car-adjusted
+V3_FORM_DECAY = 0.82             # weight = 0.82 ^ age
+V3_H2H_MIN = 3                   # comparisons needed before head-to-head counts
+V3_REP_RATE = 0.25               # share of the gap to the performance rating closed in a full season
+V3_ROLLOVER_CAP = 4.0            # pledge + team goal Reputation at rollover, kept within +/-4
+V3_PLEDGE_FAIL = {0: 0.0, 1: -0.5, 2: -1.0, 3: -1.5}
+V3_TEAM_GOALS = {"safe": (1.0, 0.0), "competitive": (2.0, -1.0), "ambitious": (3.0, -2.0)}
+V3_GOAL_EFFECT = {"Met": 2.0, "On track": 0.0, "Behind": -3.0, "Not evaluated": 0.0, "Not started": 0.0}
+V3_PRESS_SHARE = 0.5
+V3_EXTRA_ROUNDS = 6
+V3_EXTRA_CAP = 10.0
+V3_ORDER_OBEYED, V3_ORDER_IGNORED = 1.0, -2.0
+V3_INTEREST_DIVISOR, V3_INTEREST_MIN, V3_INTEREST_MAX = 5.0, -8.0, 6.0
+V3_EMERGENCY_MARGIN = 8.0        # an emergency offer needs Driver Value >= slowest eligible team bar - 8
+V3_MAX_COUNTERS = 3
+V3_TALK_CAP = 5.0                # message + interview interest effect, combined
+V3_NOFAULT_SHARE = 0.10          # no-fault retirements excluded from pledge pace, at most 10% of the season
+# AI tracker (engine 3)
+AI_QUALI_SCALE = 0.80            # seconds of qualifying gap for a full -1/+1
+AI_RACE_SCALE = 0.60             # seconds per lap of race gap for a full -1/+1
+AI_WEIGHTS = {"finish": 0.20, "quali_pos": 0.10, "teammate": 0.25, "race_pace": 0.30, "quali_pace": 0.15}
+AI_SPRINT_WEIGHT = 0.5
+AI_NO_MATE_CONFIDENCE = 0.8
+AI_EXTREME_GAP = 0.45            # s/lap: a clean session this far off may move up to AI_EXTREME_STEP at once
+AI_EXTREME_STEP = 5
+AI_STEP_LIMITS = ((1, 3), (3, 4), (10 ** 6, 6))   # (usable weekends up to, max step)
+AI_PERSISTENT_STEP = 8
+AI_FLAGS = {
+    "damage": ("Damage", 0.0), "penalty": ("Major time penalty", 0.0), "mechanical": ("No-fault mechanical issue", 0.0),
+    "disconnect": ("Disconnection", 0.0), "weather": ("Wet or changing conditions", 0.25),
+    "safety_car": ("Safety-car distortion", 0.25), "strategy": ("Strategy distortion", 0.25),
+    "traffic": ("Traffic distortion", 0.75),
+}
+AI_REPRESENTATIVE_WEIGHT = 0.5   # an excluded session the Race Master marks representative counts at half weight

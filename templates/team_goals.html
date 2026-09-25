@@ -35,6 +35,10 @@
   <p><span class="pill">{{ t.goal.label }}</span> {{ t.goal.text }}.
     <span class="state state-{{ t.goal.state|lower|replace(' ', '-') }}">{{ t.goal.state }}</span></p>
   <p class="muted small">Now: {% if t.goal.position %}P{{ t.goal.position }}, {% endif %}{{ t.goal.points }} pts · Met +{{ '%g'|format(t.goal.reward) }}, missed {{ '%g'|format(t.goal.penalty) if t.goal.penalty else '0' }} · {{ t.goal.why }}</p>
+  {% if t.goal.needed is defined %}
+  <p class="small goal-progress">{% if t.goal.secured %}<b>Secured</b>: the points target is reached.{% else %}{{ t.goal.needed|round(1) }} more point{{ 's' if t.goal.needed != 1 }} needed{% if t.goal.weekends_left %}, about {{ t.goal.per_weekend }} a weekend over the {{ t.goal.weekends_left }} left{% endif %}{% if t.goal.target_position %}, or finish P{{ t.goal.target_position }} or better (decided at the end of the season){% endif %}.{% endif %}
+    {% if t.goal.impossible %}<b class="text-bad">The points target can no longer be reached.</b>{% endif %}</p>
+  {% endif %}
   {% endif %}
   {% if t.can_choose %}
   <form method="post" action="{{ url_for('team_goal_choose', token=ctx.token, team_id=t.team.id) }}" class="goal-options">

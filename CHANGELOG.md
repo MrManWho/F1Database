@@ -3,6 +3,34 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 2.5 · Calculation Version 3
+_Released September 25, 2026_
+> Fairer, clearer numbers everywhere: a new way of working out standings, Form, Reputation, relationships, goals,
+> the transfer market and the AI difficulty. Existing leagues choose when to switch; nothing changes until they do.
+
+### Highlights
+- **You choose when your league switches.** The Race Master decides: recalculate this season from round 1 (with a full preview and a backup first), start the new rules from the next round, or decide later. Nothing changes by itself, and drivers see exactly what changed for them.
+- **Fairer standings.** Ties are split by full countback (most wins, then most P2s, and so on, then qualifying), never by name. A classified retirement keeps its points, and a shortened race uses the reduced points scale.
+- **Form and Reputation that follow how you drive.** Form looks at your last six races, so a long calendar doesn't inflate it. Reputation rises after a good season and can fall after a bad one.
+- **A new AI difficulty tracker.** It compares you with your AI teammate and cars of similar speed, and, if you enter them, lap times. Finishing last right behind your teammate is "about right"; being 30 seconds behind them brings the AI down. One odd result can't swing it the other way.
+- **Goals you can actually reach.** Slower cars get finishing goals like "P16 or better in 8 races", teammate goals need at least three comparisons, and team goals never ask for more points than are left to win.
+- **A tougher transfer market.** Your current team's opinion helps but never guarantees a new deal, and an experienced driver can end a window unsigned and return later as a free agent.
+
+### Added
+- **Calculation Update** (Race Master, League settings → Data & tools): the choice, a preview of every driver's before and after, the rollback reference, and every notice drivers agreed to.
+- **Classified retirement** and **no-fault retirement** (Race Master) on the results page; **Grand Prix distance** (full, 50–75%, 25–50%, two laps to 25%, no points, or manual points) and **Sprint distance**.
+- **Pace & conditions** on each round: optional qualifying times, race gap and laps, plus flags for damage, penalties, weather, safety cars, strategy, traffic or a mechanical issue.
+- **Team order rulings**: the Race Master says whether an order was obeyed, ignored or not actionable. Finishing ahead on merit no longer counts as ignoring it.
+- **Final warnings**: the Race Master can switch one to "finish ahead of your teammate", and a free agent can step in for a dropped driver.
+- **Career status**: Free Agent, Returning Driver, Mid-season Replacement or Unsigned, shown in the Garage.
+- **Team goal progress**: points still needed, points needed per weekend, Secured and Impossible.
+
+### Changed
+- **Formula changes (approved, Calculation Version 3 only):** countback, points for classified retirements and shortened races, car strength (ratings blended with AI finishing evidence, one stored rank per round), Form, car-adjusted performance, head-to-head (three comparisons needed, a DNS never counts), Reputation, current-team interest, relationships (neutral at 60, recent weekends only, press counts half), season goals, team goals, weekend targets, final warnings, team orders, negotiations and the AI tracker. The exact formulas are in the calculation guide.
+- A missed pledge now costs Reputation (Solid −0.5, Strong −1, Breakout −1.5), and pledge plus team-goal Reputation at the end of a season is kept within ±4.
+- Press answers that are simply honest no longer count against you; the fastest-lap answer "Every point counts in this championship" is now "Every tenth matters when you're chasing performance".
+- Seasons already played keep the numbers they had.
+
 ## 2.4.1 · A fairer AI recommendation
 _Released September 25, 2026_
 > The AI difficulty recommendation no longer raises the level on drivers who are finishing at the back.
