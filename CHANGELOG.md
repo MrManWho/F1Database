@@ -3,6 +3,18 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 2.4.1 · A fairer AI recommendation
+_Released September 25, 2026_
+> The AI difficulty recommendation no longer raises the level on drivers who are finishing at the back.
+
+### Highlights
+- **Half the car, half the grid.** Each round is judged half against what your car should manage and half against the whole grid. A slow car still counts, but finishing near the back now brings the level down, so there's room for a breakout season.
+- **Never up while someone is struggling.** The level holds instead of going up while any player driver is struggling or finishing near the back of the grid (about P16 or worse).
+
+### Changed
+- **Formula change (approved):** AI difficulty uses a 50/50 blend of the car-relative reading (2.4) and a whole-grid reading, and it can't go up while anyone is struggling. The one-line summary under the recommendation says how rounds are judged.
+- **League setting** (League settings → Race weekends → *How each round is judged*): Blend (the default), Car only (as in 2.4) or Overall.
+
 ## 2.4 · Choose your target, reset a weekend, and a tidier league
 _Released September 24, 2026_
 > Weekend targets are now a choice, the Race Master can reset a round as if it never happened, each round has its own

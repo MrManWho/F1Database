@@ -31,6 +31,9 @@ CALC_NOTES = {
                               "driver (for example two players in the same team) no longer counts as the slowest car "
                               "after three rounds, and the Reputation carried between seasons now includes the pledge "
                               "and team-goal rewards every time it's worked out."),
+    3: ("Paddock Legacy 2.4.1", "The AI difficulty recommendation now judges each round half against your car and half "
+                                "against the whole grid, and it never goes up while a player driver is struggling or "
+                                "near the back. Results, points and ratings are unchanged."),
 }
 
 

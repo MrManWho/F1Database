@@ -86,8 +86,11 @@
     <label class="toggle-row">
       <input type="checkbox" name="difficulty_recs" value="1" {{ 'checked' if difficulty_recs }}>
       <span class="switch"></span>
-      <span><b>AI difficulty recommendations</b><small class="muted">Suggest the next AI level from how each player did against what their car should manage. Off still records the level used each round.</small></span>
+      <span><b>AI difficulty recommendations</b><small class="muted">Suggest the next AI level from how each player did. Off still records the level used each round.</small></span>
     </label>
+    <label>How each round is judged
+      <select name="difficulty_mode">{% for key, label in C.DIFF_MODES.items() %}<option value="{{ key }}" {{ 'selected' if difficulty_mode == key }}>{{ label }}{{ ' (recommended)' if key == C.DIFF_MODE_DEFAULT }}</option>{% endfor %}</select>
+      <small class="muted">Car only: finishing where your car should is "about right", even at the back. Overall: finishing near the back always reads as struggling. Blend: half of each. In every mode the level never goes up while a player driver is struggling or near the back of the grid.</small></label>
     <label class="check"><input type="checkbox" name="difficulty_sprints" value="1" {{ 'checked' if difficulty_sprints }}> Count Sprint points in the recommendation (off: only the Grand Prix counts)</label>
   </section>
   <section class="card settings-section">

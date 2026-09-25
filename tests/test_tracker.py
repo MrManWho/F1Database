@@ -225,23 +225,56 @@ def test_one_player_struggling_while_the_other_flies_is_a_small_move(db):
     assert abs(rec["recommended"] - 90) <= C.DIFF_MAX_STEP // 2
 
 
-def test_the_car_is_taken_into_account(db):
-    """v2.3.1: finishing where the car should is "about right" in any car; beating it is "comfortable"."""
-    def rec_for(team_name, finishes):
-        token = storage.new_token()
-        with storage.session(token, create=True) as conn:
-            S.seed_career(conn, token, "Car", 2026, ["David Conley", "Carson Hayes"])
-            seat_players_in(conn, team_name)
-            _player_rounds(conn, finishes, 82)
-            return S.difficulty_recommendation(conn)
+def _rec_for(team_name, finishes, mode=None):
+    token = storage.new_token()
+    with storage.session(token, create=True) as conn:
+        S.seed_career(conn, token, "Car", 2026, ["David Conley", "Carson Hayes"])
+        if mode:
+            storage.set_meta(conn, "difficulty_mode", mode)
+        seat_players_in(conn, team_name)
+        _player_rounds(conn, finishes, 82)
+        return S.difficulty_recommendation(conn)
+
+
+def _fastest_team():
     with storage.session(storage.new_token(), create=True) as conn:
         S.seed_career(conn, "x", "Car", 2026, ["A B", "C D"])
-        fastest = _fastest(conn)
-    fast = rec_for(fastest, [(1, 2), (2, 1), (1, 2), (2, 1)])          # the best car, winning: its par
-    slow = rec_for("Cadillac", [(21, 22), (22, 21), (21, 22), (22, 21)])  # the slowest car, at the back: its par
+        return _fastest(conn)
+
+
+def test_car_only_mode_judges_against_the_car(db):
+    """2.4 behaviour, kept as the "Car only" setting: finishing where the car should is "about right" in any car."""
+    fast = _rec_for(_fastest_team(), [(1, 2), (2, 1), (1, 2), (2, 1)], "car")          # the best car, winning
+    slow = _rec_for("Cadillac", [(21, 22), (22, 21), (21, 22), (22, 21)], "car")       # the slowest car, at the back
     assert abs(fast["recommended"] - 82) <= 1 and abs(slow["recommended"] - 82) <= 1
-    flying = rec_for("Cadillac", [(12, 13), (13, 12), (12, 13), (13, 12)])  # the slowest car in the midfield
+    flying = _rec_for("Cadillac", [(12, 13), (13, 12), (12, 13), (13, 12)], "car")     # the slowest car in the midfield
     assert flying["recommended"] >= 82 + 4 and flying["direction"] == "up"
+
+
+def test_blend_brings_the_level_down_at_the_back_even_in_the_slowest_car(db):
+    """2.4.1 default: half car, half whole grid. Dead last in the slowest car now lowers the level."""
+    slow = _rec_for("Cadillac", [(21, 22), (22, 21), (21, 22), (22, 21)])
+    assert slow["recommended"] <= 82 - 4 and slow["direction"] == "down"
+    assert all(p["verdict"] == "struggling" for p in slow["players"])
+    assert "half against each car, half against the whole grid" in slow["evidence"]
+    fast = _rec_for(_fastest_team(), [(1, 2), (2, 1), (1, 2), (2, 1)])                # winning in the best car
+    assert fast["direction"] == "up"
+    flying = _rec_for("Cadillac", [(12, 13), (13, 12), (12, 13), (13, 12)])            # breakout: slowest car, midfield
+    assert flying["direction"] == "up"
+    overall = _rec_for("Cadillac", [(21, 22), (22, 21), (21, 22), (22, 21)], "overall")
+    assert overall["recommended"] <= slow["recommended"]
+
+
+def test_the_level_never_goes_up_while_someone_is_at_the_back(db):
+    """One player wins in the fastest car, the other is always last in it: the average says up, but it holds."""
+    rec = _rec_for(_fastest_team(), [(1, 22), (1, 22), (1, 22), (1, 22), (1, 22)], "car")
+    assert rec["recommended"] <= 82
+    # Car only: a slow-car hero plus a teammate who is "about right" for the car but at the back of the grid.
+    held = _rec_for("Cadillac", [(1, 21), (1, 22), (1, 21), (2, 22)], "car")
+    assert held["direction"] == "hold" and held["recommended"] == 82
+    assert "near the back" in held["reason"] and len(held["held_by"]) == 1
+    blend = _rec_for("Cadillac", [(1, 21), (1, 22), (1, 21), (2, 22)])
+    assert blend["recommended"] <= 82
 
 
 def test_double_dnf_rounds_do_not_force_reduction(db):

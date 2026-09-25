@@ -122,6 +122,7 @@ def test_three_rounds_and_one_offs_stay_gradual(db):
     a, b = players(db)
     ranks = S.team_strength_ranks(db, sid)
     fast = min(ranks, key=ranks.get)          # v2.3.1: in the fastest car, winning is what the car should do
+    storage.set_meta(db, "difficulty_mode", "car")   # v2.4.1: judged on the car alone (the blend is tested elsewhere)
     S.place_players(db, sid, {a: (fast, 1), b: (fast, 2)})
     evs = S.events(db, sid)
     for ev in evs[:3]:

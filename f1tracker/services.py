@@ -835,43 +835,65 @@ def _signal(value):
     return clamp(value, -1.0, 1.0)
 
 
-def player_event_score(conn, event, ranks=None):
-    """Average performance score of the player drivers who finished this GP, or None."""
+def difficulty_mode(conn):
+    """How the league judges a round for the AI recommendation (v2.4.1): "blend" (default), "car" or "overall"."""
+    row = _row(conn, "SELECT value FROM meta WHERE key = 'difficulty_mode'")
+    return row["value"] if row and row["value"] in C.DIFF_MODES else C.DIFF_MODE_DEFAULT
+
+
+def _round_part(expected, pos, quali, points_for, is_sprint, sprint_pos, sprint_status, with_sprint, teammate):
+    """One reading of a finish (-1..1) against an expected position: finish, qualifying, points and teammate."""
+    finish = _signal((expected - pos) / C.DIFF_PLACES)
+    q = _signal((expected - quali) / C.DIFF_PLACES) if quali else 0.0
+    par = max(1, round(expected))
+    pts = points_for(pos, sprint_pos, sprint_status)
+    par_pts = gp_points(par, C.STATUS_FINISHED) + (sprint_points(par, C.STATUS_FINISHED, is_sprint) if with_sprint else 0)
+    points = _signal((pts - par_pts) / C.DIFF_POINTS_SCALE)
+    if teammate is None:
+        # No AI teammate to compare with (two players in one car): the other parts share its weight.
+        return (0.40 * finish + 0.20 * q + 0.15 * points) / 0.75
+    return 0.40 * finish + 0.20 * q + 0.15 * points + 0.25 * teammate
+
+
+def player_event_score(conn, event, ranks=None, mode=None):
+    """Average performance score of the player drivers who finished this GP, or None.
+
+    v2.4.1: each finish is read two ways. "Car": against where this car should finish (2 x rank - 0.5).
+    "Overall": against the middle of the grid, whatever the car, so finishing at the back always reads as
+    struggling. The league's mode picks car, overall or a blend (DIFF_OVERALL_SHARE overall)."""
     rows = _rows(conn, """SELECT r.*, d.is_player FROM results r JOIN drivers d ON d.id = r.driver_id
                           WHERE r.event_id = ?""", (event["id"],))
     by_team = {}
     for r in rows:
         by_team.setdefault(r["team_id"], []).append(r)
+    mode = mode or difficulty_mode(conn)
+    share = {"car": 0.0, "overall": 1.0}.get(mode, C.DIFF_OVERALL_SHARE)
+    middle = (len(rows) + 1) / 2 if len(rows) >= 2 else (C.GRID_SIZE + 1) / 2
     scores = []
     details = []
     # v2.0: Sprint points only count when the league explicitly says so (League settings → Career systems).
     with_sprint = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "1"})["value"] == "1"
+    is_sprint = bool(event["is_sprint"])
+
+    def points_for(pos, sprint_pos, sprint_status):
+        return gp_points(pos, C.STATUS_FINISHED) + (sprint_points(sprint_pos, sprint_status, is_sprint) if with_sprint else 0)
+
     for r in rows:
         if not r["is_player"] or r["result_status"] != C.STATUS_FINISHED or not r["race_position"]:
             continue
         pos = r["race_position"]
-        # v2.3.1: everything is judged against what this car should manage, not against the middle of the grid,
-        # so a driver doing exactly what their car allows is "about right" in the fastest car and the slowest.
-        expected = 2 * ranks[r["team_id"]] - 0.5 if ranks and r["team_id"] in ranks else 11.5
-        finish = _signal((expected - pos) / C.DIFF_PLACES)
-        quali = _signal((expected - r["qualifying_position"]) / C.DIFF_PLACES) if r["qualifying_position"] else 0.0
-        par = max(1, round(expected))
-        pts = gp_points(pos, r["result_status"]) + (sprint_points(r["sprint_position"], r["sprint_status"],
-                                                                  bool(event["is_sprint"])) if with_sprint else 0)
-        par_pts = gp_points(par, C.STATUS_FINISHED) + (sprint_points(par, C.STATUS_FINISHED, bool(event["is_sprint"]))
-                                                       if with_sprint else 0)
-        points = _signal((pts - par_pts) / C.DIFF_POINTS_SCALE)
+        expected = 2 * ranks[r["team_id"]] - 0.5 if ranks and r["team_id"] in ranks else middle
         mate = next((m for m in by_team.get(r["team_id"], []) if not m["is_player"] and m["race_position"]
                      and m["result_status"] == C.STATUS_FINISHED), None)
         teammate = _signal((mate["race_position"] - pos) / 10) if mate else None
-        if teammate is None:
-            # No AI teammate to compare with (two players in one car): the other parts share its weight.
-            score = (0.40 * finish + 0.20 * quali + 0.15 * points) / 0.75
-        else:
-            score = 0.40 * finish + 0.20 * quali + 0.15 * points + 0.25 * teammate
+        args = (pos, r["qualifying_position"], points_for, is_sprint, r["sprint_position"], r["sprint_status"],
+                with_sprint, teammate)
+        car = _round_part(expected, *args)
+        overall = _round_part(middle, *args)
+        score = (1 - share) * car + share * overall
         scores.append(score)
         details.append({"driver_id": r["driver_id"], "position": pos, "score": round(score, 3),
-                        "expected": round(expected, 1)})
+                        "car": round(car, 3), "overall": round(overall, 3), "expected": round(expected, 1)})
     if not scores:
         return None, details
     return sum(scores) / len(scores), details
@@ -984,6 +1006,8 @@ def _evidence_line(conn, rec, usable):
         short = x["label"].split(" ")[1] if " " in x["label"] else x["label"]
         parts.append(f"{short} " + ("untracked" if "track" in x["why"] else "excluded (no player finished)"))
     sprints = (_row(conn, "SELECT value FROM meta WHERE key = 'difficulty_sprints'") or {"value": "1"})["value"] == "1"
+    parts.append({"car": "judged against each car", "overall": "judged against the whole grid"}.get(
+        difficulty_mode(conn), "judged half against each car, half against the whole grid"))
     parts.append("Sprint points counted" if sprints else "Sprint points not counted")
     return ", ".join(parts) + "."
 
@@ -1013,9 +1037,12 @@ def _adaptive(conn, rec, history, current):
         w = 0.5 ** (age / C.DIFF_RECENT_HALF_LIFE)
         for d in h["details"]:
             shift = clamp(_soft(d["score"]) * C.DIFF_SPAN, -C.DIFF_ROUND_CAP, C.DIFF_ROUND_CAP)
-            p = per.setdefault(d["driver_id"], {"w": 0.0, "sum": 0.0, "rounds": 0})
+            overall = d.get("overall", d["score"])
+            shift_overall = clamp(_soft(overall) * C.DIFF_SPAN, -C.DIFF_ROUND_CAP, C.DIFF_ROUND_CAP)
+            p = per.setdefault(d["driver_id"], {"w": 0.0, "sum": 0.0, "overall": 0.0, "rounds": 0})
             p["w"] += w
             p["sum"] += w * (h["ai_difficulty"] + shift)
+            p["overall"] += w * shift_overall
             p["rounds"] += 1
     players = []
     for did, p in per.items():
@@ -1023,8 +1050,11 @@ def _adaptive(conn, rec, history, current):
         delta = level - current
         verdict = ("struggling" if delta <= -C.DIFF_VERDICT else "comfortable" if delta >= C.DIFF_VERDICT
                    else "about right")
+        # v2.4.1: how they're doing against the whole grid, whatever the car (levels above/below the one used).
+        overall = p["overall"] / p["w"]
         players.append({"driver_id": did, "name": dmap[did]["name"] if did in dmap else "A player", "rounds": p["rounds"],
-                        "level": round(level, 1), "delta": round(delta, 1), "verdict": verdict, "weight": p["w"]})
+                        "level": round(level, 1), "delta": round(delta, 1), "verdict": verdict, "weight": p["w"],
+                        "overall": round(overall, 1), "at_back": overall <= -C.DIFF_BACK})
     players.sort(key=lambda x: x["delta"])
     rec["players"] = players
     rec["average"] = round(sum(h["score"] for h in usable[-5:]) / len(usable[-5:]), 3)
@@ -1039,6 +1069,13 @@ def _adaptive(conn, rec, history, current):
     step = int(round(clamp(raw, -C.DIFF_MAX_STEP, C.DIFF_MAX_STEP)))
     if not ups and not downs:
         step = 0
+    # v2.4.1: never raise the level while anyone is struggling, on the blended reading or against the whole grid
+    # (e.g. at the back in a slow car): they need the chance to move up the order first.
+    held = [x for x in players if x["verdict"] == "struggling" or x["at_back"]]
+    blocked = step > 0 and bool(held)
+    if blocked:
+        step = 0
+    rec["held_by"] = [x["name"] for x in held] if blocked else []
     rec["recommended"] = int(clamp(current + step, C.MIN_DIFFICULTY, C.MAX_DIFFICULTY))
     step = rec["recommended"] - current
     rec["direction"] = "up" if step > 0 else "down" if step < 0 else "hold"
@@ -1049,7 +1086,11 @@ def _adaptive(conn, rec, history, current):
     n = len(usable)
     evidence = f"{n} recent round{'s' if n != 1 else ''}"
     if step == 0:
-        if mixed:
+        if blocked:
+            rec["reason"] = (f"Results say AI {current} could go up, but {who(held)} "
+                             f"{'is' if len(held) == 1 else 'are'} still near the back of the grid, so it holds at "
+                             f"{current} until {'they move' if len(held) > 1 else 'that changes'}.")
+        elif mixed:
             rec["reason"] = (f"{who(downs)} {'is' if len(downs) == 1 else 'are'} finding AI {current} hard while "
                              f"{who(ups)} {'is' if len(ups) == 1 else 'are'} comfortable. Too close to call: hold at {current}.")
         elif ups or downs:

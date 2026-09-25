@@ -1,10 +1,10 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.4"
+APP_VERSION = "2.4.1"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
-CALC_VERSION = 2
+CALC_VERSION = 3
 SCHEMA_VERSION = 20
 
 GRID_SIZE = 22
@@ -145,6 +145,15 @@ DIFF_CONFIDENCE_K = 0.75     # evidence weight w gives confidence w / (w + K): o
 DIFF_PLACES = 8              # v2.3.1: places better (or worse) than the car's expected finish for a full +1 (or -1)
 DIFF_POINTS_SCALE = 15       # points above (or below) what the car's expected finish would score for a full +1
 DIFF_VERDICT = 1.0           # levels away from the current one before a player counts as struggling / comfortable
+# v2.4.1: how a round is judged. "car": against the car's expected finish only (2.4). "overall": against the middle
+# of the grid, whatever the car. "blend" (default): DIFF_OVERALL_SHARE of each. In every mode the level is never
+# raised while any player driver is struggling, on the blended or the overall reading.
+DIFF_MODES = {"blend": "Blend (half car, half overall)", "car": "Car only (against the car's expected finish)",
+              "overall": "Overall (against the middle of the grid)"}
+DIFF_MODE_DEFAULT = "blend"
+DIFF_OVERALL_SHARE = 0.5
+DIFF_BACK = 5.0             # levels below the one used, against the whole grid, that count as "near the back"
+                            # (about P16 or worse on a 22-car grid, qualifying there too): the level won't go up
 # Where a level sits for a typical player (the game's own bands; most players are comfortable around 82).
 DIFF_BANDS = [(1, 40, "Beginner"), (41, 65, "Casual"), (66, 99, "Intermediate / Advanced"), (100, 110, "Expert")]
 DIFF_MIN_ROUNDS = 3

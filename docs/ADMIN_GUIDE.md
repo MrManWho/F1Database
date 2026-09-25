@@ -26,7 +26,8 @@ All of these affect one league only.
   rounds, names, standings, records and news; never emails, usernames, notes, garages, offers, drafts or rounds in progress.
 - **Selectable team goals**: off by default. See Help → Team goals. Rewards: Safe +1/0, Competitive +3/−1, Ambitious +6/−3
   Reputation, settled once at the next season rollover.
-- **AI difficulty**: recommendations on/off; *Count Sprint points* (on by default, as before 2.0).
+- **AI difficulty**: recommendations on/off; *Count Sprint points* (on by default, as before 2.0); *How each round is
+  judged* (2.4.1, meta `difficulty_mode`): `blend` (default), `car` or `overall`.
 - **Team orders, weekend targets, round gates**: as in 1.20.
 - **Joining**: requests, invite only or closed. **Rollover default** for ending contracts.
 - **Discord webhook**: kept private; never shown in the Activity Log, exports or downloaded backups.
@@ -87,6 +88,18 @@ All of these affect one league only.
 - **Team goals**: reopening a team's choice sends that team's drivers to choose before anything else; re-pushing
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
+
+## New in 2.4.1: AI difficulty blend
+
+- **Formula** (`services.player_event_score`): each finishing player driver gets a car reading (expected finish
+  2 × car rank − 0.5) and an overall reading (expected finish = middle of the grid, (cars entered + 1) ÷ 2), each
+  0.40 finish + 0.20 qualifying + 0.15 points + 0.25 AI teammate as before. Round score =
+  (1 − s) × car + s × overall, with s = `DIFF_OVERALL_SHARE` (0.5) in Blend, 0 in Car only, 1 in Overall.
+- **No raise while struggling** (`services._adaptive`): if the step would be up and any player is "struggling" on the
+  round score, or their weighted overall reading is `DIFF_BACK` (5) levels or more below the level used, the
+  recommendation holds and says who it's waiting on. Applies in every mode.
+- **Calculation version 3**: each league recalculates once when first opened and shows the 2.4.1 note. Nothing
+  stored changes (the recommendation is worked out fresh), so there are no per-driver change notices.
 
 ## New in 2.4
 

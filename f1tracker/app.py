@@ -3815,6 +3815,8 @@ def register_routes(app):
             if "team_life" in request.form and mine("weekends"):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
+                if request.form.get("difficulty_mode") in C.DIFF_MODES:
+                    storage.set_meta(conn, "difficulty_mode", request.form["difficulty_mode"])
                 raceweek.set_enabled(conn, bool(request.form.get("race_weekends")))
             if "team_life" in request.form and mine("career"):
                 teamgoals.set_enabled(conn, bool(request.form.get("team_goal_choice")))
@@ -3900,6 +3902,7 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
+                    difficulty_mode=S.difficulty_mode(conn),
                     team_goal_choice=teamgoals.enabled(conn), midseason_sackings=ultimatums.enabled(conn),
                     recalculated_at=storage.get_meta(conn, "recalculated_at"),
                     active_season=any(e["status"] != C.EVENT_NOT_RUN for e in S.events(conn, ctx["current_season_id"]))
