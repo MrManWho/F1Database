@@ -581,7 +581,7 @@ def test_race_master_menu_links_to_every_log(app, master_client):
         assert f'href="/career/{token}/{path}"' in page, path
 
 
-# --------------------------------------------------------------------------- 3.0.2: weather
+# --------------------------------------------------------------------------- 3.1: weather
 
 def _wx_league(master_client):
     from f1tracker import auth

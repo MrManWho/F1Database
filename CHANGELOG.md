@@ -3,7 +3,7 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
-## 3.0.2 · Weather for every race
+## 3.1 · Weather for every race
 _Released September 25, 2026_
 > Record the conditions of every session and see who's quickest in the rain.
 

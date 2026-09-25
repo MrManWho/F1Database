@@ -1,4 +1,4 @@
-"""Weather for each race weekend (v3.0.2).
+"""Weather for each race weekend (v3.1).
 
 A Scorekeeper or the Race Master records the conditions of each session as they were in the game: qualifying, the
 Sprint (Sprint weekends) and the race. They show on the round page, the calendar, the results list, the race summary

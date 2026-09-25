@@ -4244,7 +4244,7 @@ def register_routes(app):
     @app.route("/career/<token>/weekend/<int:event_id>/weather", methods=["POST"])
     @career_page()
     def weekend_weather(conn, ctx, event_id):
-        """v3.0.2: a Scorekeeper or the Race Master records each session's conditions (a record only)."""
+        """v3.1: a Scorekeeper or the Race Master records each session's conditions (a record only)."""
         from . import weather
         if not (ctx["can_run"] or ctx["is_master"]):
             abort(403)

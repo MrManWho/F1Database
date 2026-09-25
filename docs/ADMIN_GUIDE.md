@@ -89,7 +89,7 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
-## 3.0.2: weather
+## New in 3.1: weather
 
 - Each session's weather (quali / Sprint / race: dry, overcast, light rain, heavy rain, changing) is stored in a
   `weather` table inside the league file, created on first use (no schema version change, no upgrade backup). It's

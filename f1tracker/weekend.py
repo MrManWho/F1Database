@@ -292,7 +292,7 @@ def reset(conn, event_id, username):
     for key in (f"gate_reminded_{eid}", f"targets_removed_{eid}"):
         conn.execute("DELETE FROM meta WHERE key = ?", (key,))
     from . import weather
-    weather.clear(conn, eid)      # v3.0.2: the weekend never started, so neither did its weather
+    weather.clear(conn, eid)      # v3.1: the weekend never started, so neither did its weather
     conn.execute("""UPDATE events SET status = ?, ai_difficulty = NULL, ai_untracked = 0, submitted_at = NULL,
                     press_required = 0, paddock_at = NULL, paddock_by = NULL, lights_at = NULL, lights_by = NULL,
                     revision = revision + 1 WHERE id = ?""", (C.EVENT_NOT_RUN, eid))
