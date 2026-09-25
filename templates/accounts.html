@@ -145,6 +145,32 @@
   {% endif %}
 </section>
 
+<section class="card" id="leagues">
+  <h2>Leagues on this site</h2>
+  <p class="muted small">Only the site admin sees this. Every league on the server with its ID, including demo leagues and any that can't be opened.</p>
+  {% if all_leagues %}
+  <div class="table-wrap"><table class="data-table compact">
+    <caption class="sr-only">Every league on this site</caption>
+    <thead><tr><th scope="col">League</th><th scope="col">League ID</th><th scope="col" class="num">Season</th><th scope="col" class="num">Members</th><th scope="col">Last opened</th></tr></thead>
+    <tbody>{% for l in all_leagues %}
+      <tr><th scope="row">{{ l.name }}{% if l.builder %} <span class="pill">Demo builder file</span>{% elif l.demo %} <span class="pill">Demo</span>{% endif %}{% if l.broken %} <span class="pill pill-hot">Can't be opened</span>{% endif %}</th>
+        <td><code>{{ l.token }}</code></td><td class="num">{{ l.year or '—' }}</td><td class="num">{{ l.members|length }}</td>
+        <td class="muted small">{{ l.last_opened|stamp if l.last_opened else '—' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted small">No leagues yet.</p>{% endif %}
+  <h3>Delete a league</h3>
+  <p class="muted small">Type the league's ID twice. It's deleted for everyone who's in it. A copy is kept in its automatic backups on the server first.</p>
+  <form method="post" action="{{ url_for('admin_delete_league') }}" class="stack"
+        data-confirm='{"title": "Delete this league?", "what": "The league is deleted for every member.", "backup": "A copy is kept in its automatic backups on the server.", "ok": "Delete league"}'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2">
+      <label>League ID<input name="league_id" required autocomplete="off" spellcheck="false"></label>
+      <label>Type the ID again<input name="confirm_id" required autocomplete="off" spellcheck="false"></label>
+    </div>
+    <div><button class="btn btn-danger">Delete league</button></div>
+  </form>
+</section>
+
 <section class="card" id="offsite">
   <h2>Encrypted backup to keep somewhere else</h2>
   <p class="muted small">The automatic backups are stored on the same disk as the site, so they can't help if the disk or the hosting account is lost.

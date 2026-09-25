@@ -221,6 +221,22 @@ def _summary(path):
     }
 
 
+def all_league_files():
+    """v3.0.1 (site admin): every league file on the server, including ones that can't be opened and the demo
+    builder's work file, so the site admin can find and delete any of them by ID."""
+    out = []
+    for p in sorted(careers_dir().glob(f"*{CAREER_EXT}")):
+        info = _summary(p)
+        if info is None:
+            info = {"token": p.stem, "name": "(can't be opened)", "year": None, "completed": 0, "total": 0,
+                    "members": [], "demo": p.stem.startswith("demo-"), "last_opened": "", "broken": True,
+                    "size_kb": round(p.stat().st_size / 1024, 1)}
+        info["builder"] = p.stem == "demo-template-build"
+        out.append(info)
+    out.sort(key=lambda c: (not (c.get("broken") or c["demo"]), c["name"].lower()))
+    return out
+
+
 def list_careers():
     items = [s for s in (_summary(p) for p in careers_dir().glob(f"*{CAREER_EXT}")) if s]
     items.sort(key=lambda c: c["last_opened"] or "", reverse=True)

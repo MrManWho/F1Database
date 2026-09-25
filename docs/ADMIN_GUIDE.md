@@ -93,6 +93,13 @@ All of these affect one league only.
 
 - **Change notices:** a driver's page lists only their own notices. Race Masters see other drivers' notices in a
   separate section, and only while viewing the league as Race Master (not in Driver or Spectator view).
+- **Leagues on this site (site admin, Account → Settings):** every league file with its ID, members and last opened,
+  flagged Demo, Demo builder file or Can't be opened. *Delete a league* takes the ID typed twice; a copy goes to that
+  league's automatic backups (`backups/auto/<id>/…-before-delete…`) first where the file can be read.
+- **Stuck demo league:** `demo-template-build` is the demo builder's work file. An interrupted build used to leave it in
+  the league list forever (every cleanup skipped it); it's now removed by the normal demo cleanup once it's older than the
+  demo lifetime, and it can be deleted by ID.
+- **Race Master menu:** the tools list no longer has its own scroll box (it could shrink to nothing); the sidebar scrolls.
 - **Form/Reputation chart:** Version 3 seasons are charted with `calc3.round_timeline`, the same numbers the
   standings show at each round (Future-only seasons keep Version 2 values up to the cutoff and blend in after, like the
   standings). No data changes and no recalculation: it's how the chart is drawn.

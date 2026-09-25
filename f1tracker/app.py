@@ -925,6 +925,32 @@ def register_routes(app):
             flash(str(exc), "error")
         return redirect(url_for("accounts_page", find=user["username"]) + "#recovery")
 
+    @app.route("/settings/delete-league", methods=["POST"])
+    @master_required
+    def admin_delete_league():
+        """v3.0.1: the site admin deletes any league by its ID (typed twice), e.g. a stuck demo league. A copy is
+        kept in that league's automatic backups first, so it can still be recovered from the server."""
+        token = (request.form.get("league_id") or "").strip()
+        again = (request.form.get("confirm_id") or "").strip()
+        known = {c["token"]: c for c in storage.all_league_files()}
+        if not token or token not in known:
+            flash("No league has that ID. Nothing was deleted.", "error")
+        elif again != token:
+            flash("Type the league ID a second time, exactly, to confirm. Nothing was deleted.", "error")
+        else:
+            name = known[token]["name"]
+            try:
+                storage.auto_backup(token, "before-delete", force=True)
+            except Exception:       # an unreadable file can still be removed
+                logging.getLogger(__name__).exception("backup before admin delete failed")
+            try:
+                storage.delete_career(token)
+                flash(f"Deleted the league {name} ({token}).", "success")
+                logging.getLogger(__name__).info("site admin deleted league %s", token)
+            except CareerNotFound:
+                flash("That league was already gone.", "error")
+        return redirect(url_for("accounts_page") + "#leagues")
+
     @app.route("/settings/offsite-backup", methods=["POST"])
     @master_required
     def offsite_backup():
@@ -1033,7 +1059,8 @@ def register_routes(app):
                                reserved_count=auth.reserved_count() if is_master() else 0,
                                offsite_at=offsite.last_made() if is_master() else None,
                                offsite_overdue=offsite.overdue() if is_master() else False,
-                               offsite_min=offsite.MIN_PASSPHRASE)
+                               offsite_min=offsite.MIN_PASSPHRASE,
+                               all_leagues=storage.all_league_files() if is_master() else [])
 
     @app.route("/accounts/release", methods=["POST"])
     @master_required

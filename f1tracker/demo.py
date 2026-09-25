@@ -144,8 +144,8 @@ def cleanup(now=None):
     now = now or datetime.now()
     cutoff = (now - timedelta(hours=DEMO_HOURS)).replace(microsecond=0).isoformat(sep=" ")
     for path in storage.careers_dir().glob("demo-*" + storage.CAREER_EXT):
-        if path.stem == "demo-template-build":
-            continue
+        # v3.0.1: the builder's work file is skipped only while fresh; one left behind by an interrupted build
+        # used to stay in the league list forever
         if datetime.fromtimestamp(path.stat().st_mtime) < now - timedelta(hours=DEMO_HOURS):
             try:
                 storage.delete_career(path.stem)

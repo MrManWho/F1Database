@@ -3,17 +3,21 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
-## 3.0.1 · Your changes stay yours, and charts follow the recalculation
+## 3.0.1 · Your changes stay yours, charts follow the recalculation, and admin fixes
 _Released September 25, 2026_
-> Two fixes from the first day of 3.0.
+> Fixes from the first day of 3.0.
 
 ### Highlights
 - **Only you see your driver's change notices.** My settings → change notices now lists only your own driver's changes. Race Masters still see everyone's, in a separate "Other drivers' changes" section, and only while viewing the league as Race Master.
+- **Race Master logs are back in the menu.** Notifications, Activity log and Backups & data were squeezed out of sight at the bottom of the Race Master tools; the whole menu now shows and scrolls with the sidebar.
+- **The site admin can delete any league.** Account → Settings → *Leagues on this site* lists every league with its ID (including demo leagues and any that can't be opened), and *Delete a league* removes one after you type its ID twice.
 - **Form and Reputation charts follow the recalculation.** In a league on Calculation Version 3 (including one recalculated from round 1), every earlier round on the Form and Reputation chart now shows the Version 3 numbers, matching the standings at that round. In a league that switched from the next round, earlier rounds keep the values they had.
 
 ### Fixed
 - Players could see other drivers' change notices under "Earlier changes" when the league was shown in Driver or Spectator view by a Race Master.
 - The Form and Reputation chart (Garage and driver profiles) always used the Version 2 formulas, so after a recalculation its earlier rounds didn't match the standings.
+- The Race Master tools in the sidebar could shrink to almost nothing on a normal-height screen, hiding the league logs.
+- A demo league left behind by an interrupted demo setup couldn't be deleted by anyone; it's now cleaned up automatically after a few hours, and the site admin can delete it at any time.
 
 ## 3.0 · The Definitive Release
 _Released September 25, 2026_

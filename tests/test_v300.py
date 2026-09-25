@@ -520,3 +520,62 @@ def test_other_drivers_change_notices_are_race_master_only(app, master_client):
     master_client.post(f"/career/{token}/mode", data={"csrf_token": "tok", "mode": "spectator"})
     page = master_client.get(f"/career/{token}/changes").get_data(as_text=True)
     assert "Someone else" not in page and "Race Master only" not in page
+
+
+def test_site_admin_sees_every_league_id_and_deletes_by_id(app, master_client):
+    from f1tracker import auth
+    token = _league(master_client, "Keep Me")
+    stuck = storage.careers_dir() / f"demo-template-build{storage.CAREER_EXT}"       # a leftover demo build
+    import shutil
+    shutil.copyfile(storage.career_path(token), stuck)
+    broken = storage.careers_dir() / f"broken1{storage.CAREER_EXT}"
+    broken.write_bytes(b"not a database")
+    page = master_client.get("/accounts").get_data(as_text=True)
+    for tid in (token, "demo-template-build", "broken1"):
+        assert f"<code>{tid}</code>" in page
+    assert "Demo builder file" in page and '<span class="pill pill-hot">Can\'t be opened</span>' in page
+    # the ID has to be typed twice, exactly
+    res = master_client.post("/settings/delete-league", data={"csrf_token": "tok", "league_id": "demo-template-build",
+                                                              "confirm_id": "demo-template"}, follow_redirects=True)
+    assert "Nothing was deleted" in res.get_data(as_text=True) and stuck.exists()
+    res = master_client.post("/settings/delete-league", data={"csrf_token": "tok", "league_id": "nope",
+                                                              "confirm_id": "nope"}, follow_redirects=True)
+    assert "No league has that ID" in res.get_data(as_text=True)
+    for tid in ("demo-template-build", "broken1"):
+        res = master_client.post("/settings/delete-league", data={"csrf_token": "tok", "league_id": tid,
+                                                                  "confirm_id": tid}, follow_redirects=True)
+        assert "Deleted the league" in res.get_data(as_text=True)
+    assert not stuck.exists() and not broken.exists() and storage.career_path(token).exists()
+    # nobody else can see IDs or delete
+    auth.create_user("zoe", "Zoe", "password1")
+    c = app.test_client()
+    login(c, "zoe")
+    assert f"<code>{token}</code>" not in c.get("/accounts").get_data(as_text=True)
+    assert c.post("/settings/delete-league", data={"csrf_token": "tok", "league_id": token,
+                                                   "confirm_id": token}).status_code == 403
+    assert storage.career_path(token).exists()
+
+
+def test_a_stale_demo_builder_file_is_cleaned_up():
+    import os
+    import time
+    from f1tracker import demo
+    stuck = storage.careers_dir() / f"demo-template-build{storage.CAREER_EXT}"
+    token = storage.new_token()
+    with storage.session(token, create=True) as conn:
+        S.seed_career(conn, token, "Stub", 2026, [])
+    import shutil
+    shutil.copyfile(storage.career_path(token), stuck)
+    demo.cleanup()
+    assert stuck.exists()                                   # a build in progress is left alone
+    old = time.time() - 60 * 60 * (demo.DEMO_HOURS + 1)
+    os.utime(stuck, (old, old))
+    demo.cleanup()
+    assert not stuck.exists()
+
+
+def test_race_master_menu_links_to_every_log(app, master_client):
+    token = _league(master_client, "Menu League")
+    page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    for path in ("activity", "deliveries", "backups", "settings", "members"):
+        assert f'href="/career/{token}/{path}"' in page, path

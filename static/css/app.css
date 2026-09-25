@@ -1690,3 +1690,6 @@ body.rail .nav-subtitle { display: none; }
 .h2h small a, .page-purpose a, p small a { text-decoration: underline; text-underline-offset: 2px; }
 .choice .pill { width: fit-content; align-self: flex-start; }
 @media (max-width: 600px) { .impact-table td:nth-child(2) { min-width: 0; overflow-wrap: anywhere; } }
+/* v3.0.1: the Race Master tools never shrink into a tiny scroll box; the whole sidebar scrolls instead */
+.nav-admin-items { max-height: none; overflow: visible; }
+.sidebar nav > * { flex-shrink: 0; }
