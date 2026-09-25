@@ -145,6 +145,11 @@ def register_hooks(app):
             elif g.user["is_steward"]:  # an old account-wide Scorekeeper: move it into their leagues first
                 roles.unify_legacy_scorekeepers()
                 g.user = auth.get_user(session["user"])
+        if g.user and g.user.get("must_change_password") and endpoint not in ("must_change_password", "logout"):
+            # v3.1.1: the site owner reset this password; the person chooses their own before anything else
+            if request.path.startswith("/api/"):
+                return jsonify(ok=False, error="Choose a new password first"), 403
+            return redirect(url_for("must_change_password"))
         if g.user and g.user.get("is_demo") and endpoint in DEMO_BLOCKED:
             flash("That isn't available in the demo. Create a free account to use it.", "info")
             return redirect(url_for("dashboard", token=session.get("demo")) if session.get("demo") else url_for("home"))
@@ -220,7 +225,7 @@ def register_hooks(app):
         """This version's highlights, once per account, on ordinary page views only."""
         user = g.get("user")
         if not user or user.get("is_demo") or request.method != "GET" or request.path.startswith("/api/") \
-                or request.endpoint in ("changelog_page", "whats_new_ack"):
+                or request.endpoint in ("changelog_page", "whats_new_ack", "must_change_password"):
             return None
         from . import changelog, whatsnew
         entry = changelog.entry(_base_dir(), C.APP_VERSION)
@@ -1018,6 +1023,22 @@ def register_routes(app):
             flash("Report dismissed.", "success")
         return redirect(url_for("accounts_page") + "#moderation")
 
+    @app.route("/account/new-password", methods=["GET", "POST"])
+    def must_change_password():
+        """v3.1.1: after the site owner sets someone's password, they replace it with their own at the next sign-in."""
+        if not g.user.get("must_change_password"):
+            return redirect(url_for("home"))
+        if request.method == "POST":
+            try:
+                auth.change_password(g.user["username"], request.form.get("current_password"),
+                                     request.form.get("password"), request.form.get("confirm"))
+                security.end_other_sessions(g.user["username"], session.get("sid"))
+                flash("Password saved. You're all set.", "success")
+                return redirect(url_for("home"))
+            except AuthError as exc:
+                flash(str(exc), "error")
+        return render_template("login.html", mode="must_change")
+
     @app.route("/logout", methods=["POST"])
     def logout():
         session.clear()
@@ -1047,6 +1068,7 @@ def register_routes(app):
                 f["two_step"] = security.totp_status(f["username"])["enabled"]
                 f["devices"] = len(security.sessions(f["username"]))
                 f["leagues"] = [c["name"] for c in careers if f["username"] in c["members"]]
+                f["lock"] = auth.lock_status(f["username"])
         return render_template("accounts.html", my_leagues=mine,
                                anyone_creates=onboarding.creation_policy() == "everyone",
                                reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
@@ -1080,11 +1102,25 @@ def register_routes(app):
         try:
             if "confirm_password" in request.form and request.form.get("confirm_password") != request.form.get("password"):
                 raise AuthError("The two passwords don't match")
-            auth.set_password(username, request.form.get("password"))
+            # v3.1.1: a reset also unlocks the account, and they choose their own password at their next sign-in
+            auth.set_password(username, request.form.get("password"), force_change=True)
+            auth.unlock(username)
             security.end_other_sessions(auth.normalise(username))
-            flash("Password updated, and their devices were signed out. Give them the new password privately.", "success")
+            flash("Password set, the account is unlocked and their devices were signed out. Give them the password "
+                  "privately: they'll be asked to choose their own when they sign in.", "success")
         except AuthError as exc:
             flash(str(exc), "error")
+        return redirect(url_for("accounts_page", find=auth.normalise(username)) + "#recovery")
+
+    @app.route("/accounts/<username>/unlock", methods=["POST"])
+    @master_required
+    def account_unlock(username):
+        """v3.1.1: clear a wrong-password or wrong-code lockout (optionally every locked-out address too)."""
+        if not auth.get_user(username):
+            abort(404)
+        n = auth.unlock(username, addresses=bool(request.form.get("addresses")))
+        flash(f"{auth.normalise(username)} can sign in again" +
+              (f", and {n} locked-out address{'es' if n != 1 else ''} were cleared." if n else ".") , "success")
         return redirect(url_for("accounts_page", find=auth.normalise(username)) + "#recovery")
 
     @app.route("/accounts/<username>/delete", methods=["POST"])

@@ -3,6 +3,18 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.1.1 · Unlocking accounts
+_Released September 25, 2026_
+> Help for anyone locked out of their login.
+
+### Highlights
+- **The site owner can unlock an account.** Account recovery shows whether a login is locked (too many wrong passwords or two-step codes) and has an **Unlock sign-in** button.
+- **A password reset now unlocks the account too,** so the person can sign in straight away with the password you give them.
+- **They then choose their own password.** After the site owner sets someone's password, that person is asked to replace it with one only they know the next time they sign in, before they can do anything else.
+
+### Fixed
+- A password set by the site owner didn't clear an active lockout, so a locked-out person could still be turned away for several minutes with the right password.
+
 ## 3.1 · Weather for every race
 _Released September 25, 2026_
 > Record the conditions of every session and see who's quickest in the rain.

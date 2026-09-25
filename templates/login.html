@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import pw_field, pw_help %}
-{% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up', 'forgot': 'Forgot password', 'reset': 'New password'}.get(mode, 'Log in') }}{% endblock %}
+{% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up', 'forgot': 'Forgot password', 'reset': 'New password', 'must_change': 'Choose your password'}.get(mode, 'Log in') }}{% endblock %}
 {% block plain %}
 <section class="auth-card card">
   <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
@@ -87,6 +87,19 @@
     {{ pw_help() }}
     <button class="btn btn-primary">Save new password</button>
   </form>
+  {% elif mode == 'must_change' %}
+  <h1>Choose your own password</h1>
+  <p class="muted">The site owner reset the password for <b>{{ user.username }}</b>. Before you carry on, replace it with one only you know.</p>
+  <form method="post" class="stack" data-password-form novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {{ pw_field('current_password', 'The password you were given', 'current', 'current-password', autofocus=True) }}
+    {{ pw_field('password', 'New password', 'new') }}
+    {{ pw_field('confirm', 'Confirm new password', 'confirm') }}
+    {{ pw_help() }}
+    <button class="btn btn-primary">Save and continue</button>
+  </form>
+  <form method="post" action="{{ url_for('logout') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-ghost">Log out instead</button></form>
   {% else %}
   <h1>Log in</h1>
   <form method="post" class="stack" data-password-form novalidate>

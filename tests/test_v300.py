@@ -657,3 +657,69 @@ def test_resetting_a_weekend_clears_its_weather(app, master_client):
         assert wk.reset_preview(conn, S.get_event(conn, ev["id"]))["weather"] == 1
         wk.reset(conn, ev["id"], "david")
         assert weather.get(conn, ev["id"]) == {}
+
+
+# --------------------------------------------------------------------------- 3.1.1: unlocking accounts
+
+def _lock_out(app, name):
+    c = app.test_client()
+    for _ in range(12):
+        c.post("/login", data={"username": name, "password": "wrong-password-x"})
+    return c
+
+
+def test_site_owner_sees_a_lock_and_unlocks_it(app, master_client):
+    from f1tracker import auth
+    auth.create_user("lou", "Lou", "password1")
+    c = _lock_out(app, "lou")
+    res = c.post("/login", data={"username": "lou", "password": "password1"}, follow_redirects=True)
+    assert "Too many wrong passwords" in res.get_data(as_text=True)
+    page = master_client.get("/accounts?find=lou").get_data(as_text=True)
+    assert "Locked" in page and "Unlock sign-in" in page
+    master_client.post("/accounts/lou/unlock", data={"csrf_token": "tok", "addresses": "1"})
+    assert not auth.lock_status("lou")["locked"]
+    c2 = app.test_client()
+    res = c2.post("/login", data={"username": "lou", "password": "password1"})
+    assert res.status_code == 302 and "/login" not in res.headers["Location"]
+    # nobody else can unlock
+    other = app.test_client()
+    login(other, "lou")
+    assert other.post("/accounts/lou/unlock", data={"csrf_token": "tok"}).status_code == 403
+
+
+def test_an_owner_reset_unlocks_and_forces_a_new_password(app, master_client):
+    from f1tracker import auth
+    auth.create_user("ray", "Ray", "password1")
+    token = _league(master_client, "Ray League")
+    _lock_out(app, "ray")
+    assert auth.lock_status("ray")["locked"]
+    res = master_client.post("/accounts/ray/password", data={"csrf_token": "tok", "password": "Temp-Paddock-77",
+                                                              "confirm_password": "Temp-Paddock-77"}, follow_redirects=True)
+    assert "unlocked" in res.get_data(as_text=True)
+    assert not auth.lock_status("ray")["locked"] and auth.get_user("ray")["must_change_password"]
+    assert "Must choose a new password" in master_client.get("/accounts?find=ray").get_data(as_text=True)
+    c = app.test_client()
+    login(c, "ray", "Temp-Paddock-77")
+    # every page (and the API) sends them to choose their own password first
+    for path in ("/", f"/career/{token}/dashboard", "/accounts"):
+        r = c.get(path)
+        assert r.status_code == 302 and r.headers["Location"].endswith("/account/new-password"), path
+    assert c.get(f"/api/career/{token}/search?q=a").status_code == 403
+    page = c.get("/account/new-password").get_data(as_text=True)
+    assert "Choose your own password" in page and 'id="whats-new"' not in page
+    res = c.post("/account/new-password", data={"csrf_token": "tok", "current_password": "wrong",
+                                                "password": "Mine-Paddock-88", "confirm": "Mine-Paddock-88"},
+                 follow_redirects=True)
+    assert "current password is wrong" in res.get_data(as_text=True)
+    res = c.post("/account/new-password", data={"csrf_token": "tok", "current_password": "Temp-Paddock-77",
+                                                "password": "Mine-Paddock-88", "confirm": "Mine-Paddock-88"})
+    assert res.status_code == 302 and not auth.get_user("ray")["must_change_password"]
+    assert c.get("/").status_code == 200
+    assert auth.verify("ray", "Mine-Paddock-88") and not auth.verify("ray", "Temp-Paddock-77")
+
+
+def test_changing_your_own_password_never_forces_a_change(app, master_client):
+    from f1tracker import auth
+    auth.create_user("sam", "Sam", "password1")
+    auth.set_password("sam", "Another-Good-99")
+    assert not auth.get_user("sam")["must_change_password"]

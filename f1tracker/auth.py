@@ -59,6 +59,9 @@ def accounts():
     if "is_owner" not in columns:
         # v2.1.2: the one site owner (made with the host's setup code); everyone else signs up themselves.
         conn.execute("ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0")
+    if "must_change_password" not in columns:
+        # v3.1.1: set when the site owner gives someone a new password; they choose their own at the next sign-in.
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
     if "email_paused" not in columns:
         # v2.0: one switch to stop every email from every league (league choices are kept separately).
         conn.execute("ALTER TABLE users ADD COLUMN email_paused INTEGER NOT NULL DEFAULT 0")
@@ -221,11 +224,13 @@ def verify(username, password):
     return None
 
 
-def set_password(username, password):
+def set_password(username, password, force_change=False):
+    """force_change (v3.1.1): the site owner set it, so the person has to choose their own at the next sign-in.
+    Any other password change clears that."""
     check_password(password)
     with accounts() as conn:
-        cur = conn.execute("UPDATE users SET password_hash = ? WHERE username = ?",
-                           (generate_password_hash(password), normalise(username)))
+        cur = conn.execute("UPDATE users SET password_hash = ?, must_change_password = ? WHERE username = ?",
+                           (generate_password_hash(password), int(bool(force_change)), normalise(username)))
         if not cur.rowcount:
             raise AuthError("Unknown user")
 
@@ -303,6 +308,38 @@ def record_failure(username, ip):
             conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,?)
                             ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at,
                             locked_until=excluded.locked_until""", (key, count, first, locked))
+
+
+def lock_status(username):
+    """v3.1.1 (site owner): is this username locked out? {locked, minutes, failures, code_lock}. Address locks are
+    counted separately (the owner can't know which address someone was using)."""
+    now = time.time()
+    with accounts() as conn:
+        row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (_keys(username, None)[0],)).fetchone()
+        ips = conn.execute("SELECT COUNT(*) FROM login_failures WHERE key LIKE 'ip:%' AND locked_until > ?",
+                           (now,)).fetchone()[0]
+        code_lock = 0
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'rate_hits'").fetchone():
+            code_lock = conn.execute("SELECT COUNT(*) FROM rate_hits WHERE key = ? AND at >= ?",
+                                     (f"2fa:{normalise(username)}", now - 600)).fetchone()[0]
+    locked = bool(row and row["locked_until"] > now)
+    return {"locked": locked, "minutes": max(1, int((row["locked_until"] - now) // 60) + 1) if locked else 0,
+            "failures": row["count"] if row else 0, "code_lock": code_lock >= 6, "address_locks": ips}
+
+
+def unlock(username, addresses=False):
+    """v3.1.1 (site owner): clear a username's wrong-password lock and its two-step code limit; with addresses=True
+    also every locked-out internet address (temporary throttles only; nothing else is touched)."""
+    now = time.time()
+    with accounts() as conn:
+        conn.execute("DELETE FROM login_failures WHERE key = ?", (_keys(username, None)[0],))
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'rate_hits'").fetchone():
+            conn.execute("DELETE FROM rate_hits WHERE key = ?", (f"2fa:{normalise(username)}",))
+        cleared = 0
+        if addresses:
+            cleared = conn.execute("DELETE FROM login_failures WHERE key LIKE 'ip:%' AND locked_until > ?",
+                                   (now,)).rowcount
+    return cleared
 
 
 def clear_failures(username, ip):

@@ -208,7 +208,16 @@
       <dt>Leagues</dt><dd>{{ found.leagues|join(', ') or 'none' }}</dd>
       <dt>Two-step sign-in</dt><dd>{{ 'On' if found.two_step else 'Off' }}</dd>
       <dt>Signed-in devices</dt><dd>{{ found.devices }}</dd>
+      <dt>Sign-in</dt><dd>{% if found.lock.locked %}<span class="pill pill-hot">Locked</span> for about {{ found.lock.minutes }} more minute{{ 's' if found.lock.minutes != 1 }} ({{ found.lock.failures }} wrong passwords){% elif found.lock.code_lock %}<span class="pill pill-hot">Locked</span> too many wrong two-step codes{% else %}Not locked{% if found.lock.failures %} · {{ found.lock.failures }} recent wrong password{{ 's' if found.lock.failures != 1 }}{% endif %}{% endif %}
+        {% if found.must_change_password %} · <span class="pill">Must choose a new password</span>{% endif %}</dd>
     </dl>
+    {% if found.username != user.username %}
+    <form method="post" action="{{ url_for('account_unlock', username=found.username) }}" class="inline-form tight unlock-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm {{ '' if found.lock.locked or found.lock.code_lock else 'btn-ghost' }}">Unlock sign-in</button>
+      {% if found.lock.address_locks %}<label class="check small"><input type="checkbox" name="addresses" value="1"> Also clear {{ found.lock.address_locks }} locked-out internet address{{ 'es' if found.lock.address_locks != 1 }} (use this if they're still blocked)</label>{% endif %}
+    </form>
+    {% endif %}
     {% if found.username != user.username %}
     <div class="grid-2">
       <form method="post" action="{{ url_for('account_reset', username=found.username) }}" class="stack" data-password-form novalidate>
@@ -217,6 +226,7 @@
         {{ pw_field('password', 'New password for ' ~ found.username, 'new', 'new-password', pw_min) }}
         {{ pw_field('confirm_password', 'Confirm', 'confirm', 'new-password', pw_min) }}
         {{ pw_help(pw_min) }}
+        <p class="muted small">This also unlocks their sign-in. They'll be asked to choose their own password the next time they sign in.</p>
         <button class="btn btn-sm">Set password and sign them out</button>
       </form>
       <div class="stack">

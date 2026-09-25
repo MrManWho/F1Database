@@ -89,6 +89,17 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## 3.1.1: unlocking accounts
+
+- **Account recovery** (Account → Settings, find the person) now shows their sign-in state: locked (with minutes left
+  and the number of wrong passwords), locked by too many wrong two-step codes, or not locked.
+- **Unlock sign-in** clears the username's wrong-password lock and its two-step code limit. Tick *Also clear locked-out
+  internet addresses* if they're still blocked. That clears the temporary per-address locks, since you can't know which
+  address they used.
+- **Set password** now also unlocks the account and sets `users.must_change_password`. At their next sign-in the person
+  is sent to *Choose your own password* (every page and the API wait until they do; they need the password you gave
+  them), and it's cleared when they choose their own.
+
 ## New in 3.1: weather
 
 - Each session's weather (quali / Sprint / race: dry, overcast, light rain, heavy rain, changing) is stored in a
