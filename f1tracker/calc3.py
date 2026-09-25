@@ -409,6 +409,48 @@ def driver_standings(conn, season_id, upto_round=None, completed_only=False):
     return out
 
 
+def round_timeline(conn, season_id, driver_id):
+    """v3.0.1: {round_number: (Form, Reputation)} after each round this driver took part in, worked out exactly as
+    driver_standings would have shown it at that round (engine 3), so charts follow a recalculated season. In a
+    Future-only season the rounds up to the cutoff are left out (they keep their Version 2 values) and later rounds
+    blend in over ENGINE_BLEND_ROUNDS, as the standings do. A finished season's last point is its locked value."""
+    rows_all = season_rows(conn, season_id, completed_only=False)
+    rounds = sorted({r["round_number"] for r in rows_all if r["driver_id"] == driver_id and _has_data(r)})
+    if not rounds:
+        return {}
+    n_teams = len(_teams(conn)) or 11
+    season_rounds = conn.execute("SELECT COUNT(*) FROM events WHERE season_id = ?", (season_id,)).fetchone()[0] or 1
+    state = conn.execute("SELECT * FROM season_driver_state WHERE season_id = ? AND driver_id = ?",
+                         (season_id, driver_id)).fetchone()
+    driver = conn.execute("SELECT baseline_reputation FROM drivers WHERE id = ?", (driver_id,)).fetchone()
+    start = state["starting_reputation"] if state else (driver["baseline_reputation"] if driver else 50.0)
+    cut = E.cutoff(conn, season_id)
+    fz = (E.frozen(conn, season_id).get("drivers", {}).get(str(driver_id)) or {}) if cut else {}
+    pts = Points(conn)
+    out = {}
+    for rn in rounds:
+        if cut and rn <= cut:
+            continue
+        sub = [r for r in rows_all if r["round_number"] <= rn]
+        mine = [r for r in sub if r["driver_id"] == driver_id and _has_data(r)]
+        s = _stats(mine, pts)
+        f = form(mine) if s["has_results"] else 50.0
+        car = car_adjusted(conn, mine, n_teams)
+        h = head_to_head(conn, season_id, driver_id, rows=sub)
+        rep = reputation(start, f, car, h, s["starts"], season_rounds) if s["has_results"] else \
+            E.round_half_up(clamp(start, 1, 100), 1)
+        if cut and fz:
+            done_after = conn.execute("SELECT COUNT(*) FROM events WHERE season_id = ? AND status = ? AND round_number > ? "
+                                      "AND round_number <= ?", (season_id, C.EVENT_COMPLETE, cut, rn)).fetchone()[0]
+            w = min(1.0, done_after / C.ENGINE_BLEND_ROUNDS)
+            f = E.round_half_up(E.blend(fz.get("form"), f, w), 1)
+            rep = E.round_half_up(E.blend(fz.get("reputation"), rep, w), 1)
+        out[rn] = (f, rep)
+    if state and state["locked_reputation"] is not None and rounds[-1] in out:
+        out[rounds[-1]] = (out[rounds[-1]][0], state["locked_reputation"])
+    return out
+
+
 def _stats(rows, pts):
     s = {"points": 0, "gp_points": 0, "sprint_points": 0, "wins": 0, "podiums": 0, "poles": 0, "fastest_laps": 0,
          "dotds": 0, "dnfs": 0, "dns": 0, "dsqs": 0, "classified_retirements": 0, "no_fault_dnfs": 0, "starts": 0,

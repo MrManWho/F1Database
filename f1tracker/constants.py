@@ -1,7 +1,7 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "3.0"
+APP_VERSION = "3.0.1"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 4

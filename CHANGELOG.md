@@ -3,6 +3,18 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.0.1 · Your changes stay yours, and charts follow the recalculation
+_Released September 25, 2026_
+> Two fixes from the first day of 3.0.
+
+### Highlights
+- **Only you see your driver's change notices.** My settings → change notices now lists only your own driver's changes. Race Masters still see everyone's, in a separate "Other drivers' changes" section, and only while viewing the league as Race Master.
+- **Form and Reputation charts follow the recalculation.** In a league on Calculation Version 3 (including one recalculated from round 1), every earlier round on the Form and Reputation chart now shows the Version 3 numbers, matching the standings at that round. In a league that switched from the next round, earlier rounds keep the values they had.
+
+### Fixed
+- Players could see other drivers' change notices under "Earlier changes" when the league was shown in Driver or Spectator view by a Race Master.
+- The Form and Reputation chart (Garage and driver profiles) always used the Version 2 formulas, so after a recalculation its earlier rounds didn't match the standings.
+
 ## 3.0 · The Definitive Release
 _Released September 25, 2026_
 > Balanced. Polished. Complete. The career rules were checked by an independent audit and rebalanced so the

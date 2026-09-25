@@ -2376,8 +2376,13 @@ def register_routes(app):
             g.audit_summary = f"agreed to {len(ids)} change notice{'s' if len(ids) != 1 else ''} for {mine['name']}"
             flash("Thanks. You're all caught up.", "success")
             return redirect(url_for("dashboard", token=ctx["token"]))
+        # v3.0.1: everyone sees only their own driver's notices here; other drivers' notices are a separate
+        # Race Master section, and only while actually viewing as Race Master (not in Driver or Spectator view).
+        others = []
+        if ctx["is_master"] and ctx.get("real", ctx)["is_master"]:
+            others = [n for n in impacts.history(conn, None) if not mine or n["driver_id"] != mine["id"]]
         return page("changes.html", ctx, waiting=waiting, stats=impacts.STATS,
-                    history=impacts.history(conn, None if ctx.get("real", ctx)["is_master"] else (mine["id"] if mine else -1)),
+                    history=impacts.history(conn, mine["id"]) if mine else [], others=others,
                     dmap=S.driver_map(conn))
 
     @app.route("/career/<token>/press")

@@ -435,3 +435,88 @@ def test_a_release_before_3_0_is_repaired_at_the_rollover(app, master_client):
                                                              **{f"decision_{p}": "provisional" for p in pids}})
     with storage.session(token) as conn:
         assert seats.problems(conn, S.current_season_id(conn)) == []
+
+
+# --------------------------------------------------------------------------- 3.0.1: charts and change notices
+
+from f1tracker import insights, migration   # noqa: E402
+
+
+def _chart_matches_standings(conn, sid, did):
+    t = insights.driver_round_timeline(conn, did)
+    row = next(r for r in S.driver_standings(conn, sid) if r["driver_id"] == did)
+    return t, (t["form"][-1], t["reputation"][-1]) == (row["form"], row["reputation"])
+
+
+@v3
+def test_form_and_reputation_chart_follows_version_3():
+    token = _v3_league(teams=(6,))
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players_ids(conn)[0]
+        for i, ev in enumerate(S.events(conn, sid)[:5]):
+            run_event(conn, ev, order=_order(conn, ev, {a: 3 + i}))
+        t, same = _chart_matches_standings(conn, sid, a)
+        assert same and len(t["form"]) == 5
+        # every point is what the standings showed after that round
+        for i in range(5):
+            row = next(r for r in S.driver_standings(conn, sid, upto_round=i + 1) if r["driver_id"] == a)
+            assert (t["form"][i], t["reputation"][i]) == (row["form"], row["reputation"])
+
+
+def test_chart_follows_a_full_recalculation_to_version_3():
+    token = _v3_league(engine3=False, pending=True, teams=(6,))
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players_ids(conn)[0]
+        for i, ev in enumerate(S.events(conn, sid)[:4]):
+            run_event(conn, ev, order=_order(conn, ev, {a: 2 + 3 * i}))
+        before = insights.driver_round_timeline(conn, a)
+        migration.apply_full(conn, "tester")
+        t, same = _chart_matches_standings(conn, sid, a)
+        assert same and len(t["form"]) == 4
+        row1 = next(r for r in S.driver_standings(conn, sid, upto_round=1) if r["driver_id"] == a)
+        assert (t["form"][0], t["reputation"][0]) == (row1["form"], row1["reputation"])     # earlier rounds follow too
+        assert t["form"] != before["form"] or t["reputation"] != before["reputation"]
+
+
+def test_chart_for_a_future_only_season_keeps_earlier_rounds_and_matches_now():
+    token = _v3_league(engine3=False, pending=True, teams=(6,))
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a = players_ids(conn)[0]
+        evs = S.events(conn, sid)
+        for i, ev in enumerate(evs[:3]):
+            run_event(conn, ev, order=_order(conn, ev, {a: 4 + i}))
+        before = insights.driver_round_timeline(conn, a)
+        migration.apply_future(conn, "tester")
+        for i, ev in enumerate(evs[3:6]):
+            run_event(conn, ev, order=_order(conn, ev, {a: 8 + i}))
+        t, same = _chart_matches_standings(conn, sid, a)
+        assert same and t["form"][:3] == before["form"][:3] and t["reputation"][:3] == before["reputation"][:3]
+
+
+def test_other_drivers_change_notices_are_race_master_only(app, master_client):
+    from f1tracker import auth
+    token = _league(master_client, "Notice League")
+    with storage.session(token) as conn:
+        for _ in range(2):
+            conn.execute("UPDATE drivers SET is_player = 1 WHERE id = (SELECT id FROM drivers WHERE is_player = 0 "
+                         "ORDER BY id LIMIT 1)")
+        one, two = [p["id"] for p in S.player_drivers(conn)][:2]
+    auth.create_user("pat", "Pat", "password1")
+    with storage.session(token) as conn:
+        conn.execute("INSERT INTO career_members(username, role, driver_id) VALUES(?,?,?)", ("pat", "member", one))
+        impacts.add_notice(conn, one, "t-1", "Pat's change", "why", [{"label": "Form", "before": 1, "after": 2,
+                                                                       "change": 1, "stat": "form"}])
+        impacts.add_notice(conn, two, "t-2", "Someone else's change", "why", [])
+    pat = app.test_client()
+    login(pat, "pat")
+    page = pat.get(f"/career/{token}/changes").get_data(as_text=True)
+    assert "Pat&#39;s change" in page and "Someone else" not in page and "Race Master only" not in page
+    page = master_client.get(f"/career/{token}/changes").get_data(as_text=True)
+    assert "Someone else" in page and "Race Master only" in page
+    # a Race Master viewing the league as someone else sees only their own notices
+    master_client.post(f"/career/{token}/mode", data={"csrf_token": "tok", "mode": "spectator"})
+    page = master_client.get(f"/career/{token}/changes").get_data(as_text=True)
+    assert "Someone else" not in page and "Race Master only" not in page

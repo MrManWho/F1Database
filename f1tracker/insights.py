@@ -73,6 +73,8 @@ def driver_round_timeline(conn, driver_id):
         state = conn.execute("SELECT locked_reputation FROM season_driver_state WHERE season_id = ? AND driver_id = ?",
                              (season["id"], driver_id)).fetchone()
         rows = [r for r in _season_rows(conn, season["id"]) if r["driver_id"] == driver_id and S._result_has_data(r)]
+        # v3.0.1: a Version 3 season charts the Version 3 numbers (after a recalculation too), round by round
+        v3 = calc3.round_timeline(conn, season["id"], driver_id) if engine.is_v3(conn, season["id"]) else {}
         for i, r in enumerate(rows):
             _accumulate(stats, r)
             s = S._finalise(dict(stats, finishes=list(stats["finishes"]), qualis=list(stats["qualis"])))
@@ -80,6 +82,8 @@ def driver_round_timeline(conn, driver_id):
             value = S.compute_reputation(start, s, f)
             if i == len(rows) - 1 and state and state["locked_reputation"] is not None:
                 value = state["locked_reputation"]
+            if r["round_number"] in v3:
+                f, value = v3[r["round_number"]]
             labels.append(f"{str(season['year'])[2:]} R{r['round_number']}")
             form.append(f)
             rep.append(value)

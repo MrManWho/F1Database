@@ -89,6 +89,14 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## 3.0.1
+
+- **Change notices:** a driver's page lists only their own notices. Race Masters see other drivers' notices in a
+  separate section, and only while viewing the league as Race Master (not in Driver or Spectator view).
+- **Form/Reputation chart:** Version 3 seasons are charted with `calc3.round_timeline`, the same numbers the
+  standings show at each round (Future-only seasons keep Version 2 values up to the cutoff and blend in after, like the
+  standings). No data changes and no recalculation: it's how the chart is drawn.
+
 ## New in 3.0: The Definitive Release
 
 **What happens on upgrade.** Nothing to do. Each league on Calculation Version 3 is recalculated once the next time

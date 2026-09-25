@@ -42,13 +42,20 @@
 <section class="card empty-state"><h2>You're all caught up</h2><p class="muted">Nothing new has changed for your driver.</p></section>
 {% endif %}
 
-{% if history %}
+{% set waiting_ids = waiting|map(attribute='id')|list %}
+{% set earlier = history|rejectattr('id', 'in', waiting_ids)|list %}
+{% if earlier %}
 <details class="card impact-history" {{ 'open' if not waiting }}>
-  <summary><h2 class="inline-h">Earlier changes</h2></summary>
-  {% set waiting_ids = waiting|map(attribute='id')|list %}
-  {% for n in history if n.id not in waiting_ids %}
+  <summary><h2 class="inline-h">Your earlier changes</h2></summary>
+  {% for n in earlier %}{{ notice(n) }}{% endfor %}
+</details>
+{% endif %}
+{% if others %}
+<details class="card impact-history">
+  <summary><h2 class="inline-h">Other drivers' changes <span class="pill">Race Master only</span></h2></summary>
+  {% for n in others %}
     {{ notice(n) }}
-    {% if ctx.is_master %}<p class="muted small">Agreed by: {{ n.acked|map(attribute='username')|join(', ') or 'nobody yet' }}</p>{% endif %}
+    <p class="muted small">Agreed by: {{ n.acked|map(attribute='username')|join(', ') or 'nobody yet' }}</p>
   {% endfor %}
 </details>
 {% endif %}
