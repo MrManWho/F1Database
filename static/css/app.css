@@ -1693,3 +1693,10 @@ body.rail .nav-subtitle { display: none; }
 /* v3.0.1: the Race Master tools never shrink into a tiny scroll box; the whole sidebar scrolls instead */
 .nav-admin-items { max-height: none; overflow: visible; }
 .sidebar nav > * { flex-shrink: 0; }
+/* v3.0.2: weather */
+.weather-list { list-style: none; padding: 0; margin: 0 0 .8rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+.weather-chip { padding: .35rem .7rem; border: 1px solid var(--line); border-radius: 999px; font-size: .9rem; }
+.weather-chip.is-wet, .weather-pill.is-wet { border-color: color-mix(in srgb, #4aa3ff 55%, transparent); }
+.weather-form .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .6rem; margin-bottom: .6rem; }
+.weather-icon { margin-left: .25rem; }
+.round-hero.stage-complete .round-badge { color: #06140c; }   /* v3.0.2: readable on the green "complete" badge */

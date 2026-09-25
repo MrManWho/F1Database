@@ -1606,6 +1606,7 @@ def register_routes(app):
                     distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
                     status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
                     pace=_pace_panel(conn, ctx, event), hub=_hub(conn, ctx, event, full=True),
+                    wx=_weather_panel(conn, ctx, event),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
                     gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id),
@@ -1617,6 +1618,14 @@ def register_routes(app):
             return int(storage.get_meta(conn, "sprint_min_distance", str(C.SPRINT_MIN_DISTANCE)))
         except (TypeError, ValueError):
             return C.SPRINT_MIN_DISTANCE
+
+    def _weather_panel(conn, ctx, event):
+        from . import weather
+        recorded = weather.get(conn, event["id"])
+        return {"recorded": recorded, "shown": weather.describe(recorded, event), "sessions": weather.sessions_for(event),
+                "session_labels": weather.SESSIONS, "conditions": weather.CONDITIONS,
+                "can_edit": ctx["can_run"] or ctx["is_master"],
+                "wet": any(weather.is_wet(k) for k in recorded.values())}
 
     def _pace_panel(conn, ctx, event):
         """v2.5: the optional lap-time evidence for each player driver on an engine 3 round."""
@@ -1720,7 +1729,10 @@ def register_routes(app):
             ctx["season"] = season
         evs = S.events(conn, season["id"])
         nxt = next((e for e in evs if e["round_number"] > event["round_number"]), None)
-        return page("race_summary.html", ctx, s=insights.race_summary(conn, event_id), next_event=nxt)
+        from . import weather
+        ev_ = S.get_event(conn, event_id)
+        return page("race_summary.html", ctx, s=insights.race_summary(conn, event_id), next_event=nxt,
+                    wx_shown=weather.describe(weather.get(conn, event_id), ev_) if ev_ else [])
 
     def _share_card(conn, ctx, event):
         """Everything the result card image needs (it's drawn in the browser)."""
@@ -1773,7 +1785,9 @@ def register_routes(app):
                 r["pole"] = next((x for x in rows if x["qualifying_position"] == 1), None)
                 r["players"] = [x for x in rows if x["driver"]["is_player"]]
             rounds.append(r)
-        return page("results_index.html", ctx, rounds=rounds, dmap=dmap)
+        from . import weather
+        wx_head = {eid: weather.headline(w) for eid, w in weather.for_season(conn, sid).items()}
+        return page("results_index.html", ctx, rounds=rounds, dmap=dmap, wx_head=wx_head)
 
     @app.route("/career/<token>/standings")
     @career_page()
@@ -1831,9 +1845,10 @@ def register_routes(app):
         pairs = stats.teammates(conn, sid)
         if players_only:
             pairs = [p for p in pairs if p["a"]["is_player"] or p["b"]["is_player"]]
+        from . import weather
         return page("stats.html", ctx, rows=rows, sprint=stats.sprint_table(rows), chart=chart,
                     reliability=stats.teams_reliability(conn, sid), pairs=pairs, years=years, sos=sos,
-                    players_only=players_only)
+                    players_only=players_only, wet_dry=weather.driver_splits(conn, sid, players_only))
 
     @app.route("/api/career/<token>/search")
     @career_page()
@@ -2088,7 +2103,9 @@ def register_routes(app):
         seasons = S.list_seasons(conn)
         latest = seasons[-1] if seasons else None
         evs_ = S.events(conn, ctx["season"]["id"])
-        return page("seasons.html", ctx, seasons_list=seasons, events=evs_, warnings=_calendar_warnings(evs_),
+        from . import weather
+        wx_head = {eid: weather.headline(w) for eid, w in weather.for_season(conn, ctx["season"]["id"]).items()}
+        return page("seasons.html", ctx, seasons_list=seasons, events=evs_, warnings=_calendar_warnings(evs_), wx_head=wx_head,
                     months=timefmt.month_grid(evs_, ctx["timezone"]),
                     next_year=(latest["year"] + 1) if latest else 2026, latest=latest,
                     all_complete=all(e["status"] == C.EVENT_COMPLETE for e in S.events(conn, latest["id"])))
@@ -4223,6 +4240,24 @@ def register_routes(app):
         names = {u["username"]: u["display_name"] for u in auth.list_users()}
         people = sorted({r["username"] for r in community.audit_entries(conn, 2000)})
         return page("activity.html", ctx, rows=rows, names=names, people=people, who=who)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/weather", methods=["POST"])
+    @career_page()
+    def weekend_weather(conn, ctx, event_id):
+        """v3.0.2: a Scorekeeper or the Race Master records each session's conditions (a record only)."""
+        from . import weather
+        if not (ctx["can_run"] or ctx["is_master"]):
+            abort(403)
+        event = S.get_event(conn, event_id)
+        if not event:
+            abort(404)
+        changed = weather.save(conn, event, request.form, g.user["username"])
+        year = S.get_season(conn, event["season_id"])["year"]
+        g.audit_link = f"weekend/{event_id}#weather"
+        g.audit_summary = (f"recorded the weather for {event_label(event, year)}: {', '.join(changed)}" if changed
+                           else f"cleared the weather for {event_label(event, year)}")
+        flash("Weather saved." if changed else "Weather cleared.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#weather")
 
     @app.route("/career/<token>/weekend/<int:event_id>/time", methods=["POST"])
     @career_page(master_only=True)

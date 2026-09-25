@@ -118,7 +118,7 @@
     {% for e in events %}
     <tr class="row-link" data-href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">
       <td class="num">R{{ e.round_number }}</td>
-      <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}"><strong>{{ e.name }}</strong></a></td>
+      <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}"><strong>{{ e.name }}</strong></a>{% set h = wx_head.get(e.id) if wx_head is defined else none %}{% if h %} <span class="weather-icon" title="Weather: {{ h[1] }}"><span aria-hidden="true">{{ h[0] }}</span><span class="sr-only">Weather: {{ h[1] }}</span></span>{% endif %}</td>
       <td>{{ e.location or '—' }}</td>
       <td>{% if e.is_sprint %}<span class="pill pill-sprint">Sprint</span>{% else %}<span class="muted small">Standard</span>{% endif %}</td>
       <td class="small">{% if e.race_at %}<time datetime="{{ e.race_at }}" data-local-time>{{ e.race_at|race_time }} {{ e.race_at|zone_label }}</time>{% endif %}{% set st = e|race_status %}<span class="race-state state-{{ st[0] }}">{{ ' · ' if e.race_at }}{{ st[1] }}</span></td>

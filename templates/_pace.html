@@ -4,6 +4,7 @@
   <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">(optional, for the AI recommendation)</small></h2></div>
   <p class="muted small">Lap times make the AI recommendation much sharper: it compares you with your AI teammate (or cars of similar speed), not just finishing positions.
     Leave anything blank you don't have. Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+  {% if wx and wx.wet %}<p class="small">🌧️ This round's weather is recorded as wet or changing. If it made a player's session unrepresentative, tick <em>Wet or changing conditions</em> for them below. Nothing is ticked for you.</p>{% endif %}
   {% for item in pace.entries %}{% set r = item.row %}{% set p = item.input %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}

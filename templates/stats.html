@@ -80,6 +80,26 @@
 </section>
 {% endif %}
 
+{% if wet_dry %}
+<section class="card table-card" id="weather">
+  <h2>In the wet</h2>
+  <p class="muted small">Grand Prix results in rounds where the race was recorded as light rain, heavy rain or changing, against dry ones. Only rounds with the race's weather recorded count.</p>
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Wet and dry Grand Prix records</caption>
+    <thead><tr><th scope="col">Driver</th><th scope="col" class="num">Wet races</th><th scope="col" class="num">Avg finish (wet)</th>
+      <th scope="col" class="num">Avg finish (dry)</th><th scope="col" class="num">Wet vs dry</th><th scope="col" class="num">Wet wins</th><th scope="col" class="num">Wet podiums</th><th scope="col" class="num">Wet DNFs</th></tr></thead>
+    <tbody>{% for w in wet_dry %}<tr>
+      <td>{{ driver_link(ctx, w.driver) }}</td><td class="num">{{ w.wet.races }}</td>
+      <td class="num">{{ 'P%.1f'|format(w.wet.avg) if w.wet.avg is not none else '—' }}</td>
+      <td class="num">{{ 'P%.1f'|format(w.dry.avg) if w.dry.avg is not none else '—' }}</td>
+      <td class="num {{ 'up' if w.gain and w.gain > 0 else 'down' if w.gain and w.gain < 0 }}">{% if w.gain is not none %}{{ '%+.1f'|format(w.gain) }} {{ 'places better' if w.gain > 0 else 'places worse' if w.gain < 0 else '' }}{% else %}—{% endif %}</td>
+      <td class="num">{{ w.wet.wins }}</td><td class="num">{{ w.wet.podiums }}</td><td class="num">{{ w.wet.dnfs }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
 <section class="card" id="teammates">
   <h2>Teammate head-to-heads</h2>
   {% if pairs %}

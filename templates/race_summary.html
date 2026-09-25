@@ -5,7 +5,8 @@
 {% set e = s.event %}
 <div class="page-head">
   <div><div class="kicker">Post-race summary · {{ s.season.year }} · Round {{ e.round_number }}{{ ' · Sprint weekend' if e.is_sprint }}</div>
-    <h1>{{ e.name }}</h1>{% if e.location %}<div class="muted">{{ e.location }}{% if e.race_at %} · {{ e.race_at|race_time }}{% endif %}</div>{% endif %}</div>
+    <h1>{{ e.name }}</h1>{% if e.location %}<div class="muted">{{ e.location }}{% if e.race_at %} · {{ e.race_at|race_time }}{% endif %}</div>{% endif %}
+    {% if wx_shown %}<div class="muted small weather-line">{% for w in wx_shown %}<span aria-hidden="true">{{ w.icon }}</span> {{ w.session_label }}: {{ w.text }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}</div>
   <div class="button-row">
     <a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">Full results</a>
     {% if next_event %}<a class="btn" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">Next: R{{ next_event.round_number }} {{ next_event.name }} →</a>{% endif %}

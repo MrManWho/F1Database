@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.0.2 · Weather for every race
+_Released September 25, 2026_
+> Record the conditions of every session and see who's quickest in the rain.
+
+### Highlights
+- **A weather tracker for each race.** A Scorekeeper or the Race Master records qualifying, the Sprint and the race as dry, overcast, light rain, heavy rain or changing, from the Weather card on the round page's Results tab.
+- **Seen everywhere.** Weather shows at the top of the round page, on the calendar, in the results list and on the race summary.
+- **In the wet.** Statistics has a new table comparing each driver's wet and dry races: average finish, the difference, and wet wins, podiums and DNFs.
+- **Nothing changes your numbers.** Weather is a record only. Points, Form, Reputation, relationships and the AI recommendation are exactly as before.
+
+### Added
+- Weather card (Scorekeepers and Race Masters edit; everyone sees it), weather icons on the calendar and results list, weather on the race summary, the "In the wet" statistics table and a Weather topic in Help.
+- On a wet round, Pace & conditions reminds the Race Master that they can tick "Wet or changing conditions" for a player. Nothing is ticked for them.
+
+### Changed
+- Resetting a weekend also clears its weather, and the confirmation page lists it.
+
 ## 3.0.1 · Your changes stay yours, charts follow the recalculation, and admin fixes
 _Released September 25, 2026_
 > Fixes from the first day of 3.0.

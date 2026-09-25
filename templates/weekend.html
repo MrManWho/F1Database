@@ -16,6 +16,7 @@
     <div class="hero-meta">
       <span>{{ event.location }}</span>
       {% if event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
+      {% for w in (wx.shown if wx else []) %}<span class="pill weather-pill {{ 'is-wet' if w.wet }}" title="{{ w.session_label }}: {{ w.text }}"><span aria-hidden="true">{{ w.icon }}</span> {{ w.session_label }}<span class="sr-only">: {{ w.text }}</span></span>{% endfor %}
       <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ wk.label if wk and wk.on else event.status }}</span>
     </div>
   </div>
@@ -52,6 +53,7 @@
 </div>
 
 <div class="round-panel" data-panel="results" role="tabpanel">
+{% include "_weather.html" with context %}
 <section class="card diff-strip">
   {{ difficulty(rec, compact=True) }}
   <div class="diff-input">

@@ -89,6 +89,14 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## 3.0.2: weather
+
+- Each session's weather (quali / Sprint / race: dry, overcast, light rain, heavy rain, changing) is stored in a
+  `weather` table inside the league file, created on first use (no schema version change, no upgrade backup). It's
+  included in exports and backups like every other table.
+- Scorekeepers and Race Masters record it (`POST /career/<id>/weekend/<round>/weather`, logged in the Activity log).
+  It's a record only: no formula reads it. Resetting a weekend clears it.
+
 ## 3.0.1
 
 - **Change notices:** a driver's page lists only their own notices. Race Masters see other drivers' notices in a

@@ -1,0 +1,25 @@
+{# v3.0.2: each session's weather, recorded by a Scorekeeper or the Race Master. Needs: ctx, event, wx. #}
+{% if wx and (wx.shown or wx.can_edit) %}
+<section class="card weather-card" id="weather" aria-labelledby="weather-title">
+  <div class="card-head"><h2 id="weather-title">Weather</h2><span class="muted small">A record only: it doesn't change points or ratings</span></div>
+  {% if wx.shown %}
+  <ul class="weather-list">{% for w in wx.shown %}
+    <li class="weather-chip {{ 'is-wet' if w.wet }}"><span aria-hidden="true">{{ w.icon }}</span> <b>{{ w.session_label }}</b> {{ w.text }}</li>{% endfor %}</ul>
+  {% elif not wx.can_edit %}<p class="muted small">No weather recorded for this round.</p>{% endif %}
+  {% if wx.can_edit %}
+  <form method="post" action="{{ url_for('weekend_weather', token=ctx.token, event_id=event.id) }}" class="weather-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      {% for s in wx.sessions %}
+      <label>{{ wx.session_labels[s] }}
+        <select name="weather_{{ s }}">
+          <option value="">Not recorded</option>
+          {% for key, c in wx.conditions.items() %}<option value="{{ key }}" {{ 'selected' if wx.recorded.get(s) == key }}>{{ c[1] }} {{ c[0] }}</option>{% endfor %}
+        </select></label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-sm">Save weather</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}

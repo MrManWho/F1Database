@@ -222,6 +222,7 @@ def reset_blocker(conn, event):
 
 def reset_preview(conn, event):
     """What a reset would clear, for the confirmation page."""
+    from . import weather
     eid = event["id"]
     n = lambda sql, *a: conn.execute(sql, a).fetchone()[0]  # noqa: E731
     return {
@@ -236,6 +237,7 @@ def reset_preview(conn, event):
         "incidents": n("SELECT COUNT(*) FROM incidents WHERE event_id = ?", eid),
         "orders": n("SELECT COUNT(*) FROM team_orders WHERE event_id = ?", eid),
         "headlines": len(_round_news(conn, event)),
+        "weather": len(weather.get(conn, eid)),
     }
 
 
@@ -289,6 +291,8 @@ def reset(conn, event_id, username):
                  (f"weekend/{eid}%", f"results:{eid}", f"paddock:{eid}"))
     for key in (f"gate_reminded_{eid}", f"targets_removed_{eid}"):
         conn.execute("DELETE FROM meta WHERE key = ?", (key,))
+    from . import weather
+    weather.clear(conn, eid)      # v3.0.2: the weekend never started, so neither did its weather
     conn.execute("""UPDATE events SET status = ?, ai_difficulty = NULL, ai_untracked = 0, submitted_at = NULL,
                     press_required = 0, paddock_at = NULL, paddock_by = NULL, lights_at = NULL, lights_by = NULL,
                     revision = revision + 1 WHERE id = ?""", (C.EVENT_NOT_RUN, eid))

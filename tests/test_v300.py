@@ -579,3 +579,81 @@ def test_race_master_menu_links_to_every_log(app, master_client):
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
     for path in ("activity", "deliveries", "backups", "settings", "members"):
         assert f'href="/career/{token}/{path}"' in page, path
+
+
+# --------------------------------------------------------------------------- 3.0.2: weather
+
+def _wx_league(master_client):
+    from f1tracker import auth
+    token = _league(master_client, "Weather League")
+    auth.create_user("kim", "Kim", "password1")
+    auth.create_user("mo", "Mo", "password1")
+    with storage.session(token) as conn:
+        conn.execute("INSERT INTO career_members(username, role) VALUES('kim', 'scorekeeper')")
+        conn.execute("INSERT INTO career_members(username, role) VALUES('mo', 'member')")
+        evs = S.events(conn, S.current_season_id(conn))
+    return token, evs
+
+
+def test_weather_is_recorded_by_scorekeepers_and_shown_everywhere(app, master_client):
+    token, evs = _wx_league(master_client)
+    ev = next(e for e in evs if not e["is_sprint"])
+    sprint = next(e for e in evs if e["is_sprint"])
+    kim, mo = app.test_client(), app.test_client()
+    login(kim, "kim")
+    login(mo, "mo")
+    url = f"/career/{token}/weekend/{ev['id']}/weather"
+    assert mo.post(url, data={"csrf_token": "tok", "weather_race": "dry"}).status_code == 403
+    res = kim.post(url, data={"csrf_token": "tok", "weather_race": "snow"}, follow_redirects=True)
+    assert "Choose the conditions from the list" in res.get_data(as_text=True)
+    kim.post(url, data={"csrf_token": "tok", "weather_quali": "dry", "weather_race": "heavy_rain",
+                        "weather_sprint": "dry"})                    # no Sprint this weekend: ignored
+    from f1tracker import weather
+    with storage.session(token) as conn:
+        assert weather.get(conn, ev["id"]) == {"quali": "dry", "race": "heavy_rain"}
+        run_event(conn, ev)
+    master_client.post(f"/career/{token}/weekend/{sprint['id']}/weather",
+                       data={"csrf_token": "tok", "weather_sprint": "changing", "weather_race": "overcast"})
+    with storage.session(token) as conn:
+        assert weather.get(conn, sprint["id"]) == {"sprint": "changing", "race": "overcast"}
+    page = mo.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
+    assert "Heavy rain" in page and 'id="weather"' in page and 'name="weather_race"' not in page   # members only see it
+    assert 'name="weather_race"' in kim.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
+    assert "Weather: Heavy rain" in mo.get(f"/career/{token}/results").get_data(as_text=True)
+    assert "Weather: Heavy rain" in mo.get(f"/career/{token}/seasons").get_data(as_text=True)
+    assert "Race: Heavy rain" in mo.get(f"/career/{token}/weekend/{ev['id']}/summary").get_data(as_text=True)
+    with storage.session(token) as conn:
+        audit = [a["summary"] for a in community.audit_entries(conn, 20, None)]
+    assert any("recorded the weather" in (a or "") for a in audit)
+
+
+def test_weather_never_changes_the_numbers_and_feeds_the_wet_statistics(app, master_client):
+    from f1tracker import weather
+    token, evs = _wx_league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        for ev in evs[:4]:
+            run_event(conn, ev)
+        before = [(r["driver_id"], r["points"], r["form"], r["reputation"]) for r in S.driver_standings(conn, sid)]
+        winner = S.driver_standings(conn, sid)[0]["driver_id"]
+    for ev, cond in zip(evs[:4], ("heavy_rain", "dry", "light_rain", "overcast")):
+        master_client.post(f"/career/{token}/weekend/{ev['id']}/weather", data={"csrf_token": "tok", "weather_race": cond})
+    with storage.session(token) as conn:
+        after = [(r["driver_id"], r["points"], r["form"], r["reputation"]) for r in S.driver_standings(conn, sid)]
+        assert before == after
+        splits = {s["driver_id"]: s for s in weather.driver_splits(conn, sid)}
+    assert splits[winner]["wet"]["races"] == 2 and splits[winner]["dry"]["races"] == 2
+    page = master_client.get(f"/career/{token}/stats").get_data(as_text=True)
+    assert "In the wet" in page
+
+
+def test_resetting_a_weekend_clears_its_weather(app, master_client):
+    from f1tracker import weather, weekend as wk
+    token, evs = _wx_league(master_client)
+    ev = evs[0]
+    master_client.post(f"/career/{token}/weekend/{ev['id']}/weather", data={"csrf_token": "tok", "weather_race": "dry"})
+    with storage.session(token) as conn:
+        run_event(conn, ev)
+        assert wk.reset_preview(conn, S.get_event(conn, ev["id"]))["weather"] == 1
+        wk.reset(conn, ev["id"], "david")
+        assert weather.get(conn, ev["id"]) == {}
