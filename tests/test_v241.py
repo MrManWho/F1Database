@@ -39,9 +39,10 @@ def test_upgrading_from_2_4_shows_the_2_4_1_note(app, master_client):
     with storage.session(token) as conn:
         storage.set_meta(conn, "calc_version", "2")
     page = master_client.get(f"/career/{token}/standings").get_data(as_text=True)
-    assert impacts.CALC_NOTES[3][0] in page and "never goes up while a player driver is struggling" in page
+    # the newest version's title, with every note since 2.4 (3.0 bumped the counter to 4)
+    assert impacts.CALC_NOTES[C.CALC_VERSION][0] in page and "never goes up while a player driver is struggling" in page
     with storage.session(token) as conn:
-        assert storage.get_meta(conn, "calc_version") == str(C.CALC_VERSION) == "3"
+        assert storage.get_meta(conn, "calc_version") == str(C.CALC_VERSION)
 
 
 def test_the_worked_example_from_the_proposal():

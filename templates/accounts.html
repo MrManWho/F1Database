@@ -145,6 +145,24 @@
   {% endif %}
 </section>
 
+<section class="card" id="offsite">
+  <h2>Encrypted backup to keep somewhere else</h2>
+  <p class="muted small">The automatic backups are stored on the same disk as the site, so they can't help if the disk or the hosting account is lost.
+    Download one encrypted file with every league and all accounts and keep it somewhere else: your computer, a USB stick or a cloud drive.
+    It's locked with a passphrase only you know. <b>Without the passphrase nobody, including you, can open it</b>, so keep it in a password manager.</p>
+  <p class="small">{% if offsite_at %}Last downloaded: <b>{{ offsite_at|stamp }}</b> ({{ offsite_at|ago }}).{% else %}<b>Never downloaded yet.</b>{% endif %}
+    {% if offsite_overdue %}<span class="pill pill-hot">Due</span> We suggest one every two weeks during a season.{% endif %}</p>
+  <form method="post" action="{{ url_for('offsite_backup') }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2">
+      <label>Passphrase <small class="muted">(at least {{ offsite_min }} characters)</small><input name="passphrase" type="password" minlength="{{ offsite_min }}" required autocomplete="new-password"></label>
+      <label>Type it again<input name="passphrase2" type="password" minlength="{{ offsite_min }}" required autocomplete="new-password"></label>
+    </div>
+    <div><button class="btn">Download encrypted backup</button></div>
+    <p class="muted small">To restore: <code>python -m f1tracker.offsite decrypt backup.plbk restored.zip</code>, then unzip it into an empty data folder. The Admin guide has the steps.</p>
+  </form>
+</section>
+
 <section class="card" id="recovery">
   <h2>Account recovery</h2>
   <p class="muted small">For someone who's lost access. Look up accounts by an exact username or email. Every account using that email is shown; there's no list of all accounts.

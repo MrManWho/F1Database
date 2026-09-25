@@ -1,4 +1,4 @@
-# Paddock Legacy 2.x: admin guide
+# Paddock Legacy 3.0: admin guide
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
@@ -88,6 +88,34 @@ All of these affect one league only.
 - **Team goals**: reopening a team's choice sends that team's drivers to choose before anything else; re-pushing
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
+
+## New in 3.0: The Definitive Release
+
+**What happens on upgrade.** Nothing to do. Each league on Calculation Version 3 is recalculated once the next time
+someone opens it (a backup is written first, as with every calculation update). Everyone sees a one-off note, and each
+player driver whose numbers moved gets a change notice to agree to before carrying on. Leagues still on Version 2 are not
+affected. Pledges, team goals and weekend targets already chosen keep their terms. The formulas and the before/after
+tables are in `docs/CALCULATION_V3.md` §26.
+
+**Encrypted off-site backup (site owner).** Account → Settings → *Encrypted backup to keep somewhere else*. Choose a
+passphrase (12+ characters; keep it in a password manager: it can't be recovered) and download `paddock-legacy-backup-
+<date>.plbk`. It holds `accounts.db` and every `careers/*.f1career`, encrypted with AES-256-GCM (scrypt key). The page
+shows when you last made one and flags it as due after 14 days. To restore on a new host:
+
+1. On any computer with Python 3 and `pip install cryptography`, from a copy of the code:
+   `python -m f1tracker.offsite decrypt paddock-legacy-backup-<date>.plbk restored.zip` (asks for the passphrase and
+   checks every file against its checksum).
+2. Stop the site, unzip `restored.zip` into the empty data folder (`/data` on Render: `accounts.db` at the top,
+   league files in `careers/`), and start it again. Everyone signs in again (sessions aren't in the backup).
+
+**Other admin-visible changes.** The Race Master menu is grouped into Race, People, Career and System; the new-league
+setup is Essentials → Players → (optional) More options → Ready; downloaded league backups are rebuilt without any
+trace of the Discord webhook (the copies on the server are unchanged); a failing daily backup is logged instead of
+stopping the page.
+
+**Season Two freeze.** After 3.0 goes live, career formulas stay as they are for the whole season. Only security,
+data-loss and serious bug fixes go out; other requests wait for 3.1, and balance is reviewed after the season with
+its real data.
 
 ## New in 2.5: Calculation Version 3
 

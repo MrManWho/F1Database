@@ -7,7 +7,10 @@
 {% macro notice(n) -%}
 <article class="impact card">
   <div class="card-head"><h2>{{ n.title }}</h2><small class="muted">{{ dmap[n.driver_id].name if dmap.get(n.driver_id) else '' }} · {{ n.created_at|stamp }}</small></div>
-  <p>{{ n.why }}</p>
+  {% set first = n.why.split('. ')[0] %}
+  {% if n.why|length > 220 and first|length < n.why|length %}<p>{{ first }}.</p>
+  <details class="why-more"><summary>Read the full explanation</summary><p>{{ n.why[first|length + 2:] }}</p></details>
+  {% else %}<p>{{ n.why }}</p>{% endif %}
   {% if n.changes %}
   <div class="table-wrap"><table class="data-table compact impact-table">
     <caption class="sr-only">What changed</caption>

@@ -59,6 +59,24 @@ def contracts(conn, driver_id):
     return out
 
 
+def end_contracts_on_release(conn, driver_id, team_id, last_year):
+    """v3.0: a team that lets a driver go ends its contract with them after last_year (a multi-year deal is cut short,
+    a deal that hadn't started yet is withdrawn), so the driver becomes a free agent instead of staying "contracted
+    but not seated". The shortened deal stays in the history. Returns how many contracts changed."""
+    changed = 0
+    for c in contracts(conn, driver_id):
+        if c["team_id"] != team_id or c["end_year"] <= last_year:
+            continue
+        if c["target_year"] > last_year:
+            conn.execute("UPDATE offers SET status = ?, stage = 'Released', responded_at = ? WHERE id = ?",
+                         (C.OFFER_WITHDRAWN, now_iso(), c["id"]))
+        else:
+            conn.execute("UPDATE offers SET years = ?, stage = 'Released' WHERE id = ?",
+                         (last_year - c["target_year"] + 1, c["id"]))
+        changed += 1
+    return changed
+
+
 def covering(deals, year):
     hits = [d for d in deals if d["target_year"] <= year <= d["end_year"]]
     return hits[-1] if hits else None
@@ -197,8 +215,11 @@ def rollover_review(conn, source_id, year):
         deals = contracts(conn, d["id"])
         seat = seats.get(d["id"])
         now = covering(deals, year)
-        released = bool(conn.execute("SELECT 1 FROM team_relations WHERE season_id = ? AND driver_id = ? AND released = 1",
-                                     (source_id, d["id"])).fetchone())
+        rel_row = conn.execute("SELECT team_id FROM team_relations WHERE season_id = ? AND driver_id = ? AND released = 1",
+                               (source_id, d["id"])).fetchone()
+        released = bool(rel_row)
+        if released and now and now["team_id"] == rel_row["team_id"]:
+            now = None      # v3.0: the team that released them won't honour the rest of that contract
         row = {"driver": d, "seat": seat, "team": tmap.get(seat[0]) if seat else None, "next": now,
                "released": released, "last": deals[-1] if deals else None, "needs_decision": False}
         if not d["active"]:

@@ -6,7 +6,8 @@ when a player "finishes where the car should" but is half a second a lap slower 
 Evidence per player per session (Grand Prix, and the Sprint as its own half-weight sample if Sprints are tracked):
 
   benchmark, in order: the AI teammate in the same car; AI drivers of the teams one place either side in car
-  strength (confidence x0.8); the car's expected finish; the whole field only as a fallback.
+  strength (confidence x0.8); two places either side (x0.7); the car's expected finish (x0.6), or the middle of the
+  field if the car has no rank (v3.0: every step is implemented and the one used is shown per player).
 
   finish     = clamp((E - finish) / 8, -1, 1)          E = expected finish of the car (stored rank for that round)
   quali pos  = clamp((E - qualifying) / 8, -1, 1)      (Grand Prix only)
@@ -173,11 +174,20 @@ def session_evidence(conn, event, r, rows, ranks, session, n_teams):
         bench = mate[pos_key]
         bench_name = "your AI teammate"
     else:
-        near = [t for t, k in ranks.items() if rank and abs(k - rank) == 1]
-        others = [m[pos_key] for m in rows if m["team_id"] in near and classified_ai(m)]
-        bench = sum(others) / len(others) if others else None
-        confidence = C.AI_NO_MATE_CONFIDENCE
-        bench_name = "comparable AI cars" if others else None
+        # v3.0: AI teammate -> AI cars one car-strength rank either side -> two ranks either side -> the car's
+        # expected finish (whole-field middle if the car has no rank), each with less confidence than the last.
+        bench = None
+        for reach, conf, label in ((1, C.AI_NO_MATE_CONFIDENCE, "AI cars one place either side in car strength"),
+                                   (2, C.AI_WIDER_CONFIDENCE, "AI cars two places either side in car strength")):
+            near = [t for t, k in ranks.items() if rank and 1 <= abs(k - rank) <= reach]
+            others = [m[pos_key] for m in rows if m["team_id"] in near and classified_ai(m)]
+            if others:
+                bench, confidence, bench_name = sum(others) / len(others), conf, label
+                break
+        if bench is None:
+            bench, confidence = expected, C.AI_EXPECTED_CONFIDENCE
+            bench_name = (f"the car's expected finish (P{expected:.1f}; no AI car close by)" if rank
+                          else f"the middle of the field (P{expected:.1f})")
     if bench is not None:
         parts["teammate"] = _clamp((bench - pos) / 10)
         out["places_vs_benchmark"] = round(bench - pos, 1)
@@ -348,6 +358,7 @@ def recommendation(conn, before=None):
                         "race_gap": round(sum(gaps) / len(gaps), 2) if gaps else None,
                         "quali_gap": round(sum(qgaps) / len(qgaps), 2) if qgaps else None,
                         "places": round(sum(places) / len(places), 1) if places else None,
+                        "benchmark": recent[-1].get("benchmark") if recent else None,
                         "trend": _trend(p["items"])})
     players.sort(key=lambda x: x["delta"])
     rec["players"] = players

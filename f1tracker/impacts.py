@@ -35,6 +35,13 @@ CALC_NOTES = {
                               "driver (for example two players in the same team) no longer counts as the slowest car "
                               "after three rounds, and the Reputation carried between seasons now includes the pledge "
                               "and team-goal rewards every time it's worked out."),
+    4: ("Paddock Legacy 3.0", "Calculation Version 3 was rebalanced. Good press answers now add at most +2 to a team "
+                              "relationship across the last six weekends (bad answers still count in full). Weekend "
+                              "targets offered from now on reward risk (Safe +0.25/-0.75, Standard +1.5/-1.25, Stretch "
+                              "+3/-2). From now on a kept Steady pledge is neutral and a met Safe team goal adds +0.5 "
+                              "Reputation; pledges, team goals and targets you already chose keep their terms. The AI "
+                              "difficulty recommendation now falls back step by step when no AI car is close to yours. "
+                              "Results and points are unchanged."),
     3: ("Paddock Legacy 2.4.1", "The AI difficulty recommendation now judges each round half against your car and half "
                                 "against the whole grid, and it never goes up while a player driver is struggling or "
                                 "near the back. Results, points and ratings are unchanged."),
@@ -198,6 +205,7 @@ def on_open(conn, is_api=False):
         notes = [CALC_NOTES[v] for v in range(version + 1, C.CALC_VERSION + 1) if v in CALC_NOTES]
         if version and notes:
             from . import recalc
+            _backup_first(conn)
             recalc.recalculate(conn)
             announce(conn, notes[-1][0], " ".join(why for _t, why in notes))
         if stored and fresh and notes:
@@ -209,6 +217,19 @@ def on_open(conn, is_api=False):
         refresh(conn)
     elif not is_api and get_meta(conn, "calc_snapshot_stale") != "0":
         refresh(conn)
+
+
+def _backup_first(conn):
+    """v3.0: a safety copy before a version recalculates a league (kept apart from the rolling daily copies)."""
+    import logging
+    from pathlib import Path
+    from . import storage
+    try:
+        path = conn.execute("PRAGMA database_list").fetchone()[2]
+        if path:
+            storage.auto_backup(Path(path).stem, f"before-calc-{C.CALC_VERSION}", force=True)
+    except Exception:   # a backup problem must never stop the league opening
+        logging.getLogger(__name__).exception("backup before the calculation update failed")
 
 
 def announce(conn, title, text):
@@ -284,4 +305,17 @@ def _void_orders_if_off(conn):
                       teamlife.void_all_orders)
 
 
-MIGRATIONS = {1: [_void_orders_if_off]}
+def _keep_pledge_terms(conn):
+    """v3.0: pledges already made this season keep the Reputation reward they were made under."""
+    from . import engine, relations
+    sid = S.current_season_id(conn)
+    if not int(get_meta(conn, "calc_version") or 0):
+        return      # a league created in 3.0 has no earlier promises
+    if not sid or not engine.is_v3(conn, sid) or engine.mixed(conn, sid):
+        return
+    for rel in conn.execute("SELECT driver_id, growth FROM team_relations WHERE season_id = ? AND pledged = 1 "
+                            "AND outcome IS NULL", (sid,)).fetchall():
+        set_meta(conn, f"pledge_terms_{sid}_{rel['driver_id']}", str(relations.growth_level(rel["growth"])["reward"]))
+
+
+MIGRATIONS = {1: [_void_orders_if_off], 4: [_keep_pledge_terms]}

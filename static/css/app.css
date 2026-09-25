@@ -1658,3 +1658,35 @@ tr.contract-historical { opacity: .75; }
 .status-pill.st-classified { background: rgba(74, 163, 255, .15); color: var(--blue, #4aa3ff); }
 .flag-grid label.check { display: inline-flex; width: auto; gap: .3rem; align-items: center; margin: 0; }
 .nofault[hidden] { display: none; }
+
+/* v3.0: calculation badge on Help topics whose numbers depend on the calculation version */
+.calc-badge { display: inline-block; vertical-align: middle; margin-left: .4rem; padding: .1rem .45rem; border: 1px solid var(--line);
+  border-radius: 999px; font-size: .68rem; font-weight: 600; letter-spacing: .04em; color: var(--muted); }
+/* v3.0: Race Master tools grouped as Race, People, Career and System */
+.nav-sub + .nav-sub { margin-top: .25rem; }
+.nav-subtitle { font-size: .6rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); opacity: .8; padding: .35rem .75rem .15rem 1.1rem; }
+body.rail .nav-subtitle { display: none; }
+/* v3.0: new-league setup: essentials first, extras folded away */
+.wizard-sub { font-size: 1rem; margin: 1rem 0 .4rem; }
+.wizard-more { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin: .6rem 0; }
+.wizard-more > summary { cursor: pointer; font-weight: 600; }
+.wizard-more[open] > summary { margin-bottom: .6rem; }
+.next-action { border-left: 3px solid var(--accent, #e10600); }
+.next-action .next-action-main { margin: .3rem 0; }
+.next-action .next-action-main .btn { white-space: normal; text-align: left; }
+.calc-details, .why-more { margin-top: .6rem; }
+.calc-details > summary, .why-more > summary { cursor: pointer; font-size: .85rem; color: var(--muted); }
+.calc-details table { margin-top: .4rem; }
+/* v3.0: What's New eras */
+.era-sep { margin: 2rem 0 1rem; padding: 1.1rem 1.2rem; border-radius: 14px; text-align: center;
+  background: linear-gradient(135deg, var(--red-soft, rgba(225, 6, 0, .12)), transparent 70%); border: 1px solid var(--line); }
+.era-sep:first-of-type { margin-top: 1rem; }
+.era-sep .era-name { margin: 0; font-size: 1.05rem; font-weight: 800; letter-spacing: .18em; }
+.era-sep .era-versions { margin: .15rem 0 0; font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--accent-text, var(--muted)); }
+.era-sep .era-line { margin: .45rem 0 0; color: var(--muted); font-style: italic; }
+@media (max-width: 600px) { .era-sep .era-name { font-size: .92rem; letter-spacing: .12em; } }
+/* v3.0 accessibility pass (axe-core) */
+.round-badge small { opacity: 1; }
+.h2h small a, .page-purpose a, p small a { text-decoration: underline; text-underline-offset: 2px; }
+.choice .pill { width: fit-content; align-self: flex-start; }
+@media (max-width: 600px) { .impact-table td:nth-child(2) { min-width: 0; overflow-wrap: anywhere; } }

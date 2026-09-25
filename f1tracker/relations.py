@@ -45,6 +45,19 @@ def expected_finish(rank):
     return 2 * rank - 0.5
 
 
+def pledge_reward(conn, season_id, growth, driver_id=None):
+    """Reputation added next season for keeping this pledge. Engine 3 full seasons use V3_PLEDGE_REWARD (v3.0); a
+    pledge made before 3.0 keeps the reward it was made under (stored when the league updated)."""
+    if driver_id is not None:
+        from .storage import get_meta
+        kept = get_meta(conn, f"pledge_terms_{season_id}_{driver_id}")
+        if kept not in (None, ""):
+            return float(kept)
+    if season_id and engine.is_v3(conn, season_id) and not engine.mixed(conn, season_id):
+        return C.V3_PLEDGE_REWARD.get(int(growth or 0), growth_level(growth)["reward"])
+    return growth_level(growth)["reward"]
+
+
 def pledged_finish(rank, growth):
     expected = expected_finish(rank)
     return round(expected - growth_level(growth)["share"] * (expected - 1), 1)
@@ -64,7 +77,7 @@ def targets_for(conn, season_id, driver_id, team_id, growth, ranks=None):
         "rank": rank,
         "finish_base": expected_finish(rank),
         "finish_target": pledged_finish(rank, growth),
-        "reward": growth_level(growth)["reward"],
+        "reward": pledge_reward(conn, season_id, growth),
         # Kept for older screens and saves; not used to judge the pledge.
         "form_base": base, "form_target": base,
         "rep_start": round(rep_start, 1), "rep_target": round(rep_start, 1),
@@ -225,7 +238,7 @@ def assess(conn, season_id, driver_id, standings=None):
             "form": form, "rep": rep, "rep_change": round(rep - rel["rep_start"], 1), "pace": p["average"],
             "pace_rounds": p["rounds"], "pace_dropped": p["dropped"], "field": p["field"], "pace_gap": round(pace_gap, 2),
             "on_pledge": p["average"] is not None and p["average"] <= rel["finish_target"] + 1e-9,
-            "reward_if_kept": growth_level(rel["growth"])["reward"], "h2h": h2h, "score": score, "status": status, "done": done,
+            "reward_if_kept": pledge_reward(conn, season_id, rel["growth"], rel["driver_id"]), "h2h": h2h, "score": score, "status": status, "done": done,
             "total": total, "confidence": confidence, "live_status": band(score), "goals": goals,
             "role": _role(conn, rel)}
 
@@ -261,8 +274,20 @@ def extras_v3(conn, season_id, driver_id, team_id):
         if (r["ruled_at"] or "9") >= since:
             items.append((r["round_number"], C.V3_ORDER_OBEYED if r["status"] == "Obeyed" else C.V3_ORDER_IGNORED,
                           "team order"))
+    # v3.0: favourable press adds at most V3_PRESS_POSITIVE_CAP across the window; unfavourable answers count in full.
+    press_good = sum(x[1] for x in items if x[2] == "press" and x[1] > 0)
+    if press_good > C.V3_PRESS_POSITIVE_CAP + 1e-9:
+        items.append((None, C.V3_PRESS_POSITIVE_CAP - press_good, "press limit"))
     total = sum(x[1] for x in items)
     return max(-C.V3_EXTRA_CAP, min(C.V3_EXTRA_CAP, total)), items
+
+
+def extras_breakdown(items):
+    """v3.0: the extras split into press, weekend targets and team orders (after the press limit)."""
+    out = {"press": 0.0, "weekend target": 0.0, "team order": 0.0}
+    for _round, effect, what in items:
+        out["press" if what == "press limit" else what] = out.get("press" if what == "press limit" else what, 0.0) + effect
+    return {k: round(v, 2) for k, v in out.items()}
 
 
 def get_since(conn, season_id, driver_id):
@@ -311,11 +336,11 @@ def _assess_v3(conn, season_id, driver_id, standings=None):
             "pace_rounds": p["rounds"], "pace_dropped": p["dropped"], "pace_excused": p.get("excused", 0),
             "field": p["field"], "pace_gap": round(pace_gap, 2),
             "on_pledge": p["average"] is not None and p["average"] <= rel["finish_target"] + 1e-9,
-            "reward_if_kept": growth_level(rel["growth"])["reward"], "h2h": h2h, "score": score, "status": status,
+            "reward_if_kept": pledge_reward(conn, season_id, rel["growth"], rel["driver_id"]), "h2h": h2h, "score": score, "status": status,
             "done": done, "total": total, "confidence": confidence, "live_status": band(score), "goals": goals,
             "role": _role(conn, rel), "bonus": extras, "extras": items, "engine": 3,
             "parts": {"pace": round(pace_part, 1), "h2h": round(h2h_part, 1), "goals": goal_part,
-                      "extras": round(extras, 1)}}
+                      "extras": round(extras, 1)}, "extras_split": extras_breakdown(items)}
 
 
 WARNINGS = {
@@ -379,6 +404,8 @@ def decide_releases(conn, season_id, final=False):
         team = a["team"]["name"] if a["team"] else "Your team"
         conn.execute("UPDATE team_relations SET released = 1, status = 'Released', updated_at = ? "
                      "WHERE season_id = ? AND driver_id = ?", (now_iso(), season_id, a["driver_id"]))
+        from . import seats
+        seats.end_contracts_on_release(conn, a["driver_id"], a["team_id"], S.get_season(conn, season_id)["year"])
         note(conn, season_id, a["driver_id"], a["team_id"], "danger",
              f"{team} have decided to let you go at the end of the season. You'll need a new team.")
         driver = S.driver_map(conn)[a["driver_id"]]["name"]
@@ -446,11 +473,12 @@ def set_pledge(conn, season_id, driver_id, growth):
                   now_iso(), season_id, driver_id))
     if rel["offer_id"]:
         conn.execute("UPDATE offers SET growth = ? WHERE id = ?", (growth, rel["offer_id"]))
+    conn.execute("DELETE FROM meta WHERE key = ?", (f"pledge_terms_{season_id}_{driver_id}",))   # a new pledge: new terms
     team = S.team_map(conn)[rel["team_id"]]["name"]
     note(conn, season_id, driver_id, rel["team_id"], "good",
          f"You've pledged a {level['name']} season to {team}: an average finish of P{t['finish_target']:.1f} or "
          f"better (the car's expected finish is P{t['finish_base']:.1f}). Keep it and you start next season with "
-         f"+{level['reward']} Reputation.", notify=False)
+         f"{pledge_reward(conn, season_id, growth):+g} Reputation.", notify=False)
     return t
 
 

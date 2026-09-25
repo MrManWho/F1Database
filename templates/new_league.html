@@ -3,11 +3,11 @@
 {% block plain %}
 <div class="wizard-wrap">
 <div class="page-head"><div><div class="kicker">New league</div><h1>Set up your league</h1>
-  <p class="page-purpose">Eight short steps. Every choice can be changed later in League settings, and nothing is sent to anyone until you create the league.</p></div>
+  <p class="page-purpose">Three steps: the essentials, your players, and you're ready. Extra options are in an optional step you can skip. Everything can be changed later in League settings, and nothing is sent to anyone until you create the league.</p></div>
   <a class="btn btn-ghost" href="{{ url_for('home') }}">Cancel</a></div>
 
 <ol class="wizard-steps" id="wizard-steps" aria-label="Setup steps">
-  {% for label in ['Identity', 'Season & calendar', 'Teams & grid', 'Scoring', 'Career systems', 'Roles & invitations', 'Notifications', 'Review'] %}
+  {% for label in ['Essentials', 'Players', 'More options (optional)', 'Ready'] %}
   <li data-step-link="{{ loop.index0 }}"><span class="num">{{ loop.index }}</span><span class="lbl">{{ label }}</span></li>
   {% endfor %}
 </ol>
@@ -17,31 +17,21 @@
   <input type="hidden" name="wizard" value="1">
 
   <fieldset class="card wizard-step" data-step="0">
-    <legend><h2>1 · League identity</h2></legend>
+    <legend><h2>1 · Essentials</h2></legend>
     <label>League name<input name="name" required maxlength="80" placeholder="e.g. Thursday Night F1" data-summary="League"></label>
-    <label>Short description <small class="muted">(optional; shown publicly only if you make the league public)</small>
-      <textarea name="league_description" rows="2" maxlength="600"></textarea></label>
-    <div class="grid-2">
-      <label>Region <small class="muted">(optional)</small><input name="league_region" maxlength="60" placeholder="e.g. Europe"></label>
-      <label>Platform / game <small class="muted">(optional)</small><input name="league_platform" maxlength="80" placeholder="e.g. F1 25 on PlayStation"></label>
+    <label>Opening season<input name="year" type="number" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" value="{{ default_year }}" required data-summary="Season"></label>
+    <h3 class="wizard-sub">What kind of league?</h3>
+    <div class="choice-cards" role="radiogroup" aria-label="Setup preset">
+      {% for key, p in presets.items() %}
+      <label class="choice"><input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'multiplayer' }} data-summary="Setup" data-summary-text="{{ p.label }}{% if key != 'custom' %}: {{ p.enables|join(', ') }}{% endif %}">
+        <span><b>{{ p.label }}</b>{% if key == 'simple' %} <span class="pill pill-good">Best for a first league</span>{% endif %}<small class="muted">{{ p.blurb }}</small><small class="enables">{{ p.enables|join(' · ') }}</small></span></label>
+      {% endfor %}
     </div>
-    <label>Accent colour<input type="color" name="accent_color" value="#e10600"></label>
+    <p class="muted small">New to this? Start with <b>Simple</b>: results and standings only. You can switch on careers, contracts and targets any time.</p>
   </fieldset>
 
   <fieldset class="card wizard-step" data-step="1">
-    <legend><h2>2 · Season and calendar</h2></legend>
-    <label>Opening season<input name="year" type="number" min="{{ C.MIN_YEAR }}" max="{{ C.MAX_YEAR }}" value="{{ default_year }}" required data-summary="Season"></label>
-    <div class="choice-cards" role="radiogroup" aria-label="Calendar">
-      <label class="choice"><input type="radio" name="calendar" value="standard" checked data-summary="Calendar" data-summary-text="Standard {{ calendar|length }}-round calendar">
-        <span><b>Standard calendar</b><small class="muted">{{ calendar|length }} rounds, including {{ calendar|selectattr(3)|list|length }} Sprint weekends. Edit, reorder or remove rounds any time.</small></span></label>
-      <label class="choice"><input type="radio" name="calendar" value="blank" data-summary="Calendar" data-summary-text="Empty: I'll add rounds">
-        <span><b>Start empty</b><small class="muted">Add your own rounds in Calendar management.</small></span></label>
-    </div>
-    <label class="check"><input type="checkbox" name="sprints" value="1" checked> Keep Sprint weekends in the standard calendar</label>
-  </fieldset>
-
-  <fieldset class="card wizard-step" data-step="2">
-    <legend><h2>3 · Teams and grid</h2></legend>
+    <legend><h2>2 · Players</h2></legend>
     <p class="muted small">The league starts with the {{ teams|length }} current teams and their drivers as AI. Add the human (player) drivers: one, several or none.
       Player drivers replace AI drivers on the grid; you choose seats afterwards in Grid &amp; contracts.</p>
     <div id="player-rows" class="stack">
@@ -55,69 +45,67 @@
       </div>
     </div>
     <button type="button" class="btn btn-sm btn-ghost" id="add-player">+ Add another player driver</button>
-    <p class="muted small">Invitations are only created when you finish, and nobody is emailed unless you choose to on the last step.</p>
-  </fieldset>
-
-  <fieldset class="card wizard-step" data-step="3">
-    <legend><h2>4 · Scoring and Sprints</h2></legend>
-    <p>Standard points: Grand Prix {% for pos, pts in C.GP_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.GP_POINTS|length }};
-      Sprint {% for pos, pts in C.SPRINT_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.SPRINT_POINTS|length }}.</p>
-    <ul class="muted small">
-      <li>A DNF, DNS or DSQ scores nothing in that session; a Sprint DNF never affects Grand Prix points.</li>
-      <li>Standings, records and career stats use these rules in every season, so seasons stay comparable.</li>
-    </ul>
-  </fieldset>
-
-  <fieldset class="card wizard-step" data-step="4">
-    <legend><h2>5 · Career systems</h2></legend>
-    <div class="choice-cards" role="radiogroup" aria-label="Setup preset">
-      {% for key, p in presets.items() %}
-      <label class="choice"><input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'multiplayer' }} data-summary="Setup" data-summary-text="{{ p.label }}{% if key != 'custom' %}: {{ p.enables|join(', ') }}{% endif %}">
-        <span><b>{{ p.label }}</b><small class="muted">{{ p.blurb }}</small><small class="enables">{{ p.enables|join(' · ') }}</small></span></label>
-      {% endfor %}
-    </div>
-    <div class="custom-systems" id="custom-systems" hidden>
-      <h3>Choose each system</h3>
-      {% for key, (label, desc, default) in features.items() %}
-      <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> {{ label }} <small class="muted">· {{ desc }}</small></label>
-      {% endfor %}
-      <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Contracts and the transfer market (starts with a Rookie Draft)</label>
-      <label class="check"><input type="checkbox" name="weekend_targets" value="1" checked> Weekend targets</label>
-      <label class="check"><input type="checkbox" name="round_gates" value="1" checked> Round gates</label>
-      <label class="check"><input type="checkbox" name="team_goal_choice" value="1"> Selectable team goals</label>
-      <label>Team orders<select name="team_orders">{% for k, l in order_modes.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
-    </div>
-  </fieldset>
-
-  <fieldset class="card wizard-step" data-step="5">
-    <legend><h2>6 · Roles, joining and visibility</h2></legend>
-    <p class="muted small">You'll be the Race Master. Race Masters run the league; Scorekeepers enter results; Members follow along and drive their own driver; Spectators only watch.</p>
     <label>How people join
       <select name="join_mode" data-summary="Joining">{% for key, label in join_modes.items() %}<option value="{{ key }}" {{ 'selected' if key == 'invite' }}>{{ label }}</option>{% endfor %}</select></label>
-    <label>Who can see the league
-      <select name="visibility" data-summary="Visibility">{% for key, (label, desc) in visibility.items() %}<option value="{{ key }}" {{ 'selected' if key == 'private' }}>{{ label }}: {{ desc }}</option>{% endfor %}</select></label>
     <fieldset><legend>Invite more people (optional)</legend>
+      <p class="muted small">You'll be the Race Master. Scorekeepers enter results; Members follow along and drive their own driver; Spectators only watch.</p>
       <div id="invite-rows" class="stack">
         <div class="grid-2 invite-row"><label>Username<input name="invite_username" maxlength="32" autocomplete="off"></label>
           <label>Role<select name="invite_role"><option value="member">Member</option><option value="scorekeeper">Scorekeeper</option><option value="spectator">Spectator</option></select></label></div>
       </div>
       <button type="button" class="btn btn-sm btn-ghost" id="add-invite">+ Another</button>
     </fieldset>
+    <p class="muted small">Invitations are only created when you finish, and nobody is emailed unless you choose to on the last step.</p>
   </fieldset>
 
-  <fieldset class="card wizard-step" data-step="6">
-    <legend><h2>7 · Your notifications</h2></legend>
-    <div class="choice-cards" role="radiogroup" aria-label="Notifications from this league">
-      {% for key, (label, desc) in notify_presets.items() %}
-      <label class="choice"><input type="radio" name="notify_preset" value="{{ key }}" {{ 'checked' if key == 'important' }} data-summary="Your notifications" data-summary-text="{{ label }}">
-        <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span></label>
-      {% endfor %}
-    </div>
-    <p class="muted small">Only for you, in this league. Everyone else chooses for themselves when they join; nobody is subscribed automatically.</p>
+  <fieldset class="card wizard-step" data-step="2">
+    <legend><h2>3 · More options <small class="muted">(optional: skip if you like)</small></h2></legend>
+    <details class="wizard-more"><summary>Calendar and scoring</summary>
+      <div class="choice-cards" role="radiogroup" aria-label="Calendar">
+        <label class="choice"><input type="radio" name="calendar" value="standard" checked data-summary="Calendar" data-summary-text="Standard {{ calendar|length }}-round calendar">
+          <span><b>Standard calendar</b><small class="muted">{{ calendar|length }} rounds, including {{ calendar|selectattr(3)|list|length }} Sprint weekends. Edit, reorder or remove rounds any time.</small></span></label>
+        <label class="choice"><input type="radio" name="calendar" value="blank" data-summary="Calendar" data-summary-text="Empty: I'll add rounds">
+          <span><b>Start empty</b><small class="muted">Add your own rounds in Calendar management.</small></span></label>
+      </div>
+      <label class="check"><input type="checkbox" name="sprints" value="1" checked> Keep Sprint weekends in the standard calendar</label>
+      <p class="muted small">Standard points: Grand Prix {% for pos, pts in C.GP_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.GP_POINTS|length }};
+        Sprint {% for pos, pts in C.SPRINT_POINTS.items() %}{{ pts }}{{ '-' if not loop.last }}{% endfor %} for P1–P{{ C.SPRINT_POINTS|length }}. A DNF, DNS or DSQ scores nothing in that session.</p>
+    </details>
+    <details class="wizard-more" id="custom-details"><summary>Choose each career system (Custom setup)</summary>
+      <div class="custom-systems" id="custom-systems">
+        <p class="muted small">Only used when you pick <b>Custom</b> on step 1.</p>
+        {% for key, (label, desc, default) in features.items() %}
+        <label class="check"><input type="checkbox" name="feature_{{ key }}" value="1" {{ 'checked' if default }}> {{ label }} <small class="muted">· {{ desc }}</small></label>
+        {% endfor %}
+        <label class="check"><input type="checkbox" name="rookie_market" value="1" checked> Contracts and the transfer market (starts with a Rookie Draft)</label>
+        <label class="check"><input type="checkbox" name="weekend_targets" value="1" checked> Weekend targets</label>
+        <label class="check"><input type="checkbox" name="round_gates" value="1" checked> Round gates</label>
+        <label class="check"><input type="checkbox" name="team_goal_choice" value="1"> Selectable team goals</label>
+        <label>Team orders<select name="team_orders">{% for k, l in order_modes.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+      </div>
+    </details>
+    <details class="wizard-more"><summary>Look, visibility and your notifications</summary>
+      <label>Short description <small class="muted">(optional; shown publicly only if you make the league public)</small>
+        <textarea name="league_description" rows="2" maxlength="600"></textarea></label>
+      <div class="grid-2">
+        <label>Region <small class="muted">(optional)</small><input name="league_region" maxlength="60" placeholder="e.g. Europe"></label>
+        <label>Platform / game <small class="muted">(optional)</small><input name="league_platform" maxlength="80" placeholder="e.g. F1 25 on PlayStation"></label>
+      </div>
+      <label>Accent colour<input type="color" name="accent_color" value="#e10600"></label>
+      <label>Who can see the league
+        <select name="visibility" data-summary="Visibility">{% for key, (label, desc) in visibility.items() %}<option value="{{ key }}" {{ 'selected' if key == 'private' }}>{{ label }}: {{ desc }}</option>{% endfor %}</select></label>
+      <div class="choice-cards" role="radiogroup" aria-label="Notifications from this league">
+        {% for key, (label, desc) in notify_presets.items() %}
+        <label class="choice"><input type="radio" name="notify_preset" value="{{ key }}" {{ 'checked' if key == 'important' }} data-summary="Your notifications" data-summary-text="{{ label }}">
+          <span><b>{{ label }}</b><small class="muted">{{ desc }}</small></span></label>
+        {% endfor %}
+      </div>
+      <p class="muted small">Notifications are only for you, in this league. Everyone else chooses for themselves when they join.</p>
+    </details>
   </fieldset>
 
-  <fieldset class="card wizard-step" data-step="7">
-    <legend><h2>8 · Review and create</h2></legend>
+  <fieldset class="card wizard-step" data-step="3">
+    <legend><h2>4 · Ready</h2></legend>
     <dl class="review-list" id="review-list"><div><dt>League</dt><dd class="muted">Fill in the steps above.</dd></div></dl>
     <label class="check"><input type="checkbox" name="send_invites" value="1"> Email the people I invited (they'll see the invitation in their league list either way)</label>
     <p class="muted small">Creating the league makes you its Race Master. It's private until you choose otherwise, and you can change every setting later.</p>
@@ -182,8 +170,8 @@
     row.querySelectorAll("input").forEach(function (i) { i.value = ""; });
     rows.appendChild(row); row.querySelector("input").focus();
   });
-  // Custom preset shows every system.
-  function customToggle() { document.getElementById("custom-systems").hidden = (form.querySelector("input[name=preset]:checked") || {}).value !== "custom"; }
+  // Custom preset opens the "Choose each system" options on the optional step.
+  function customToggle() { var d = document.getElementById("custom-details"); if ((form.querySelector("input[name=preset]:checked") || {}).value === "custom") d.open = true; }
   form.querySelectorAll("input[name=preset]").forEach(function (r) { r.addEventListener("change", customToggle); });
   customToggle();
   function summarise() {

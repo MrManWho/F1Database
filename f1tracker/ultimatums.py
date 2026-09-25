@@ -249,6 +249,8 @@ def decide(conn, ultimatum_id, dismiss, username, note="", replacement_id=None):
                  (note[:500] or None, username, now_iso(), ultimatum_id))
     conn.execute("UPDATE team_relations SET released = 1, status = 'Released', updated_at = ? "
                  "WHERE season_id = ? AND driver_id = ?", (now_iso(), sid, did))
+    from . import seats
+    seats.end_contracts_on_release(conn, did, u["team_id"], S.get_season(conn, sid)["year"])   # v3.0: a free agent
     replacement = S.grid_map(conn, sid).get(seat) if seat else None
     rname = S.driver_map(conn)[replacement]["name"] if replacement else "a reserve"
     relations.note(conn, sid, did, u["team_id"], "danger",

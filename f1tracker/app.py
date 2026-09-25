@@ -22,7 +22,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, announcements, calc3, engine, impacts, migration, stats, ultimatums
+from . import ai3, announcements, calc3, engine, impacts, migration, offsite, stats, ultimatums
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -344,7 +344,7 @@ def career_page(master_only=False, ops_only=False):
             try:
                 storage.auto_backup(token, "daily")
             except Exception:  # a backup problem must never block the page
-                app.logger.exception("automatic backup failed")
+                logging.getLogger(__name__).exception("automatic backup failed")
             try:
                 with storage.session(token) as conn:
                     g.league_role = roles.effective_role(conn, g.user)
@@ -925,6 +925,24 @@ def register_routes(app):
             flash(str(exc), "error")
         return redirect(url_for("accounts_page", find=user["username"]) + "#recovery")
 
+    @app.route("/settings/offsite-backup", methods=["POST"])
+    @master_required
+    def offsite_backup():
+        """v3.0: the site owner downloads every league and the accounts, encrypted with their own passphrase."""
+        from . import offsite
+        phrase, again = request.form.get("passphrase") or "", request.form.get("passphrase2") or ""
+        if phrase != again:
+            flash("The two passphrases don't match.", "error")
+            return redirect(url_for("accounts_page") + "#offsite")
+        try:
+            blob, manifest = offsite.make(phrase)
+        except offsite.BackupError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("accounts_page") + "#offsite")
+        logging.getLogger(__name__).info("encrypted site backup downloaded (%d files)", len(manifest["files"]))
+        name = f"paddock-legacy-backup-{manifest['created_at'][:10]}.plbk"
+        return send_file(io.BytesIO(blob), as_attachment=True, download_name=name, mimetype="application/octet-stream")
+
     @app.route("/settings/test-email", methods=["POST"])
     @master_required
     def settings_test_email():
@@ -1012,7 +1030,10 @@ def register_routes(app):
                                current_sid=session.get("sid"), totp=totp,
                                otpauth=security.otpauth_uri(me, totp["secret"]) if totp["secret"] and not totp["enabled"] else None,
                                query=query, found=found, contact_email=auth.get_setting("contact_email") or "",
-                               reserved_count=auth.reserved_count() if is_master() else 0)
+                               reserved_count=auth.reserved_count() if is_master() else 0,
+                               offsite_at=offsite.last_made() if is_master() else None,
+                               offsite_overdue=offsite.overdue() if is_master() else False,
+                               offsite_min=offsite.MIN_PASSPHRASE)
 
     @app.route("/accounts/release", methods=["POST"])
     @master_required

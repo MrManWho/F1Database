@@ -11,6 +11,21 @@
   </div>
 </div>
 
+{# v3.0: one clear next step for whoever is looking, with a one-line reason #}
+{% if pending %}{% set na_text, na_link, na_tone = pending[0] %}{% set na = {'text': na_text, 'href': '/career/' ~ ctx.token ~ '/' ~ na_link, 'why': 'This is waiting on you before the league can move on.'} %}
+{% elif can_finish and ctx.is_master and ctx.season.id == ctx.current_season_id %}{% set na = {'text': 'Review contracts and start ' ~ (ctx.season.year + 1), 'href': url_for('season_rollover', token=ctx.token), 'why': 'Every round of ' ~ ctx.season.year ~ ' is complete.'} %}
+{% elif next_event and ctx.can_run %}{% set na = {'text': 'Run R' ~ next_event.round_number ~ ' ' ~ next_event.name, 'href': url_for('weekend', token=ctx.token, event_id=next_event.id), 'why': 'Open the paddock, start the race, then enter the results.'} %}
+{% elif next_event and ctx.my_driver %}{% set na = {'text': 'Get ready for R' ~ next_event.round_number ~ ' ' ~ next_event.name, 'href': url_for('weekend', token=ctx.token, event_id=next_event.id), 'why': 'Your target, pre-race press and check-in are on the round page.'} %}
+{% elif next_event %}{% set na = {'text': 'Follow R' ~ next_event.round_number ~ ' ' ~ next_event.name, 'href': url_for('weekend', token=ctx.token, event_id=next_event.id), 'why': 'Results and news appear here once the round is submitted.'} %}
+{% else %}{% set na = none %}{% endif %}
+{% if na %}
+<section class="card next-action" aria-labelledby="next-action-title">
+  <div class="kicker" id="next-action-title">Next action</div>
+  <p class="next-action-main"><a class="btn btn-primary" href="{{ na.href }}">{{ na.text }} →</a></p>
+  <p class="muted small">{{ na.why }}</p>
+</section>
+{% endif %}
+
 {% if notices_ %}
 <section class="card announce-card" id="announcements" aria-labelledby="announce-title">
   <div class="card-head"><h2 id="announce-title">Announcements</h2>
@@ -25,11 +40,11 @@
 </section>
 {% endif %}
 
-{% if pending %}
+{% if pending|length > 1 %}
 <section class="card pending-card" aria-labelledby="pending-title">
-  <h2 id="pending-title">Waiting for you</h2>
+  <h2 id="pending-title">Also waiting for you</h2>
   <ul class="pending-list">
-    {% for text, link, tone in pending %}<li class="pt-{{ tone }}"><a href="/career/{{ ctx.token }}/{{ link }}">{{ text }} →</a></li>{% endfor %}
+    {% for text, link, tone in pending[1:] %}<li class="pt-{{ tone }}"><a href="/career/{{ ctx.token }}/{{ link }}">{{ text }} →</a></li>{% endfor %}
   </ul>
 </section>
 {% endif %}

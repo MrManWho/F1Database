@@ -64,11 +64,11 @@
     <tbody>{% for t in all_teams %}
       {% set f = 'team-' ~ t.id %}
       <tr>
-        <td><input form="{{ f }}" name="name" value="{{ t.name }}" maxlength="40" required></td>
-        <td><input form="{{ f }}" name="abbreviation" value="{{ t.abbreviation }}" maxlength="4" class="narrow" required></td>
-        <td><input form="{{ f }}" name="color" type="color" value="{{ t.color }}"></td>
-        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if t.active }}></td>
-        <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
+        <td><input form="{{ f }}" name="name" value="{{ t.name }}" maxlength="40" required aria-label="{{ t.name }}: team name"></td>
+        <td><input form="{{ f }}" name="abbreviation" value="{{ t.abbreviation }}" maxlength="4" class="narrow" required aria-label="{{ t.name }}: code"></td>
+        <td><input form="{{ f }}" name="color" type="color" value="{{ t.color }}" aria-label="{{ t.name }}: colour"></td>
+        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if t.active }} aria-label="{{ t.name }}: active"></td>
+        <td><button form="{{ f }}" class="btn btn-sm" aria-label="Save {{ t.name }}">Save</button></td>
       </tr>
     {% endfor %}</tbody>
   </table>
@@ -135,13 +135,13 @@
     <tbody>{% for d in all_drivers %}
       {% set f = 'driver-' ~ d.id %}
       <tr {{ pattrs(d) }}>
-        <td><input form="{{ f }}" name="name" value="{{ d.name }}" maxlength="60" required></td>
+        <td><input form="{{ f }}" name="name" value="{{ d.name }}" maxlength="60" required aria-label="{{ d.name }}: driver name"></td>
         <td>{% if d.team %}{{ team_dot(d.team) }}{{ d.team.abbreviation }}{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td><input form="{{ f }}" name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="{{ d.baseline_reputation }}" class="narrow"></td>
+        <td><input form="{{ f }}" name="baseline_reputation" type="number" min="1" max="100" step="0.1" value="{{ d.baseline_reputation }}" class="narrow" aria-label="{{ d.name }}: baseline Reputation"></td>
         <td class="num">{{ d.rep_now }}</td>
-        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if d.active }}></td>
-        <td><button form="{{ f }}" class="btn btn-sm">Save</button></td>
-        <td><button type="button" class="btn btn-sm btn-danger" data-delete-driver="{{ d.id }}" data-name="{{ d.name }}"
+        <td class="center"><input form="{{ f }}" type="checkbox" name="active" value="1" {{ 'checked' if d.active }} aria-label="{{ d.name }}: active"></td>
+        <td><button form="{{ f }}" class="btn btn-sm" aria-label="Save {{ d.name }}">Save</button></td>
+        <td><button type="button" class="btn btn-sm btn-danger" aria-label="Delete {{ d.name }}" data-delete-driver="{{ d.id }}" data-name="{{ d.name }}"
               data-seat="{{ (d.team.name ~ ' (' ~ ctx.season.year ~ ')') if d.team else '' }}" data-races="{{ d.history.races }}"
               data-player="{{ 1 if d.is_player else 0 }}" data-url="{{ url_for('paddock_driver_delete', token=ctx.token, driver_id=d.id) }}">Delete</button></td>
       </tr>

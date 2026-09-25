@@ -209,6 +209,8 @@
     });
     input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(load, 120); });
     input.addEventListener("keydown", function (e) {
+      // v3.0: one Escape closes the palette (a search box would otherwise use the first one to clear itself)
+      if (e.key === "Escape") { e.preventDefault(); palette.close(); searchBtn.focus(); return; }
       if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(items.length - 1, active + 1); render(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); render(); }
       else if (e.key === "Enter") {
@@ -234,4 +236,25 @@
   window.addEventListener("online", offline);
   window.addEventListener("offline", offline);
   if (navigator.onLine === false) offline();
+
+  /* v3.0: a table or code block that scrolls sideways (common on phones) can be reached and scrolled by keyboard. */
+  function focusableScrollers() {
+    document.querySelectorAll(".table-wrap, .scroll-x, pre, main table").forEach(function (el) {
+      var scrolls = el.scrollWidth > el.clientWidth + 1;
+      if (scrolls && !el.hasAttribute("tabindex")) {
+        el.setAttribute("tabindex", "0");
+        el.setAttribute("data-scroll-focus", "1");
+        if (!el.getAttribute("aria-label") && !el.getAttribute("role") && el.tagName !== "TABLE") {
+          var cap = el.querySelector("caption");
+          el.setAttribute("role", "region");
+          el.setAttribute("aria-label", (cap && cap.textContent.trim()) || "Scrollable table");
+        }
+      } else if (!scrolls && el.getAttribute("data-scroll-focus")) {
+        el.removeAttribute("tabindex");
+        el.removeAttribute("data-scroll-focus");
+      }
+    });
+  }
+  focusableScrollers();
+  window.addEventListener("resize", function () { clearTimeout(focusableScrollers.t); focusableScrollers.t = setTimeout(focusableScrollers, 200); });
 })();

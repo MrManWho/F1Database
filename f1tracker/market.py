@@ -944,9 +944,13 @@ def on_new_season(conn, season_id, previous_id=None):
     if previous_id:
         seats = S.driver_seats(conn, season_id)
         old = S.driver_seats(conn, previous_id)
+        prev_year = S.get_season(conn, previous_id)["year"]
+        from . import seats as seats_mod
         for rel in conn.execute("SELECT * FROM team_relations WHERE season_id = ? AND released = 1",
                                 (previous_id,)).fetchall():
             did = rel["driver_id"]
+            # v3.0: a release ends that team's contract (also for leagues released before 3.0)
+            seats_mod.end_contracts_on_release(conn, did, rel["team_id"], prev_year)
             signed_new = conn.execute(
                 """SELECT 1 FROM offers o JOIN market_windows w ON w.id = o.window_id WHERE o.driver_id = ?
                    AND o.status = ? AND w.target_year = ?""", (did, C.OFFER_ACCEPTED, year)).fetchone()

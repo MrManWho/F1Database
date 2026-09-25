@@ -80,8 +80,9 @@ def test_wizard_creates_a_league_with_a_preset_and_no_emails_unless_asked(app, m
     auth.create_user("bob", "Bob", "password1", email="bob@example.com")
     ann = _client(app, "ann")
     page = ann.get("/leagues/new").get_data(as_text=True)
-    for step in ("League identity", "Season and calendar", "Teams and grid", "Scoring and Sprints", "Career systems",
-                 "Roles, joining and visibility", "Your notifications", "Review and create"):
+    # v3.0: Essentials -> Players -> (optional extras) -> Ready; every earlier choice is still on the page
+    for step in ("1 · Essentials", "2 · Players", "3 · More options", "4 · Ready", "Best for a first league",
+                 'name="calendar"', 'name="visibility"', 'name="notify_preset"', 'name="team_orders"'):
         assert step in page
     res = ann.post("/careers/new", data={
         "wizard": "1", "csrf_token": "tok", "name": "Ann's League", "year": "2026", "calendar": "standard", "sprints": "1",

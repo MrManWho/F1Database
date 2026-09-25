@@ -220,7 +220,8 @@ Per player per session (Grand Prix; Sprint as its own half-weight sample):
 ```
 finish     = clamp((E − finish) / 8)            quali pos = clamp((E − qualifying) / 8)
 teammate   = clamp((benchmark finish − finish) / 10)   benchmark: AI teammate, else AI cars one rank either
-             side (confidence × 0.8), else the car's E
+             side (confidence × 0.8), else two ranks either side (× 0.7), else the car's E (× 0.6; the field
+             middle if the car has no rank). 3.0: every step is implemented; the one used is shown per player.
 race pace  = clamp(−(gap / laps) / 0.60)        quali pace = clamp(−(my time − benchmark time) / 0.80)
 score      = 0.20 finish + 0.10 quali pos + 0.25 teammate + 0.30 race pace + 0.15 quali pace
              (re-normalised over the parts that exist; championship points never used)
@@ -346,3 +347,54 @@ sent to the choice).
 
 `docs/v2.5/`: `migration_choice.png`, `recalculation_preview.png`, `migration_done.png`, `driver_change_notice.png`
 (and `_phone`), `round_v3_results.png`.
+
+## 26. The 3.0 balance update (Calculation Version 3, update counter 4)
+
+An independent audit of 2.5 found four things a player could learn and repeat. 3.0 changes only those; standings,
+points, Form, Reputation's season movement and Driver Value are untouched. Leagues on Version 3 are recalculated
+once when next opened and each player driver whose numbers moved agrees to a change notice first. **Promises already
+made keep their terms**: a pledge made before 3.0 keeps its reward (stored per driver as `pledge_terms_<season>_<driver>`
+when the league updates), team goals keep the reward/penalty stored when they were chosen, and weekend targets keep
+the values they were offered with.
+
+| Rule | 2.5 | 3.0 |
+|---|---|---|
+| Good press in the six-weekend window | counts toward the ±10 extras cap | **at most +2** in total (`V3_PRESS_POSITIVE_CAP`); bad answers count in full |
+| Pre-race questions where no answer pleases the team | 0 of 18 | 6 of 18 (`pre_expect`, `pre_momentum`, `pre_sprint`, `pre_track`, `pre_setup`, `pre_rival`: their team-friendly answers now count 0; damaging answers still cost) |
+| Weekend targets (hit / miss) | Safe +1/−0.5, Standard +2/−1.5, Stretch +3.5/−2.5 | **Safe +0.25/−0.75, Standard +1.5/−1.25, Stretch +3/−2** |
+| Contract message themes counted | the two the receiving team likes best | **the first two you lead with**; more than 3 themes × 0.45 |
+| Kept Steady pledge | +0.5 Reputation | **0** (Solid +1, Strong +1.75, Breakout +2.5 unchanged) |
+| Met Safe team goal | +1 | **+0.5** (Competitive +2/−1, Ambitious +3/−2 unchanged) |
+| AI benchmark with no AI teammate | AI cars ±1 rank (×0.8), else the component was dropped | ±1 rank (×0.8) → **±2 ranks (×0.7) → car's expected finish (×0.6)**, shown per player |
+
+**Why these target values.** A driver's finish scatters about ±3.5 places around where they "should" finish; Safe is
+set 3 places easier than Standard and Stretch 3 harder. Expected relationship change per weekend:
+
+| Driver vs the car | Safe | Standard | Stretch | Best |
+|---|---:|---:|---:|---|
+| 3 places worse | −0.25 | −0.71 | −1.79 | Safe (still negative) |
+| at the car's level | +0.05 | +0.13 | −1.02 | Standard |
+| 1.5 places better | +0.15 | +0.58 | −0.34 | Standard |
+| 3 places better | +0.21 | +0.96 | +0.51 | Standard |
+| 5 places better | +0.24 | +1.29 | +1.58 | Stretch |
+
+The audit's example values (Safe +0.25/−0.5, Standard +1.25/−1.5, Stretch +2.5/−2.5) still made Safe the best choice
+for a driver exactly at the car's level, so they were not used.
+
+**Before / after, same scenarios run on 2.5 and 3.0** (6 rounds, 6th-fastest car, Steady pledge, four most
+team-friendly press answers every weekend):
+
+| Scenario | 2.5 | 3.0 |
+|---|---|---|
+| Average driver, Safe targets | 67.9 Happy (extras +10, capped) | 61.4 Happy (extras +3.5) |
+| Average driver, Standard targets | 67.9 Happy (+10) | 67.9 Happy (+10): risk now pays |
+| 3–4 places behind the pledge, beaten by the teammate, Safe | 44.4 Concerned | 37.9 Unhappy |
+| Clearly outperforming, Stretch | 92.0 Delighted | 92.0 Delighted |
+| Universal six-theme message, interest across every team tier and favourite | +2.46 to +3.00 | +0.75 to +1.17 |
+| Current-team interest from the average Safe driver's relationship | +1.6 | +0.3 |
+| Reputation after 10 seasons of Steady + Safe at performance 50 (no rewards: 50.0) | 55.7 (long-run +6) | 51.9 (long-run +2) |
+| AI recommendation, one player with an AI teammate / two players in one car / players in three adjacent cars (8 rounds) | identical | identical (the new steps only apply when no AI car is within one place) |
+
+Tests: `tests/test_v300.py`.
+
+Screenshots of the 3.0 changes (fictional demo data): `docs/v3.0/`.

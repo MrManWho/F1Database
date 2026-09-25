@@ -402,8 +402,12 @@ def redacted_copy(path):
     dst = sqlite3.connect(tmp)
     try:
         src.backup(dst)
+        # v3.0: deleting a row can leave its bytes in free pages, so overwrite them (secure_delete) and rebuild the
+        # file (VACUUM). This only touches the temporary download copy, never the league or its server backups.
+        dst.execute("PRAGMA secure_delete = ON")
         dst.execute(f"DELETE FROM meta WHERE key IN ({','.join('?' * len(SECRET_META))})", tuple(SECRET_META))
         dst.commit()
+        dst.execute("VACUUM")
     finally:
         src.close()
         dst.close()

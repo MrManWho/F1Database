@@ -45,7 +45,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
       {% endif %}
       {% if rec.used %}<p class="small"><b>Used ({{ rec.used|length }}):</b> {% for u in rec.used %}{{ u.label }} ({{ '%+.2f'|format(u.score) }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
       {% if rec.excluded %}<p class="small"><b>Not counted:</b> {% for x in rec.excluded %}{{ x.label }}: {{ x.why }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
-      {% if rec.players %}<ul class="small diff-players">{% for p in rec.players %}<li><b>{{ p.name }}</b>: {{ p.verdict }}{% if p.verdict != 'about right' %} (about {{ '%+.0f'|format(p.delta) }} levels){% endif %} · {{ p.rounds }} {{ 'session' if rec.engine == 3 else 'round' }}{{ 's' if p.rounds != 1 }}{% if rec.engine == 3 %}{% if p.sweet_spot is not none %} · personal sweet spot <b>{{ '%.1f'|format(p.sweet_spot) }}</b>{% endif %}{% if p.race_gap is not none %} · race pace {{ '%+.2f'|format(p.race_gap) }}s/lap vs benchmark{% endif %}{% if p.quali_gap is not none %} · qualifying {{ '%+.3f'|format(p.quali_gap) }}s{% endif %}{% if p.places is not none %} · {{ '%+.1f'|format(p.places) }} places vs comparable cars{% endif %}{% if p.trend and p.trend != '—' %} · {{ p.trend }}{% endif %}{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% if rec.players %}<ul class="small diff-players">{% for p in rec.players %}<li><b>{{ p.name }}</b>: {{ p.verdict }}{% if p.verdict != 'about right' %} (about {{ '%+.0f'|format(p.delta) }} levels){% endif %} · {{ p.rounds }} {{ 'session' if rec.engine == 3 else 'round' }}{{ 's' if p.rounds != 1 }}{% if rec.engine == 3 %}{% if p.sweet_spot is not none %} · personal sweet spot <b>{{ '%.1f'|format(p.sweet_spot) }}</b>{% endif %}{% if p.race_gap is not none %} · race pace {{ '%+.2f'|format(p.race_gap) }}s/lap vs benchmark{% endif %}{% if p.quali_gap is not none %} · qualifying {{ '%+.3f'|format(p.quali_gap) }}s{% endif %}{% if p.places is not none %} · {{ '%+.1f'|format(p.places) }} places vs {{ p.benchmark or 'comparable cars' }}{% endif %}{% if p.trend and p.trend != '—' %} · {{ p.trend }}{% endif %}{% endif %}</li>{% endfor %}</ul>{% endif %}
       {% if rec.why_size %}<p class="small"><b>Why this size:</b> {{ rec.why_size|join('; ') }}.</p>{% endif %}
       {% if rec.engine == 3 %}
       <p class="small muted">Calculation Version 3: each session is compared with your AI teammate (or cars of similar speed), the car's expected finish and, when entered, lap times. The last ten usable sessions count, recent ones most; a Sprint counts half. One odd result can't swing it the other way by more than one level. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
@@ -85,7 +85,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 </div>
 {%- endmacro %}
 
-{% macro comment_thread(ctx, target, comments) -%}
+{% macro comment_thread(ctx, target, comments, label='') -%}
 <div class="comments">
   {% for c in comments %}
   <div class="comment">
@@ -100,7 +100,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
   {% if not ctx.is_spectator %}
   <form method="post" action="{{ url_for('comment_add', token=ctx.token) }}" class="comment-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="target" value="{{ target }}">
-    <input name="body" maxlength="1000" placeholder="Add a comment…" required autocomplete="off">
+    <input name="body" maxlength="1000" placeholder="Add a comment…" required autocomplete="off" aria-label="Add a comment{{ (' on ' ~ label) if label }}">
     <button class="btn btn-sm btn-primary">Post</button>
   </form>
   {% endif %}

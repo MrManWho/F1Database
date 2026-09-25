@@ -102,7 +102,19 @@
       <em>{{ {'Issued': 'Pending', 'Obeyed': 'Followed', 'Ignored': 'Ignored', 'Void': 'Void', 'Cancelled': 'Cancelled'}.get(o.status, o.status) }}</em></li>{% endfor %}</ul>
     {% else %}<p class="muted small">{% if rel.role == 'No. 2' %}None yet. As a No. 2 you may be asked to give way to your teammate.{% else %}As {{ 'the No. 1' if rel.role == 'No. 1' else 'an Equal Status driver' }} you won't be asked to give way.{% endif %}</p>{% endif %}
     {% endif %}
-    {% if rel.bonus %}<p class="muted small">Press answers, weekend targets{{ ' and team orders' if orders }} have moved the relationship by <b>{{ '%+.0f'|format(rel.bonus) }}</b> this season.</p>{% endif %}
+    {% if rel.engine == 3 and rel.parts %}
+    <details class="calc-details"><summary>How this was calculated</summary>
+      <table class="data-table compact"><caption class="sr-only">Relationship score breakdown</caption><tbody>
+        <tr><th scope="row">Starting point</th><td class="num">{{ '%g'|format(C.RELATION_START) }}</td></tr>
+        <tr><th scope="row">Pace against your pledge</th><td class="num">{{ '%+.1f'|format(rel.parts.pace * rel.confidence) }}</td></tr>
+        <tr><th scope="row">Teammate head-to-head</th><td class="num">{{ '%+.1f'|format(rel.parts.h2h * rel.confidence) }}</td></tr>
+        <tr><th scope="row">Season goals</th><td class="num">{{ '%+.1f'|format(rel.parts.goals * rel.confidence) }}</td></tr>
+        {% for what, label in (('press', 'Press answers (good ones at most +' ~ ('%g'|format(C.V3_PRESS_POSITIVE_CAP)) ~ ')'), ('weekend target', 'Weekend targets'), ('team order', 'Team orders')) %}
+        <tr><th scope="row">{{ label }}</th><td class="num">{{ '%+.1f'|format(rel.extras_split[what]) }}</td></tr>{% endfor %}
+      </tbody></table>
+      <p class="muted small">Results count for {{ (rel.confidence * 100)|round|int }}% so far (the team's judgement firms up after about a third of the season). Only the last {{ C.V3_EXTRA_ROUNDS }} weekends' extras count, {{ '%g'|format(C.V3_EXTRA_CAP) }} at most either way.</p>
+    </details>
+    {% elif rel.bonus %}<p class="muted small">Press answers, weekend targets{{ ' and team orders' if orders }} have moved the relationship by <b>{{ '%+.0f'|format(rel.bonus) }}</b> this season.</p>{% endif %}
   </section>
 </div>
 {% elif driver %}

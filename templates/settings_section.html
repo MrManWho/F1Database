@@ -115,7 +115,7 @@
     <label class="toggle-row" id="team-goals">
       <input type="checkbox" name="team_goal_choice" value="1" {{ 'checked' if team_goal_choice }}>
       <span class="switch"></span>
-      <span><b>Selectable team goals</b><small class="muted">Each team with a player driver picks Safe, Competitive or Ambitious for the season. Met or missed changes next season's starting Reputation ({% if calc_engine >= 3 %}Safe +1/0, Competitive +2/−1, Ambitious +3/−2; with the pledge, at most ±4 in total{% else %}Safe +1/0, Competitive +3/−1, Ambitious +6/−3{% endif %}).</small></span>
+      <span><b>Selectable team goals</b><small class="muted">Each team with a player driver picks Safe, Competitive or Ambitious for the season. Met or missed changes next season's starting Reputation ({% if calc_engine >= 3 %}Safe +0.5/0, Competitive +2/−1, Ambitious +3/−2; with the pledge, at most ±4 in total; goals chosen before 3.0 keep their terms{% else %}Safe +1/0, Competitive +3/−1, Ambitious +6/−3{% endif %}).</small></span>
     </label>
     <label class="toggle-row" id="dismissals">
       <input type="checkbox" name="midseason_sackings" value="1" {{ 'checked' if midseason_sackings }}>

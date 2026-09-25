@@ -1,10 +1,10 @@
 """Static universe data and rule tables for Paddock Legacy."""
 
 APP_NAME = "Paddock Legacy"
-APP_VERSION = "2.5"
+APP_VERSION = "3.0"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
-CALC_VERSION = 3
+CALC_VERSION = 4
 SCHEMA_VERSION = 21
 
 GRID_SIZE = 22
@@ -305,11 +305,21 @@ V3_H2H_MIN = 3                   # comparisons needed before head-to-head counts
 V3_REP_RATE = 0.25               # share of the gap to the performance rating closed in a full season
 V3_ROLLOVER_CAP = 4.0            # pledge + team goal Reputation at rollover, kept within +/-4
 V3_PLEDGE_FAIL = {0: 0.0, 1: -0.5, 2: -1.0, 3: -1.5}
-V3_TEAM_GOALS = {"safe": (1.0, 0.0), "competitive": (2.0, -1.0), "ambitious": (3.0, -2.0)}
+V3_TEAM_GOALS = {"safe": (0.5, 0.0), "competitive": (2.0, -1.0), "ambitious": (3.0, -2.0)}
 V3_GOAL_EFFECT = {"Met": 2.0, "On track": 0.0, "Behind": -3.0, "Not evaluated": 0.0, "Not started": 0.0}
 V3_PRESS_SHARE = 0.5
 V3_EXTRA_ROUNDS = 6
 V3_EXTRA_CAP = 10.0
+# v3.0 balance (engine 3): good press answers add at most +2 over the six-weekend window (bad ones still count in
+# full), and weekend targets reward risk rather than the safe choice.
+V3_PRESS_POSITIVE_CAP = 2.0
+# Chosen by simulation (docs/CALCULATION_V3.md §26): Safe pays only a driver below the car's level, Standard pays a
+# driver at or above it, Stretch pays one clearly outperforming the car.
+V3_TARGET_TIERS = {"safe": (0.25, -0.75), "standard": (1.5, -1.25), "stretch": (3.0, -2.0)}
+# v3.0 (engine 3): a kept Steady pledge ("deliver what the car should") is neutral at rollover, and a met Safe team
+# goal adds +0.5, so the lowest-risk choices no longer lift Reputation every year. Pledges and team goals chosen
+# before 3.0 keep the terms they were chosen under.
+V3_PLEDGE_REWARD = {0: 0.0, 1: 1.0, 2: 1.75, 3: 2.5}
 V3_ORDER_OBEYED, V3_ORDER_IGNORED = 1.0, -2.0
 V3_INTEREST_DIVISOR, V3_INTEREST_MIN, V3_INTEREST_MAX = 5.0, -8.0, 6.0
 V3_EMERGENCY_MARGIN = 8.0        # an emergency offer needs Driver Value >= slowest eligible team bar - 8
@@ -322,6 +332,8 @@ AI_RACE_SCALE = 0.60             # seconds per lap of race gap for a full -1/+1
 AI_WEIGHTS = {"finish": 0.20, "quali_pos": 0.10, "teammate": 0.25, "race_pace": 0.30, "quali_pace": 0.15}
 AI_SPRINT_WEIGHT = 0.5
 AI_NO_MATE_CONFIDENCE = 0.8
+AI_WIDER_CONFIDENCE = 0.7       # v3.0: AI cars two car-strength places either side
+AI_EXPECTED_CONFIDENCE = 0.6     # v3.0: no AI car close by: the car's expected finish
 AI_EXTREME_GAP = 0.45            # s/lap: a clean session this far off may move up to AI_EXTREME_STEP at once
 AI_EXTREME_STEP = 5
 AI_STEP_LIMITS = ((1, 3), (3, 4), (10 ** 6, 6))   # (usable weekends up to, max step)

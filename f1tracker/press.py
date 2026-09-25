@@ -176,6 +176,10 @@ V3_EFFECTS = {
     ("fastest", "show"): 0, ("first_points", "time"): 0, ("solid", "more"): 0, ("title", "develop"): 0,
     ("pre_expect", "struggle"): 0, ("pre_target", "stretch"): 0, ("pre_mood", "race"): 0,
     ("pre_opener", "behind"): -1, ("pre_setup", "wrong"): -1,
+    # v3.0: these pre-race questions have no "right" answer for the team. Every sensible reply is neutral; only a
+    # damaging one still costs something, so the choice is about your story (and headlines), not a free bonus.
+    ("pre_expect", "points"): 0, ("pre_momentum", "pace"): 0, ("pre_sprint", "more"): 0, ("pre_track", "quali"): 0,
+    ("pre_track", "tyres"): 0, ("pre_setup", "found"): 0, ("pre_rival", "respect"): 0,
 }
 
 

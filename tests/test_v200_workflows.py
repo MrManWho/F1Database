@@ -215,7 +215,7 @@ def test_waiting_for_you_lists_each_roles_actions(app, master_client):
         conn.execute("INSERT INTO join_requests(username, driver_name, created_at) VALUES('joe', 'Joe Racer', '2026-01-01')")
         conn.execute("UPDATE events SET race_at = '2020-01-01T10:00+00:00' WHERE round_number = 1")
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Waiting for you" in page and "1 join request to answer" in page and "Results pending for R1" in page
+    assert "Next action" in page and "Also waiting for you" in page and "1 join request to answer" in page and "Results pending for R1" in page
     ana = _client(app, "ana")
     page = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "join request" not in page

@@ -41,30 +41,42 @@ TASTES = {
     "back": {"development": 1.0, "commitment": 0.9, "teamwork": 0.6, "respect": 0.5, "record": 0.4, "results": 0.3},
 }
 PITCH_MAX = 3.0          # interest points a message can add or take away
+STUFFING_THEMES = 3      # v3.0: a message touching more themes than this reads as a list, not a reason
+STUFFING_SHARE = 0.45    # ...and lands at under half its value
 INTERVIEW_MAX = 5.0      # an interview is more work, so it can matter a little more
 
 
-def _has(text, phrase):
-    """The phrase is there, as whole words, and not negated in the five words before it (same sentence)."""
+def _first(text, phrase):
+    """Where the phrase first appears, as whole words and not negated in the five words before it (same
+    sentence), or None."""
     for m in re.finditer(r"(?<![a-z])" + re.escape(phrase) + r"(?![a-z])", text):
         sentence = re.split(r"[.!?;]", text[:m.start()])[-1]
         before = re.sub(r"[^a-z' ]", " ", sentence).split()[-5:]
         if not NEGATIONS.intersection(before):
-            return True
-    return False
+            return m.start()
+    return None
+
+
+def _has(text, phrase):
+    return _first(text, phrase) is not None
 
 
 def analyse(message):
     """What a message says: themes found, tone problems, and a plain summary of what the team heard."""
     raw = (message or "").strip()
     text = " " + re.sub(r"\s+", " ", raw.lower()) + " "
-    found = {key for key, (_label, words) in THEMES.items() if any(_has(text, w) for w in words)}
+    where = {}
+    for key, (_label, words) in THEMES.items():
+        hits = [p for p in (_first(text, w) for w in words) if p is not None]
+        if hits:
+            where[key] = min(hits)
+    found = set(where)
     arrogant = sum(1 for w in ARROGANT if w in text)
     blame = sum(1 for w in BLAME if w in text)
     letters = [c for c in raw if c.isalpha()]
     shouting = len(letters) >= 12 and sum(1 for c in letters if c.isupper()) / len(letters) > 0.6 or "!!!" in raw
     words = len(raw.split())
-    return {"themes": sorted(found), "arrogant": arrogant, "blame": blame, "shouting": bool(shouting),
+    return {"themes": sorted(found), "order": sorted(where, key=lambda k: (where[k], k)), "arrogant": arrogant, "blame": blame, "shouting": bool(shouting),
             "words": words, "empty": words < 4, "meaningful": meaningful(raw)}
 
 
@@ -104,21 +116,27 @@ def score(reading, team_taste, v3=False):
     w = team_taste["weights"]
     themes = reading["themes"]
     if v3:
-        # v2.5: only the two strongest themes count (for this team), so stuffing in every theme doesn't pay.
-        themes = sorted(themes, key=lambda t: -w.get(t, 0.2))[:2]
+        # v3.0: the first two themes you actually lead with count (not the two this team likes best), and a message
+        # that ticks off more than three themes reads as a list, so it lands at under half its value.
+        themes = (reading.get("order") or sorted(themes))[:2]
     good = sum(w.get(t, 0.2) for t in themes)
     s = min(1.0, good / 2.2)
+    if v3 and len(reading["themes"]) > STUFFING_THEMES:
+        s *= STUFFING_SHARE
     s -= 0.45 * min(2, reading["arrogant"]) + 0.35 * min(2, reading["blame"]) + (0.25 if reading["shouting"] else 0)
     if not reading["themes"] and not (reading["arrogant"] or reading["blame"]):
         s = 0.0
     return max(-1.0, min(1.0, round(s, 2)))
 
 
-def reaction(team, reading, s, team_taste):
+def reaction(team, reading, s, team_taste, v3=False):
     """What the team says back about your message (one sentence)."""
     if reading["empty"]:
         return ""
-    labels = [THEMES[t][0].lower() for t in reading["themes"]]
+    if v3 and len(reading["themes"]) > STUFFING_THEMES and not (reading["arrogant"] or reading["blame"]):
+        return (f"{team} felt your message tried to say everything at once. Lead with the one or two reasons "
+                f"that matter most to them.")
+    labels = [THEMES[t][0].lower() for t in (reading.get("order", reading["themes"])[:2] if v3 else reading["themes"])]
     if reading["arrogant"]:
         return f"{team} didn't enjoy the attitude in your message."
     if reading["blame"]:
@@ -139,7 +157,7 @@ def message_effect(conn, team_id, rank, teams_total, message, team_name, v3=Fals
     reading = analyse(message)
     t = taste(conn, team_id, rank, teams_total)
     s = score(reading, t, v3)
-    return round(s * PITCH_MAX, 2), s, reaction(team_name, reading, s, t), reading
+    return round(s * PITCH_MAX, 2), s, reaction(team_name, reading, s, t, v3), reading
 
 
 # --------------------------------------------------------------------------- interviews

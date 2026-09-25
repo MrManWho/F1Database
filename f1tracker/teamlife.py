@@ -223,15 +223,15 @@ def _pen(conn, event, driver_id):
 def press_history(conn, driver_id, limit=40):
     """Everything this driver has said to the press, newest first, with how the team took it."""
     from . import press
-    out, asked_cache = [], {}
+    out, asked_cache, events_cache = [], {}, {}
     for r in conn.execute("""SELECT p.*, e.round_number, e.name AS event_name, s.year FROM press_answers p
                              JOIN events e ON e.id = p.event_id JOIN seasons s ON s.id = e.season_id
                              WHERE p.driver_id = ? ORDER BY s.year DESC, e.round_number DESC, p.created_at DESC LIMIT ?""",
                           (driver_id, limit)):
         pre = press.is_pre(r["question"])
         key = (r["event_id"], pre)
+        event = events_cache.get(r["event_id"]) or events_cache.setdefault(r["event_id"], S.get_event(conn, r["event_id"]))
         if key not in asked_cache:
-            event = S.get_event(conn, r["event_id"])
             qs = prerace_pen(conn, event, driver_id)["questions"] if pre else _post_questions(conn, r["event_id"], driver_id)[0]
             asked_cache[key] = {q["key"]: q for q in qs}
         q = asked_cache[key].get(r["question"])
@@ -240,8 +240,11 @@ def press_history(conn, driver_id, limit=40):
         said = next((a["text"] for a in q["answers"] if a["key"] == r["answer"]), None) if q else None
         if said is None:
             said = next((t for k, t, _e, _h in bank[1] if k == r["answer"]), r["answer"]) if bank else r["answer"]
+        # v3.0: show what the calculation actually used (engine 3 re-rates some answers and counts press at 50%).
+        v3 = engine.round_v3(conn, event)
+        applied = press.effect_v3(r["question"], r["answer"], r["effect"]) if v3 else (r["effect"] or 0)
         out.append({"label": f"{r['year']} R{r['round_number']} {r['event_name']}", "question": asked,
-                    "answer": said, "effect": r["effect"], "pre": pre})
+                    "answer": said, "effect": applied, "original_effect": r["effect"] or 0, "engine3": v3, "pre": pre})
     return out
 
 
@@ -634,10 +637,11 @@ def target_options(conn, event, driver_id, team_id, ranks=None, rng=None):
             if safe["label"] == std["label"]:
                 safe = _finish_target(field, field)
     out = {}
+    v3 = engine.round_v3(conn, event)
     for tier, t in (("safe", safe), ("standard", std), ("stretch", stretch)):
         info = C.TARGET_TIERS[tier]
-        out[tier] = {**t, "tier": tier, "tier_label": info["label"], "hit": info["hit"], "miss": info["miss"],
-                     "blurb": info["blurb"]}
+        hit, miss = C.V3_TARGET_TIERS[tier] if v3 else (info["hit"], info["miss"])     # v3.0 engine 3 values
+        out[tier] = {**t, "tier": tier, "tier_label": info["label"], "hit": hit, "miss": miss, "blurb": info["blurb"]}
     return out
 
 

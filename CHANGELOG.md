@@ -3,6 +3,39 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.0 · The Definitive Release
+_Released September 25, 2026_
+> Balanced. Polished. Complete. The career rules were checked by an independent audit and rebalanced so the
+> safe choice is never the automatic best one, every explanation now matches the numbers, and the site is easier
+> to start with and safer to back up. Results and points are unchanged.
+
+### Highlights
+- **Off-track choices are real choices.** Good press answers now add at most +2 to your team relationship across the last six weekends (bad ones still count in full), and some pre-race questions have no "right" answer. Weekend targets reward risk: Safe +0.25 / −0.75, Standard +1.5 / −1.25, Stretch +3 / −2.
+- **Write to one team, not to all of them.** Only the first two reasons you lead with in a contract message count, and a message that lists every theme lands at under half its value.
+- **No free Reputation for playing it safe.** From now on a kept Steady pledge is neutral and a met Safe team goal adds +0.5. Pledges, team goals and targets you already chose keep their terms.
+- **A steadier AI recommendation.** When no AI teammate can be compared, it now looks at AI cars one place either side, then two, then the car's expected finish, and it shows which one it used.
+- **Help that matches the maths.** Every rule on the Help page now gives the Version 3 numbers (Version 2 values are labelled), your Press page shows what each answer actually counted for, and the Relationships page has a "How this was calculated" breakdown.
+- **Easier to start, easier to run.** New-league setup is Essentials → Players → Ready, the Race Master menu is grouped into Race, People, Career and System, and the Control Room shows your next action.
+- **Safer backups.** Downloaded backups no longer keep any trace of the Discord webhook, and the site owner can download one encrypted backup of the whole site to keep somewhere else.
+
+### Added
+- **Next action** card at the top of the Control Room, with a one-line reason, for every role.
+- **How this was calculated** on the Relationships page: pace, head-to-head, goals, press, targets and team orders, each shown separately.
+- **Encrypted backup to keep somewhere else** (site owner, Account → Settings): every league and all accounts in one passphrase-protected file.
+- **The three eras** in What's New: The Foundation Era (1.x), The Career Expansion (2.0–2.5) and The Definitive Release (3.0).
+- A **Version 3** badge on Help topics whose numbers depend on the calculation version.
+
+### Changed
+- **Formula changes (approved, Calculation Version 3 only):** a +2 limit on good press within the six-weekend window; six of the eighteen pre-race questions no longer have an answer the team prefers; weekend target values (Safe +0.25/−0.75, Standard +1.5/−1.25, Stretch +3/−2); contract messages count the first two themes you lead with and lose over half their value above three themes; Steady pledge reward 0; Safe team goal +0.5; the AI benchmark falls back to AI cars two places either side (confidence ×0.7) and then the car's expected finish (×0.6). Leagues on Version 3 are recalculated once when they're next opened, and each driver whose numbers moved sees what changed and agrees to it first.
+- New-league setup is three steps plus an optional one, and Simple is marked as the best choice for a first league.
+- Long change notices show the first sentence with the rest a tap away.
+- Screen readers now get a name for the search box, every comment box and every field in the Drivers & teams tables.
+
+### Fixed
+- A downloaded league backup could still contain the removed Discord webhook text in unused parts of the file.
+- A problem saving the daily automatic backup could stop a league page from opening.
+- A driver released by their team (or dismissed mid-season) while on a multi-year contract could start the next season "contracted but not seated". A release now ends that team's contract after the current season, so the driver becomes a free agent; leagues where this already happened are repaired at the next rollover.
+
 ## 2.5 · Calculation Version 3
 _Released September 25, 2026_
 > Fairer, clearer numbers everywhere: a new way of working out standings, Form, Reputation, relationships, goals,

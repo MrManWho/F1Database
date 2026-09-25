@@ -82,20 +82,29 @@
         <button type="button" class="nav-title nav-toggle" id="nav-admin-toggle" aria-expanded="true" aria-controls="nav-admin-items">
           <span>Manage</span><span class="chev" aria-hidden="true">▾</span></button>
         <div class="nav-admin-items" id="nav-admin-items">
+        {# v3.0: Race Master tools in four groups #}
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race</div>
         {{ item(url_for('weekend_next', token=t), 'Results entry', 'entry', ep in ('weekend', 'weekend_next')) }}
+        {% if ctx.is_master %}{{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}{% endif %}
+        </div>
         {% if ctx.is_master %}
-        {{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}
-        {{ item(url_for('grid_page', token=t), 'Grid & contracts', 'grid', ep == 'grid_page') }}
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-people"><div class="nav-subtitle" id="nav-sub-people">People</div>
         {{ item(url_for('members', token=t), 'Members & roles', 'players', ep == 'members') }}
-        {{ item(url_for('market_page', token=t), 'Market administration', 'market', ep == 'market_page') }}
-        {{ item(url_for('team_admin', token=t), 'Team management', 'teams', ep == 'team_admin') }}
         {{ item(url_for('paddock_admin', token=t), 'Drivers & teams', 'settings', ep == 'paddock_admin') }}
+        {{ item(url_for('team_admin', token=t), 'Team management', 'teams', ep == 'team_admin') }}
+        </div>
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-career"><div class="nav-subtitle" id="nav-sub-career">Career</div>
+        {{ item(url_for('grid_page', token=t), 'Grid & contracts', 'grid', ep == 'grid_page') }}
+        {{ item(url_for('market_page', token=t), 'Market administration', 'market', ep == 'market_page') }}
         {% if not ctx.my_driver %}{{ item(url_for('garage', token=t), 'Player garages', 'garage', ep == 'garage', badge) }}
         {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}{% endif %}
+        </div>
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-system"><div class="nav-subtitle" id="nav-sub-system">System</div>
         {{ item(url_for('league_settings', token=t), 'League settings', 'toggles', ep in ('league_settings', 'league_settings_section')) }}
         {{ item(url_for('delivery_log_page', token=t), 'Notifications', 'bell', ep == 'delivery_log_page') }}
         {{ item(url_for('activity_log', token=t), 'Activity log', 'log', ep == 'activity_log') }}
         {{ item(url_for('backups_page', token=t), 'Backups & data', 'backup', ep == 'backups_page') }}
+        </div>
         {% endif %}
         </div>
       </div>
@@ -172,7 +181,7 @@
       {% endif %}
       {% if ctx.is_spectator and not ctx.mode_lowered %}<span class="view-only-badge" title="You can follow everything in this league but not change it">Spectator · view only</span>{% endif %}
       <div class="topbar-actions">
-        <button class="btn btn-ghost btn-sm search-btn" type="button" id="search-btn" data-search-url="{{ url_for('api_search', token=t) }}" aria-keyshortcuts="Control+K Meta+K">{{ icon('search') }}<span class="label">Search</span><kbd class="kbd-hint">Ctrl K</kbd></button>
+        <button class="btn btn-ghost btn-sm search-btn" type="button" id="search-btn" aria-label="Search this league" data-search-url="{{ url_for('api_search', token=t) }}" aria-keyshortcuts="Control+K Meta+K">{{ icon('search') }}<span class="label">Search</span><kbd class="kbd-hint">Ctrl K</kbd></button>
         {% if ctx.is_master %}
         <form method="post" action="{{ url_for('save_now', token=t) }}" class="hide-sm">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -235,7 +244,7 @@
 
   <dialog id="palette" class="dialog palette" aria-labelledby="palette-title">
     <h2 id="palette-title" class="sr-only">Search and go to</h2>
-    <div class="palette-input">{{ icon('search') }}<input type="search" id="palette-q" placeholder="Search drivers, teams, rounds, seasons, settings, help…" autocomplete="off"
+    <div class="palette-input">{{ icon('search') }}<input type="search" id="palette-q" aria-label="Search this league" placeholder="Search drivers, teams, rounds, seasons, settings, help…" autocomplete="off"
       role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"><kbd>Esc</kbd></div>
     <ul id="palette-list" class="palette-list" role="listbox" aria-label="Results"></ul>
     <p class="muted small palette-foot">↑ ↓ to move · Enter to open · only this league is searched</p>

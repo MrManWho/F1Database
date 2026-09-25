@@ -4,7 +4,20 @@
 <div class="page-head"><div><div class="kicker">Version history</div><h1>What's new</h1></div>
   <a class="btn btn-ghost" href="{{ url_for('home') }}">← {{ 'Your leagues' if user else 'Home' }}</a></div>
 <p class="muted">You're on <b>v{{ APP_VERSION }}</b>. Every update keeps your leagues, logins and results.</p>
+{# v3.0: the three development eras, as separators above their versions #}
+{% set eras = {3: ('THE DEFINITIVE RELEASE', 'Version 3.0', 'Balanced. Polished. Complete.'),
+               2: ('THE CAREER EXPANSION', 'Versions 2.0–2.5', 'The website evolved into a complete career and league simulation.'),
+               1: ('THE FOUNDATION ERA', 'Versions 1.0–1.x', 'Where Paddock Legacy began.')} %}
+{% set seen = namespace(era=none) %}
 {% for v in versions %}
+{% set major = (v.version.split('.')[0]|int) %}{% set era = 3 if major >= 3 else (2 if major == 2 else 1) %}
+{% if era != seen.era %}{% set seen.era = era %}{% set e = eras[era] %}
+<div class="era-sep era-{{ era }}" role="separator" aria-label="{{ e[0]|title }}, {{ e[1] }}">
+  <p class="era-name">{{ e[0] }}</p>
+  <p class="era-versions">{{ e[1] }}</p>
+  <p class="era-line">{{ e[2] }}</p>
+</div>
+{% endif %}
 <section class="card changelog-entry {{ 'current' if v.version == APP_VERSION }}" id="v{{ v.version }}">
   <div class="card-head"><h2>v{{ v.version }}{% if v.title %} · {{ v.title }}{% endif %}</h2>
     {% if v.version == APP_VERSION %}<span class="pill pill-hot">Current</span>{% endif %}</div>
