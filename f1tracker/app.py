@@ -2507,6 +2507,8 @@ def register_routes(app):
     @career_page(master_only=True)
     def calc_update_page(conn, ctx):
         """The Race Master's Calculation Update screen: choose, review what happened, roll back."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         sid = ctx["current_season_id"]
         done = [e for e in S.events(conn, sid) if e["status"] == C.EVENT_COMPLETE] if sid else []
         history = migration.migrations(conn)
@@ -2526,6 +2528,8 @@ def register_routes(app):
     @career_page(master_only=True)
     def calc_update_preview(conn, ctx):
         """Option A step 1: write a complete backup, then show exactly what a full recalculation would change."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2537,6 +2541,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/full", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_full(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2557,6 +2563,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/future", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_future(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2573,6 +2581,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/later", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_later(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         migration.decide_later(conn, g.user["username"])
         g.audit_summary = "chose to decide on the Calculation Update later (the league stays on Version 2)"
         flash("The league stays on Calculation Version 2 for now. You'll see a reminder until you choose.", "info")
@@ -2581,6 +2591,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/reminder", methods=["POST"])
     @career_page(master_only=True)
     def calc_reminder_hide(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         session[f"calc_reminder_hidden_{ctx['token']}"] = True
         return _back(ctx, "")
 
@@ -2589,6 +2601,8 @@ def register_routes(app):
     def calc_update_rollback(token, migration_id):
         """Put the league back exactly as it was before a Calculation Update, from that update's own backup. The state
         just before rolling back is saved too (storage.restore), so even the rollback can be undone."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=token))
         if request.form.get("confirm") != "1":
             flash("Tick the box to confirm the rollback.", "error")
             return redirect(url_for("calc_update_page", token=token))
@@ -3951,9 +3965,18 @@ def register_routes(app):
             return jsonify(ok=False, error="Invalid request"), 400
         try:
             with storage.session(token) as conn:
+                # 4.0: take the write lock before reading, so two submissions arriving together are handled one
+                # after the other and the second sees the first (the post-race steps can only run once).
+                if not conn.in_transaction:
+                    conn.execute("BEGIN IMMEDIATE")
                 before = S.get_event(conn, event_id)
                 if not before:
                     return jsonify(ok=False, error="Event not found"), 404
+                if payload.get("mark_complete") and before["status"] == C.EVENT_COMPLETE:
+                    # A repeated "Submit weekend" (double tap, retry after a lost reply): already done, nothing reruns.
+                    return jsonify(ok=True, complete=True, already_submitted=True, revision=before["revision"],
+                                   market_opened=False,
+                                   summary_url=url_for("race_summary", token=token, event_id=event_id))
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
                     return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
                                    "can reopen or change it now."), 403

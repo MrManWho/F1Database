@@ -35,7 +35,7 @@ CALC_NOTES = {
                               "driver (for example two players in the same team) no longer counts as the slowest car "
                               "after three rounds, and the Reputation carried between seasons now includes the pledge "
                               "and team-goal rewards every time it's worked out."),
-    4: ("Paddock Legacy 3.0", "Calculation Version 3 was rebalanced. Good press answers now add at most +2 to a team "
+    4: ("Paddock Legacy 3.0", "The calculations were rebalanced. Good press answers now add at most +2 to a team "
                               "relationship across the last six weekends (bad answers still count in full). Weekend "
                               "targets offered from now on reward risk (Safe +0.25/-0.75, Standard +1.5/-1.25, Stretch "
                               "+3/-2). From now on a kept Steady pledge is neutral and a met Safe team goal adds +0.5 "

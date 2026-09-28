@@ -85,6 +85,9 @@ def open_db(token, create=False):
     if not create:
         _backup_before_upgrade(conn, token)
     migrate(conn)
+    if not create:
+        from . import engine
+        engine.ensure_latest(conn)
     conn.commit()
     return conn
 

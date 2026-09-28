@@ -299,15 +299,15 @@ def test_the_teammate_benchmark_returns_as_soon_as_an_ai_teammate_is_classified(
 
 def test_help_teaches_the_version_3_numbers(app, master_client):
     page = master_client.get("/help").get_data(as_text=True)
-    for text in ("at most +2 across the last six weekends", "within ±10", "a goal met adds +2",
+    for text in ("at most +2 across the last six weekends", "within ±10", "A goal met adds +2",
                  "behind -3", "the Race Master rules whether the order was followed (+1",
-                 "ignored (-2", "Safe</b> (+0.5 Reputation", "conditional emergency offer", "Version 3</span>",
-                 "only the first two reasons you lead with count", "two places either side"):
+                 "ignored (-2", "Safe</b> (+0.5 Reputation", "conditional emergency offer",
+                 "only the first two reasons you lead with count"):
         assert text in page, text
-    # legacy promises are only ever labelled as Version 2
-    for legacy in ("capped at ±15", "offers a last-chance deal", "Ambitious +6 / −3", "finish ahead and you ignored it"):
-        i = page.index(legacy)
-        assert "Version 2 leagues" in page[max(0, i - 400):i], legacy
+    # 4.0: only the latest calculations exist, so the old values and any version wording are gone
+    for legacy in ("capped at ±15", "offers a last-chance deal", "Ambitious +6 / −3", "finish ahead and you ignored it",
+                   "Version 2", "Version 3", "Calculation Update"):
+        assert legacy not in page, legacy
 
 
 @v3

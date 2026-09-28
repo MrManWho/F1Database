@@ -344,9 +344,9 @@ def recommendation(conn, before=None):
         if fz and not new_usable:
             rec.update(recommended=fz.get("recommended", current), direction=fz.get("direction", "hold"),
                        band=S.difficulty_band(fz.get("recommended", current)),
-                       reason=f"Kept from before the Calculation Update ({fz.get('recommended', current)}). The new "
-                              "tracker takes over from the next tracked round.", frozen=True)
-            rec["evidence"] = "Waiting for the first round under Calculation Version 3."
+                       reason=f"Kept from earlier this season ({fz.get('recommended', current)}). It updates again "
+                              "after the next tracked round.", frozen=True)
+            rec["evidence"] = "Waiting for the next tracked round."
             return rec
     sessions = []
     for h in hist:

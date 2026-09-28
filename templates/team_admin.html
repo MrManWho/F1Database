@@ -19,7 +19,7 @@
 {% if orders %}
 <section class="card" id="orders">
   <h2>Team orders to rule on</h2>
-  <p class="small">Calculation Version 3 never guesses from the finishing order whether an order was followed (finishing ahead on merit isn't ignoring it). Say what happened: Obeyed +1, Ignored −2, Not actionable or Void 0.</p>
+  <p class="small">The site never guesses from the finishing order whether an order was followed (finishing ahead on merit isn't ignoring it). Say what happened: Obeyed +1, Ignored −2, Not actionable or Void 0.</p>
   {% for o in orders %}
   <form method="post" action="{{ url_for('order_rule', token=ctx.token, event_id=o.event_id, driver_id=o.driver_id) }}" class="admin-row stack tight">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="admin"><input type="hidden" name="anchor" value="#orders">
