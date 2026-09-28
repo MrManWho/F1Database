@@ -11,7 +11,7 @@ from f1tracker import constants as C
 
 
 def _league(master_client):
-    """David (site Race Master, no driver) runs a league; ana and ben drive for Cadillac with logins."""
+    """Devon (site Race Master, no driver) runs a league; ana and ben drive for Cadillac with logins."""
     auth.create_user("ana", "Ana", "password1")
     auth.create_user("ben", "Ben", "password1")
     res = master_client.post("/careers/new", data={"name": "V20", "year": "2026", "player_name": ["Ana Silva", "Ben Okafor"],
@@ -68,18 +68,18 @@ def _seat(conn, sid, pairs):
 
 def test_team_orders_off_by_default_advisory_and_on(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Cadillac", 2)})
+    devon, carsten = players(db)
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Cadillac", 2)})
     cad = db.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
     market.open_window(db, sid, rng=random.Random(1))
-    for did in (david, carson):
+    for did in (devon, carsten):
         offer = [o for o in market.offers(db, driver_id=did) if o["status"] == C.OFFER_PENDING][0]
-        db.execute("UPDATE offers SET team_id = ?, role = ? WHERE id = ?", (cad, "No. 2" if did == carson else "No. 1",
+        db.execute("UPDATE offers SET team_id = ?, role = ? WHERE id = ?", (cad, "No. 2" if did == carsten else "No. 1",
                                                                           offer["id"]))
         market.accept_offer(db, offer["id"])
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Cadillac", 2)})
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Cadillac", 2)})
     relations.ensure(db, sid)
-    assert relations.assess(db, sid, carson)["role"] == "No. 2"
+    assert relations.assess(db, sid, carsten)["role"] == "No. 2"
 
     class Low(random.Random):
         def random(self):
@@ -88,27 +88,27 @@ def test_team_orders_off_by_default_advisory_and_on(db):
     assert teamlife.issue_orders(db, sid, rng=Low()) == []            # Off: never issued
 
     storage.set_meta(db, "team_orders", "advisory")
-    assert teamlife.issue_orders(db, sid, rng=Low()) == [carson]
+    assert teamlife.issue_orders(db, sid, rng=Low()) == [carsten]
     ev = S.next_incomplete_event(db, sid)
     ids = [r["driver_id"] for r in S.weekend_rows(db, ev["id"])]
-    run_event(db, ev, order=[carson, david] + [d for d in ids if d not in (carson, david)])
+    run_event(db, ev, order=[carsten, devon] + [d for d in ids if d not in (carsten, devon)])
     headlines = len(feed.latest(db, 50))
-    assert teamlife.resolve_orders(db, ev["id"]) == [(carson, "Ignored")]
-    assert relations.assess(db, sid, carson)["bonus"] == 0            # Advisory: no effect
+    assert teamlife.resolve_orders(db, ev["id"]) == [(carsten, "Ignored")]
+    assert relations.assess(db, sid, carsten)["bonus"] == 0            # Advisory: no effect
     assert len(feed.latest(db, 50)) == headlines                      # and no headline
 
     storage.set_meta(db, "team_orders", "on")
-    assert teamlife.issue_orders(db, sid, rng=Low()) == [carson]
+    assert teamlife.issue_orders(db, sid, rng=Low()) == [carsten]
     # v2.1: switching Off removes every order, past ones too. The advisory one had no effect, so nothing is undone.
     teamlife.save_settings(db, "off", True, True, True, True)
-    assert teamlife.orders_for(db, sid, carson) == []
-    assert relations.assess(db, sid, carson)["bonus"] == 0
+    assert teamlife.orders_for(db, sid, carsten) == []
+    assert relations.assess(db, sid, carsten)["bonus"] == 0
     from f1tracker import impacts
-    assert [n["title"] for n in impacts.pending(db, carson, "anyone")] == ["Team orders removed"]
+    assert [n["title"] for n in impacts.pending(db, carsten, "anyone")] == ["Team orders removed"]
     ev2 = S.next_incomplete_event(db, sid)
-    run_event(db, ev2, order=[carson, david] + [d for d in ids if d not in (carson, david)])
+    run_event(db, ev2, order=[carsten, devon] + [d for d in ids if d not in (carsten, devon)])
     assert teamlife.resolve_orders(db, ev2["id"]) == []
-    assert relations.assess(db, sid, carson)["bonus"] == 0
+    assert relations.assess(db, sid, carsten)["bonus"] == 0
 
 
 def test_league_settings_change_team_life_and_log_it(app, master_client):
@@ -130,68 +130,68 @@ def test_league_settings_change_team_life_and_log_it(app, master_client):
 
 def test_targets_are_realistic_for_every_car(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
+    devon, carsten = players(db)
     ranks = S.team_strength_ranks(db, sid)
     fastest = min(ranks, key=ranks.get)
     slowest = max(ranks, key=ranks.get)
     tmap = S.team_map(db)
-    _seat(db, sid, {david: (tmap[fastest]["name"], 1), carson: (tmap[slowest]["name"], 1)})
+    _seat(db, sid, {devon: (tmap[fastest]["name"], 1), carsten: (tmap[slowest]["name"], 1)})
     ev = S.events(db, sid)[0]
     for seed in range(40):
-        fast = teamlife.plan_target(db, ev, david, fastest, ranks, random.Random(seed))
-        slow = teamlife.plan_target(db, ev, carson, slowest, ranks, random.Random(seed))
+        fast = teamlife.plan_target(db, ev, devon, fastest, ranks, random.Random(seed))
+        slow = teamlife.plan_target(db, ev, carsten, slowest, ranks, random.Random(seed))
         if fast["kind"] == "finish":
             assert fast["target"] <= 4
         if slow["kind"] in ("finish", "points"):
             assert slow["target"] >= 15, slow          # a backmarker is never asked for a podium or points
         assert slow["kind"] != "beat_team"               # nobody slower to beat
         assert fast["label"] and slow["label"]
-    kinds = {teamlife.plan_target(db, ev, david, fastest, ranks, random.Random(s))["kind"] for s in range(60)}
+    kinds = {teamlife.plan_target(db, ev, devon, fastest, ranks, random.Random(s))["kind"] for s in range(60)}
     assert {"finish", "beat_team", "teammate"} <= kinds
 
 
 def test_targets_judged_with_void_and_excused_dnf_and_rejudged_on_correction(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Cadillac", 2)})
+    devon, carsten = players(db)
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Cadillac", 2)})
     relations.ensure(db, sid)
     evs = S.events(db, sid)
     ev = evs[0]
-    assert teamlife.issue_targets(db, ev["id"]) == [david, carson]
+    assert teamlife.issue_targets(db, ev["id"]) == [devon, carsten]
     assert teamlife.issue_targets(db, ev["id"]) == []                 # never twice
     # v2.4: targets are offered as three options; nobody chooses here, so both race for the Standard one.
     db.execute("UPDATE target_options SET kind = 'finish', target = 5, label = 'Finish P5 or better' WHERE event_id = ? "
                "AND tier = 'standard'", (ev["id"],))
     ids = [r["driver_id"] for r in S.weekend_rows(db, ev["id"])]
-    order = [david] + [d for d in ids if d not in (david, carson)] + [carson]
-    run_event(db, ev, order=order, overrides={carson: "DNF"})
-    assert dict(teamlife.judge_targets(db, ev["id"])) == {david: "Hit", carson: "Missed"}
-    assert relations.assess(db, sid, david)["bonus"] == C.TARGET_HIT
-    assert relations.assess(db, sid, carson)["bonus"] == C.TARGET_MISSED
+    order = [devon] + [d for d in ids if d not in (devon, carsten)] + [carsten]
+    run_event(db, ev, order=order, overrides={carsten: "DNF"})
+    assert dict(teamlife.judge_targets(db, ev["id"])) == {devon: "Hit", carsten: "Missed"}
+    assert relations.assess(db, sid, devon)["bonus"] == C.TARGET_HIT
+    assert relations.assess(db, sid, carsten)["bonus"] == C.TARGET_MISSED
     # Re-judging never counts twice.
     teamlife.judge_targets(db, ev["id"])
-    assert relations.assess(db, sid, david)["bonus"] == C.TARGET_HIT
-    # The Race Master rules the DNF wasn't Carson's fault: void, and the penalty is taken back.
-    assert teamlife.excuse(db, ev["id"], carson, True)["status"] == "Void"
-    assert relations.assess(db, sid, carson)["bonus"] == 0
+    assert relations.assess(db, sid, devon)["bonus"] == C.TARGET_HIT
+    # The Race Master rules the DNF wasn't Carsten's fault: void, and the penalty is taken back.
+    assert teamlife.excuse(db, ev["id"], carsten, True)["status"] == "Void"
+    assert relations.assess(db, sid, carsten)["bonus"] == 0
     with pytest.raises(S.ValidationError):
-        teamlife.excuse(db, ev["id"], david, True)                      # only a DNF/DSQ can be excused
-    # A correction moves David to P9: re-judged as a miss, only the difference applied.
-    run_event(db, ev, order=[d for d in ids if d not in (david, carson)][:8] + [david] + [carson], overrides={carson: "DNF"})
+        teamlife.excuse(db, ev["id"], devon, True)                      # only a DNF/DSQ can be excused
+    # A correction moves Devon to P9: re-judged as a miss, only the difference applied.
+    run_event(db, ev, order=[d for d in ids if d not in (devon, carsten)][:8] + [devon] + [carsten], overrides={carsten: "DNF"})
     teamlife.judge_targets(db, ev["id"])
-    assert teamlife.target_for(db, ev["id"], david)["status"] == "Missed"
-    assert relations.assess(db, sid, david)["bonus"] == C.TARGET_MISSED
+    assert teamlife.target_for(db, ev["id"], devon)["status"] == "Missed"
+    assert relations.assess(db, sid, devon)["bonus"] == C.TARGET_MISSED
     # Didn't take part: void.
     ev2 = evs[1]
     teamlife.issue_targets(db, ev2["id"])
-    run_event(db, ev2, overrides={carson: "DNS"})
-    assert dict(teamlife.judge_targets(db, ev2["id"]))[carson] == "Void"
+    run_event(db, ev2, overrides={carsten: "DNS"})
+    assert dict(teamlife.judge_targets(db, ev2["id"]))[carsten] == "Void"
 
 
 def test_three_targets_in_a_row_make_one_headline(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Cadillac", 2)})
+    devon, carsten = players(db)
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Cadillac", 2)})
     relations.ensure(db, sid)
     for ev in S.events(db, sid)[:3]:
         teamlife.issue_targets(db, ev["id"])
@@ -200,9 +200,9 @@ def test_three_targets_in_a_row_make_one_headline(db):
         run_event(db, ev)
         teamlife.judge_targets(db, ev["id"])
         teamlife.judge_targets(db, ev["id"])
-    assert teamlife.target_streak(db, sid, david, 3) == 3
+    assert teamlife.target_streak(db, sid, devon, 3) == 3
     streaks = [n for n in feed.latest(db, 50) if "3 team targets in a row" in n["headline"]]
-    assert len(streaks) == 2   # one each for David and Carson, not repeated by re-judging
+    assert len(streaks) == 2   # one each for Devon and Carsten, not repeated by re-judging
 
 
 def test_targets_off_issue_nothing(db):
@@ -215,25 +215,25 @@ def test_targets_off_issue_nothing(db):
 
 def test_teammate_battle_counts_dnfs_and_splits_mid_season_seat_changes(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Cadillac", 2)})
+    devon, carsten = players(db)
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Cadillac", 2)})
     evs = S.events(db, sid)
     ids = lambda ev: [r["driver_id"] for r in S.weekend_rows(db, ev["id"])]  # noqa: E731
-    rest = lambda ev: [d for d in ids(ev) if d not in (david, carson)]        # noqa: E731
-    run_event(db, evs[0], order=[david, carson] + rest(evs[0]), quali=[carson, david] + rest(evs[0]))
-    run_event(db, evs[1], order=[carson, david] + rest(evs[1]), overrides={carson: "DNF"})   # finisher beats a DNF
-    run_event(db, evs[2], order=[david, carson] + rest(evs[2]), overrides={david: "DNF", carson: "DNF"})  # skipped
-    p = battle.pairings(db, sid, david)
-    assert len(p) == 1 and p[0]["mate"]["id"] == carson
+    rest = lambda ev: [d for d in ids(ev) if d not in (devon, carsten)]        # noqa: E731
+    run_event(db, evs[0], order=[devon, carsten] + rest(evs[0]), quali=[carsten, devon] + rest(evs[0]))
+    run_event(db, evs[1], order=[carsten, devon] + rest(evs[1]), overrides={carsten: "DNF"})   # finisher beats a DNF
+    run_event(db, evs[2], order=[devon, carsten] + rest(evs[2]), overrides={devon: "DNF", carsten: "DNF"})  # skipped
+    p = battle.pairings(db, sid, devon)
+    assert len(p) == 1 and p[0]["mate"]["id"] == carsten
     assert (p[0]["race_won"], p[0]["race_lost"]) == (2, 0)
     assert (p[0]["quali_won"], p[0]["quali_lost"]) == (1, 2)
     assert p[0]["human"] and p[0]["first_round"] == 1 and p[0]["last_round"] == 3
     assert p[0]["gap"] == p[0]["points"] - p[0]["mate_points"] > 0
-    # Carson moves to Haas from round 4: David gets a new pairing with his new teammate.
-    _seat(db, sid, {david: ("Cadillac", 1), carson: ("Haas", 1)})
+    # Carsten moves to Haas from round 4: Devon gets a new pairing with his new teammate.
+    _seat(db, sid, {devon: ("Cadillac", 1), carsten: ("Haas", 1)})
     run_event(db, evs[3])
-    p = battle.pairings(db, sid, david)
-    assert [x["mate"]["id"] == carson for x in p] == [True, False]
+    p = battle.pairings(db, sid, devon)
+    assert [x["mate"]["id"] == carsten for x in p] == [True, False]
     assert p[1]["first_round"] == 4 and not p[1]["human"]
     cad = db.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
     assert len(battle.team_battles(db, sid, cad)) == 2
@@ -331,7 +331,7 @@ def test_race_master_bypass_needs_a_note_is_logged_and_late_answers_still_count(
     assert "Open this round early" in week and 'data-readonly="1"' in week
     # Scorekeepers can't bypass.
     assert kim.post(f"/career/{token}/weekend/{r1['id']}/open-early",
-                    data={"csrf_token": "tok", "note": "Carson's away, answering later"}).status_code == 403
+                    data={"csrf_token": "tok", "note": "Carsten's away, answering later"}).status_code == 403
     master_client.post(f"/career/{token}/weekend/{r1['id']}/open-early", data={"csrf_token": "tok", "note": "short"})
     assert _api_save(kim, token, r1["id"]).status_code == 423          # a note is required
     master_client.post(f"/career/{token}/weekend/{r1['id']}/open-early",

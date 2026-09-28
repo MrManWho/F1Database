@@ -15,18 +15,18 @@ def cadillac(conn):
 
 def seat_players_in(conn, team_name):
     sid = S.current_season_id(conn)
-    david, carson = players(conn)
+    devon, carsten = players(conn)
     team = conn.execute("SELECT id FROM teams WHERE name = ?", (team_name,)).fetchone()["id"]
-    S.place_players(conn, sid, {david: (team, 1), carson: (team, 2)})
-    return sid, david, carson, team
+    S.place_players(conn, sid, {devon: (team, 1), carsten: (team, 2)})
+    return sid, devon, carsten, team
 
 
 def seat_players_at_cadillac(conn):
     sid = S.current_season_id(conn)
-    david, carson = players(conn)
+    devon, carsten = players(conn)
     cad = cadillac(conn)
-    S.place_players(conn, sid, {david: (cad, 1), carson: (cad, 2)})
-    return sid, david, carson, cad
+    S.place_players(conn, sid, {devon: (cad, 1), carsten: (cad, 2)})
+    return sid, devon, carsten, cad
 
 
 # --------------------------------------------------------------------------- universe & grid
@@ -46,15 +46,15 @@ def test_new_career_seeds_universe_with_unassigned_players(db):
 
 
 def test_players_replace_cadillac_and_same_seat_is_blocked(db):
-    sid, david, carson, cad = seat_players_at_cadillac(db)
+    sid, devon, carsten, cad = seat_players_at_cadillac(db)
     gmap = S.grid_map(db, sid)
-    assert gmap[(cad, 1)] == david and gmap[(cad, 2)] == carson
+    assert gmap[(cad, 1)] == devon and gmap[(cad, 2)] == carsten
     seats = S.driver_seats(db, sid)
     assert driver_id(db, "Sergio Perez") not in seats and driver_id(db, "Valtteri Bottas") not in seats
     with pytest.raises(S.ValidationError):
-        S.place_players(db, sid, {david: (1, 1), carson: (1, 1)})
+        S.place_players(db, sid, {devon: (1, 1), carsten: (1, 1)})
     # Moving a player out refills the vacancy with the best unseated AI driver.
-    S.place_players(db, sid, {david: None, carson: (cad, 2)})
+    S.place_players(db, sid, {devon: None, carsten: (cad, 2)})
     assert S.grid_map(db, sid)[(cad, 1)] == driver_id(db, "Sergio Perez")
 
 
@@ -162,13 +162,13 @@ def _player_rounds(conn, finishes, difficulty, season_id=None, start=0):
     """Run rounds where both players finish at the given positions (tuples)."""
     sid = season_id or S.current_season_id(conn)
     evs = S.events(conn, sid)
-    david, carson = players(conn)
+    devon, carsten = players(conn)
     for i, (pd, pc) in enumerate(finishes):
         event = evs[start + i]
         ids = [r["driver_id"] for r in S.weekend_rows(conn, event["id"])]
-        others = [d for d in ids if d not in (david, carson)]
+        others = [d for d in ids if d not in (devon, carsten)]
         order = list(others)
-        for pid, pos in sorted(((david, pd), (carson, pc)), key=lambda x: x[1]):
+        for pid, pos in sorted(((devon, pd), (carsten, pc)), key=lambda x: x[1]):
             order.insert(pos - 1, pid)
         run_event(conn, event, order=order, difficulty=difficulty)
     return start + len(finishes)
@@ -203,7 +203,7 @@ def test_both_struggling_moves_further_than_one_struggling(db):
     def fresh():
         token = storage.new_token()
         with storage.session(token, create=True) as conn:
-            S.seed_career(conn, token, "Other", 2026, ["David Conley", "Carson Hayes"])
+            S.seed_career(conn, token, "Other", 2026, ["Devon Corwin", "Carsten Hale"])
         return token
     recs = {}
     for label, finishes in (("one", [(1, 16), (2, 16), (1, 17)]), ("both", [(15, 16), (16, 15), (17, 16)])):
@@ -228,7 +228,7 @@ def test_one_player_struggling_while_the_other_flies_is_a_small_move(db):
 def _rec_for(team_name, finishes, mode=None):
     token = storage.new_token()
     with storage.session(token, create=True) as conn:
-        S.seed_career(conn, token, "Car", 2026, ["David Conley", "Carson Hayes"])
+        S.seed_career(conn, token, "Car", 2026, ["Devon Corwin", "Carsten Hale"])
         if mode:
             storage.set_meta(conn, "difficulty_mode", mode)
         seat_players_in(conn, team_name)
@@ -278,10 +278,10 @@ def test_the_level_never_goes_up_while_someone_is_at_the_back(db):
 
 
 def test_double_dnf_rounds_do_not_force_reduction(db):
-    sid, david, carson, _ = seat_players_at_cadillac(db)
+    sid, devon, carsten, _ = seat_players_at_cadillac(db)
     evs = S.events(db, sid)
     for event in evs[:4]:
-        run_event(db, event, overrides={david: "DNF", carson: "DNF"}, difficulty=100)
+        run_event(db, event, overrides={devon: "DNF", carsten: "DNF"}, difficulty=100)
     rec = S.difficulty_recommendation(db)
     assert rec["recommended"] == 100 and rec["direction"] == "hold" and not rec["sample"]
 
@@ -325,8 +325,8 @@ def test_inactive_driver_keeps_earned_reputation(db):
     perez = driver_id(db, "Sergio Perez")
     earned = next(r for r in S.driver_standings(db, sid) if r["driver_id"] == perez)["reputation"]
     s2 = S.create_next_season(db, sid, 2027)
-    david, _ = players(db)
-    S.place_players(db, s2, {david: S.driver_seats(db, s2)[perez]})
+    devon, _ = players(db)
+    S.place_players(db, s2, {devon: S.driver_seats(db, s2)[perez]})
     assert perez not in S.driver_seats(db, s2)
     s3 = S.create_next_season(db, s2, 2028)
     assert S.starting_reputation(db, s3, perez) == earned != C.BASELINE_REPUTATION["Sergio Perez"]
@@ -377,14 +377,14 @@ def test_rookie_draft_offers_come_from_backmarkers_and_signing_places_player(db,
     window = market.open_window(db, sid, rng=rng)
     assert db.execute("SELECT kind, target_year FROM market_windows WHERE id = ?", (window,)).fetchone()[:] == \
         ("Rookie Draft", 2026)
-    david, carson = players(db)
-    offers = market.offers(db, driver_id=david)
+    devon, carsten = players(db)
+    offers = market.offers(db, driver_id=devon)
     assert len(offers) == C.ROOKIE_OFFERS
     assert all(o["team_id"] >= 7 for o in offers)  # bottom five of the default order
     chosen = offers[0]
     market.accept_offer(db, chosen["id"])
-    assert S.driver_seats(db, sid)[david][0] == chosen["team_id"]
-    statuses = {o["id"]: o["status"] for o in market.offers(db, driver_id=david)}
+    assert S.driver_seats(db, sid)[devon][0] == chosen["team_id"]
+    statuses = {o["id"]: o["status"] for o in market.offers(db, driver_id=devon)}
     assert statuses[chosen["id"]] == C.OFFER_ACCEPTED
     assert all(s == C.OFFER_WITHDRAWN for oid, s in statuses.items() if oid != chosen["id"])
     assert len(S.weekend_rows(db, S.events(db, sid)[0]["id"])) == 22
@@ -393,29 +393,29 @@ def test_rookie_draft_offers_come_from_backmarkers_and_signing_places_player(db,
 
 
 def test_strong_season_attracts_better_teams_and_applies_next_year(db):
-    sid, david, carson, cad = seat_players_at_cadillac(db)
+    sid, devon, carsten, cad = seat_players_at_cadillac(db)
     evs = S.events(db, sid)
     for event in evs[:12]:
         ids = [r["driver_id"] for r in S.weekend_rows(db, event["id"])]
-        order = [david] + [d for d in ids if d not in (david, carson)] + [carson]
+        order = [devon] + [d for d in ids if d not in (devon, carsten)] + [carsten]
         run_event(db, event, order=order, difficulty=90)
     window = market.maybe_open_silly_season(db, sid)
     assert window is not None
     assert market.maybe_open_silly_season(db, sid) is None
-    david_offers = market.offers(db, driver_id=david, window_id=window)
-    carson_offers = market.offers(db, driver_id=carson, window_id=window)
-    best_rank = min(S.team_strength_ranks(db, sid)[o["team_id"]] for o in david_offers)
+    devon_offers = market.offers(db, driver_id=devon, window_id=window)
+    carsten_offers = market.offers(db, driver_id=carsten, window_id=window)
+    best_rank = min(S.team_strength_ranks(db, sid)[o["team_id"]] for o in devon_offers)
     assert best_rank <= 3
-    assert len(carson_offers) >= 1
-    _, interest = market.team_interest(db, sid, david)
+    assert len(carsten_offers) >= 1
+    _, interest = market.team_interest(db, sid, devon)
     assert interest[0]["label"] in ("Keen", "Interested")
-    top = min(david_offers, key=lambda o: S.team_strength_ranks(db, sid)[o["team_id"]])
+    top = min(devon_offers, key=lambda o: S.team_strength_ranks(db, sid)[o["team_id"]])
     market.accept_offer(db, top["id"])
-    assert S.driver_seats(db, sid)[david][0] == cad  # still racing for Cadillac this year
+    assert S.driver_seats(db, sid)[devon][0] == cad  # still racing for Cadillac this year
     new_id = S.create_next_season(db, sid, 2027)
     market.on_new_season(db, new_id)
-    assert S.driver_seats(db, new_id)[david][0] == top["team_id"]
-    assert market.current_contract(db, david)["team_id"] == top["team_id"]
+    assert S.driver_seats(db, new_id)[devon][0] == top["team_id"]
+    assert market.current_contract(db, devon)["team_id"] == top["team_id"]
     assert db.execute("SELECT status FROM market_windows WHERE id = ?", (window,)).fetchone()[0] == C.WINDOW_CLOSED
 
 
@@ -427,8 +427,8 @@ def test_login_is_required_and_setup_runs_first(app):
     client.get("/setup")
     with client.session_transaction() as sess:
         csrf = sess["csrf"]
-    client.post("/setup", data={"username": "david", "password": "Pit-Lane-42", "csrf_token": csrf})
-    assert auth.get_user("david")["is_master"] == 1
+    client.post("/setup", data={"username": "devon", "password": "Pit-Lane-42", "csrf_token": csrf})
+    assert auth.get_user("devon")["is_master"] == 1
     other = app.test_client()
     # v2.0: a first-time visitor sees the welcome page; anything inside still needs a login.
     welcome = other.get("/")
@@ -438,7 +438,7 @@ def test_login_is_required_and_setup_runs_first(app):
 
 def test_every_major_page_returns_successfully(master_client, data_dir):
     res = master_client.post("/careers/new", data={"name": "Web", "year": "2026", "rookie_market": "1",
-                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"})
+                                                   "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devon", ""], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
         event = S.events(conn, S.current_season_id(conn))[0]
@@ -460,31 +460,31 @@ def test_every_major_page_returns_successfully(master_client, data_dir):
 
 
 def test_players_only_see_their_own_career_and_offers(app, master_client):
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     auth.create_user("stranger", "Nobody", "password1")
     res = master_client.post("/careers/new", data={"name": "Two", "year": "2026", "rookie_market": "1",
-                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
+                                                   "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devon", "carsten"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
-        david, carson = players(conn)
-        david_offer = market.offers(conn, driver_id=david)[0]
-        carson_offer = market.offers(conn, driver_id=carson)[0]
+        devon, carsten = players(conn)
+        devon_offer = market.offers(conn, driver_id=devon)[0]
+        carsten_offer = market.offers(conn, driver_id=carsten)[0]
         event = S.events(conn, S.current_season_id(conn))[0]
 
-    carson_client = app.test_client()
-    login(carson_client, "carson")
-    page = carson_client.get(f"/career/{token}/offers").get_data(as_text=True)
-    assert "Carson Hayes" in page and str(escape(carson_offer["reason"])) in page
-    assert carson_client.get(f"/career/{token}/garage?driver={david}").get_data(as_text=True).count("David Conley") <= 1
-    assert carson_client.post(f"/career/{token}/offers/{david_offer['id']}/accept",
+    carsten_client = app.test_client()
+    login(carsten_client, "carsten")
+    page = carsten_client.get(f"/career/{token}/offers").get_data(as_text=True)
+    assert "Carsten Hale" in page and str(escape(carsten_offer["reason"])) in page
+    assert carsten_client.get(f"/career/{token}/garage?driver={devon}").get_data(as_text=True).count("Devon Corwin") <= 1
+    assert carsten_client.post(f"/career/{token}/offers/{devon_offer['id']}/accept",
                               data={"csrf_token": "tok"}).status_code == 403
-    assert carson_client.post(f"/api/career/{token}/weekend/{event['id']}", json={"results": []},
+    assert carsten_client.post(f"/api/career/{token}/weekend/{event['id']}", json={"results": []},
                               headers={"X-CSRF-Token": "tok"}).status_code == 403
-    assert carson_client.post(f"/career/{token}/grid/save", data={"csrf_token": "tok"}).status_code == 403
-    assert carson_client.get(f"/career/{token}/weekend/{event['id']}").status_code == 200
-    carson_client.post(f"/career/{token}/offers/{carson_offer['id']}/accept", data={"csrf_token": "tok"})
+    assert carsten_client.post(f"/career/{token}/grid/save", data={"csrf_token": "tok"}).status_code == 403
+    assert carsten_client.get(f"/career/{token}/weekend/{event['id']}").status_code == 200
+    carsten_client.post(f"/career/{token}/offers/{carsten_offer['id']}/accept", data={"csrf_token": "tok"})
     with storage.session(token) as conn:
-        assert S.driver_seats(conn, S.current_season_id(conn))[carson][0] == carson_offer["team_id"]
+        assert S.driver_seats(conn, S.current_season_id(conn))[carsten][0] == carsten_offer["team_id"]
 
     stranger = app.test_client()
     login(stranger, "stranger")
@@ -497,13 +497,13 @@ def test_players_only_see_their_own_career_and_offers(app, master_client):
 def _rookie_window(db, rng):
     sid = S.current_season_id(db)
     window = market.open_window(db, sid, rng=rng)
-    david, carson = players(db)
-    return sid, window, david, carson
+    devon, carsten = players(db)
+    return sid, window, devon, carsten
 
 
 def test_reasonable_counter_is_agreed_then_signed(db, rng):
-    sid, window, david, _ = _rookie_window(db, rng)
-    offer = market.offers(db, driver_id=david)[0]
+    sid, window, devon, _ = _rookie_window(db, rng)
+    offer = market.offers(db, driver_id=devon)[0]
     assert offer["growth"] is not None and offer["ceiling_role"] == "No. 2" and offer["max_years"] <= 3
     assert offer["min_growth"] >= 1  # teams sign rookies to develop them
     pledge = market.growth_needed(offer["min_growth"], "No. 2", offer["min_years"])  # exactly what they need
@@ -514,14 +514,14 @@ def test_reasonable_counter_is_agreed_then_signed(db, rng):
     with pytest.raises(S.ValidationError, match="final offer"):
         market.counter_offer(db, offer["id"], "No. 2", 1, 0, rng=rng)
     market.accept_offer(db, offer["id"])
-    assert S.driver_seats(db, sid)[david][0] == offer["team_id"]
-    authors = [m["author"] for m in market.offers(db, driver_id=david)[0]["messages"]]
+    assert S.driver_seats(db, sid)[devon][0] == offer["team_id"]
+    authors = [m["author"] for m in market.offers(db, driver_id=devon)[0]["messages"]]
     assert authors[:3] == ["team", "driver", "team"]
 
 
 def test_rookies_cannot_demand_number_one_and_greed_ends_talks(db, rng):
-    _sid, window, david, _ = _rookie_window(db, rng)
-    offers = market.offers(db, driver_id=david)
+    _sid, window, devon, _ = _rookie_window(db, rng)
+    offers = market.offers(db, driver_id=devon)
     first = offers[0]
     result = market.counter_offer(db, first["id"], "No. 1", 5, 0, rng=rng)
     assert result == "final"  # a greedy ask burns two rounds of patience at once
@@ -540,9 +540,9 @@ def test_rookies_cannot_demand_number_one_and_greed_ends_talks(db, rng):
 
 def test_low_pledge_is_countered_and_big_pledge_buys_leverage(db, rng):
     sid = S.current_season_id(db)
-    david, _ = players(db)
+    devon, _ = players(db)
     window = market.open_window(db, sid, rng=rng)
-    offer = market.offers(db, driver_id=david)[0]
+    offer = market.offers(db, driver_id=devon)[0]
     # Pretend this is an experienced driver whose team is lukewarm: No. 2 ceiling, 1-2 years, needs a Solid pledge.
     db.execute("UPDATE offers SET ceiling_role = 'No. 2', min_years = 1, max_years = 2, min_growth = 1, patience = 3, "
                "final = 0 WHERE id = ?", (offer["id"],))
@@ -551,7 +551,7 @@ def test_low_pledge_is_countered_and_big_pledge_buys_leverage(db, rng):
     try:
         assert market.counter_offer(db, offer["id"], "No. 2", 1, 0, rng=rng) == "countered"
         o = market.get_offer(db, offer["id"])
-        assert o["growth"] == 1 and "Solid season" in market.offers(db, driver_id=david)[0]["messages"][-1]["message"]
+        assert o["growth"] == 1 and "Solid season" in market.offers(db, driver_id=devon)[0]["messages"][-1]["message"]
         # Two levels over what Equal Status needs (1) = Breakout: status one step past the ceiling, plus an extra year.
         assert market.counter_offer(db, offer["id"], "Equal Status", 3, 3, rng=rng) == "agreed"
         o = market.get_offer(db, offer["id"])
@@ -561,33 +561,33 @@ def test_low_pledge_is_countered_and_big_pledge_buys_leverage(db, rng):
 
 
 def test_approaches_are_judged_limited_and_lifeline_when_out_of_options(db, rng):
-    sid, window, david, _ = _rookie_window(db, rng)
+    sid, window, devon, _ = _rookie_window(db, rng)
     mclaren = 1
-    offer_id, result = market.approach_team(db, window, david, mclaren, rng=rng)
+    offer_id, result = market.approach_team(db, window, devon, mclaren, rng=rng)
     assert result == "rejected"
     with pytest.raises(S.ValidationError):
-        market.approach_team(db, window, david, mclaren, rng=rng)  # once per team per window
-    talked = {o["team_id"] for o in market.offers(db, driver_id=david)}
+        market.approach_team(db, window, devon, mclaren, rng=rng)  # once per team per window
+    talked = {o["team_id"] for o in market.offers(db, driver_id=devon)}
     backmarker = next(t for t in (7, 8, 9, 10, 11) if t not in talked)
-    offer_id, result = market.approach_team(db, window, david, backmarker, rng=rng)
+    offer_id, result = market.approach_team(db, window, devon, backmarker, rng=rng)
     assert result == "offer" and market.get_offer(db, offer_id)["origin"] == "driver"
-    offer_id, result = market.approach_team(db, window, david, 2, rng=rng)
-    assert result == "rejected" and market.approaches_left(db, window, david) == 0
+    offer_id, result = market.approach_team(db, window, devon, 2, rng=rng)
+    assert result == "rejected" and market.approaches_left(db, window, devon) == 0
     with pytest.raises(S.ValidationError, match="approaches"):
-        market.approach_team(db, window, david, 3, rng=rng)
-    for o in market.offers(db, driver_id=david):
+        market.approach_team(db, window, devon, 3, rng=rng)
+    for o in market.offers(db, driver_id=devon):
         if o["status"] == C.OFFER_PENDING and not o["lifeline"]:
             market.decline_offer(db, o["id"], rng=rng)
-    lifelines = [o for o in market.offers(db, driver_id=david) if o["lifeline"]]
+    lifelines = [o for o in market.offers(db, driver_id=devon) if o["lifeline"]]
     assert len(lifelines) == 1 and lifelines[0]["status"] == C.OFFER_PENDING and lifelines[0]["final"]
     market.decline_offer(db, lifelines[0]["id"], rng=rng)
-    assert len([o for o in market.offers(db, driver_id=david) if o["lifeline"]]) == 1  # only one lifeline
+    assert len([o for o in market.offers(db, driver_id=devon) if o["lifeline"]]) == 1  # only one lifeline
 
 
 def test_v4_offers_migrate_and_can_be_negotiated(career, rng):
     with storage.session(career) as conn:
-        _sid, _window, david, _ = _rookie_window(conn, rng)
-        offer_id = market.offers(conn, driver_id=david)[0]["id"]
+        _sid, _window, devon, _ = _rookie_window(conn, rng)
+        offer_id = market.offers(conn, driver_id=devon)[0]["id"]
     raw = sqlite3.connect(str(storage.career_path(career)))
     raw.execute("DROP TABLE offer_messages")
     for column in ("salary", "origin", "stage", "patience", "final", "lifeline", "ceiling_role", "min_years",
@@ -605,11 +605,11 @@ def test_v4_offers_migrate_and_can_be_negotiated(career, rng):
 
 def test_garage_negotiation_routes(app, master_client):
     res = master_client.post("/careers/new", data={"name": "Talks", "year": "2026", "rookie_market": "1",
-                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"})
+                                                   "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devon", ""], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
-        david, _ = players(conn)
-        offer = market.offers(conn, driver_id=david)[0]
+        devon, _ = players(conn)
+        offer = market.offers(conn, driver_id=devon)[0]
         window = offer["window_id"]
     page = master_client.get(f"/career/{token}/offers").get_data(as_text=True)
     assert "Counter-offer" in page and "Approach a team" in page
@@ -619,7 +619,7 @@ def test_garage_negotiation_routes(app, master_client):
     with storage.session(token) as conn:
         assert market.get_offer(conn, offer["id"])["stage"] == "Terms agreed"
     res = master_client.post(f"/career/{token}/market/approach",
-                             data={"driver_id": david, "window_id": window, "team_id": 1, "terms": "talks",
+                             data={"driver_id": devon, "window_id": window, "team_id": 1, "terms": "talks",
                                    "csrf_token": "tok"})
     assert res.status_code == 302
     assert "Conversation" in master_client.get(f"/career/{token}/offers").get_data(as_text=True)
@@ -631,7 +631,7 @@ from f1tracker import feed, insights  # noqa: E402
 
 
 def _career_token(master_client, rookies=False):
-    data = {"name": "V15", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", ""], "csrf_token": "tok"}
+    data = {"name": "V15", "year": "2026", "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devon", ""], "csrf_token": "tok"}
     if rookies:
         data["rookie_market"] = "1"
     res = master_client.post("/careers/new", data=data)
@@ -639,17 +639,17 @@ def _career_token(master_client, rookies=False):
 
 
 def test_login_locks_after_repeated_wrong_passwords(app):
-    auth.create_user("david", "David", "password1", is_master=True)
+    auth.create_user("devon", "Devon", "password1", is_master=True)
     client = app.test_client()
     for _ in range(C.LOGIN_MAX_FAILURES):
-        client.post("/login", data={"username": "david", "password": "nope"})
-    res = client.post("/login", data={"username": "david", "password": "password1"}, follow_redirects=True)
+        client.post("/login", data={"username": "devon", "password": "nope"})
+    res = client.post("/login", data={"username": "devon", "password": "password1"}, follow_redirects=True)
     assert "Too many wrong passwords" in res.get_data(as_text=True)
     with pytest.raises(auth.AuthError, match="Too many"):
-        auth.login("david", "password1", "10.0.0.9")  # the account stays locked from any address
+        auth.login("devon", "password1", "10.0.0.9")  # the account stays locked from any address
     with auth.accounts() as conn:  # ...until the lock expires
         conn.execute("UPDATE login_failures SET locked_until = 0")
-    assert auth.login("david", "password1", "10.0.0.9")["username"] == "david"
+    assert auth.login("devon", "password1", "10.0.0.9")["username"] == "devon"
 
 
 @pytest.fixture
@@ -662,7 +662,7 @@ def codes(monkeypatch):
     return sent
 
 
-def _sign_up(client, codes, username="carson", email="carson@example.com"):
+def _sign_up(client, codes, username="carsten", email="carsten@example.com"):
     client.get("/register")
     with client.session_transaction() as sess:
         sess["csrf"] = "tok"
@@ -677,20 +677,20 @@ def test_players_can_sign_up_but_see_nothing_until_assigned(app, master_client, 
     token = _career_token(master_client)
     client = app.test_client()
     res = _sign_up(client, codes)
-    assert res.headers["Location"].endswith("/register/verify") and auth.get_user("carson") is None
+    assert res.headers["Location"].endswith("/register/verify") and auth.get_user("carsten") is None
     code = codes[-1][1].rsplit(" ", 1)[-1]
-    assert codes[-1][0] == ["carson@example.com"] and len(code) == 6
+    assert codes[-1][0] == ["carsten@example.com"] and len(code) == 6
     client.post("/register/verify", data={"code": code, "csrf_token": "tok"})
-    assert auth.get_user("carson")["is_master"] == 0
+    assert auth.get_user("carsten")["is_master"] == 0
     assert token not in client.get("/").get_data(as_text=True)
     assert client.get(f"/career/{token}/dashboard").status_code == 403
     # v2.1.2: there's no list of accounts; the owner finds one by exact username or email.
     page = master_client.get("/accounts").get_data(as_text=True)
-    assert "carson" not in page and "All logins" not in page
-    assert "Carson" in master_client.get("/accounts?find=carson@example.com").get_data(as_text=True)
+    assert "carsten" not in page and "All logins" not in page
+    assert "Carsten" in master_client.get("/accounts?find=carsten@example.com").get_data(as_text=True)
     with storage.session(token) as conn:
-        carson = players(conn)[1]
-    master_client.post(f"/career/{token}/members", data={f"user_{carson}": "carson", "csrf_token": "tok"})
+        carsten = players(conn)[1]
+    master_client.post(f"/career/{token}/members", data={f"user_{carsten}": "carsten", "csrf_token": "tok"})
     assert client.get(f"/career/{token}/garage").status_code == 200
     auth.set_setting("allow_signups", "0")
     with pytest.raises(auth.AuthError, match="turned off"):
@@ -719,10 +719,10 @@ def test_weekend_completion_posts_news_notifications_and_backup(master_client):
         news = feed.latest(conn)
         assert len([n for n in news if n["kind"] == "result"]) == 1
         assert rows[0]["driver"]["name"] in news[-1]["headline"]
-        items, unread = feed.notifications_for(conn, "david", players(conn)[0])
+        items, unread = feed.notifications_for(conn, "devon", players(conn)[0])
         assert unread == 1 and "Results are in" in items[0]["text"]
-        feed.mark_read(conn, "david")
-        assert feed.notifications_for(conn, "david", players(conn)[0])[1] == 0
+        feed.mark_read(conn, "devon")
+        assert feed.notifications_for(conn, "devon", players(conn)[0])[1] == 0
     assert any("after-round-1" in b["name"] for b in storage.list_auto_backups(token))
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "wins the 2026 Australian GP" in page and "data-chart" in page
@@ -731,14 +731,14 @@ def test_weekend_completion_posts_news_notifications_and_backup(master_client):
 def test_signing_is_announced_to_the_other_player(db, rng):
     sid = S.current_season_id(db)
     market.open_window(db, sid, rng=rng)
-    david, carson = players(db)
-    offer = market.offers(db, driver_id=david)[0]
+    devon, carsten = players(db)
+    offer = market.offers(db, driver_id=devon)[0]
     market.accept_offer(db, offer["id"])
     assert any("signs with" in n["headline"] for n in feed.latest(db))
-    items, _ = feed.notifications_for(db, "carson", carson)
-    assert any("David Conley just signed" in n["text"] for n in items)
-    mine, _ = feed.notifications_for(db, "david", david)
-    assert not any("David Conley just signed" in n["text"] for n in mine)
+    items, _ = feed.notifications_for(db, "carsten", carsten)
+    assert any("Devon Corwin just signed" in n["text"] for n in items)
+    mine, _ = feed.notifications_for(db, "devon", devon)
+    assert not any("Devon Corwin just signed" in n["text"] for n in mine)
 
 
 def test_cars_develop_over_winter_and_ratings_drive_early_ranks(db):
@@ -758,17 +758,17 @@ def test_cars_develop_over_winter_and_ratings_drive_early_ranks(db):
 
 
 def test_rivalry_and_season_review(db):
-    sid, david, carson, _ = seat_players_at_cadillac(db)
+    sid, devon, carsten, _ = seat_players_at_cadillac(db)
     _player_rounds(db, [(1, 5), (6, 2), (3, 9)], 90)
-    r = insights.rivalry(db, david, carson)
+    r = insights.rivalry(db, devon, carsten)
     assert r["race"] == [2, 1] and r["quali"] == [2, 1]
     assert r["streak"][0] == 1 and r["current"] == (0, 1) and r["swing"] == [1, 0, 1]
     assert r["best_margin"][0]["margin"] == 6
     review = insights.season_review(db, sid)
     titles = [a["title"] for a in review["awards"]]
     assert "Championship leader" in titles and "Rookie of the year" in titles
-    assert {p["driver_id"] for p in review["players"]} == {david, carson}
-    trend = insights.driver_round_timeline(db, david)
+    assert {p["driver_id"] for p in review["players"]} == {devon, carsten}
+    trend = insights.driver_round_timeline(db, devon)
     assert len(trend["labels"]) == 3 and trend["form"][0] > 50
 
 
@@ -821,11 +821,11 @@ def test_new_v15_pages_render(master_client):
     token = _career_token(master_client, rookies=True)
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
-        david, carson = players(conn)
-        S.place_players(conn, sid, {david: (11, 1), carson: (11, 2)})
+        devon, carsten = players(conn)
+        S.place_players(conn, sid, {devon: (11, 1), carsten: (11, 2)})
         _player_rounds(conn, [(2, 4)], 90)
     pledge_all(token)
-    for path in ["rivalry", f"review/{sid}", "news", "paddock", "garage", "drivers", f"driver/{david}", "teams",
+    for path in ["rivalry", f"review/{sid}", "news", "paddock", "garage", "drivers", f"driver/{devon}", "teams",
                  "seasons", "api/notifications"]:
         url = f"/api/career/{token}/notifications" if path.startswith("api") else f"/career/{token}/{path}"
         assert master_client.get(url).status_code == 200, path
@@ -837,20 +837,20 @@ def test_new_v15_pages_render(master_client):
 # --------------------------------------------------------------------------- v1.6: Race Steward role
 
 def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master_client):
-    auth.create_user("davidd", "David", "password1", is_steward=True)
-    auth.create_user("carson", "Carson", "password1")
-    assert auth.role_of(auth.get_user("davidd")) == "steward"
+    auth.create_user("devond", "Devon", "password1", is_steward=True)
+    auth.create_user("carsten", "Carsten", "password1")
+    assert auth.role_of(auth.get_user("devond")) == "steward"
     res = master_client.post("/careers/new", data={"name": "Steward", "year": "2026", "rookie_market": "1",
-                                                   "player_name": ["David Conley", "Carson Hayes"], "player_login": ["davidd", "carson"], "csrf_token": "tok"})
+                                                   "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devond", "carsten"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     with storage.session(token) as conn:
-        david, carson = players(conn)
-        carson_offer = market.offers(conn, driver_id=carson)[0]
+        devon, carsten = players(conn)
+        carsten_offer = market.offers(conn, driver_id=carsten)[0]
         event = S.events(conn, S.current_season_id(conn))[0]
         ids = [r["driver_id"] for r in S.weekend_rows(conn, event["id"])]
 
     steward = app.test_client()
-    login(steward, "davidd")
+    login(steward, "devond")
     # Can run the race weekend...
     res = steward.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
                        json={"results": [{"driver_id": ids[0], "race_position": 1}], "ai_difficulty": 88})
@@ -870,22 +870,22 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
     assert "Submitted and locked" in steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
     assert master_client.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
                               json=full).get_json()["ok"]
-    # ...but never sees Carson's side of the market, and can't open windows or write storylines.
+    # ...but never sees Carsten's side of the market, and can't open windows or write storylines.
     assert steward.get(f"/career/{token}/market").status_code == 302
     assert steward.post(f"/career/{token}/market/open", data={"csrf_token": "tok"}).status_code == 403
     assert steward.post(f"/career/{token}/contracts", data={"csrf_token": "tok"}).status_code == 403
-    assert "Carson Hayes" not in steward.get(f"/career/{token}/garage?driver={carson}").get_data(as_text=True).split("<h1>")[1][:40]
-    assert steward.post(f"/career/{token}/offers/{carson_offer['id']}/accept", data={"csrf_token": "tok"}).status_code == 403
+    assert "Carsten Hale" not in steward.get(f"/career/{token}/garage?driver={carsten}").get_data(as_text=True).split("<h1>")[1][:40]
+    assert steward.post(f"/career/{token}/offers/{carsten_offer['id']}/accept", data={"csrf_token": "tok"}).status_code == 403
     with storage.session(token) as conn:
-        items, _ = feed.notifications_for(conn, "davidd", david, is_master=False)
-        assert not any("made you an offer" in n["text"] and n["driver_id"] == carson for n in items)
+        items, _ = feed.notifications_for(conn, "devond", devon, is_master=False)
+        assert not any("made you an offer" in n["text"] and n["driver_id"] == carsten for n in items)
     for path in ("/accounts", f"/career/{token}/members", f"/career/{token}/backup", f"/career/{token}/export"):
         res = steward.get(path)
         assert res.status_code == 403 or "All logins" not in res.get_data(as_text=True), path
 
     # A plain driver still can't enter results.
     driver = app.test_client()
-    login(driver, "carson")
+    login(driver, "carsten")
     assert driver.post(f"/api/career/{token}/weekend/{event['id']}", headers={"X-CSRF-Token": "tok"},
                        json={"results": []}).status_code == 403
     assert driver.get(f"/career/{token}/paddock").status_code == 403
@@ -893,13 +893,13 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
 
 def test_roles_can_be_changed_but_one_race_master_remains(app):
     auth.create_user("boss", "Boss", "password1", is_master=True)
-    auth.create_user("davidd", "David", "password1")
+    auth.create_user("devond", "Devon", "password1")
     with pytest.raises(auth.AuthError, match="per league"):  # Scorekeeper is a league role now (v1.16)
-        auth.set_role("davidd", "steward")
-    auth.set_role("davidd", "master")
+        auth.set_role("devond", "steward")
+    auth.set_role("devond", "master")
     auth.set_role("boss", "driver")
     with pytest.raises(auth.AuthError):
-        auth.set_role("davidd", "steward")
+        auth.set_role("devond", "steward")
     assert [u["role"] for u in auth.list_users()] == ["master", "driver"]
 
 
@@ -909,16 +909,16 @@ def test_places_gained_near_the_front_count_far_more(db):
     assert S.racecraft_score(20, 1) == pytest.approx(19.0)
     assert S.racecraft_score(20, 19) < 0.25
     assert S.racecraft_score(3, 8) == pytest.approx(-2.0)
-    sid, david, carson, _ = seat_players_at_cadillac(db)
+    sid, devon, carsten, _ = seat_players_at_cadillac(db)
     event = S.events(db, sid)[0]
     ids = [r["driver_id"] for r in S.weekend_rows(db, event["id"])]
-    others = [d for d in ids if d not in (david, carson)]
-    quali = others[:18] + [carson, david] + others[18:]          # both start at the back (P19, P20)
-    order = [david] + others[:17] + [carson] + others[17:]        # David P1, Carson P19
+    others = [d for d in ids if d not in (devon, carsten)]
+    quali = others[:18] + [carsten, devon] + others[18:]          # both start at the back (P19, P20)
+    order = [devon] + others[:17] + [carsten] + others[17:]        # Devon P1, Carsten P19
     run_event(db, event, order=order, quali=quali)
     table = {r["driver_id"]: r for r in S.driver_standings(db, sid)}
-    comeback = dict(table[david])
-    assert comeback["gained"] == 19 and table[carson]["gained"] == 0
+    comeback = dict(table[devon])
+    assert comeback["gained"] == 19 and table[carsten]["gained"] == 0
     plain = dict(comeback, racecraft=0, racecraft_races=0)
     assert S.compute_form(comeback) - S.compute_form(plain) > 10
     assert S.compute_reputation(42, comeback, comeback["form"]) - S.compute_reputation(42, plain, comeback["form"]) > 1.4
@@ -973,7 +973,7 @@ def outbox(monkeypatch):
 
 
 def test_forgot_password_emails_a_one_time_link(app, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
     auth.create_user("noemail", "No Email", "password1")
     client = app.test_client()
     client.get("/forgot")
@@ -981,30 +981,30 @@ def test_forgot_password_emails_a_one_time_link(app, outbox):
         sess["csrf"] = "tok"
     client.post("/forgot", data={"login": "noemail", "csrf_token": "tok"})
     assert outbox == []
-    client.post("/forgot", data={"login": "CARSON@example.com", "csrf_token": "tok"})
-    assert outbox[0][0] == ["carson@example.com"]
+    client.post("/forgot", data={"login": "CARSTEN@example.com", "csrf_token": "tok"})
+    assert outbox[0][0] == ["carsten@example.com"]
     link = next(w for w in outbox[0][2].split() if "/reset/" in w)
     path = link.split("localhost", 1)[-1]
     assert "Choose a new password" in client.get(path).get_data(as_text=True)
     client.post(path, data={"password": "newpass99", "confirm": "newpass99", "csrf_token": "tok"})
-    assert auth.verify("carson", "newpass99")
+    assert auth.verify("carsten", "newpass99")
     assert client.get(path).status_code == 302  # the link only works once
     for _ in range(10):
-        client.post("/forgot", data={"login": "carson", "csrf_token": "tok"})
+        client.post("/forgot", data={"login": "carsten", "csrf_token": "tok"})
     assert len(outbox) <= auth.RESET_REQUESTS_PER_IP_PER_HOUR
 
 
 def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
     auth.create_user("quiet", "Quiet", "password1", email="quiet@example.com")
     auth.set_email("quiet", "quiet@example.com", False)
-    res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "player_name": ["David Conley", "Carson Hayes"], "player_login": ["david", "carson"], "csrf_token": "tok"})
+    res = master_client.post("/careers/new", data={"name": "Mail", "year": "2026", "player_name": ["Devon Corwin", "Carsten Hale"], "player_login": ["devon", "carsten"], "csrf_token": "tok"})
     token = res.headers["Location"].split("/career/")[1].split("/")[0]
     from f1tracker import notices
     with storage.session(token) as conn:
         conn.execute("INSERT INTO career_members(username, driver_id) VALUES('quiet', NULL)")
         # v2.0: result emails are chosen per league; a new membership doesn't inherit an account-wide switch.
-        notices.save(conn, "carson", email={"results"})
+        notices.save(conn, "carsten", email={"results"})
         event = S.events(conn, S.current_season_id(conn))[0]
         rows = S.weekend_rows(conn, event["id"])
     payload = {"mark_complete": True, "ai_untracked": True, "results": [
@@ -1012,7 +1012,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
     master_client.post(f"/api/career/{token}/weekend/{event['id']}", json=payload, headers={"X-CSRF-Token": "tok"})
     assert len(outbox) == 1
     to, subject, text = outbox[0]
-    assert to == ["carson@example.com"] and "Australian GP" in subject
+    assert to == ["carsten@example.com"] and "Australian GP" in subject
     assert rows[0]["driver"]["name"] in text and "Championship" in text
     assert 'for the league "Mail"' in text and f"/career/{token}/notifications" in text
 
@@ -1020,7 +1020,7 @@ def test_race_results_are_emailed_to_career_members(app, master_client, outbox):
 def test_race_master_can_delete_a_transfer_window_and_its_trail(db, rng):
     sid = S.current_season_id(db)
     window = market.open_window(db, sid, rng=rng)
-    david, carson = players(db)
+    devon, carsten = players(db)
     feed.post(db, sid, "result", "An unrelated headline")
     assert db.execute("SELECT COUNT(*) FROM news WHERE ref = ?", (f"window:{window}",)).fetchone()[0] == 1
     # Two offer notices plus (v2.0) the league-wide "market is open" notice.
@@ -1241,7 +1241,7 @@ def test_join_requests_carry_a_role_the_race_master_can_change(app, master_clien
         f"keeper_{members['lee']['driver_id']}": "1", "member_kim": "spectator", "csrf_token": "tok"})
     with storage.session(token) as conn:
         flags = {r["username"]: r["scorekeeper"] for r in conn.execute("SELECT * FROM career_members")}
-    assert flags == {"david": 0, "sam": 0, "lee": 1, "kim": 0}   # david: the creator is a member since v2.0
+    assert flags == {"devon": 0, "sam": 0, "lee": 1, "kim": 0}   # devon: the creator is a member since v2.0
     # A spectator role needs no driver name; declining still works.
     auth.create_user("viv", "Viv", "password1")
     viv = app.test_client()

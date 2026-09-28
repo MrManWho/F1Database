@@ -87,13 +87,13 @@ def create_app(config=None):
 
     register_hooks(app)
     register_routes(app)
+    # v3.1.2: the one-time 2.1.3 login reset ran long ago and was removed, so no start-up can ever erase logins.
     if not app.config.get("TESTING"):
-        try:   # v2.1.3, once per site: every login removed, and the league links that pointed at them
-            if auth.reset_all_logins_213(storage.backups_dir()):
-                n = reset_league_logins("before-2.1.3-login-reset")
-                app.logger.warning("2.1.3 login reset: all logins removed; login links cleared in %s league(s)", n)
+        try:   # v3.1.2: send anything a restart interrupted (emails, Discord posts, phone alerts)
+            from . import outbox
+            outbox.drain()
         except Exception:
-            app.logger.exception("login reset failed")
+            app.logger.exception("outbox drain failed")
     try:
         roles.unify_legacy_scorekeepers()
     except Exception:  # never block start-up; it is retried whenever a legacy Scorekeeper signs in
@@ -190,6 +190,9 @@ def register_hooks(app):
                                   background=not app.config.get("TESTING"))
             except Exception:
                 app.logger.exception("notification delivery failed")
+        if not app.config.get("TESTING"):
+            from . import outbox
+            outbox.kick()       # v3.1.2: retry anything waiting (at most once a minute)
         return response
 
     def _tz():
@@ -244,34 +247,6 @@ def register_hooks(app):
     @app.errorhandler(413)
     def too_large(_e):
         return render_template("error.html", code=413, message="Uploads are limited to 100 MB."), 413
-
-
-def reset_league_logins(backup_label):
-    """After the logins are reset: remove each league's links to logins that no longer exist (members, pending
-    invitations and join requests, notification choices). Drivers, results, seasons, contracts and settings are not
-    touched, and every league is backed up first. Returns the number of leagues changed."""
-    existing = {r[0] for r in _account_names()}
-    changed = 0
-    for c in storage.list_careers():
-        stale = [u for u in c["members"] if u not in existing]
-        try:
-            storage.auto_backup(c["token"], backup_label, force=True)
-            with storage.session(c["token"]) as conn:
-                for table, extra in (("career_members", ""), ("invitations", " AND status = 'Pending'"),
-                                     ("join_requests", " AND status = 'Pending'"), ("member_notify", "")):
-                    if conn.execute("SELECT name FROM sqlite_master WHERE name = ?", (table,)).fetchone():
-                        rows = [r[0] for r in conn.execute(f"SELECT username FROM {table} WHERE 1=1{extra}")]
-                        for u in set(rows) - existing:
-                            conn.execute(f"DELETE FROM {table} WHERE username = ?{extra}", (u,))
-            changed += 1
-        except Exception:
-            logging.getLogger(__name__).exception("clearing login links failed for %s", c["token"])
-    return changed
-
-
-def _account_names():
-    with auth.accounts() as conn:
-        return conn.execute("SELECT username FROM users").fetchall()
 
 
 def _discord_news(items):
@@ -956,6 +931,14 @@ def register_routes(app):
                 flash("That league was already gone.", "error")
         return redirect(url_for("accounts_page") + "#leagues")
 
+    @app.route("/settings/offsite-snooze", methods=["POST"])
+    @master_required
+    def offsite_snooze():
+        """v3.1.2: hide the Control Room backup reminder for a week."""
+        offsite.snooze(7)
+        flash("OK, we'll remind you again in a week.", "success")
+        return redirect(request.referrer or url_for("home"))
+
     @app.route("/settings/offsite-backup", methods=["POST"])
     @master_required
     def offsite_backup():
@@ -1608,6 +1591,7 @@ def register_routes(app):
                     rec=_recs_off(conn) or S.difficulty_recommendation(conn, before),
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
                     news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
+                    backup_due=bool(g.user and g.user["is_master"] and offsite.remind()),
                     hub=_hub(conn, ctx, nxt) if nxt else None,
                     circuit=circuits.lookup(nxt["name"], nxt["location"]) if nxt else None,
                     press_pens=teamlife.press_pens(conn, ctx["current_season_id"], ctx["my_driver"]["id"])

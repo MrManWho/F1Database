@@ -508,7 +508,7 @@ def test_browser_screenshot_import_end_to_end(app, master_client, live_server, t
         page.on("request", lambda r: (external.append(r.url) if not r.url.startswith(live_server) and not r.url.startswith(("data:", "blob:")) else None,
                                       uploads.append(r.url) if r.method == "POST" and "import" in r.url else None))
         page.goto(live_server + "/login")
-        page.fill("input[name=username]", "david"); page.fill("input[name=password]", "password1")
+        page.fill("input[name=username]", "devon"); page.fill("input[name=password]", "password1")
         page.press("input[name=password]", "Enter"); page.wait_for_load_state()
         page.goto(f"{live_server}/career/{token}/weekend/{ev['id']}")
         page.click('[data-dialog="import-dialog"]')
@@ -573,7 +573,7 @@ def test_page_keeps_working_if_ocr_cannot_load(app, master_client, live_server, 
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.route("**/vendor/tesseract/**", lambda route: route.abort())
         page.goto(live_server + "/login")
-        page.fill("input[name=username]", "david"); page.fill("input[name=password]", "password1")
+        page.fill("input[name=username]", "devon"); page.fill("input[name=password]", "password1")
         page.press("input[name=password]", "Enter"); page.wait_for_load_state()
         _results_png(browser.new_page(), [(1, "Lando Norris", "McLaren", "")], str(tmp_path / "x.png"), "RACE")
         page.goto(f"{live_server}/career/{token}/weekend/{ev['id']}")

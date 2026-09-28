@@ -12,7 +12,7 @@ import shutil
 import sqlite3
 from datetime import datetime, timedelta
 
-from . import auth, market, relations, roles, seats, storage, teamlife
+from . import auth, relations, roles, seats, storage, teamlife
 from . import constants as C
 from . import services as S
 

@@ -114,7 +114,7 @@ def test_account_export_has_my_data_and_no_secrets(app, master_client):
     assert data["format"] == "paddock-legacy-account" and data["account"]["email"] == "ana@example.com"
     assert data["leagues"][0]["league"] == "Safe League" and data["leagues"][0]["driver"]["name"] == "Ana Silva"
     assert "password" not in body and "sid" not in json.dumps(data["signed_in_devices"])
-    assert "david" not in body.lower()                                      # nobody else's account
+    assert "devon" not in body.lower()                                      # nobody else's account
     assert token
 
 
@@ -134,8 +134,8 @@ def test_deleting_my_account_keeps_league_results(app, master_client):
         assert not conn.execute("SELECT 1 FROM career_members WHERE username = 'ana'").fetchone()
         assert any(p["name"] == "Ana Silva" for p in S.player_drivers(conn))
     # The only site admin can't delete themselves.
-    master_client.post("/account/delete", data={"csrf_token": "tok", "confirm": "david", "password": "password1"})
-    assert auth.get_user("david")
+    master_client.post("/account/delete", data={"csrf_token": "tok", "confirm": "devon", "password": "password1"})
+    assert auth.get_user("devon")
 
 
 def test_leaving_one_league_leaves_the_others_alone(app, master_client):

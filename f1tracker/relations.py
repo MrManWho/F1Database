@@ -211,7 +211,6 @@ def assess(conn, season_id, driver_id, standings=None):
     evs = S.events(conn, season_id)
     total = len(evs) or 1
     done = sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE)
-    frac = done / total
     standings = standings if standings is not None else {r["driver_id"]: r for r in S.driver_standings(conn, season_id)}
     row = standings.get(driver_id)
     has = bool(row and row["has_results"])

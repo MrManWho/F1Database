@@ -13,8 +13,6 @@ Older versions also had an account-wide "Scorekeeper" switch (users.is_steward).
 the league role of every league that person belongs to, then cleared, so the two can never disagree.
 """
 
-from contextlib import closing
-
 from . import auth
 from . import constants as C
 from . import services as S

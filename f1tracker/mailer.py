@@ -9,7 +9,6 @@ import logging
 import os
 import smtplib
 import ssl
-import threading
 from email.message import EmailMessage
 from email.utils import formataddr
 
@@ -69,14 +68,10 @@ def send(recipients, subject, text, html=None):
 
 
 def send_later(recipients, subject, text, html=None):
-    """Fire-and-forget version for use inside requests."""
+    """Fire-and-forget version for use inside requests. v3.1.2: saved to the outbox first, so a restart or a mail
+    server that's briefly down doesn't lose it (it's retried)."""
     if not recipients or not configured():
         return False
-
-    def run():
-        try:
-            send(recipients, subject, text, html)
-        except MailError:
-            log.exception("email failed")
-    threading.Thread(target=run, daemon=True).start()
+    from . import outbox
+    outbox.enqueue("email", {"to": list(recipients), "subject": subject, "text": text, "html": html})
     return True

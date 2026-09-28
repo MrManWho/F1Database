@@ -64,12 +64,12 @@ def test_seated_drivers_must_pledge_before_carrying_on(app, master_client):
 def test_v11_relationships_without_a_pledge_are_flagged(career, rng):
     with storage.session(career) as conn:
         sid = S.current_season_id(conn)
-        david, carson = players(conn)
+        devon, carsten = players(conn)
         market.open_window(conn, sid, rng=rng)
-        offer = market.offers(conn, driver_id=david)[0]
+        offer = market.offers(conn, driver_id=devon)[0]
         market.accept_offer(conn, offer["id"])
         cad = conn.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
-        S.place_players(conn, sid, {carson: (cad, 1)})
+        S.place_players(conn, sid, {carsten: (cad, 1)})
         relations.ensure(conn, sid)
     raw = sqlite3.connect(str(storage.career_path(career)))
     for col in ("pledged", "rebased", "bonus"):
@@ -79,50 +79,50 @@ def test_v11_relationships_without_a_pledge_are_flagged(career, rng):
     raw.commit()
     raw.close()
     with storage.session(career) as conn:
-        assert not relations.needs_pledge(conn, sid, david)   # signed with a pledge
-        assert relations.needs_pledge(conn, sid, carson)      # placed by hand, no contract
+        assert not relations.needs_pledge(conn, sid, devon)   # signed with a pledge
+        assert relations.needs_pledge(conn, sid, carsten)      # placed by hand, no contract
 
 
 def test_targets_rebase_after_three_rounds(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
+    devon, carsten = players(db)
     cad = db.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
-    S.place_players(db, sid, {david: (cad, 1), carson: (cad, 2)})
+    S.place_players(db, sid, {devon: (cad, 1), carsten: (cad, 2)})
     relations.ensure(db, sid)
-    before = relations.assess(db, sid, david)["form_base"]
+    before = relations.assess(db, sid, devon)["form_base"]
     evs = S.events(db, sid)
     ids = [r["driver_id"] for r in S.weekend_rows(db, evs[0]["id"])]
     # Cadillac's AI... there is none (both players), so make Cadillac's car look quick by points from other teams? Instead
     # use the default: reversing the grid makes the old backmarkers' AI score big.
-    order = list(reversed([d for d in ids if d not in (david, carson)])) + [david, carson]
+    order = list(reversed([d for d in ids if d not in (devon, carsten)])) + [devon, carsten]
     for ev in evs[:3]:
         run_event(db, ev, order=order)
         relations.review(db, sid)
-    a = relations.assess(db, sid, david)
+    a = relations.assess(db, sid, devon)
     assert a["rebased"] == 1
     ranks = S.team_strength_ranks(db, sid)
     assert a["form_base"] == relations.car_baseline_form(ranks[cad])
     if abs(a["form_base"] - before) >= 1:
-        assert any("re-set your targets" in n["text"] for n in relations.notes(db, sid, david))
+        assert any("re-set your targets" in n["text"] for n in relations.notes(db, sid, devon))
 
 
 def test_goals_track_progress(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
-    S.place_players(db, sid, {david: (1, 1), carson: (1, 2)})
+    devon, carsten = players(db)
+    S.place_players(db, sid, {devon: (1, 1), carsten: (1, 2)})
     relations.ensure(db, sid)
-    goals = relations.assess(db, sid, david)["goals"]
+    goals = relations.assess(db, sid, devon)["goals"]
     kinds = {g["kind"]: g for g in goals}
     assert {"points", "championship", "teammate"} <= set(kinds)
     assert kinds["championship"]["target"] <= 5  # a top car is expected near the front
     evs = S.events(db, sid)
     ids = [r["driver_id"] for r in S.weekend_rows(db, evs[0]["id"])]
-    order = [david] + [d for d in ids if d != david]
+    order = [devon] + [d for d in ids if d != devon]
     for ev in evs[:4]:
         run_event(db, ev, order=order)
-    goals = {g["kind"]: g for g in relations.assess(db, sid, david)["goals"]}
+    goals = {g["kind"]: g for g in relations.assess(db, sid, devon)["goals"]}
     assert goals["points"]["state"] in ("On track", "Met") and goals["teammate"]["state"] == "On track"
-    loser = {g["kind"]: g for g in relations.assess(db, sid, carson)["goals"]}
+    loser = {g["kind"]: g for g in relations.assess(db, sid, carsten)["goals"]}
     assert loser["teammate"]["state"] == "Behind"
 
 
@@ -157,18 +157,18 @@ def test_press_pen_answers_move_the_relationship(app, master_client):
 
 def test_team_orders_for_number_two_drivers(db):
     sid = S.current_season_id(db)
-    david, carson = players(db)
+    devon, carsten = players(db)
     cad = db.execute("SELECT id FROM teams WHERE name = 'Cadillac'").fetchone()["id"]
-    S.place_players(db, sid, {david: (cad, 1), carson: (cad, 2)})
+    S.place_players(db, sid, {devon: (cad, 1), carsten: (cad, 2)})
     market.open_window(db, sid, rng=random.Random(1))
-    for did in (david, carson):
+    for did in (devon, carsten):
         offer = [o for o in market.offers(db, driver_id=did) if o["status"] == C.OFFER_PENDING][0]
-        db.execute("UPDATE offers SET team_id = ?, role = ? WHERE id = ?", (cad, "No. 2" if did == carson else "No. 1",
+        db.execute("UPDATE offers SET team_id = ?, role = ? WHERE id = ?", (cad, "No. 2" if did == carsten else "No. 1",
                                                                           offer["id"]))
         market.accept_offer(db, offer["id"])
-    S.place_players(db, sid, {david: (cad, 1), carson: (cad, 2)})
+    S.place_players(db, sid, {devon: (cad, 1), carsten: (cad, 2)})
     relations.ensure(db, sid)
-    assert relations.assess(db, sid, carson)["role"] == "No. 2"
+    assert relations.assess(db, sid, carsten)["role"] == "No. 2"
     assert teamlife.issue_orders(db, sid) == []   # team orders are off unless the Race Master switches them on
     storage.set_meta(db, "team_orders", "on")
     issued = teamlife.issue_orders(db, sid, rng=random.Random(0))  # 0.84 > chance? force with a low roll instead
@@ -177,16 +177,16 @@ def test_team_orders_for_number_two_drivers(db):
             def random(self):
                 return 0.0
         issued = teamlife.issue_orders(db, sid, rng=Low())
-    assert issued == [carson]
+    assert issued == [carsten]
     ev = S.next_incomplete_event(db, sid)
     ids = [r["driver_id"] for r in S.weekend_rows(db, ev["id"])]
-    order = [carson, david] + [d for d in ids if d not in (carson, david)]
+    order = [carsten, devon] + [d for d in ids if d not in (carsten, devon)]
     run_event(db, ev, order=order)
-    assert teamlife.resolve_orders(db, ev["id"]) == [(carson, "Ignored")]
-    rel = relations.assess(db, sid, carson)
+    assert teamlife.resolve_orders(db, ev["id"]) == [(carsten, "Ignored")]
+    rel = relations.assess(db, sid, carsten)
     assert rel["bonus"] == C.TEAM_ORDER_IGNORED
     assert any("defies team orders" in n["headline"] for n in feed.latest(db, 5))
-    assert teamlife.orders_for(db, sid, carson)[0]["status"] == "Ignored"
+    assert teamlife.orders_for(db, sid, carsten)[0]["status"] == "Ignored"
 
 
 def test_incident_reports_and_rulings(app, master_client):

@@ -241,7 +241,7 @@ def on_weekend_complete(conn, event_id, link):
     winner = next((r for r in rows if r["race_position"] == 1 and r["result_status"] == C.STATUS_FINISHED), None)
     pole = next((r for r in rows if r["qualifying_position"] == 1), None)
     if winner:
-        extra = f" from pole" if pole and pole["driver_id"] == winner["driver_id"] else \
+        extra = " from pole" if pole and pole["driver_id"] == winner["driver_id"] else \
             (f" from P{winner['qualifying_position']} on the grid" if winner["qualifying_position"] else "")
         post(conn, sid, "result", f"{winner['driver']['name']} wins the {title}{extra}",
              f"{winner['team']['name']} take 25 points in round {event['round_number']}.", link,
@@ -374,7 +374,7 @@ def results_email(conn, event_id, url):
                 f"<td style='padding:4px 8px;border-left:3px solid {escape(r['team']['color'])}'>{escape(r['driver']['name'])}"
                 f"<br><small style='color:#8d97a8'>{escape(r['team']['name'])}</small></td>"
                 f"<td style='padding:4px 8px;text-align:right'>{extra}</td></tr>")
-    html = [f"<div style='font-family:Segoe UI,Arial,sans-serif;background:#0c1019;color:#e8ecf3;padding:20px'>",
+    html = ["<div style='font-family:Segoe UI,Arial,sans-serif;background:#0c1019;color:#e8ecf3;padding:20px'>",
             f"<div style='color:#e10600;font-size:12px;letter-spacing:2px;text-transform:uppercase'>Round {event['round_number']}</div>",
             f"<h1 style='margin:4px 0 16px'>{escape(title)}</h1><table style='border-collapse:collapse;width:100%;max-width:560px'>"]
     html += [row_html(r, f"+{r['gp_points'] + r['sprint_pts']}") for r in top]

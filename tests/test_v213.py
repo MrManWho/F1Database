@@ -181,32 +181,26 @@ def _league_data(token):
                 for t in ("drivers", "results", "events", "seasons", "season_grid", "teams", "contracts", "offers")}
 
 
-def test_2_1_3_reset_erases_every_login_and_the_links_to_them_but_no_league_data(app, master_client):
-    from f1tracker.app import create_app, reset_league_logins
+def test_starting_the_server_never_erases_logins_or_league_links(app, master_client):
+    """v3.1.2: the 2.1.3 reset is gone. A start on a data folder without its marker leaves every login, league
+    member and invitation exactly as they were."""
     token, a, b = _league(master_client)
     with storage.session(token) as conn:
         run_event(conn, S.events(conn, S.current_season_id(conn))[0])
         conn.execute("INSERT INTO invitations(username, role, invited_by, status, created_at) "
-                     "VALUES('ghost', 'member', 'david', 'Pending', 'x')")
-    before = _league_data(token)
+                     "VALUES('ghost', 'member', 'devon', 'Pending', 'x')")
     with auth.accounts() as conn:
-        conn.execute("INSERT INTO reserved_usernames(username, email_hash, reserved_at) VALUES('old', 'h', 'x')")
-    create_app({"SECRET_KEY": "x"})                                    # what the server does on start
-    assert auth.user_count() == 0 and auth.reserved_count() == 0
-    assert list(storage.backups_dir().glob("accounts-before-2.1.3-reset-*.db"))
-    assert any("before-213-login-reset" in b["name"] for b in storage.list_auto_backups(token))
-    assert _league_data(token) == before                               # drivers, results, seasons... untouched
+        conn.execute("DELETE FROM settings WHERE key IN ('accounts_reset_212', 'accounts_reset_213')")
+    before, users, members = _league_data(token), auth.user_count(), None
     with storage.session(token) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM career_members").fetchone()[0] == 0
-        assert conn.execute("SELECT COUNT(*) FROM invitations WHERE status = 'Pending'").fetchone()[0] == 0
-    # A newcomer who picks an old username gets nothing from the old league.
-    auth.create_user("ana", "Someone Else", "password1")
-    stranger = _client(app, "ana")
-    assert stranger.get(f"/career/{token}/dashboard").status_code == 403
-    # Only once: a second start leaves the new accounts alone.
-    create_app({"SECRET_KEY": "x"})
-    assert auth.get_user("ana")
-    assert reset_league_logins("x") >= 1
+        members = conn.execute("SELECT COUNT(*) FROM career_members").fetchone()[0]
+    from f1tracker.app import create_app
+    create_app({"SECRET_KEY": "x"})                                    # what the server does on start
+    assert auth.user_count() == users and _league_data(token) == before
+    with storage.session(token) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM career_members").fetchone()[0] == members
+        assert conn.execute("SELECT COUNT(*) FROM invitations WHERE status = 'Pending'").fetchone()[0] == 1
+    assert not list(storage.backups_dir().glob("accounts-before-2.1.3-reset-*.db"))
 
 
 @pytest.mark.whatsnew

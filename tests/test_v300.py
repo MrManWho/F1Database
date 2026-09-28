@@ -655,7 +655,7 @@ def test_resetting_a_weekend_clears_its_weather(app, master_client):
     with storage.session(token) as conn:
         run_event(conn, ev)
         assert wk.reset_preview(conn, S.get_event(conn, ev["id"]))["weather"] == 1
-        wk.reset(conn, ev["id"], "david")
+        wk.reset(conn, ev["id"], "devon")
         assert weather.get(conn, ev["id"]) == {}
 
 
@@ -723,3 +723,91 @@ def test_changing_your_own_password_never_forces_a_change(app, master_client):
     auth.create_user("sam", "Sam", "password1")
     auth.set_password("sam", "Another-Good-99")
     assert not auth.get_user("sam")["must_change_password"]
+
+
+# --------------------------------------------------------------------------- 3.1.2: durable outbox
+
+def test_messages_survive_a_restart_and_failures_are_retried(app, monkeypatch):
+    import time as _t
+    from f1tracker import mailer, outbox
+    sent, fail = [], {"n": 1}
+
+    def fake_send(to, subject, text, html=None):
+        if fail["n"]:
+            fail["n"] -= 1
+            raise mailer.MailError("server down")
+        sent.append((tuple(to), subject))
+    monkeypatch.setattr(mailer, "send", fake_send)
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    oid = outbox.enqueue("email", {"to": ["a@example.com"], "subject": "Hi", "text": "x"}, background=False)
+    assert not sent and outbox.pending() == 1                         # first try failed: kept for a retry
+    with auth_accounts() as conn:
+        conn.execute("UPDATE outbox SET next_at = ? WHERE id = ?", (_t.time() - 1, oid))
+    assert outbox.drain(background=False) == 1 and sent == [(("a@example.com",), "Hi")]
+    assert outbox.pending() == 0                                      # nothing kept once sent
+    # a message saved but never sent (the process died mid-send) is picked up after a restart
+    oid = outbox.enqueue("email", {"to": ["b@example.com"], "subject": "Later", "text": "y"}, background=False)
+    assert outbox.pending() == 0
+    with auth_accounts() as conn:
+        conn.execute("INSERT INTO outbox(kind, payload, created_at, next_at, claimed_at) VALUES(?,?,?,?,?)",
+                     ("email", '{"to": ["c@example.com"], "subject": "Lost", "text": "z"}', _t.time(), _t.time(),
+                      _t.time() - 1000))
+    assert outbox.drain(background=False) == 1 and ("c@example.com",) in [s[0] for s in sent]
+    # a message that keeps failing is dropped after the last attempt
+    fail["n"] = 99
+    oid = outbox.enqueue("email", {"to": ["d@example.com"], "subject": "Never", "text": "q"}, background=False)
+    for _ in range(outbox.MAX_ATTEMPTS):
+        with auth_accounts() as conn:
+            conn.execute("UPDATE outbox SET next_at = 0 WHERE id = ?", (oid,))
+        outbox.drain(background=False)
+    assert outbox.pending() == 0
+
+
+def test_mailer_and_discord_go_through_the_outbox(app, monkeypatch):
+    from f1tracker import discord, mailer, outbox
+    queued = []
+    monkeypatch.setattr(outbox, "enqueue", lambda kind, payload, background=True: queued.append((kind, payload)))
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    assert mailer.send_later(["a@example.com"], "S", "T")
+    discord.send_later("https://discord.com/api/webhooks/1/abc", ["one", "two"])
+    assert [k for k, _ in queued] == ["email", "discord", "discord"]
+    assert [p["message"] for k, p in queued if k == "discord"] == ["one", "two"]
+
+
+def auth_accounts():
+    from f1tracker import auth
+    return auth.accounts()
+
+
+def test_one_persons_typos_never_lock_their_whole_address(app):
+    from f1tracker import auth
+    auth.create_user("hh1", "One", "password1")
+    auth.create_user("hh2", "Two", "password1")
+    for _ in range(auth.IP_MAX_FAILURES + 5):                       # someone keeps mistyping their own password
+        auth.record_failure("hh1", "10.0.0.9")
+    assert auth.lock_remaining("hh1", "10.0.0.9")                   # their login is locked...
+    assert not auth.lock_remaining("hh2", "10.0.0.9")               # ...but not everyone on that connection
+    for i in range(auth.IP_MAX_FAILURES):                           # guessing across many accounts still locks it
+        auth.record_failure(f"guess{i % 5}", "10.0.0.66")
+    assert auth.lock_remaining("hh2", "10.0.0.66")
+
+
+def test_site_owner_is_reminded_to_download_a_backup(app, master_client):
+    from f1tracker import auth
+    token = _league(master_client, "Reminder League")
+    assert "Time for an encrypted backup" in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    master_client.post("/settings/offsite-snooze", data={"csrf_token": "tok"})
+    assert "Time for an encrypted backup" not in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    auth.set_setting("offsite_snooze_until", "0")
+    phrase = "correct horse battery staple"
+    master_client.post("/settings/offsite-backup", data={"csrf_token": "tok", "passphrase": phrase, "passphrase2": phrase})
+    assert "Time for an encrypted backup" not in master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    # players never see it
+    auth.create_user("pip", "Pip", "password1")
+    with storage.session(token) as conn:
+        conn.execute("INSERT INTO career_members(username, role) VALUES('pip', 'member')")
+    auth.set_setting("offsite_backup_at", "2020-01-01 00:00:00")
+    pip = app.test_client()
+    login(pip, "pip")
+    assert "Time for an encrypted backup" not in pip.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    assert pip.post("/settings/offsite-snooze", data={"csrf_token": "tok"}).status_code == 403

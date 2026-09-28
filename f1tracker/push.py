@@ -4,9 +4,6 @@ served over HTTPS, everything here quietly does nothing and the in-app bell stil
 import base64
 import json
 import logging
-import threading
-import time
-from contextlib import closing
 
 from . import auth, storage
 

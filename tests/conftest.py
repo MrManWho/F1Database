@@ -61,7 +61,7 @@ def calc_engine_default(request, monkeypatch):
 def career():
     token = storage.new_token()
     with storage.session(token, create=True) as conn:
-        S.seed_career(conn, token, "Test Career", 2026, ["David Conley", "Carson Hayes"])
+        S.seed_career(conn, token, "Test Career", 2026, ["Devon Corwin", "Carsten Hale"])
     return token
 
 
@@ -131,9 +131,9 @@ def login(client, username, password="password1"):
 
 @pytest.fixture
 def master_client(app):
-    auth.create_user("david", "David", "password1", is_master=True)
+    auth.create_user("devon", "Devon", "password1", is_master=True)
     client = app.test_client()
-    login(client, "david")
+    login(client, "devon")
     return client
 
 

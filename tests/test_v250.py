@@ -15,7 +15,7 @@ v3 = pytest.mark.engine3
 
 # --------------------------------------------------------------------------- helpers
 
-def _league(engine3=True, players_=("David Conley", "Carson Hayes"), teams=None, pending=False, rounds=None):
+def _league(engine3=True, players_=("Devon Corwin", "Carsten Hale"), teams=None, pending=False, rounds=None):
     token = storage.new_token()
     with storage.session(token, create=True) as conn:
         S.seed_career(conn, token, "V25", 2026, list(players_))
@@ -96,12 +96,12 @@ def test_existing_leagues_are_never_migrated_automatically(app, master_client):
         assert not engine.is_v3(conn, sid)
         assert [r["form"] for r in S.driver_standings(conn, sid)] == [r["form"] for r in before]
     # Drivers never see the choice.
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     with storage.session(token) as conn:
-        conn.execute("INSERT INTO career_members(username, driver_id, role) VALUES('carson', ?, 'member')",
+        conn.execute("INSERT INTO career_members(username, driver_id, role) VALUES('carsten', ?, 'member')",
                      (players(conn)[1],))
     c = app.test_client()
-    login(c, "carson")
+    login(c, "carsten")
     assert "calculation-update" not in (c.get(f"/career/{token}/dashboard").headers.get("Location") or "")
     # Decide later: stays on Version 2 with a reminder the Race Master can hide.
     master_client.post(f"/career/{token}/calculation-update/later", data={"csrf_token": "tok"})
@@ -140,12 +140,12 @@ def test_preview_changes_nothing_and_a_backup_exists_before_the_update(app, mast
                                                                          "backup": backup})
     with storage.session(token) as conn:
         m = migration.migrations(conn)[0]
-        assert m["option"] == "full" and m["backup"] == backup and m["approved_by"] == "david"
+        assert m["option"] == "full" and m["backup"] == backup and m["approved_by"] == "devon"
         assert m["old_engine"] == 2 and m["new_engine"] == 3 and json.loads(m["before"]) and json.loads(m["after"])
 
 
 def test_full_recalculation_rebuilds_the_season_and_tells_only_affected_drivers():
-    token = _league(engine3=False, pending=True, players_=("David Conley", "Carson Hayes", "Pat Reserve"),
+    token = _league(engine3=False, pending=True, players_=("Devon Corwin", "Carsten Hale", "Pat Reserve"),
                     teams=(11, 6))
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
@@ -154,7 +154,7 @@ def test_full_recalculation_rebuilds_the_season_and_tells_only_affected_drivers(
         _play(conn, sid, 6)
         before = impacts.snapshot(conn)
         preview = migration.preview(conn)
-        result = migration.apply_full(conn, "david", "x.f1career")
+        result = migration.apply_full(conn, "devon", "x.f1career")
         assert engine.is_v3(conn, sid) and engine.cutoff(conn, sid) == 0 and engine.choice(conn) == "full"
         done = [e for e in S.events(conn, sid) if e["status"] == C.EVENT_COMPLETE]
         assert all(conn.execute("SELECT 1 FROM round_ranks WHERE event_id = ?", (e["id"],)).fetchone() for e in done)
@@ -177,15 +177,15 @@ def test_full_recalculation_rebuilds_the_season_and_tells_only_affected_drivers(
 
 def test_personal_notice_shows_arrows_and_must_be_agreed(app, master_client):
     token = _league(engine3=False, pending=True, teams=(11, 6))
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
         a, b = players(conn)
-        conn.execute("INSERT INTO career_members(username, driver_id, role) VALUES('carson', ?, 'member')", (b,))
+        conn.execute("INSERT INTO career_members(username, driver_id, role) VALUES('carsten', ?, 'member')", (b,))
         _play(conn, sid, 5)
-        migration.apply_full(conn, "david", None)
+        migration.apply_full(conn, "devon", None)
     c = app.test_client()
-    login(c, "carson")
+    login(c, "carsten")
     res = c.get(f"/career/{token}/dashboard")
     assert res.headers["Location"].endswith("/changes")
     page = c.get(f"/career/{token}/changes").get_data(as_text=True)
@@ -207,7 +207,7 @@ def test_version_2_history_stays_reproducible_after_a_migration():
         history = [(r["driver_id"], r["points"], r["position"], r["form"], r["reputation"])
                    for r in S.driver_standings(conn, old)]
         cons = [(t["team"]["id"], t["points"]) for t in S.constructor_standings(conn, old)]
-        migration.apply_full(conn, "david", None)
+        migration.apply_full(conn, "devon", None)
         assert not engine.is_v3(conn, old) and engine.is_v3(conn, new)
         assert [(r["driver_id"], r["points"], r["position"], r["form"], r["reputation"])
                 for r in S.driver_standings(conn, old)] == history
@@ -241,7 +241,7 @@ def test_future_only_keeps_everything_until_new_evidence_arrives():
         before = impacts.snapshot(conn)
         goals_before = [tuple(r) for r in conn.execute("SELECT * FROM team_goals WHERE season_id = ?", (sid,))]
         rel_before = [tuple(r) for r in conn.execute("SELECT growth, finish_target FROM team_relations")]
-        result = migration.apply_future(conn, "david", None)
+        result = migration.apply_future(conn, "devon", None)
         assert result["cutoff"] == 6 and engine.cutoff(conn, sid) == 6 and engine.mixed(conn, sid)
         frozen = engine.frozen(conn, sid)
         for key in ("drivers", "ranks", "ai", "team_goals", "pledges"):
@@ -528,7 +528,7 @@ def test_team_orders_are_ruled_never_inferred_and_press_counts_half():
         assert conn.execute("SELECT status FROM team_orders").fetchone()[0] == "Awaiting ruling"
         extras, items = relations.extras_v3(conn, sid, a, S.driver_seats(conn, sid)[a][0])
         assert not any(i[2] == "team order" for i in items)            # finishing ahead proves nothing
-        teamlife.rule_order(conn, ev["id"], a, "Ignored", "david")
+        teamlife.rule_order(conn, ev["id"], a, "Ignored", "devon")
         extras, items = relations.extras_v3(conn, sid, a, S.driver_seats(conn, sid)[a][0])
         assert ("team order" in [i[2] for i in items]) and C.V3_ORDER_IGNORED in [i[1] for i in items]
         from f1tracker import press
@@ -599,7 +599,7 @@ def test_negotiation_limits_and_message_rules():
 
 def _ai_league(mate_gap_s=None, player_pos=22, mate_pos=21, rounds=3, difficulty=86, flags=(), laps=50,
                single=True, second_pos=None):
-    token = _league(players_=("David Conley",) if single else ("David Conley", "Carson Hayes"),
+    token = _league(players_=("Devon Corwin",) if single else ("Devon Corwin", "Carsten Hale"),
                     teams=(11,) if single else (11, 6))
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
@@ -617,7 +617,7 @@ def _ai_league(mate_gap_s=None, player_pos=22, mate_pos=21, rounds=3, difficulty
                 for f in flags:
                     form[f"flag_{f}"] = "1"
                 for session in ("gp", "sprint") if ev["is_sprint"] else ("gp",):
-                    ai3.save_pace_input(conn, ev["id"], a, session, form, "david")
+                    ai3.save_pace_input(conn, ev["id"], a, session, form, "devon")
             after_submit(conn, ev)
         return token, sid, a
 
@@ -673,7 +673,7 @@ def test_ai_one_ordinary_outlier_does_not_cause_a_large_reversal():
         mate = _mate(conn, sid, a)
         ev = S.events(conn, sid)[4]
         run_event(conn, ev, order=_order(conn, ev, {a: 22, mate: 12}), difficulty=86)
-        ai3.save_pace_input(conn, ev["id"], a, "gp", {"race_gap": "20", "laps": "50"}, "david")
+        ai3.save_pace_input(conn, ev["id"], a, "gp", {"race_gap": "20", "laps": "50"}, "devon")
         after_submit(conn, ev)
         rec = S.difficulty_recommendation(conn)
         assert rec["recommended"] >= 86 - 1 and rec.get("reversal") in (None, "damped")
@@ -685,13 +685,13 @@ def test_ai_personal_sweet_spots_stay_separate_for_each_player():
     with storage.session(token) as conn:
         rec = S.difficulty_recommendation(conn)
         spots = {p["name"]: p["sweet_spot"] for p in rec["players"]}
-        assert len(spots) == 2 and spots["David Conley"] < spots["Carson Hayes"]
+        assert len(spots) == 2 and spots["Devon Corwin"] < spots["Carsten Hale"]
         assert {p["verdict"] for p in rec["players"]} == {"struggling", "comfortable"}
 
 
 @v3
 def test_ai_sprints_are_their_own_half_weight_sample():
-    token = _league(players_=("David Conley",), teams=(6,))
+    token = _league(players_=("Devon Corwin",), teams=(6,))
     with storage.session(token) as conn:
         sid = S.current_season_id(conn)
         sprint = next(e for e in S.events(conn, sid) if e["is_sprint"])
@@ -729,7 +729,7 @@ def test_every_league_page_renders_on_a_version_3_league(app, master_client):
         evs = _play(conn, sid, 4)
         ev = evs[0]
         ai3.save_pace_input(conn, ev["id"], a, "gp", {"quali_time": "1:30.100", "mate_quali_time": "1:29.800",
-                                                      "race_gap": "12", "laps": "50", "flag_traffic": "1"}, "david")
+                                                      "race_gap": "12", "laps": "50", "flag_traffic": "1"}, "devon")
     import re as _re
     checked = 0
     for rule in app.url_map.iter_rules():

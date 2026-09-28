@@ -28,7 +28,7 @@ def test_rollover_with_a_provisional_seat_never_loops(app, master_client):
         a = players(conn)[0]
         S.place_players(conn, sid, {a: (1, 1)})
         teamgoals.set_enabled(conn, True)
-        teamgoals.choose(conn, sid, S.driver_seats(conn, sid)[a][0], "competitive", "david")
+        teamgoals.choose(conn, sid, S.driver_seats(conn, sid)[a][0], "competitive", "devon")
         for e in S.events(conn, sid):
             run_event(conn, e)
         form = {"year": "2027", "csrf_token": "tok"}

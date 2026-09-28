@@ -134,7 +134,7 @@ def test_notifications_and_activity_stay_in_their_league(app, master_client):
     with storage.session(a) as conn:
         from f1tracker import feed
         feed.notify(conn, None, "Secret news from A", "dashboard")
-        community.audit(conn, "david", "Test", "", summary="did something private in A")
+        community.audit(conn, "devon", "Test", "", summary="did something private in A")
     bob = _client(app, "bob")
     assert "Secret news from A" not in bob.get(f"/api/career/{b}/notifications").get_data(as_text=True)
     assert "private in A" not in master_client.get(f"/career/{b}/activity").get_data(as_text=True)

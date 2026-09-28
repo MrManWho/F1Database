@@ -273,13 +273,13 @@ def test_profile_stat_grid_is_balanced(master_client):
     ("ana", "Report an incident from the relevant race-weekend page."),
     ("kim", "Only assigned drivers can submit incident reports."),
     ("sam", "Incident reports and rulings will appear here."),
-    ("david", "Submitted reports will appear here for you to review and rule on."),
+    ("devon", "Submitted reports will appear here for you to review and rule on."),
 ])
 def test_incident_empty_state_is_role_aware(app, master_client, who, expected):
     token, a, b = _league(master_client)
     _add(token, "kim", "scorekeeper")
     _add(token, "sam", "spectator")
-    client = master_client if who == "david" else _client(app, who)
+    client = master_client if who == "devon" else _client(app, who)
     page = client.get(f"/career/{token}/incidents").get_data(as_text=True)
     assert "No incidents reported" in page and expected in page and "#incidents" in page
     ev = _event(token)

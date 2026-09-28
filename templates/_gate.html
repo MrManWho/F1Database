@@ -42,7 +42,7 @@
       <form method="post" action="{{ url_for('gate_bypass', token=ctx.token, event_id=ev.id) }}" class="stack">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Why? <small class="muted">(required, kept on the round and in the Activity Log)</small>
-          <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. Carson's away, answering later"></label>
+          <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. One driver is away, answering later"></label>
         <p class="muted small">Opens R{{ ev.round_number }} only. The players can still do what's outstanding later and it still counts.</p>
         <div><button class="btn btn-sm btn-primary">Open round</button></div>
       </form>

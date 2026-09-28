@@ -54,29 +54,29 @@ def _emails_to(outbox, address):
 
 def test_account_in_two_leagues_only_gets_email_from_the_one_it_chose(app, master_client, outbox):
     """The reported bug: joining a separate Test league made its results email the account too."""
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    main = _new_league(master_client, "Main League", players_=["Carson Hayes"], logins=["carson"])
-    test = _new_league(master_client, "Test League", players_=["Carson Test"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    main = _new_league(master_client, "Main League", players_=["Carsten Hale"], logins=["carsten"])
+    test = _new_league(master_client, "Test League", players_=["Carsten Test"], logins=["carsten"])
     with storage.session(main) as conn:
-        notices.save(conn, "carson", email={"results"})           # carson wants Main's results by email...
+        notices.save(conn, "carsten", email={"results"})           # carsten wants Main's results by email...
     with storage.session(test) as conn:
-        assert not notices.prefs(conn, "carson")["email"]["results"]   # ...and Test never inherited it
+        assert not notices.prefs(conn, "carsten")["email"]["results"]   # ...and Test never inherited it
     _submit_round(master_client, test)
-    assert _emails_to(outbox, "carson@example.com") == []
+    assert _emails_to(outbox, "carsten@example.com") == []
     _submit_round(master_client, main)
-    mine = _emails_to(outbox, "carson@example.com")
+    mine = _emails_to(outbox, "carsten@example.com")
     assert len(mine) == 1 and 'for the league "Main League"' in mine[0][2]
     assert f"/career/{main}/notifications" in mine[0][2] and f"/career/{test}/" not in mine[0][2]
 
 
 def test_creating_a_league_uses_the_creators_choice_and_nobody_else_is_subscribed(app, master_client):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    token = _new_league(master_client, "Fresh", preset="all", players_=["Carson Hayes"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    token = _new_league(master_client, "Fresh", preset="all", players_=["Carsten Hale"], logins=["carsten"])
     with storage.session(token) as conn:
-        assert notices.prefs(conn, "david")["email"]["results"]           # the creator chose Everything
-        carson = notices.prefs(conn, "carson")
-        assert carson["email"] == notices.preset_prefs("important")["email"]   # sensible default, not "all"
-        assert not carson["email"]["results"]
+        assert notices.prefs(conn, "devon")["email"]["results"]           # the creator chose Everything
+        carsten = notices.prefs(conn, "carsten")
+        assert carsten["email"] == notices.preset_prefs("important")["email"]   # sensible default, not "all"
+        assert not carsten["email"]["results"]
 
 
 def test_joining_applies_the_choice_made_in_the_request(app, master_client):
@@ -107,75 +107,75 @@ def test_accepting_an_invitation_asks_for_this_leagues_notifications(app, master
 
 
 def test_leaving_a_league_stops_its_email_and_forgets_its_preferences(app, master_client, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    token = _new_league(master_client, "Leaving", players_=["Carson Hayes"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    token = _new_league(master_client, "Leaving", players_=["Carsten Hale"], logins=["carsten"])
     with storage.session(token) as conn:
-        notices.save(conn, "carson", preset="all")
-        roles.remove_member(conn, "carson")
-        assert conn.execute("SELECT COUNT(*) FROM member_notify WHERE username = 'carson'").fetchone()[0] == 0
+        notices.save(conn, "carsten", preset="all")
+        roles.remove_member(conn, "carsten")
+        assert conn.execute("SELECT COUNT(*) FROM member_notify WHERE username = 'carsten'").fetchone()[0] == 0
     _submit_round(master_client, token)
-    assert _emails_to(outbox, "carson@example.com") == []
+    assert _emails_to(outbox, "carsten@example.com") == []
 
 
 def test_muting_one_league_keeps_the_other_fully_on(app, master_client, outbox, pushes):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    a = _new_league(master_client, "League A", players_=["Carson A"], logins=["carson"])
-    b = _new_league(master_client, "League B", players_=["Carson B"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    a = _new_league(master_client, "League A", players_=["Carsten A"], logins=["carsten"])
+    b = _new_league(master_client, "League B", players_=["Carsten B"], logins=["carsten"])
     with storage.session(a) as conn:
-        notices.save(conn, "carson", preset="all")
+        notices.save(conn, "carsten", preset="all")
     with storage.session(b) as conn:
-        notices.save(conn, "carson", preset="all")
-    carson = _client(app, "carson")
-    carson.post(f"/career/{b}/notifications", data={"muted": "1", "email": ["results"], "push": ["results"], "csrf_token": "tok"})
+        notices.save(conn, "carsten", preset="all")
+    carsten = _client(app, "carsten")
+    carsten.post(f"/career/{b}/notifications", data={"muted": "1", "email": ["results"], "push": ["results"], "csrf_token": "tok"})
     with storage.session(b) as conn:
-        assert notices.prefs(conn, "carson")["muted"]
-        assert conn.execute("SELECT 1 FROM career_members WHERE username = 'carson'").fetchone()   # still in it
+        assert notices.prefs(conn, "carsten")["muted"]
+        assert conn.execute("SELECT 1 FROM career_members WHERE username = 'carsten'").fetchone()   # still in it
     _submit_round(master_client, b)
     _submit_round(master_client, a)
-    assert len(_emails_to(outbox, "carson@example.com")) == 1
-    assert all("League A" in title for names, title, _ in pushes if "carson" in names)
-    page = carson.get(f"/career/{b}/notifications").get_data(as_text=True)
+    assert len(_emails_to(outbox, "carsten@example.com")) == 1
+    assert all("League A" in title for names, title, _ in pushes if "carsten" in names)
+    page = carsten.get(f"/career/{b}/notifications").get_data(as_text=True)
     assert "Mute League B" in page and "this league only" in page
 
 
 def test_global_pause_and_unsubscribe_links(app, master_client, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    a = _new_league(master_client, "League A", players_=["Carson A"], logins=["carson"])
-    b = _new_league(master_client, "League B", players_=["Carson B"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    a = _new_league(master_client, "League A", players_=["Carsten A"], logins=["carsten"])
+    b = _new_league(master_client, "League B", players_=["Carsten B"], logins=["carsten"])
     for t in (a, b):
         with storage.session(t) as conn:
-            notices.save(conn, "carson", preset="all")
+            notices.save(conn, "carsten", preset="all")
     _submit_round(master_client, a)
-    link = next(w for w in _emails_to(outbox, "carson@example.com")[0][2].split() if "/unsubscribe/" in w)
+    link = next(w for w in _emails_to(outbox, "carsten@example.com")[0][2].split() if "/unsubscribe/" in w)
     path = link.split("localhost", 1)[-1]
     anon = app.test_client()
     page = anon.get(path).get_data(as_text=True)
     assert "Stop emails from League A?" in page and "other leagues keep emailing you" in page
     with storage.session(a) as conn:
-        assert notices.prefs(conn, "carson")["email"]["results"]           # a GET (mail scanners) changes nothing
+        assert notices.prefs(conn, "carsten")["email"]["results"]           # a GET (mail scanners) changes nothing
     with anon.session_transaction() as sess:
         sess["csrf"] = "tok"
     anon.post(path, data={"scope": "league", "csrf_token": "tok"})
     with storage.session(a) as conn:
-        assert not any(notices.prefs(conn, "carson")["email"].values())
+        assert not any(notices.prefs(conn, "carsten")["email"].values())
     with storage.session(b) as conn:
-        assert all(notices.prefs(conn, "carson")["email"].values())        # League B untouched
+        assert all(notices.prefs(conn, "carsten")["email"].values())        # League B untouched
     outbox.clear()
     _submit_round(master_client, b)
-    assert len(_emails_to(outbox, "carson@example.com")) == 1
+    assert len(_emails_to(outbox, "carsten@example.com")) == 1
     anon.post(path, data={"scope": "all", "csrf_token": "tok"})
-    assert auth.get_user("carson")["email_paused"]
+    assert auth.get_user("carsten")["email_paused"]
     outbox.clear()
     _submit_round(master_client, b, rnd=1)
-    assert _emails_to(outbox, "carson@example.com") == []
+    assert _emails_to(outbox, "carsten@example.com") == []
     assert anon.get("/unsubscribe/forged-token").status_code == 400
 
 
 def test_result_retries_and_duplicate_jobs_never_email_twice(app, master_client, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    token = _new_league(master_client, "Retry", players_=["Carson Hayes"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    token = _new_league(master_client, "Retry", players_=["Carsten Hale"], logins=["carsten"])
     with storage.session(token) as conn:
-        notices.save(conn, "carson", preset="all")
+        notices.save(conn, "carsten", preset="all")
     ev, res = _submit_round(master_client, token)
     assert res.status_code == 200
     # The Race Master saves the completed round again (as a retry would): no second email.
@@ -183,17 +183,17 @@ def test_result_retries_and_duplicate_jobs_never_email_twice(app, master_client,
     with app.test_request_context("/", base_url="http://localhost"):
         from f1tracker import mailer  # noqa: F401
         with storage.session(token) as conn:
-            again = delivery.send_email(conn, token, "results", ["carson"], f"results-email:{ev['id']}", "s", "t", None,
+            again = delivery.send_email(conn, token, "results", ["carsten"], f"results-email:{ev['id']}", "s", "t", None,
                                         "http://localhost")
     assert again == 0
-    assert len([m for m in _emails_to(outbox, "carson@example.com") if "results are in" in m[1]]) == 1
+    assert len([m for m in _emails_to(outbox, "carsten@example.com") if "results are in" in m[1]]) == 1
 
 
 def test_duplicate_background_jobs_and_season_rollover_notice(career, pushes):
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     with storage.session(career) as conn:
-        carson = conn.execute("SELECT id FROM drivers WHERE name = 'Carson Hayes'").fetchone()["id"]
-        roles.set_member(conn, "carson", "member", carson)
+        carsten = conn.execute("SELECT id FROM drivers WHERE name = 'Carsten Hale'").fetchone()["id"]
+        roles.set_member(conn, "carsten", "member", carsten)
         feed.take_outbox()
         feed.notify(conn, None, "The 2027 season has begun", "dashboard", category="season", dedupe="season-start:9")
         feed.notify(conn, None, "The 2027 season has begun", "dashboard", category="season", dedupe="season-start:9")
@@ -204,19 +204,19 @@ def test_duplicate_background_jobs_and_season_rollover_notice(career, pushes):
 
 
 def test_masters_only_notices_never_reach_members(career, pushes):
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     auth.create_user("rm", "League RM", "password1")
     with storage.session(career) as conn:
-        roles.set_member(conn, "carson", "member", None)
+        roles.set_member(conn, "carsten", "member", None)
         roles.set_member(conn, "rm", "race_master", None)
         feed.take_outbox()
         feed.notify(conn, None, "Pat asked to join as Pat Racer", "members", category="join_requests")
-        rows, _ = feed.notifications_for(conn, "carson", None)
+        rows, _ = feed.notifications_for(conn, "carsten", None)
         assert rows == []
         rows, _ = feed.notifications_for(conn, "rm", None, is_master=True)
         assert rows and "asked to join" in rows[0]["text"]
     delivery.plan(feed.take_outbox())
-    assert pushes == [] or all("carson" not in n for n, *_ in pushes)
+    assert pushes == [] or all("carsten" not in n for n, *_ in pushes)
     sends = [s for s in pushes]
     assert all(names == ["rm"] for names, *_ in sends)
 
@@ -266,11 +266,11 @@ def test_existing_memberships_keep_what_they_had(tmp_path):
 
 
 def test_delivery_log_is_race_master_only_and_has_no_content(app, master_client, outbox):
-    auth.create_user("carson", "Carson", "password1", email="carson@example.com")
-    token = _new_league(master_client, "Logged", players_=["Carson Hayes"], logins=["carson"])
+    auth.create_user("carsten", "Carsten", "password1", email="carsten@example.com")
+    token = _new_league(master_client, "Logged", players_=["Carsten Hale"], logins=["carsten"])
     with storage.session(token) as conn:
-        notices.save(conn, "carson", preset="all")
+        notices.save(conn, "carsten", preset="all")
     _submit_round(master_client, token)
     page = master_client.get(f"/career/{token}/deliveries").get_data(as_text=True)
-    assert "Results: R1" in page and "carson@example.com" not in page
-    assert _client(app, "carson").get(f"/career/{token}/deliveries").status_code == 403
+    assert "Results: R1" in page and "carsten@example.com" not in page
+    assert _client(app, "carsten").get(f"/career/{token}/deliveries").status_code == 403

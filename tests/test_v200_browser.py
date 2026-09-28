@@ -18,7 +18,7 @@ def _league(master_client, name="Browser League"):
     return token, ev
 
 
-def _login(page, base, user="david"):
+def _login(page, base, user="devon"):
     page.goto(base + "/login")
     page.fill("input[name=username]", user)
     page.fill("input[name=password]", "password1")

@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.1.2 · Safer logins and messages
+_Released September 28, 2026_
+> Behind-the-scenes fixes that protect your logins, your messages and your backups.
+
+### Highlights
+- **Emails, Discord posts and phone alerts aren't lost any more.** Each one is saved before it's sent. If the site restarts mid-send (every update restarts it) or the mail server is briefly down, it's sent again automatically.
+- **One person's typos no longer lock out the whole house.** Only that person's login is locked after too many wrong passwords. A shared internet connection is only blocked when it's guessing at several different accounts.
+- **A backup reminder you'll see.** The site owner gets a reminder on the Control Room when an encrypted backup is due, with a "remind me in a week" button.
+
+### Changed
+- The What's New heading for this era now reads "Versions 3.0–3.x".
+- Example names in the site's placeholder text and in the project's own test data are fictional, so no real person's name is part of the site.
+
+### Fixed
+- Removed an old one-time step from 2.1.3 that could erase every login if the site was ever started on an accounts file without its "already done" marker (for example a fresh or restored data folder).
+- Tidied code that was no longer used.
+
 ## 3.1.1 · Unlocking accounts
 _Released September 25, 2026_
 > Help for anyone locked out of their login.
@@ -370,7 +387,7 @@ _Released September 24, 2026_
 - **Final review before completing a weekend** now also blocks gaps in positions and a missing AI difficulty (enter it or choose "Don't track this round"), highlights player drivers with missing results, and says the round will lock for Scorekeepers.
 - **Race-time states:** Not scheduled, Scheduled, Starts in…, Starting soon, In progress, Results pending, Completed, and Postponed (Race Master). Times show the league's time-zone abbreviation.
 - **Season card:** completed and remaining rounds, current round, Sprint weekends done and left, next event and projected finish date.
-- **Activity Log** entries read as sentences ("David scheduled Round 2 — Chinese GP (2026) for Wed, Sep 23 at 11:30 AM EDT", "changed joining from Join requests enabled to Invite only", "changed Chat's league role from Member to Scorekeeper") with links, and never show private values such as webhook URLs. Older entries show names instead of ids.
+- **Activity Log** entries read as sentences ("Alex scheduled Round 2 — Chinese GP (2026) for Wed, Sep 23 at 11:30 AM EDT", "changed joining from Join requests enabled to Invite only", "changed Chat's league role from Member to Scorekeeper") with links, and never show private values such as webhook URLs. Older entries show names instead of ids.
 - **Password forms** (change, create a login, reset, sign-up, first-time setup): confirm field, show/hide, Caps Lock warning, clear rules, matching checked in the browser and on the server, and no double submission.
 - **Race Master sidebar tools** are a separate, collapsible, scrollable section that remembers whether you left it open.
 - **Confirmations** for high-impact actions explain what changes, whether history is affected, whether a backup is made and whether it can be undone. Deleting a driver's race results needs their name typed. Paddock Admin uses one delete dialog instead of one per driver.

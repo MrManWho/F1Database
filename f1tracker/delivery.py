@@ -120,7 +120,9 @@ def dispatch(items, base_url="", exclude=None, background=True):
                 url = f"{base_url}/career/{p['token']}/{p['link']}" if p.get("link") else \
                     f"{base_url}/career/{p['token']}/dashboard"
                 if channel == "push":
-                    push.send(names, p["league"], p["text"], url)
+                    from . import outbox
+                    outbox.enqueue("push", {"names": list(names), "title": p["league"], "body": p["text"], "url": url},
+                                   background=False)
                 else:
                     for username, address in names:
                         ft, fh = footer(p["league"], base_url, username, p["token"])

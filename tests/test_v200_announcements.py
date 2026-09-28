@@ -54,8 +54,8 @@ def test_recipient_preview_counts_by_preference(app, master_client, monkeypatch)
         roles.set_member(conn, "sam", "member")
         notices.save(conn, "ana", preset="all")
         notices.save(conn, "sam", preset="inapp")
-        assert announcements.preview(conn, "all", exclude="david") == {"app": 2, "push": 1, "email": 1}
-        assert announcements.preview(conn, "drivers", exclude="david")["app"] == 1
+        assert announcements.preview(conn, "all", exclude="devon") == {"app": 2, "push": 1, "email": 1}
+        assert announcements.preview(conn, "drivers", exclude="devon")["app"] == 1
     got = master_client.get(f"/career/{token}/announcements/preview?audience=drivers").get_json()
     assert got["app"] == 1
 
@@ -65,7 +65,7 @@ def test_scheduled_announcement_goes_out_once_when_due_and_expires(app, master_c
     token = _league(master_client)
     with storage.session(token) as conn:
         future = "2999-01-01T10:00+00:00"
-        ann = announcements.create(conn, "david", "Season launch", "", publish_at=future)
+        ann = announcements.create(conn, "devon", "Season launch", "", publish_at=future)
         assert not announcements.get(conn, ann)["published_at"]
         assert announcements.publish_due(conn) == 0
         conn.execute("UPDATE announcements SET publish_at = '2020-01-01T10:00+00:00' WHERE id = ?", (ann,))
@@ -78,7 +78,7 @@ def test_scheduled_announcement_goes_out_once_when_due_and_expires(app, master_c
         conn.execute("UPDATE announcements SET expires_at = '2020-06-01T10:00+00:00' WHERE id = ?", (ann,))
         assert announcements.visible(conn, "ana", "member", 1) == []
         try:
-            announcements.create(conn, "david", "Bad dates", "", publish_at="2999-01-02T00:00+00:00",
+            announcements.create(conn, "devon", "Bad dates", "", publish_at="2999-01-02T00:00+00:00",
                                  expires_at="2999-01-01T00:00+00:00")
             raise AssertionError("expected a validation error")
         except announcements.ValidationError:
@@ -89,8 +89,8 @@ def test_pinned_first_and_take_down(app, master_client):
     _people()
     token = _league(master_client)
     with storage.session(token) as conn:
-        a = announcements.create(conn, "david", "Older but pinned", "", pinned=True)
-        announcements.create(conn, "david", "Newer", "")
+        a = announcements.create(conn, "devon", "Older but pinned", "", pinned=True)
+        announcements.create(conn, "devon", "Newer", "")
         feed.take_outbox()
         assert [x["title"] for x in announcements.visible(conn, "ana", "member", players(conn)[0])] == \
             ["Older but pinned", "Newer"]
@@ -112,8 +112,8 @@ def test_email_is_one_league_scoped_delivery(app, master_client, monkeypatch):
         notices.save(conn, "ana", preset="inapp")
         feed.take_outbox()
     with storage.session(token) as conn:
-        announcements.create(conn, "david", "Rules update", "Read the new rules.", email=True)
-    sends = delivery.plan(feed.take_outbox(), exclude="david")
+        announcements.create(conn, "devon", "Rules update", "Read the new rules.", email=True)
+    sends = delivery.plan(feed.take_outbox(), exclude="devon")
     emails = [s for s in sends if s[0] == "email"]
     assert len(emails) == 1 and sorted(u for u, _ in emails[0][1]) == ["ana", "sam"]
     assert emails[0][2]["league"] == "News League"

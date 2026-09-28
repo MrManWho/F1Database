@@ -5,7 +5,7 @@
   <a class="btn btn-ghost" href="{{ url_for('home') }}">← {{ 'Your leagues' if user else 'Home' }}</a></div>
 <p class="muted">You're on <b>v{{ APP_VERSION }}</b>. Every update keeps your leagues, logins and results.</p>
 {# v3.0: the three development eras, as separators above their versions #}
-{% set eras = {3: ('THE DEFINITIVE RELEASE', 'Version 3.0', 'Balanced. Polished. Complete.'),
+{% set eras = {3: ('THE DEFINITIVE RELEASE', 'Versions 3.0–3.x', 'Balanced. Polished. Complete.'),
                2: ('THE CAREER EXPANSION', 'Versions 2.0–2.5', 'The website evolved into a complete career and league simulation.'),
                1: ('THE FOUNDATION ERA', 'Versions 1.0–1.x', 'Where Paddock Legacy began.')} %}
 {% set seen = namespace(era=none) %}

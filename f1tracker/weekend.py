@@ -256,7 +256,7 @@ def reset(conn, event_id, username):
     press, weekend targets (and their choices), team orders from this round, predictions, check-ins, fan votes,
     incidents, the Race Master override and this round's headlines are removed; every effect they had on team
     relationships is undone. Returns {driver_id: [what changed]} for change notices."""
-    from . import recalc, relations, teamlife
+    from . import recalc, relations
     event = S.get_event(conn, event_id)
     why = reset_blocker(conn, event)
     if why:

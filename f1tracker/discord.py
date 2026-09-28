@@ -43,17 +43,15 @@ def post(url, content):
 
 
 def send_later(url, messages):
+    """v3.1.2: each post goes through the outbox (one row per message, so a retry never repeats one that was sent)."""
     if not url or not messages:
         return
-
-    def run():
-        for m in messages:
-            try:
-                post(url, m)
-            except Exception as exc:  # never break the site over Discord
-                log.warning("Discord post failed: %s", exc)
-
-    threading.Thread(target=run, daemon=True).start()
+    from . import outbox
+    for m in messages:
+        try:
+            outbox.enqueue("discord", {"url": url, "message": m})
+        except Exception as exc:  # never break the site over Discord
+            log.warning("Discord post couldn't be queued: %s", exc)
 
 
 def results_message(conn, event_id, league):

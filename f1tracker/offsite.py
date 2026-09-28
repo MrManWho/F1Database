@@ -15,6 +15,7 @@ Decrypt on any computer with Python and the `cryptography` package:
 
 import hashlib
 import io
+import time
 import json
 import os
 import sqlite3
@@ -126,6 +127,22 @@ def overdue():
         return (datetime.fromisoformat(now_iso()) - datetime.fromisoformat(stamp)).days >= REMIND_AFTER_DAYS
     except ValueError:
         return True
+
+
+def remind():
+    """v3.1.2: show the site owner a reminder on the Control Room: overdue and not snoozed."""
+    from . import auth
+    if not overdue():
+        return False
+    try:
+        return float(auth.get_setting("offsite_snooze_until") or 0) < time.time()
+    except ValueError:
+        return True
+
+
+def snooze(days=7):
+    from . import auth
+    auth.set_setting("offsite_snooze_until", str(time.time() + days * 86400))
 
 
 def _main(argv):

@@ -196,7 +196,7 @@ def test_reputation_chain_keeps_pledge_and_team_goal_rewards(app, master_client)
         sid = S.current_season_id(conn)
         teamgoals.set_enabled(conn, True)
         team = S.driver_seats(conn, sid)[a][0]
-        teamgoals.choose(conn, sid, team, "safe", "david")
+        teamgoals.choose(conn, sid, team, "safe", "devon")
         for ev in S.events(conn, sid):
             run_event(conn, ev)
         new = S.create_next_season(conn, sid, 2027)

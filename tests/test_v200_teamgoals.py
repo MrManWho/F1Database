@@ -100,8 +100,8 @@ def test_settlement_rewards_and_penalises_next_season_once(app, master_client):
         teamgoals.set_enabled(conn, True)
         seats_ = S.driver_seats(conn, sid)
         ta, tb = seats_[a][0], seats_[b][0]
-        teamgoals.choose(conn, sid, ta, "safe", "david")
-        teamgoals.choose(conn, sid, tb, "ambitious", "david")
+        teamgoals.choose(conn, sid, ta, "safe", "devon")
+        teamgoals.choose(conn, sid, tb, "ambitious", "devon")
         evs = S.events(conn, sid)
         ids = [r["driver_id"] for r in S.weekend_rows(conn, evs[0]["id"])]
         ta_drivers = [d for d, (t, _s) in seats_.items() if t == ta]
@@ -131,7 +131,7 @@ def test_rollover_route_settles_goals(app, master_client):
         a = players(conn)[0]
         _seat(conn, {a: (1, 1)})
         teamgoals.set_enabled(conn, True)
-        teamgoals.choose(conn, sid, S.driver_seats(conn, sid)[a][0], "competitive", "david")
+        teamgoals.choose(conn, sid, S.driver_seats(conn, sid)[a][0], "competitive", "devon")
         for e in S.events(conn, sid):
             run_event(conn, e)
     form = {"year": "2027", "csrf_token": "tok"}
@@ -157,6 +157,6 @@ def test_goals_stay_in_their_league(app, master_client):
     with storage.session(t1) as conn:
         sid = S.current_season_id(conn)
         team = S.driver_seats(conn, sid)[players(conn)[0]][0]
-        teamgoals.choose(conn, sid, team, "competitive", "david")
+        teamgoals.choose(conn, sid, team, "competitive", "devon")
     with storage.session(t2) as conn:
         assert teamgoals.progress(conn, S.current_season_id(conn)) == []

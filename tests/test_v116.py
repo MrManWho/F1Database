@@ -10,7 +10,7 @@ from f1tracker import constants as C
 
 
 def _league(master_client):
-    """A league run by site Race Master david, with ana and ben driving for Cadillac."""
+    """A league run by site Race Master devon, with ana and ben driving for Cadillac."""
     auth.create_user("ana", "Ana", "password1")
     auth.create_user("ben", "Ben", "password1")
     res = master_client.post("/careers/new", data={"name": "V16", "year": "2026", "player_name": ["Ana Silva", "Ben Okafor"],
@@ -125,7 +125,7 @@ def test_scorekeeper_enters_results_but_nothing_administrative(app, master_clien
     for path in ("members", "settings", "market", "paddock", "activity"):
         assert kim.get(f"/career/{token}/{path}").status_code in (302, 403), path
     assert kim.post(f"/career/{token}/members/ana/update", data={"role": "spectator", "csrf_token": "tok"}).status_code == 403
-    assert kim.post(f"/career/{token}/members/david/remove", data={"csrf_token": "tok"}).status_code == 403
+    assert kim.post(f"/career/{token}/members/devon/remove", data={"csrf_token": "tok"}).status_code == 403
     assert kim.post(f"/career/{token}/seasons/new", data={"year": "2027", "csrf_token": "tok"}).status_code == 403
     assert kim.post(f"/career/{token}/delete", data={"csrf_token": "tok"}).status_code == 403
     assert kim.post(f"/career/{token}/settings", data={"csrf_token": "tok"}).status_code == 403
@@ -160,7 +160,7 @@ def test_role_rules_and_final_race_master_protection(app, master_client):
         with pytest.raises(roles.RoleError, match="Spectators can't have a driver"):
             roles.set_member(conn, "ana", "spectator", a)
         with pytest.raises(roles.RoleError, match="site owner"):
-            roles.set_member(conn, "david", "member")
+            roles.set_member(conn, "devon", "member")
         with pytest.raises(roles.RoleError, match="already assigned"):
             roles.set_member(conn, "rita", "race_master", a)
         # With a site Race Master around, a league Race Master can step down.
@@ -171,7 +171,7 @@ def test_role_rules_and_final_race_master_protection(app, master_client):
         accts.execute("UPDATE users SET is_master = 0")
     with storage.session(token) as conn:
         # Since v2.0 whoever creates a league is also its (league) Race Master; take them out to test the rule.
-        conn.execute("DELETE FROM career_members WHERE username = 'david'")
+        conn.execute("DELETE FROM career_members WHERE username = 'devon'")
         assert roles.race_master_count(conn) == 1
         with pytest.raises(roles.RoleError, match="at least one Race Master"):
             roles.set_member(conn, "rita", "scorekeeper")

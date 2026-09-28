@@ -263,7 +263,7 @@ def test_activity_log_records_changes_for_the_race_master_only(app, master_clien
     master_client.post(f"/career/{token}/calendar/add", data={"name": "Extra GP", "location": "X", "csrf_token": "tok"})
     with storage.session(token) as conn:
         log = community.audit_entries(conn)
-    assert [(r["username"], r["action"]) for r in log][:2] == [("david", "Added a race"), ("kim", "Edited results")]
+    assert [(r["username"], r["action"]) for r in log][:2] == [("devon", "Added a race"), ("kim", "Edited results")]
     assert sum(1 for r in log if r["action"] == "Edited results") == 1
     assert kim.get(f"/career/{token}/activity").status_code == 403
     page = master_client.get(f"/career/{token}/activity").get_data(as_text=True)
@@ -305,9 +305,9 @@ def test_install_files_and_push_subscriptions(app, master_client):
     sub = {"endpoint": "https://push.example.com/abc", "keys": {"p256dh": "k", "auth": "a"}}
     assert master_client.post("/push/subscribe", json=sub, headers={"X-CSRF-Token": "tok"}).get_json()["ok"]
     from f1tracker import push
-    assert push.device_count("david") == 1
+    assert push.device_count("devon") == 1
     master_client.post("/push/unsubscribe", json={"endpoint": sub["endpoint"]}, headers={"X-CSRF-Token": "tok"})
-    assert push.device_count("david") == 0
+    assert push.device_count("devon") == 0
 
 
 def test_notifications_are_queued_for_phone_alerts(career, monkeypatch):
@@ -315,16 +315,16 @@ def test_notifications_are_queued_for_phone_alerts(career, monkeypatch):
     from f1tracker import delivery, push
     monkeypatch.setattr(push, "available", lambda: True)
     auth.create_user("boss", "Boss", "password1", is_master=True)
-    auth.create_user("carson", "Carson", "password1")
+    auth.create_user("carsten", "Carsten", "password1")
     with storage.session(career) as conn:
-        carson = driver_id(conn, "Carson Hayes")
-        conn.execute("INSERT INTO career_members(username, driver_id) VALUES('carson', ?)", (carson,))
+        carsten = driver_id(conn, "Carsten Hale")
+        conn.execute("INSERT INTO career_members(username, driver_id) VALUES('carsten', ?)", (carsten,))
         feed.take_outbox()
-        feed.notify(conn, carson, "New offer from Cadillac", "garage")
+        feed.notify(conn, carsten, "New offer from Cadillac", "garage")
         feed.notify(conn, None, "Round 1 results are in")
     items = feed.take_outbox()
-    assert [(i["token"], i["driver_id"]) for i in items] == [(career, carson), (career, None)]
+    assert [(i["token"], i["driver_id"]) for i in items] == [(career, carsten), (career, None)]
     sends = delivery.plan(items)
     assert [(c, sorted(n), p["text"]) for c, n, p in sends] == [
-        ("push", ["carson"], "New offer from Cadillac"), ("push", ["carson"], "Round 1 results are in")]
+        ("push", ["carsten"], "New offer from Cadillac"), ("push", ["carsten"], "Round 1 results are in")]
     assert delivery.plan(items) == []      # the same notifications are never delivered twice

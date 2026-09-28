@@ -149,7 +149,7 @@ def test_public_page_never_shows_private_data(app, master_client):
         run_event(conn, ev, complete=False)                          # an in-progress (draft) round
         conn.execute("UPDATE results SET notes = 'private note' WHERE event_id = ?", (ev["id"],))
     page = app.test_client().get(f"/public/{token}/{key}").get_data(as_text=True)
-    assert "private note" not in page and "david@" not in page
+    assert "private note" not in page and "devon@" not in page
     master_client.post(f"/career/{token}/settings", data={"csrf_token": "tok", "visibility": "private"})
     assert app.test_client().get(f"/public/{token}/{key}").status_code == 404
 
@@ -175,7 +175,7 @@ def test_demo_is_private_temporary_and_sends_nothing(app, master_client, monkeyp
         assert len(S.player_drivers(conn)) == 3
     assert anon.get(f"/career/{real}/dashboard").status_code == 403    # never a real league
     assert anon.get("/accounts").status_code == 302                       # no account changes
-    res = anon.post(f"/career/{token}/members/invite", data={"username": "david", "role": "member", "csrf_token": "tok"},
+    res = anon.post(f"/career/{token}/members/invite", data={"username": "devon", "role": "member", "csrf_token": "tok"},
                     follow_redirects=True)
     assert "That isn&#39;t available in the demo" in res.get_data(as_text=True)
     with storage.session(token) as conn:
@@ -208,17 +208,17 @@ def test_whats_new_shows_once_per_account(app, master_client, monkeypatch):
         with auth.accounts() as conn:
             whatsnew._table(conn)
             conn.execute("DELETE FROM whats_new_seen WHERE username = ?", (name,))
-    from_before_the_update("david")
+    from_before_the_update("devon")
     page = master_client.get("/").get_data(as_text=True)
     assert 'id="whats-new"' in page and "New interface" in page
     assert "I agree to them" in page and "Later" not in page.split('id="whats-new"')[1].split("</dialog>")[0]
     master_client.post("/whats-new", data={"choice": "agree", "csrf_token": "tok"})     # v2.1: box not ticked
     assert 'id="whats-new"' in master_client.get("/").get_data(as_text=True)            # still has to agree
-    assert not whatsnew.acknowledged("david", C.APP_VERSION)
+    assert not whatsnew.acknowledged("devon", C.APP_VERSION)
     master_client.post("/whats-new", data={"choice": "agree", "agree": "1", "csrf_token": "tok"})
-    assert whatsnew.acknowledged("david", C.APP_VERSION)
+    assert whatsnew.acknowledged("devon", C.APP_VERSION)
     fresh = app.test_client()
-    login(fresh, "david")
+    login(fresh, "devon")
     assert 'id="whats-new"' not in fresh.get("/").get_data(as_text=True)          # remembered for the account
     auth.create_user("eve", "Eve", "password1")
     assert 'id="whats-new"' in _client(app, "eve").get("/").get_data(as_text=True)  # v2.1.3: new accounts see it too
@@ -241,7 +241,7 @@ def test_league_list_pins_order_and_archive_are_personal(app, master_client):
     assert [l["name"] for l in library.user_leagues(auth.get_user("ann"))] == ["Alpha"]
     with storage.session(b) as conn:        # hiding never leaves the league
         assert conn.execute("SELECT 1 FROM career_members WHERE username = 'ann'").fetchone()
-    assert [l["name"] for l in library.user_leagues(auth.get_user("david"))][:2] != []
+    assert [l["name"] for l in library.user_leagues(auth.get_user("devon"))][:2] != []
     page = ann.get("/").get_data(as_text=True)
     assert "Archived from your list (1)" in page
 

@@ -89,6 +89,23 @@ All of these affect one league only.
   shows them the new targets to agree to.
 - Race Master tools follow the view mode (Driver / Spectator preview show what those roles see).
 
+## 3.1.2: safer logins and messages
+
+- **Outbox** (`f1tracker/outbox.py`): emails, Discord posts (one row per message) and phone alerts are written to an
+  `outbox` table in `accounts.db`, sent in the background and deleted once sent. On failure they're retried with a
+  growing wait (up to 5 attempts, then dropped with a log line). Anything left by a restart is sent when the site
+  starts, and then at most once a minute on requests. Rows hold addresses, text or the Discord webhook only until
+  sent; they're never shown or exported.
+- **Login lockout:** a username is still locked after too many wrong passwords. An address is locked only after
+  `IP_MAX_FAILURES` wrong passwords across at least `IP_MIN_USERNAMES` (3) different usernames in the lock window, so
+  a shared home or mobile connection isn't locked by one person's typos.
+- **Backup reminder:** site owners see a Control Room banner when the encrypted backup is overdue (14 days); "Remind
+  me in a week" snoozes it (`settings.offsite_snooze_until`).
+- **Removed:** the 2.1.3 start-up login reset (`reset_all_logins_213`) and its league-link cleanup. A start-up never
+  changes logins now.
+- **Names:** placeholder text and test data use fictional names only. Older commits in the Git history still contain
+  them; rewriting history is possible but needs a one-off forced push.
+
 ## 3.1.1: unlocking accounts
 
 - **Account recovery** (Account → Settings, find the person) now shows their sign-in state: locked (with minutes left

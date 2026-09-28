@@ -66,7 +66,7 @@
         <form method="post" action="{{ url_for('race_start', token=ctx.token, event_id=ev.id) }}" class="stack">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>Why? <small class="muted">(required, kept on the round and in the Activity Log)</small>
-            <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. Carson's away, answering later"></label>
+            <input name="note" required minlength="{{ C.GATE_NOTE_MIN }}" maxlength="500" placeholder="e.g. One driver is away, answering later"></label>
           <p class="muted small">Race Master override. Anything still outstanding can be done later and still counts, except pre-race press, which closes at lights out.</p>
           <div><button class="btn btn-sm btn-primary">🚦 Start the race anyway</button></div>
         </form>

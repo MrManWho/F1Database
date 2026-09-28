@@ -1352,7 +1352,6 @@ def drivers_off_grid(conn, season_id, standings=None):
     standings = standings if standings is not None else driver_standings(conn, season_id)
     shown = {r["driver_id"] for r in standings}
     cache = all_season_standings(conn)
-    tmap = team_map(conn)
     out = []
     for d in drivers(conn):
         if d["id"] in shown:

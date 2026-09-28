@@ -149,9 +149,9 @@ def test_only_the_race_master_can_start_before_everyone_is_ready(app, master_cli
     with storage.session(token) as conn:
         r3 = S.events(conn, S.current_season_id(conn))[2]
         with pytest.raises(S.ValidationError, match="Open the paddock first"):
-            weekend.start_race(conn, r3["id"], "david", True, "note long enough")
+            weekend.start_race(conn, r3["id"], "devon", True, "note long enough")
         with pytest.raises(S.ValidationError, match="next round"):
-            weekend.open_paddock(conn, r3["id"], "david")
+            weekend.open_paddock(conn, r3["id"], "devon")
 
 
 @pytest.mark.weekends

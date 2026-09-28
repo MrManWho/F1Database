@@ -9,7 +9,7 @@ const grid = [
   { id: 5, name: "Lewis Hamilton", team: "Ferrari" }, { id: 6, name: "Nico Hulkenberg", team: "Audi" },
   { id: 7, name: "Mick Schumacher", team: "Haas" }, { id: 8, name: "Ralf Schumacher", team: "Haas" },
   // Human drivers (more than two), matched only by being on the grid:
-  { id: 20, name: "David Conley", team: "Cadillac", is_player: true }, { id: 21, name: "Carson Hayes", team: "Cadillac", is_player: true },
+  { id: 20, name: "Devon Corwin", team: "Cadillac", is_player: true }, { id: 21, name: "Carsten Hale", team: "Cadillac", is_player: true },
   { id: 22, name: "Ana Silva", team: "Williams", is_player: true },
 ];
 const teams = Array.from(new Set(grid.map(d => d.team)));
@@ -27,12 +27,12 @@ test("fuzzy names and OCR look-alikes", () => {
   assert.strictEqual(M.matchDriver("Hülkenberg", grid).driver_id, 6);       // accents
   assert.strictEqual(M.matchDriver("HULKENBERG", grid).driver_id, 6);       // missing accents
   assert.strictEqual(M.matchDriver("C.  LECLERC.", grid).driver_id, 4);     // punctuation and spaces
-  assert.strictEqual(M.matchDriver("D. CONLEY CADIL I AC", grid).driver_id, 20);  // trailing noise
+  assert.strictEqual(M.matchDriver("D. CORWIN CADIL I AC", grid).driver_id, 20);  // trailing noise
 });
 test("initials and surnames only", () => {
   assert.strictEqual(M.matchDriver("M. VERSTAPPEN", grid).driver_id, 1);
   assert.strictEqual(M.matchDriver("PIASTRI", grid).driver_id, 3);
-  assert.strictEqual(M.matchDriver("C HAYES", grid).driver_id, 21);
+  assert.strictEqual(M.matchDriver("C HALE", grid).driver_id, 21);
 });
 test("ambiguous names are never guessed", () => {
   const m = M.matchDriver("SCHUMACHER", grid);
@@ -45,7 +45,7 @@ test("unknown drivers are not invented", () => {
 });
 test("statuses, including common misreads", () => {
   assert.strictEqual(M.parseLine("18 C. LECLERC FERRARI DNF", teams).status, "DNF");
-  assert.strictEqual(M.parseLine("22 C HAYES CADILLAC DNE", teams).status, "DNF");
+  assert.strictEqual(M.parseLine("22 C HALE CADILLAC DNE", teams).status, "DNF");
   assert.strictEqual(M.parseLine("L. NORRIS MCLAREN DNS", teams).status, "DNS");
   assert.strictEqual(M.parseLine("5 O. PIASTRI MCLAREN DSQ", teams).status, "DSQ");
   assert.strictEqual(M.parseLine("5 O. PIASTRI MCLAREN D5Q", teams).status, "DSQ");
@@ -109,7 +109,7 @@ test("existing results are compared and protected", () => {
   assert.ok(v.blocking.some(b => /P2 already belongs to Charles Leclerc/.test(b)));   // not in import, keeps P2
 });
 test("human drivers are matched by grid id, however many there are", () => {
-  const rows = M.buildRows([shot(0, ["1 D. CONLEY CADILLAC", "2 C. HAYES CADILLAC", "3 A. SILVA WILLIAMS"])], grid, teams, 22);
+  const rows = M.buildRows([shot(0, ["1 D. CORWIN CADILLAC", "2 C. HALE CADILLAC", "3 A. SILVA WILLIAMS"])], grid, teams, 22);
   assert.deepStrictEqual(rows.map(r => r.driver_id), [20, 21, 22]);
 });
 test("noise lines are ignored and nothing outside the grid appears", () => {

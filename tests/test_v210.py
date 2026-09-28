@@ -214,12 +214,12 @@ def test_whats_new_must_be_agreed_to_in_the_browser(app, master_client, live_ser
     from f1tracker import constants as C
     with auth.accounts() as conn:                        # an account from before the update
         whatsnew._table(conn)
-        conn.execute("DELETE FROM whats_new_seen WHERE username = 'david'")
+        conn.execute("DELETE FROM whats_new_seen WHERE username = 'devon'")
     pw, browser = open_browser()
     try:
         page = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
         page.goto(live_server + "/login")
-        page.fill("input[name=username]", "david")
+        page.fill("input[name=username]", "devon")
         page.fill("input[name=password]", "password1")
         page.press("input[name=password]", "Enter")
         page.wait_for_load_state()
@@ -233,7 +233,7 @@ def test_whats_new_must_be_agreed_to_in_the_browser(app, master_client, live_ser
         assert go.is_enabled()
         go.click()
         page.wait_for_function("!document.getElementById('whats-new').open")
-        assert whatsnew.acknowledged("david", C.APP_VERSION)
+        assert whatsnew.acknowledged("devon", C.APP_VERSION)
     finally:
         browser.close()
         pw.stop()

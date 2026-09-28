@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .constants import APP_VERSION, LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILURES
+from .constants import LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILURES
 from .storage import data_dir, now_iso
 
 IP_MAX_FAILURES = 20          # a single address guessing across many usernames
@@ -294,17 +294,29 @@ def lock_remaining(username, ip):
     return max([int(r["locked_until"] - now) for r in rows if r["locked_until"] > now] + [0])
 
 
+IP_MIN_USERNAMES = 3      # v3.1.2: an address is only locked when it's guessing across several usernames
+
+
 def record_failure(username, ip):
     now = time.time()
     window = LOGIN_LOCK_MINUTES * 60
     with accounts() as conn:
+        # v3.1.2: remember which usernames each address got wrong, so one person's typos (or a household sharing
+        # a connection) never lock everyone behind that address; only guessing across accounts does.
+        conn.execute("CREATE TABLE IF NOT EXISTS login_failure_names (ip TEXT NOT NULL, username TEXT NOT NULL, "
+                     "at REAL NOT NULL)")
+        conn.execute("DELETE FROM login_failure_names WHERE at < ?", (now - window,))
+        conn.execute("INSERT INTO login_failure_names(ip, username, at) VALUES(?,?,?)",
+                     (ip or "?", normalise(username), now))
+        names = conn.execute("SELECT COUNT(DISTINCT username) FROM login_failure_names WHERE ip = ?",
+                             (ip or "?",)).fetchone()[0]
         for key, limit in zip(_keys(username, ip), (LOGIN_MAX_FAILURES, IP_MAX_FAILURES)):
             row = conn.execute("SELECT * FROM login_failures WHERE key = ?", (key,)).fetchone()
             if not row or now - row["first_at"] > window:
                 count, first = 1, now
             else:
                 count, first = row["count"] + 1, row["first_at"]
-            locked = now + window if count >= limit else 0
+            locked = now + window if count >= limit and (key.startswith("user:") or names >= IP_MIN_USERNAMES) else 0
             conn.execute("""INSERT INTO login_failures(key, count, first_at, locked_until) VALUES(?,?,?,?)
                             ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at,
                             locked_until=excluded.locked_until""", (key, count, first, locked))
@@ -651,25 +663,3 @@ def signup_direct(username, display_name, password, ip, email=None):
                         ON CONFLICT(key) DO UPDATE SET count=excluded.count, first_at=excluded.first_at""",
                      (key, count + 1, first))
     return made
-
-
-def reset_all_logins_213(backup_dir):
-    """v2.1.3, once per site: remove every login again, and this time the reserved usernames too (nobody reclaims
-    old names; everyone signs up fresh). A copy of accounts.db is written to backup_dir first. Returns True if it
-    ran. The caller removes the league login links (see app.reset_league_logins), never league data."""
-    import shutil
-    from datetime import datetime
-    with accounts() as conn:
-        if conn.execute("SELECT value FROM settings WHERE key = 'accounts_reset_213'").fetchone():
-            return False
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    shutil.copyfile(data_dir() / "accounts.db", backup_dir / f"accounts-before-2.1.3-reset-{stamp}.db")
-    with accounts() as conn:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        for table in ACCOUNT_TABLES + ["reserved_usernames"]:
-            if table in tables:
-                conn.execute(f"DELETE FROM {table}")
-        conn.execute("INSERT INTO settings(key, value) VALUES('accounts_reset_212', ?) "
-                     "ON CONFLICT(key) DO NOTHING", (now_iso(),))
-        conn.execute("INSERT INTO settings(key, value) VALUES('accounts_reset_213', ?)", (now_iso(),))
-    return True
