@@ -171,6 +171,23 @@
   </form>
 </section>
 
+{% if test_site %}
+<section class="card" id="test-import">
+  <h2>Load the live site's leagues (test site only)</h2>
+  <p class="muted small">Upload an encrypted backup downloaded from the live site (Account → Settings there) to try new features on a copy of your real leagues and logins.
+    <b>It replaces everything on this test site.</b> Afterwards, sign in with your live username and password. Nothing is ever sent from here and nothing goes back to the live site.
+    On a free plan the test site forgets this when it restarts, so load it again whenever you need it.</p>
+  <form method="post" action="{{ url_for('import_site_backup') }}" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Backup file (.plbk)<input type="file" name="file" accept=".plbk" required></label>
+    <div class="grid-2">
+      <label>Its passphrase<input name="passphrase" type="password" required autocomplete="off"></label>
+      <label>Type REPLACE to confirm<input name="confirm" required autocomplete="off"></label>
+    </div>
+    <div><button class="btn btn-danger">Load backup</button></div>
+  </form>
+</section>
+{% endif %}
 <section class="card" id="offsite">
   <h2>Encrypted backup to keep somewhere else</h2>
   <p class="muted small">The automatic backups are stored on the same disk as the site, so they can't help if the disk or the hosting account is lost.

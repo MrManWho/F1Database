@@ -1700,3 +1700,5 @@ body.rail .nav-subtitle { display: none; }
 .weather-form .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .6rem; margin-bottom: .6rem; }
 .weather-icon { margin-left: .25rem; }
 .round-hero.stage-complete .round-badge { color: #06140c; }   /* v3.1: readable on the green "complete" badge */
+/* 4.0 test site */
+.test-site-banner { position: sticky; top: 0; z-index: 100; background: #ffcc00; color: #1a1400; text-align: center; padding: .35rem .8rem; font-size: .85rem; }

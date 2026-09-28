@@ -22,7 +22,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, announcements, calc3, engine, impacts, migration, offsite, stats, ultimatums
+from . import ai3, announcements, calc3, engine, impacts, migration, offsite, stats, testsite, ultimatums
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -222,7 +222,8 @@ def register_hooks(app):
             except Exception:
                 app.logger.exception("push keys unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
-                "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new()}
+                "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new(),
+                "test_site": testsite.on()}
 
     def _whats_new():
         """This version's highlights, once per account, on ordinary page views only."""
@@ -930,6 +931,26 @@ def register_routes(app):
             except CareerNotFound:
                 flash("That league was already gone.", "error")
         return redirect(url_for("accounts_page") + "#leagues")
+
+    @app.route("/settings/import-site-backup", methods=["POST"])
+    @master_required
+    def import_site_backup():
+        """Test site only: load an encrypted site backup from the live site (replaces this site's data)."""
+        if not testsite.on():
+            abort(404)
+        upload = request.files.get("file")
+        if not upload or request.form.get("confirm") != "REPLACE":
+            flash("Choose the .plbk file and type REPLACE to confirm. Nothing was changed.", "error")
+            return redirect(url_for("accounts_page") + "#test-import")
+        try:
+            n = testsite.import_backup(upload.read(), request.form.get("passphrase") or "")
+        except offsite.BackupError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("accounts_page") + "#test-import")
+        session.clear()
+        flash(f"Loaded {n} league{'s' if n != 1 else ''} and every login from the backup. Sign in with your live "
+              "site username and password.", "success")
+        return redirect(url_for("login"))
 
     @app.route("/settings/offsite-snooze", methods=["POST"])
     @master_required

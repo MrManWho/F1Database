@@ -26,6 +26,7 @@
 <body class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
       {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
+{% if test_site %}<div class="test-site-banner" role="note"><b>TEST SITE</b> · for trying Paddock Legacy 4.0. Nothing here affects the real site, and it never sends emails, Discord posts or phone alerts.</div>{% endif %}
 <script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}

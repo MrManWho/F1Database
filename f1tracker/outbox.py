@@ -57,6 +57,9 @@ def _claim(oid):
 
 
 def _send(kind, p):
+    from . import testsite
+    if testsite.on():
+        return              # the 4.0 test site never sends anything (imported rows are just dropped)
     if kind == "email":
         from . import mailer
         mailer.send(p["to"], p["subject"], p["text"], p.get("html"))

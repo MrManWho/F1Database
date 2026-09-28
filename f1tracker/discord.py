@@ -44,8 +44,9 @@ def post(url, content):
 
 def send_later(url, messages):
     """v3.1.2: each post goes through the outbox (one row per message, so a retry never repeats one that was sent)."""
-    if not url or not messages:
-        return
+    from . import testsite
+    if not url or not messages or testsite.on():
+        return              # the 4.0 test site never posts to Discord
     from . import outbox
     for m in messages:
         try:

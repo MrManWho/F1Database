@@ -15,6 +15,9 @@ def _b64(data):
 
 
 def available():
+    from . import testsite
+    if testsite.on():
+        return False        # the 4.0 test site never sends phone alerts
     try:
         import pywebpush  # noqa: F401
     except ImportError:

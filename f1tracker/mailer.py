@@ -32,6 +32,9 @@ def config():
 
 
 def configured():
+    from . import testsite
+    if testsite.on():
+        return False        # the 4.0 test site never sends email
     cfg = config()
     return bool(cfg["smtp_host"] and cfg["smtp_from"])
 

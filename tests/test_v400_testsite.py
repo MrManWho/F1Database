@@ -1,0 +1,84 @@
+"""4.0 test site: the F1_TRACKER_TEST_SITE switch (banner, nothing ever sent) and loading a live site backup."""
+
+import io
+
+from conftest import login
+from f1tracker import auth, discord, mailer, offsite, outbox, push, storage, testsite
+
+
+def _league(master_client, name):
+    res = master_client.post("/careers/new", data={"name": name, "year": "2026", "csrf_token": "tok",
+                                                   "join_mode": "invite"})
+    return res.headers["Location"].split("/career/")[1].split("/")[0]
+
+
+def test_off_by_default_nothing_changes(app, master_client):
+    assert not testsite.on()
+    assert "TEST SITE" not in master_client.get("/").get_data(as_text=True)
+    assert "Load the live site" not in master_client.get("/accounts").get_data(as_text=True)
+    assert master_client.post("/settings/import-site-backup", data={"csrf_token": "tok"}).status_code == 404
+
+
+def test_the_test_site_shows_a_banner_and_never_sends_anything(app, master_client, monkeypatch):
+    monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
+    auth.set_setting("smtp_host", "smtp.example.com")
+    auth.set_setting("smtp_from", "site@example.com")
+    assert "TEST SITE" in master_client.get("/").get_data(as_text=True)
+    assert not mailer.configured() and not push.available()
+    queued = []
+    monkeypatch.setattr(outbox, "enqueue", lambda *a, **k: queued.append(a))
+    discord.send_later("https://discord.com/api/webhooks/1/abc", ["hello"])
+    assert not mailer.send_later(["a@example.com"], "S", "T") and queued == []
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
+    outbox._send("email", {"to": ["a@example.com"], "subject": "s", "text": "t"})   # an imported leftover: dropped
+
+
+def test_the_owner_loads_a_live_site_backup_onto_the_test_site(app, master_client, monkeypatch):
+    live = _league(master_client, "Live League")
+    auth.create_user("racer", "Racer", "Racer-Password-1")
+    phrase = "correct horse battery staple"
+    blob = master_client.post("/settings/offsite-backup", data={"csrf_token": "tok", "passphrase": phrase,
+                                                                "passphrase2": phrase}).get_data()
+    # the test site has its own, different data before the import
+    auth.delete_user("racer")
+    other = _league(master_client, "Test Only League")
+    monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
+    page = master_client.get("/accounts").get_data(as_text=True)
+    assert "Load the live site" in page
+    res = master_client.post("/settings/import-site-backup", data={"csrf_token": "tok", "passphrase": phrase,
+                                                                   "confirm": "nope", "file": (io.BytesIO(blob), "b.plbk")},
+                             content_type="multipart/form-data", follow_redirects=True)
+    assert "Nothing was changed" in res.get_data(as_text=True)
+    res = master_client.post("/settings/import-site-backup", data={"csrf_token": "tok", "passphrase": "wrong one!!",
+                                                                   "confirm": "REPLACE", "file": (io.BytesIO(blob), "b.plbk")},
+                             content_type="multipart/form-data", follow_redirects=True)
+    assert "Wrong passphrase" in res.get_data(as_text=True)
+    res = master_client.post("/settings/import-site-backup", data={"csrf_token": "tok", "passphrase": phrase,
+                                                                   "confirm": "REPLACE", "file": (io.BytesIO(blob), "b.plbk")})
+    assert res.status_code == 302 and res.headers["Location"].endswith("/login")
+    tokens = {c["token"] for c in storage.list_careers()}
+    assert live in tokens and other not in tokens                   # exactly the live site's leagues
+    assert auth.verify("racer", "Racer-Password-1")                 # and its logins
+    c = app.test_client()
+    login(c, "racer", "Racer-Password-1")
+    assert c.get("/").status_code == 200
+
+
+def test_a_backup_with_unexpected_files_is_refused(app, monkeypatch, tmp_path):
+    import json
+    import zipfile
+    monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("accounts.db", b"x")
+        z.writestr("../evil.txt", b"x")
+        import hashlib
+        z.writestr("manifest.json", json.dumps({"created_at": "x", "files": [
+            {"name": "accounts.db", "sha256": hashlib.sha256(b"x").hexdigest()},
+            {"name": "../evil.txt", "sha256": hashlib.sha256(b"x").hexdigest()}]}))
+    blob = offsite.encrypt(buf.getvalue(), "a long passphrase")
+    try:
+        testsite.import_backup(blob, "a long passphrase")
+        raise AssertionError("accepted")
+    except offsite.BackupError as exc:
+        assert "Unexpected file" in str(exc)
