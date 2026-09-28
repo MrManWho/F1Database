@@ -2,6 +2,7 @@
 
 | File | What it is |
 |---|---|
+| `UI_OVERHAUL_PROPOSAL.md` | UI and race-weekend overhaul: audit, feature map, layouts, decisions (awaiting approval); prototype in `prototype/weekend.html` |
 | `PHASE1_REPORT.md` | Phase 1 (foundation): what was delivered, tests, open items. **Latest.** |
 | `PHASE0_REPORT.md` | Phase 0 (freeze and map): findings, test results, open questions |
 | `SPECIFICATION.md` | The corrected 4.0 specification, with the Phase 0 decisions record (section 15) |

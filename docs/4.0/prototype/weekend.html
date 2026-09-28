@@ -1,0 +1,575 @@
+<title>Paddock Legacy 4.0 Weekend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one working column (max 720px) under a compact stage strip; slim rail on desktop, bottom bar on phones.
+   Timing-screen asphalt neutrals, paddock red used only for the one primary action and "needs attention". */
+:root {
+  --bg: #f3f4f6; --surface: #ffffff; --raised: #eef0f3; --line: #d9dde3; --fg: #15181d; --muted: #5d6572;
+  --accent: #d10a0a; --on-accent: #ffffff; --accent-soft: #fde8e7;
+  --good: #137a45; --good-soft: #e3f4ea; --warn: #9a5b00; --warn-soft: #fbf0dc; --info: #1f5fb8; --info-soft: #e5eefb;
+  --player: #6d3fd1;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 10px; --gap: 16px; --rail: 88px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d0f13; --surface: #15181e; --raised: #1c2028; --line: #2a2f39; --fg: #e9ecf1; --muted: #9aa3b1;
+  --accent: #ff3b30; --on-accent: #ffffff; --accent-soft: #3a1413;
+  --good: #3fcf82; --good-soft: #10291c; --warn: #f0b24a; --warn-soft: #33260e; --info: #6aa6ff; --info-soft: #132540;
+  --player: #b08cff; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d0f13; --surface: #15181e; --raised: #1c2028; --line: #2a2f39; --fg: #e9ecf1; --muted: #9aa3b1;
+  --accent: #ff3b30; --on-accent: #ffffff; --accent-soft: #3a1413;
+  --good: #3fcf82; --good-soft: #10291c; --warn: #f0b24a; --warn-soft: #33260e; --info: #6aa6ff; --info-soft: #132540;
+  --player: #b08cff; color-scheme: dark }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--info); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- shell ---------- */
+.proto { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 8px 16px; background: var(--raised); border-bottom: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+.proto b { color: var(--fg); font-weight: 600; }
+.proto select, .proto button { font-size: 13px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.proto .sim { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); min-height: 100%; }
+.rail { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; height: 100vh; display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 8px; border-right: 1px solid var(--line); background: var(--surface); }
+.brand { font: 700 13px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; text-align: center; padding: 6px 0 14px; }
+.brand span { display: block; margin: 0 auto 6px; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); }
+.navbtn { display: grid; justify-items: center; gap: 2px; padding: 10px 4px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  font: 600 12px/1.1 var(--display); letter-spacing: .02em; color: var(--muted); min-height: 56px; }
+.navbtn svg { width: 22px; height: 22px; }
+.navbtn[aria-current="page"] { color: var(--fg); background: var(--raised); }
+.navbtn.manage { margin-top: auto; border-top: 1px solid var(--line); border-radius: 0; padding-top: 14px; }
+.main { min-width: 0; padding-inline: 16px; padding-block: 20px 110px; }
+.col { max-width: 720px; margin: 0 auto; display: grid; gap: var(--gap); }
+.topline { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.league { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.league i { width: 26px; height: 26px; border-radius: 6px; background: var(--fg); color: var(--bg); display: grid; place-items: center;
+  font: 700 12px/1 var(--display); font-style: normal; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--line); background: var(--raised); font-weight: 700; }
+.bottom { display: none; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .rail { display: none; }
+  .bottom { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .bottom .navbtn { border-radius: 0; }
+}
+
+/* ---------- type & blocks ---------- */
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: 32px; font-weight: 700; letter-spacing: .01em; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 600 12px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; }
+.card.flat { background: transparent; border-style: dashed; }
+.stack { display: grid; gap: 8px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.btn { min-height: 44px; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary[disabled] { opacity: .45; cursor: not-allowed; }
+.btn.quiet { background: none; border-color: transparent; color: var(--info); padding-inline: 4px; min-height: 36px; }
+.btn.danger { color: var(--accent); }
+.btn.block { width: 100%; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--raised); color: var(--muted); white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.attn { background: var(--accent-soft); color: var(--accent); }
+.pill.info { background: var(--info-soft); color: var(--info); }
+.note { padding: 12px 14px; border-radius: 8px; background: var(--raised); font-size: 15px; }
+.note.wait { background: var(--info-soft); color: var(--fg); }
+.note.attn { background: var(--accent-soft); }
+details.more > summary { cursor: pointer; font-weight: 600; color: var(--info); list-style: none; min-height: 32px; display: flex; align-items: center; gap: 6px; }
+details.more > summary::before { content: "▸"; transition: transform .15s; }
+details.more[open] > summary::before { transform: rotate(90deg); }
+
+/* ---------- home ---------- */
+.hero { display: grid; gap: 14px; padding: 20px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.hero .round { font: 700 14px/1 var(--mono); color: var(--muted); }
+.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tasks li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; background: var(--raised); }
+.tasks li.done { opacity: .6; text-decoration: line-through; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap); }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.mini-table td { padding: 6px 4px; border-top: 1px solid var(--line); }
+.mini-table tr.me td { color: var(--player); font-weight: 700; }
+
+/* ---------- workspace ---------- */
+.round-head { display: grid; gap: 6px; }
+.round-head .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 15px; }
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--raised);
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.stage { border: 0; border-radius: 7px; background: none; padding: 8px 4px; cursor: pointer; display: grid; gap: 2px; justify-items: center; min-height: 52px; }
+.stage b { font: 600 15px/1.1 var(--display); }
+.stage small { font-size: 12px; color: var(--muted); }
+.stage[aria-current="step"] { background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.stage .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.stage.done .dot { background: var(--good); } .stage.attn .dot { background: var(--accent); } .stage.current .dot { background: var(--info); }
+.sessions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sess { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; min-height: 40px; cursor: pointer;
+  display: inline-flex; gap: 8px; align-items: center; font-weight: 600; }
+.sess[aria-current="step"] { border-color: var(--fg); }
+.sess .st { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sess.done .st { color: var(--good); } .sess.attn .st { color: var(--accent); }
+.choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.opt { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 12px; cursor: pointer; display: grid; gap: 4px; min-height: 44px; }
+.opt[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.opt .num { font-size: 13px; color: var(--muted); }
+.q { display: grid; gap: 8px; }
+.q .answers { display: grid; gap: 6px; }
+.req { color: var(--accent); font-weight: 600; font-size: 13px; }
+
+.entry { width: 100%; border-collapse: collapse; font-size: 15px; }
+.entry th { text-align: left; font: 600 12px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 6px; }
+.entry td { border-top: 1px solid var(--line); padding: 6px; vertical-align: middle; }
+.entry tr.player td { background: color-mix(in srgb, var(--player) 8%, transparent); }
+.entry tr.player .dname { color: var(--player); font-weight: 700; }
+.entry .pos { width: 58px; }
+.entry input.posin { width: 48px; text-align: center; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.entry select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); max-width: 110px; }
+.team { color: var(--muted); font-size: 13px; }
+.scroll { overflow-x: auto; }
+.field { display: grid; gap: 4px; }
+.field label { font-weight: 600; font-size: 14px; }
+.field input { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-height: 44px; }
+.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 4px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+.savebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line); position: sticky; bottom: 70px; }
+@media (min-width: 761px) { .savebar { bottom: 12px; } }
+.savestate { font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.savestate::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+.savestate.local::before { background: var(--warn); } .savestate.dirty::before { background: var(--muted); }
+.checks { display: grid; gap: 8px; }
+.check { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: var(--raised); }
+.check.block { background: var(--accent-soft); }
+.check.warnrow { background: var(--warn-soft); }
+.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.podium div { background: var(--raised); border-radius: 8px; padding: 10px; display: grid; gap: 2px; }
+.podium .p { font: 700 22px/1 var(--display); }
+.delta.up { color: var(--good); } .delta.down { color: var(--accent); }
+.statusline { display: grid; gap: 6px; }
+.statusline div { display: flex; gap: 8px; align-items: center; }
+.toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px;
+  border-radius: 8px; font-size: 14px; z-index: 40; max-width: calc(100% - 32px); }
+.sheet { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 50; display: grid; align-items: end; }
+.sheet > div { background: var(--surface); border-radius: 14px 14px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; max-width: 720px; width: 100%; margin: 0 auto; }
+.sheet button.item { text-align: left; padding: 12px; border: 0; background: none; border-radius: 8px; font-weight: 600; min-height: 44px; cursor: pointer; }
+.sheet button.item:hover { background: var(--raised); }
+.tabs2 { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs2 button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; min-height: 40px; cursor: pointer; }
+.tabs2 button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.rmstrip { border: 1px dashed var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 8px; }
+</style>
+
+<div class="proto" role="region" aria-label="Prototype controls">
+  <span><b>Prototype</b> · example data, nothing is saved</span>
+  <label>View as <select id="role">
+    <option value="driver">Driver (Jordan Vale)</option>
+    <option value="scorekeeper">Scorekeeper</option>
+    <option value="rm">Race Master who drives</option>
+    <option value="spectator">Spectator</option>
+  </select></label>
+  <span class="sim">
+    <button type="button" id="sim-other">Other driver gets ready</button>
+    <button type="button" id="sim-offline">Go offline</button>
+    <button type="button" id="sim-reset">Start over</button>
+  </span>
+</div>
+
+<div class="app">
+  <nav class="rail" aria-label="Main">
+    <div class="brand"><span aria-hidden="true"></span>Paddock</div>
+    <div id="rail-items" style="display:grid;gap:4px"></div>
+  </nav>
+  <main class="main" id="main" tabindex="-1"><div class="col" id="view"></div></main>
+</div>
+<nav class="bottom" id="bottom" aria-label="Main"></nav>
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+<div id="sheet" class="sheet" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var ICON = {
+    home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+    weekend: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    champ: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    career: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+    more: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+    manage: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h2M19 12h2M12 3v2M12 19v2"/>'
+  };
+  function svg(k) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[k] + '</svg>'; }
+
+  // ---------- example data (fictional players; AI drivers as in the game) ----------
+  var GRID = [
+    ["Lando Norris","McLaren"],["Oscar Piastri","McLaren"],["George Russell","Mercedes"],["Kimi Antonelli","Mercedes"],
+    ["Charles Leclerc","Ferrari"],["Lewis Hamilton","Ferrari"],["Max Verstappen","Red Bull"],["Isack Hadjar","Red Bull"],
+    ["Liam Lawson","Racing Bulls"],["Arvid Lindblad","Racing Bulls"],["Pierre Gasly","Alpine"],["Franco Colapinto","Alpine"],
+    ["Esteban Ocon","Haas"],["Sam Ortiz","Haas",1],["Nico Hulkenberg","Audi"],["Gabriel Bortoleto","Audi"],
+    ["Jordan Vale","Williams",1],["Alexander Albon","Williams"],["Fernando Alonso","Aston Martin"],["Lance Stroll","Aston Martin"],
+    ["Sergio Perez","Cadillac"],["Valtteri Bottas","Cadillac"]
+  ];
+  var QUALI = [0,2,4,1,6,3,5,16,7,17,10,8,12,13,9,14,11,18,15,19,20,21];      // indexes into GRID, P1 first
+  var RACE  = [2,0,4,1,3,6,16,5,7,17,8,10,13,12,9,11,14,18,15,19,20,21];
+
+  var S0 = function () {
+    return { view: "home", stage: "prepare", session: "quali",
+      target: null, press: {}, otherReady: false, lightsOut: false,
+      saved: { quali: false, race: false }, dirty: { quali: false, race: false }, offline: false,
+      times: { vale: { mine: "", theirs: "", laps: "50" }, ortiz: { mine: "", theirs: "", laps: "50" } },
+      ai: "82", notesAck: false, incidents: [], submitted: false, submitting: false,
+      postPress: {}, champTab: "standings", careerTab: "team" };
+  };
+  var st = S0();
+  var role = "driver";
+  try { var saved = localStorage.getItem("pl-proto-role"); if (saved) role = saved; } catch (e) {}
+  document.getElementById("role").value = role;
+
+  var can = {
+    enter: function () { return role === "scorekeeper" || role === "rm"; },
+    drive: function () { return role === "driver" || role === "rm"; },
+    rm: function () { return role === "rm"; },
+    act: function () { return role !== "spectator"; }
+  };
+  var myName = function () { return role === "rm" ? "Sam Ortiz" : "Jordan Vale"; };
+
+  // ---------- derived progress (from "saved state", never from the page you're on) ----------
+  function myPrepDone() { return !can.drive() || (st.target && st.press.q1 && st.press.q2); }
+  function other() { return role === "rm" ? "Jordan Vale" : "Sam Ortiz"; }
+  function timesMissing() {
+    var out = [];
+    if (!(st.times.vale.mine && st.times.vale.theirs)) out.push("Jordan Vale");
+    if (!(st.times.ortiz.mine && st.times.ortiz.theirs)) out.push("Sam Ortiz");
+    return out;
+  }
+  function stageState(k) {
+    if (k === "prepare") return st.lightsOut ? "done" : (can.drive() && !myPrepDone() ? "attn" : "current");
+    if (k === "sessions") return !st.lightsOut ? "upcoming" : (st.saved.quali && st.saved.race ? (timesMissing().length ? "attn" : "done") : "current");
+    if (k === "review") return st.submitted ? "done" : (st.saved.quali && st.saved.race ? "current" : "upcoming");
+    return st.submitted ? (can.drive() && !(st.postPress.q1) ? "attn" : "current") : "upcoming";
+  }
+  var LABEL = { done: "Done", current: "Now", upcoming: "Later", attn: "Needs you" };
+
+  // ---------- helpers ----------
+  function el(h) { var d = document.createElement("div"); d.innerHTML = h; return d; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function toast(msg) { var t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, 2600); }
+  function secs(v) { v = (v || "").trim().replace(",", "."); if (!v) return null; var t = 0, p = v.split(":"); for (var i = 0; i < p.length; i++) { var n = parseFloat(p[i]); if (isNaN(n)) return null; t = t * 60 + n; } return t; }
+  function go(view, stage) { st.view = view; if (stage) st.stage = stage; render(); document.getElementById("main").focus(); window.scrollTo(0, 0); }
+
+  // ---------- navigation ----------
+  function nav() {
+    var items = [["home","Home"],["weekend","Race Weekend"],["champ","Championship"],["career","Career"],["more","More"]];
+    if (role === "scorekeeper") items[3] = ["champ2", null];
+    var html = items.filter(function (i) { return i[1]; }).map(function (i) {
+      return '<button type="button" class="navbtn" data-nav="' + i[0] + '"' + (st.view === i[0] ? ' aria-current="page"' : '') + '>' + svg(i[0] === "champ2" ? "champ" : i[0]) + i[1] + '</button>';
+    }).join("");
+    document.getElementById("rail-items").innerHTML = html + (can.rm() ? '<button type="button" class="navbtn manage" data-nav="manage"' + (st.view === "manage" ? ' aria-current="page"' : '') + '>' + svg("manage") + 'Manage League</button>' : "");
+    document.getElementById("bottom").innerHTML = html;
+  }
+
+  function topline() {
+    return '<div class="topline"><div class="league"><i>EL</i>Example League <span class="pill">R5 · Saudi Arabian GP</span></div>' +
+      '<button type="button" class="avatar" data-sheet="account" aria-label="Account">' + (role === "spectator" ? "S" : role === "scorekeeper" ? "K" : role === "rm" ? "R" : "J") + '</button></div>';
+  }
+
+  // ---------- HOME ----------
+  function home() {
+    var tasks = [], next, wait;
+    if (can.drive()) {
+      tasks.push({ t: "Choose your weekend target", done: !!st.target, go: "prepare" });
+      tasks.push({ t: "Answer 2 pre-race press questions", done: !!(st.press.q1 && st.press.q2), go: "prepare" });
+      if (st.submitted) tasks.push({ t: "Answer post-race press", done: !!st.postPress.q1, go: "debrief" });
+    }
+    if (can.enter() && st.lightsOut && !st.submitted) tasks.push({ t: "Enter and submit the results", done: false, go: "sessions" });
+    var open = tasks.filter(function (t) { return !t.done; });
+    if (role === "spectator") { next = null; wait = st.submitted ? "Results are in. The debrief is open to everyone." : st.lightsOut ? "The race is on. Results appear once the Scorekeeper submits them." : "The paddock opens an hour before the race."; }
+    else if (open.length) { next = { label: open[0].go === "prepare" ? "Continue weekend" : open[0].go === "sessions" ? "Enter results" : "Open debrief", stage: open[0].go }; }
+    else if (!st.lightsOut) { wait = can.enter() ? (st.otherReady ? null : "Waiting for " + other() + " to choose a weekend target.") : "You're ready. Waiting for the Scorekeeper to start the race."; if (can.enter() && st.otherReady) next = { label: "Start the race", stage: "prepare" }; }
+    else if (!st.submitted) { wait = "Waiting for the Scorekeeper to submit race results."; }
+    else { wait = "League ready for R6 Miami GP once everyone finishes their post-race press."; next = { label: "Open debrief", stage: "debrief" }; }
+    return topline() +
+      '<section class="hero" aria-labelledby="h-round"><div class="row between"><span class="round">ROUND 5 OF 24</span>' +
+      '<span class="pill ' + (st.submitted ? "good" : st.lightsOut ? "info" : "") + '">' + (st.submitted ? "Results submitted" : st.lightsOut ? "Race in progress" : "Preparing") + '</span></div>' +
+      '<h1 id="h-round">Saudi Arabian GP</h1><p class="muted">Jeddah Corniche Circuit · Sunday 19:00 · Standard weekend</p>' +
+      (next ? '<button type="button" class="btn primary block" data-stage="' + next.stage + '">' + next.label + ' →</button>' : '') +
+      (wait ? '<p class="note wait">' + wait + '</p>' : '') + '</section>' +
+      (tasks.length ? '<section class="card"><h2>Your tasks</h2><ul class="tasks">' + tasks.map(function (t) {
+        return '<li class="' + (t.done ? "done" : "") + '"><span>' + t.t + '</span>' + (t.done ? '<span class="pill good">Done</span>' : '<button type="button" class="btn quiet" data-stage="' + t.go + '">Do it</button>') + '</li>'; }).join("") + '</ul></section>' : '') +
+      '<div class="grid2"><section class="card"><div class="row between"><h3>Championship</h3><button type="button" class="btn quiet" data-nav="champ">Standings</button></div>' +
+      '<table class="mini-table"><tbody><tr><td class="num">1</td><td>Lando Norris</td><td class="num">96</td></tr><tr><td class="num">2</td><td>George Russell</td><td class="num">81</td></tr>' +
+      '<tr class="me"><td class="num">11</td><td>Jordan Vale</td><td class="num">14</td></tr></tbody></table></section>' +
+      (can.drive() ? '<section class="card"><div class="row between"><h3>Career</h3><button type="button" class="btn quiet" data-nav="career">Open</button></div>' +
+      '<p>Williams · 1-year contract</p><p class="small muted">Relationship <b class="num">62</b> Steady · Driver Value <b class="num">58.4</b></p></section>' :
+      '<section class="card"><h3>Next race</h3><p>R6 Miami GP</p><p class="small muted">Sprint weekend · 2 weeks</p></section>') + '</div>';
+  }
+
+  // ---------- WORKSPACE ----------
+  function stagesBar() {
+    var s = [["prepare","Prepare"],["sessions","Sessions"],["review","Review"],["debrief","Debrief"]];
+    return '<nav class="stages" aria-label="Weekend stages">' + s.map(function (x) {
+      var state = stageState(x[0]);
+      return '<button type="button" class="stage ' + state + '" data-stage="' + x[0] + '"' + (st.stage === x[0] ? ' aria-current="step"' : '') + '>' +
+        '<span class="dot" aria-hidden="true"></span><b>' + x[1] + '</b><small>' + LABEL[state] + '</small></button>'; }).join("") + '</nav>';
+  }
+  function weekend() {
+    var body = { prepare: prepare, sessions: sessions, review: review, debrief: debrief }[st.stage]();
+    return topline() + '<header class="round-head"><span class="eyebrow">Race Weekend · Round 5</span><h1>Saudi Arabian GP</h1>' +
+      '<div class="meta"><span>Jeddah · Sun 19:00</span><span class="pill">AI <b class="num">82</b> recommended</span></div></header>' + stagesBar() + body +
+      (can.rm() ? '<details class="rmstrip more"><summary>Race Master tools for this round</summary><div class="row">' +
+        '<button type="button" class="btn" data-proto="Opens a round early past its gate, with a note.">Open early</button>' +
+        '<button type="button" class="btn" data-proto="Team orders are ruled here after the race.">Team orders</button>' +
+        '<button type="button" class="btn" data-proto="Reopens a submitted round for correction.">Reopen round</button>' +
+        '<button type="button" class="btn danger" data-proto="Resets the round with a confirmation page and a backup first.">Reset round</button></div></details>' : "");
+  }
+
+  function prepare() {
+    var mine = can.drive() ? myPrepDone() : true;
+    var h = '';
+    if (can.drive()) {
+      h += '<section class="card" aria-labelledby="h-req"><div class="row between"><h2 id="h-req">Before the race</h2><span class="req">Required</span></div>' +
+        '<div class="stack"><h3>Weekend target</h3><p class="small muted">Pick one. Safer targets protect you, stretch targets pay more.</p><div class="choice">' +
+        [["safe","Safe","P14 or better","+0.25 / −0.75"],["standard","Standard","P11 or better","+1.5 / −1.25"],["stretch","Stretch","P8 or better","+3 / −2"]].map(function (o) {
+          return '<button type="button" class="opt" data-target="' + o[0] + '" aria-pressed="' + (st.target === o[0]) + '"><b>' + o[1] + ' · ' + o[2] + '</b><span class="num">' + o[3] + ' relationship</span></button>'; }).join("") +
+        '</div></div>' +
+        '<div class="q"><h3>Pre-race press</h3>' + pq("q1", "Jeddah rewards commitment. Are you taking risks this weekend?", ["We'll attack where it makes sense.", "Points first, heroics later.", "The car decides how brave I can be."]) +
+        pq("q2", "Albon has had your number in qualifying. Does that bother you?", ["He's quick, I'm learning from him.", "Qualifying isn't where points are scored.", "It'll change this weekend."]) + '</div></section>';
+    }
+    h += '<section class="card"><h2>Readiness</h2><div class="statusline">' +
+      (can.drive() ? '<div><span class="pill ' + (mine ? "good" : "attn") + '">' + (mine ? "You're ready" : "Your part isn't done") + '</span></div>' : '') +
+      '<div><span class="pill ' + (st.otherReady ? "good" : "warn") + '">' + (st.otherReady ? other() + " ready" : other() + ": target not chosen") + '</span></div></div>' +
+      (st.lightsOut ? '<p class="note">The race has started. Pre-race press and predictions are closed.</p>' :
+        can.enter() ? (st.otherReady && mine ? '<button type="button" class="btn primary block" id="lights">Start the race</button><p class="small muted">Starting the race closes predictions and pre-race press. Results can be entered after this.</p>' :
+          '<p class="note wait">Waiting for ' + other() + ' to choose a weekend target. <button type="button" class="btn quiet" data-proto="Sends a reminder.">Send a reminder</button></p>') :
+        '<p class="note wait">' + (mine ? "Your part is done. The race starts when the Scorekeeper presses Start (everyone else must be ready too)." : "Finish the required items above.") + '</p>') + '</section>';
+    h += '<section class="card"><h2>Circuit</h2><div class="grid2"><div><p><b>Jeddah Corniche Circuit</b></p><p class="small muted">50 laps · night race</p></div>' +
+      '<div><p class="small"><b>AI 82</b> for the whole weekend</p><details class="more small"><summary>Why 82?</summary><p class="small">F1Laps baseline for Saudi Arabia <b class="num">82</b>, league adjustment <b class="num">+0</b>, track history <b class="num">+0</b>. Confidence 57% after 4 weekends.</p></details></div></div>' +
+      '<p class="small muted">Weather: recorded after each session (the game decides it).</p></section>';
+    h += '<details class="card more"><summary>Optional activities · check-in, predictions</summary><div class="stack">' +
+      '<div class="row between"><span>Race-night check-in</span><button type="button" class="btn" data-proto="Checked in.">Check in</button></div>' +
+      '<div class="row between"><span>Predictions (pole, winner, fastest lap, top player)</span><button type="button" class="btn" data-proto="Predictions lock when the race starts.">Make picks</button></div></div></details>';
+    if (role === "spectator") h = '<section class="card"><h2>Preparing</h2><p>Drivers are choosing targets and answering press. The race starts at 19:00.</p><p class="small muted">Optional: predictions and check-in are open to members.</p></section>';
+    return h;
+  }
+  function pq(k, text, answers) {
+    return '<fieldset class="card flat" style="margin:0"><legend class="small"><b>' + text + '</b></legend><div class="answers">' + answers.map(function (a, i) {
+      return '<button type="button" class="opt" data-press="' + k + '" data-a="' + i + '" aria-pressed="' + (st.press[k] === String(i)) + '">' + a + '</button>'; }).join("") + '</div></fieldset>';
+  }
+
+  function sessList() {
+    var s = [["quali","Qualifying"],["race","Race"]];
+    return '<div class="sessions" role="group" aria-label="Sessions">' + s.map(function (x) {
+      var done = st.saved[x[0]] && !(x[0] === "race" && timesMissing().length);
+      var state = done ? "done" : (x[0] === "race" && st.saved.race ? "attn" : "");
+      return '<button type="button" class="sess ' + state + '" data-sess="' + x[0] + '"' + (st.session === x[0] ? ' aria-current="step"' : '') + '>' + x[1] +
+        ' <span class="st">' + (done ? "Saved" : state === "attn" ? "Race times needed" : st.session === x[0] ? "Now" : "Later") + '</span></button>'; }).join("") +
+      '<span class="small muted" style="align-self:center">Standard weekend. Sprint weekends add Sprint between them.</span></div>';
+  }
+  function sessions() {
+    if (!st.lightsOut) return '<section class="card"><h2>Sessions open when the race starts</h2><p class="muted">Qualifying and Race results are entered after the Scorekeeper presses Start in Prepare.</p></section>';
+    if (!can.enter()) {
+      var h = sessList() + '<section class="card"><h2>' + (st.session === "quali" ? "Qualifying" : "Race") + '</h2>';
+      h += st.saved[st.session] ? orderList(st.session === "quali" ? QUALI : RACE, 10) : '<p class="note wait">Waiting for the Scorekeeper to enter ' + (st.session === "quali" ? "Qualifying" : "Race") + ' results.</p>';
+      h += (can.act() ? '<div class="row"><button type="button" class="btn" id="incident">Report an incident in this session</button></div>' : '') + incidentList() + '</section>';
+      return h;
+    }
+    var order = st.session === "quali" ? QUALI : RACE;
+    var h2 = sessList() + '<section class="card"><div class="row between"><h2>' + (st.session === "quali" ? "Qualifying" : "Race") + ' results</h2>' +
+      '<button type="button" class="btn" data-proto="Opens the screenshot import for this session only.">Import screenshot</button></div>' +
+      '<div class="scroll"><table class="entry"><caption class="sr-only" style="position:absolute;left:-9999px">Positions</caption><thead><tr><th class="pos">Pos</th><th>Driver</th>' + (st.session === "race" ? '<th>Status</th>' : '') + '</tr></thead><tbody>' +
+      order.map(function (gi, i) { var d = GRID[gi];
+        return '<tr class="' + (d[2] ? "player" : "") + '"><td class="pos"><input class="posin num" aria-label="Position for ' + d[0] + '" value="' + (i + 1) + '" data-dirty></td><td><span class="dname">' + d[0] + '</span> <span class="team">' + d[1] + '</span></td>' +
+          (st.session === "race" ? '<td><select aria-label="Status for ' + d[0] + '" data-dirty><option>Finished</option><option>DNF</option><option>DNS</option><option>DSQ</option><option>Classified</option></select></td>' : '') + '</tr>'; }).join("") +
+      '</tbody></table></div>';
+    if (st.session === "race") {
+      h2 += '<div class="grid2"><div class="field"><label for="fl">Fastest lap</label><select id="fl" data-dirty><option>George Russell</option><option>Lando Norris</option></select></div>' +
+        '<div class="field"><label for="dotd">Driver of the Day</label><select id="dotd" data-dirty><option>Jordan Vale</option><option>George Russell</option></select></div>' +
+        '<div class="field"><label for="ai-used">AI difficulty used</label><input id="ai-used" class="num" inputmode="numeric" value="' + esc(st.ai) + '"></div>' +
+        '<div class="field"><label for="wx">Race weather</label><select id="wx" data-dirty><option>Dry</option><option>Overcast</option><option>Light rain</option></select></div></div>' +
+        '<div class="stack" id="times"><h3>Race times vs your AI teammate <span class="req">Required</span></h3>' + timeRow("vale", "Jordan Vale", "Albon") + timeRow("ortiz", "Sam Ortiz", "Ocon") +
+        '<p class="small muted">Type both race times from the game\'s results screen. The site works out the gap. If a player can\'t, tick "Don\'t submit times" in the full form.</p></div>';
+    }
+    h2 += '<div class="row"><button type="button" class="btn" id="incident">Record an incident in this session</button></div>' + incidentList() + '</section>';
+    h2 += '<div class="savebar"><span class="savestate ' + (st.offline ? "local" : st.dirty[st.session] ? "dirty" : "") + '" id="savestate">' +
+      (st.offline ? "Saved on this device · will send when you're back online" : st.dirty[st.session] ? "Unsaved changes" : st.saved[st.session] ? "Saved" : "Not saved yet") + '</span>' +
+      '<button type="button" class="btn primary" id="save-continue">' + (st.session === "quali" ? "Save & continue to Race" : "Save & go to Review") + '</button></div>';
+    return h2;
+  }
+  function timeRow(k, name, mate) {
+    var t = st.times[k], a = secs(t.mine), b = secs(t.theirs), gap = (a !== null && b !== null) ? a - b : null;
+    return '<div class="grid2" style="align-items:end"><div class="field"><label for="t-' + k + '-m">' + name + '</label><input id="t-' + k + '-m" class="num" placeholder="1:24:51.200" value="' + esc(t.mine) + '" data-time="' + k + '" data-f="mine"></div>' +
+      '<div class="field"><label for="t-' + k + '-t">' + mate + ' (AI teammate)</label><input id="t-' + k + '-t" class="num" placeholder="1:24:40.900" value="' + esc(t.theirs) + '" data-time="' + k + '" data-f="theirs"></div>' +
+      '<p class="small num" id="gap-' + k + '">' + (gap === null ? '<span class="muted">Gap appears here</span>' : (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s · " + (gap >= 0 ? "+" : "") + (gap / 50).toFixed(2) + " s a lap") + '</p></div>';
+  }
+  function orderList(order, n) {
+    return '<ol class="stack" style="margin:0;padding-left:22px">' + order.slice(0, n).map(function (gi) { var d = GRID[gi];
+      return '<li' + (d[2] ? ' style="color:var(--player);font-weight:700"' : '') + '>' + d[0] + ' <span class="team">' + d[1] + '</span></li>'; }).join("") + '</ol><p class="small muted">Top 10 shown. Full classification in Review.</p>';
+  }
+  function incidentList() {
+    var mine = st.incidents.filter(function (i) { return i.s === st.session; });
+    return mine.length ? '<ul class="stack small" style="margin:0;padding-left:18px">' + mine.map(function (i) { return '<li>' + i.t + ' <span class="pill">' + (i.s === "quali" ? "Qualifying" : "Race") + '</span></li>'; }).join("") + '</ul>' : "";
+  }
+
+  function review() {
+    if (!st.lightsOut) return '<section class="card"><h2>Nothing to review yet</h2><p class="muted">Review opens once results are saved.</p></section>';
+    var blocking = [], warns = [];
+    if (!st.saved.quali) blocking.push(["Qualifying hasn't been saved", "quali", null]);
+    if (!st.saved.race) blocking.push(["Race hasn't been saved", "race", null]);
+    timesMissing().forEach(function (n) { blocking.push(["Race times missing for " + n + " (Grand Prix)", "race", "times"]); });
+    if (!st.ai) blocking.push(["Enter the AI difficulty used, or mark the round Not tracked", "race", "ai-used"]);
+    warns.push(["No weekend notes", "notes"]);
+    var h = '<section class="card"><h2>Review &amp; submit</h2>' +
+      '<div class="podium"><div><span class="small muted">Winner</span><span class="p">Russell</span></div><div><span class="small muted">P2</span><span class="p">Norris</span></div><div><span class="small muted">P3</span><span class="p">Leclerc</span></div></div>' +
+      '<p class="small">Pole: <b>Lando Norris</b> · Fastest lap: <b>George Russell</b> · Driver of the Day: <b>Jordan Vale</b> · AI used: <b class="num">' + esc(st.ai || "Not tracked") + '</b></p>' +
+      '<p class="small">Players: <b style="color:var(--player)">Jordan Vale P7</b> (qualified P8) · <b style="color:var(--player)">Sam Ortiz P13</b> (qualified P14) · No DNF, DNS or DSQ.</p>' +
+      (st.incidents.length ? '<p class="small">Incidents: ' + st.incidents.map(function (i) { return esc(i.t); }).join("; ") + ' (open, for the Race Master to rule on; they don\'t block submission)</p>' : '<p class="small muted">No incidents recorded.</p>') + '</section>';
+    h += '<section class="card"><h3>Check before submitting</h3><div class="checks">' +
+      blocking.map(function (b) { return '<div class="check block"><span class="pill attn">Must fix</span><span>' + b[0] + '</span><button type="button" class="btn quiet" data-fix="' + b[1] + '" data-field="' + (b[2] || "") + '">Fix</button></div>'; }).join("") +
+      warns.map(function (w) { return '<div class="check warnrow"><span class="pill warn">Check</span><span>' + w[0] + '</span><label class="small"><input type="checkbox" id="ack" ' + (st.notesAck ? "checked" : "") + '> OK</label></div>'; }).join("") +
+      (blocking.length ? '' : '<div class="check"><span class="pill good">Ready</span><span>Everything required is in.</span><span></span></div>') + '</div></section>';
+    if (!can.enter()) return h.replace('<h3>Check before submitting</h3>', '<h3>Waiting for the Scorekeeper</h3>');
+    h += '<button type="button" class="btn primary block" id="submit"' + (blocking.length || !st.notesAck || st.submitting ? " disabled" : "") + '>' + (st.submitting ? "Submitting…" : "Submit weekend") + '</button>' +
+      '<p class="small muted">Submitting runs the career calculations once. Pressing it again, or a retry after a dropped connection, does nothing twice.</p>';
+    return h;
+  }
+
+  function debrief() {
+    if (!st.submitted) return '<section class="card"><h2>Debrief opens after submission</h2><p class="muted">Your result, target outcome, press and changes appear here.</p></section>';
+    var h = '<section class="card"><h2>Weekend summary</h2><div class="statusline">' +
+      '<div><span class="pill good">Results submitted</span></div>' +
+      (can.drive() ? '<div><span class="pill ' + (st.postPress.q1 ? "good" : "attn") + '">' + (st.postPress.q1 ? "Your post-race tasks are done" : "Your post-race press: 1 question") + '</span></div>' : '') +
+      '<div><span class="pill warn">League ready for R6 when ' + other() + ' answers post-race press</span></div></div>' +
+      '<p>Russell won from third on the grid. Jordan Vale finished P7, ahead of Albon for the first time this season.</p></section>';
+    if (can.drive()) {
+      h += '<section class="card"><div class="row between"><h2>Post-race press</h2><span class="req">Required</span></div>' +
+        pqPost() + '</section>' +
+        '<section class="card"><h2>Your weekend</h2><div class="grid2">' +
+        '<div class="stack"><span class="eyebrow">Target</span><p><b>Standard · P11 or better</b></p><p><span class="pill good">Hit</span> <span class="num delta up">+1.5</span> relationship</p></div>' +
+        '<div class="stack"><span class="eyebrow">Championship</span><p>P11 → <b>P9</b> <span class="num delta up">▲2</span></p><p class="small muted"><span class="num">14 → 20</span> points</p></div>' +
+        '<div class="stack"><span class="eyebrow">Form · Reputation</span><p class="num"><span class="delta up">Form 61.2 (+4.8)</span> · <span class="delta up">Rep 55.9 (+0.6)</span></p></div>' +
+        '<div class="stack"><span class="eyebrow">Teammate</span><p>Race: you P7, Albon P10. Qualifying: Albon ahead.</p></div></div>' +
+        '<details class="more"><summary>Why did this change?</summary><p class="small">Form uses your last six races, recent ones counting most: P7 in a car expected around P12. Reputation moves toward how you performed against the car and your teammate. Your race time was <b class="num">+10.300 s</b> behind Albon over 50 laps (<b class="num">+0.21 s</b> a lap), as entered.</p></details></section>';
+    } else {
+      h += '<section class="card"><h2>Results</h2>' + orderList(RACE, 10) + '<p class="small muted">Drivers\' own changes (Form, relationship, target) are private to them' + (role === "spectator" ? "." : " and the Race Master.") + '</p></section>';
+    }
+    h += '<section class="card"><h2>AI for next round</h2><p><b class="num">82</b> for Miami (F1Laps 82, league +0, history +0). Both players matched their teammates, so it holds.</p>' +
+      '<details class="more"><summary>Evidence</summary><p class="small">Jordan Vale: +3 places vs Albon, +0.21 s a lap. Sam Ortiz: +1 place vs Ocon. Mixed, so no change.</p></details></section>' +
+      '<section class="card"><div class="row between"><div><span class="eyebrow">Next round</span><h3>R6 Miami GP</h3><p class="small muted">Sprint weekend · 2 weeks</p></div><button type="button" class="btn" data-proto="Opens R6 in this workspace when it becomes the current round.">Go to R6</button></div></section>';
+    return h;
+  }
+  function pqPost() {
+    var a = ["The car was strong over the long runs.", "Beating Albon is the start, not the goal.", "I'll take P7 and move on."];
+    return '<fieldset class="card flat" style="margin:0"><legend class="small"><b>You finished ahead of your teammate for the first time. What changed?</b></legend><div class="answers">' +
+      a.map(function (x, i) { return '<button type="button" class="opt" data-post="q1" data-a="' + i + '" aria-pressed="' + (st.postPress.q1 === String(i)) + '">' + x + '</button>'; }).join("") + '</div></fieldset>';
+  }
+
+  // ---------- secondary pages ----------
+  function champ() {
+    var tabs = [["standings","Standings"],["calendar","Calendar"],["stats","Statistics"],["drivers","Drivers & teams"],["records","Records & rivalries"]];
+    var body = st.champTab === "standings" ?
+      '<table class="mini-table"><tbody>' + [["Lando Norris","McLaren",96],["George Russell","Mercedes",81],["Oscar Piastri","McLaren",77],["Charles Leclerc","Ferrari",70],["Max Verstappen","Red Bull",62]].map(function (r, i) {
+        return '<tr><td class="num">' + (i + 1) + '</td><td>' + r[0] + ' <span class="team">' + r[1] + '</span></td><td class="num">' + r[2] + '</td></tr>'; }).join("") +
+      '<tr class="me"><td class="num">9</td><td>Jordan Vale <span class="team">Williams</span></td><td class="num">20</td></tr></tbody></table><details class="more"><summary>Constructors</summary><p class="small">McLaren 173 · Mercedes 132 · Ferrari 121 …</p></details>' :
+      '<p class="muted">The existing ' + tabs.filter(function (t) { return t[0] === st.champTab; })[0][1] + ' page, unchanged, opens here.</p>';
+    return topline() + '<header class="round-head"><span class="eyebrow">2026 season · after round 5</span><h1>Championship</h1></header>' +
+      '<div class="tabs2" role="group" aria-label="Championship sections">' + tabs.map(function (t) { return '<button type="button" data-champ="' + t[0] + '" aria-pressed="' + (st.champTab === t[0]) + '">' + t[1] + '</button>'; }).join("") + '</div>' +
+      '<section class="card">' + body + '</section>';
+  }
+  function career() {
+    if (!can.drive()) return topline() + '<section class="card"><h1>Career</h1><p class="muted">Career pages are for drivers. ' + (role === "scorekeeper" ? "Scorekeepers see results, not other drivers' careers." : "") + '</p></section>';
+    var tabs = [["team","Team & contract"],["progress","Progression"],["goals","Goals & pledge"],["press","Press history"]];
+    return topline() + '<header class="round-head"><span class="eyebrow">' + myName() + '</span><h1>Career</h1></header>' +
+      '<section class="card"><div class="grid2"><div class="stack"><span class="eyebrow">Team</span><p><b>Williams</b> · seat 1</p><p class="small muted">Contract to end of 2026 · pledge: Solid</p></div>' +
+      '<div class="stack"><span class="eyebrow">Relationship</span><p><b class="num">62</b> Steady <span class="num delta up">+1.5</span></p><p class="small muted">Met expectations; target hit in Jeddah.</p></div></div>' +
+      '<p class="note">No decisions waiting. The transfer window opens after round 12.</p></section>' +
+      '<div class="tabs2" role="group" aria-label="Career sections">' + tabs.map(function (t) { return '<button type="button" data-career="' + t[0] + '" aria-pressed="' + (st.careerTab === t[0]) + '">' + t[1] + '</button>'; }).join("") + '</div>' +
+      '<section class="card"><p class="muted">The existing ' + tabs.filter(function (t) { return t[0] === st.careerTab; })[0][1] + ' content opens here, one section at a time.</p></section>';
+  }
+  function more() {
+    return topline() + '<h1>More</h1><section class="card"><div class="stack">' + ["News","Announcements","Predictions standings","Incidents","Transfers","Help"].map(function (x) {
+      return '<button type="button" class="btn" style="text-align:left" data-proto="' + x + ' opens as it does today.">' + x + '</button>'; }).join("") + '</div></section>';
+  }
+  function manage() {
+    var g = [["Race weekends","Calendar and race times, round gates"],["People","Members and roles, invitations, join requests"],["Career management","Grid and contracts, market, drivers and teams, team management"],["League administration","Settings, notifications, activity log, backups"]];
+    return topline() + '<h1>Manage League</h1>' + g.map(function (x) { return '<section class="card"><h3>' + x[0] + '</h3><p class="small muted">' + x[1] + '</p></section>'; }).join("");
+  }
+
+  // ---------- render & events ----------
+  function render() {
+    nav();
+    var fn = { home: home, weekend: weekend, champ: champ, champ2: champ, career: career, more: more, manage: manage }[st.view];
+    document.getElementById("view").innerHTML = fn();
+    document.getElementById("sim-offline").textContent = st.offline ? "Back online" : "Go offline";
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.nav) { if (t.dataset.nav === "more") return openMore(); go(t.dataset.nav); return; }
+    if (t.dataset.stage) { go("weekend", t.dataset.stage); return; }
+    if (t.dataset.sess) { st.session = t.dataset.sess; render(); return; }
+    if (t.dataset.target) { st.target = t.dataset.target; render(); toast("Target saved: " + t.textContent.split("·")[0].trim()); return; }
+    if (t.dataset.press) { st.press[t.dataset.press] = t.dataset.a; render(); toast("Answer saved"); return; }
+    if (t.dataset.post) { st.postPress[t.dataset.post] = t.dataset.a; render(); toast("Answer saved. Your post-race tasks are done."); return; }
+    if (t.dataset.champ) { st.champTab = t.dataset.champ; render(); return; }
+    if (t.dataset.career) { st.careerTab = t.dataset.career; render(); return; }
+    if (t.dataset.proto) { toast(t.dataset.proto); return; }
+    if (t.dataset.fix) { st.stage = "sessions"; st.session = t.dataset.fix; render();
+      var f = t.dataset.field && document.getElementById(t.dataset.field); var target = f || document.querySelector(".entry");
+      if (target) { target.scrollIntoView({ block: "center" }); target.classList.add("flash"); var inp = target.querySelector ? (target.querySelector("input") || target) : target; if (inp.focus) inp.focus(); }
+      toast("Fix it here, then Save & go to Review."); return; }
+    if (t.dataset.sheet === "account") { sheet('<h2>Account</h2><button class="item" type="button" data-proto="Theme, density and notifications.">Settings</button><button class="item" type="button" data-proto="Signed out (prototype).">Sign out</button><button class="item" type="button" data-close>Close</button>'); return; }
+    if (t.hasAttribute("data-close")) { closeSheet(); return; }
+    switch (t.id) {
+      case "lights": st.lightsOut = true; st.stage = "sessions"; render(); toast("Race started. Predictions and pre-race press are closed."); break;
+      case "save-continue":
+        st.saved[st.session] = true; st.dirty[st.session] = false;
+        if (st.session === "quali") { st.session = "race"; toast(st.offline ? "Qualifying saved on this device" : "Qualifying saved. Now the Race."); }
+        else { st.stage = "review"; toast(st.offline ? "Saved on this device. Review is ready when you're online." : "Race saved. Nothing is submitted until you press Submit weekend."); }
+        render(); window.scrollTo(0, 0); break;
+      case "submit":
+        if (st.submitting || st.submitted) return;
+        st.submitting = true; render();
+        setTimeout(function () { st.submitting = false; st.submitted = true; st.stage = "debrief"; render(); window.scrollTo(0, 0); toast("Weekend submitted."); }, 900); break;
+      case "incident":
+        var who = st.session === "quali" ? "Stroll impeded Jordan Vale at turn 27" : "Contact between Ortiz and Ocon, turn 1";
+        st.incidents.push({ s: st.session, t: who }); render(); toast("Incident recorded in " + (st.session === "quali" ? "Qualifying" : "the Race")); break;
+      case "sim-other": st.otherReady = true; render(); toast(other() + " chose a target and answered press"); break;
+      case "sim-offline": st.offline = !st.offline; render(); toast(st.offline ? "Offline: saves stay on this device and are sent later" : "Back online: 1 saved change sent"); break;
+      case "sim-reset": st = S0(); render(); break;
+    }
+  });
+  document.addEventListener("input", function (e) {
+    var t = e.target;
+    if (t.dataset.time) { st.times[t.dataset.time][t.dataset.f] = t.value; var k = t.dataset.time, a = secs(st.times[k].mine), b = secs(st.times[k].theirs);
+      document.getElementById("gap-" + k).innerHTML = (a !== null && b !== null) ? ((a - b >= 0 ? "+" : "") + (a - b).toFixed(3) + " s · " + ((a - b) >= 0 ? "+" : "") + ((a - b) / 50).toFixed(2) + " s a lap") : '<span class="muted">Gap appears here</span>'; }
+    if (t.id === "ai-used") st.ai = t.value.trim();
+    if (t.id === "ack") { st.notesAck = t.checked; render(); }
+    if (t.hasAttribute("data-dirty") || t.dataset.time) { st.dirty[st.session] = true; var s = document.getElementById("savestate"); if (s) { s.className = "savestate dirty"; s.textContent = "Unsaved changes · autosaving"; } }
+  });
+  document.addEventListener("change", function (e) { if (e.target.id === "ack") { st.notesAck = e.target.checked; render(); } });
+  document.getElementById("role").addEventListener("change", function (e) {
+    role = e.target.value; try { localStorage.setItem("pl-proto-role", role); } catch (x) {}
+    if ((st.view === "manage" && !can.rm()) ) st.view = "home"; render(); });
+  function openMore() { sheet('<h2>More</h2>' + ["News","Announcements","Predictions standings","Incidents","Transfers","Help"].map(function (x) { return '<button class="item" type="button" data-proto="' + x + ' opens as it does today.">' + x + '</button>'; }).join("") + '<button class="item" type="button" data-close>Close</button>'); }
+  function sheet(h) { var s = document.getElementById("sheet"); s.innerHTML = '<div role="dialog" aria-modal="true">' + h + '</div>'; s.hidden = false; var b = s.querySelector("button"); if (b) b.focus(); }
+  function closeSheet() { document.getElementById("sheet").hidden = true; }
+  document.getElementById("sheet").addEventListener("click", function (e) { if (e.target.id === "sheet") closeSheet(); if (e.target.closest("[data-proto]")) closeSheet(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSheet(); });
+  render();
+})();
+</script>
