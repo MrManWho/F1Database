@@ -31,10 +31,12 @@ function clearCaches() {
   return caches.keys().then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); });
 }
 
-/* Network first (never from a cache); if you're offline, show a simple message instead of the browser's error page. */
+/* Network first (the app keeps no page cache); if you're offline, show a simple message instead of the browser's error
+   page. v3.2.2: the request is passed on exactly as the browser made it. Adding options to it (3.2 did) makes the
+   browser report the service worker itself as the page you came from, which sent "back" redirects to /sw.js. */
 self.addEventListener("fetch", function (event) {
   if (event.request.mode !== "navigate") return;
-  event.respondWith(fetch(event.request, { cache: "no-store" }).then(function (res) {
+  event.respondWith(fetch(event.request).then(function (res) {
     if (res.status === 503 && res.headers.get("X-Paddock-Maintenance")) {
       return clearCaches().then(function () { return res; });
     }

@@ -3,6 +3,16 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.2 · No more landing on a page of code
+_Released September 28, 2026_
+> A fix for a bug introduced in 3.2.
+
+### Highlights
+- **Saving a race time (and other forms) takes you back to the right page again.** Since 3.2, when a save couldn't be completed (for example a time that wasn't accepted, or an expired session), the site could send you to a page full of code instead of back to where you were. It now always returns you to the page you came from, or to the league's Control Room.
+
+### Fixed
+- The app's background helper (the service worker) changed how page requests were passed on in 3.2, which made browsers report it as the page you came from. It now passes requests on unchanged, and the site never sends anyone "back" to a file that isn't a page.
+
 ## 3.2.1 · Signing in during maintenance
 _Released September 28, 2026_
 > A fix for the site owner signing in while the site is closed.

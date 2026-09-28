@@ -173,6 +173,18 @@ def register_hooks(app):
         return None
 
     @app.after_request
+    def never_back_to_a_file(response):
+        """v3.2.2: a "back to where you were" redirect must land on a page, never on the service worker, the app
+        manifest, a static file, the health check or the API (a browser can report one of those as the referrer)."""
+        if 300 <= response.status_code < 400 and response.location:
+            from urllib.parse import urlsplit
+            path = urlsplit(response.location).path
+            if path in ("/sw.js", "/manifest.webmanifest", "/healthz") or path.startswith(("/static/", "/api/")):
+                token = (request.view_args or {}).get("token")
+                response.location = url_for("dashboard", token=token) if token else url_for("home")
+        return response
+
+    @app.after_request
     def vendor_files(response):
         """The self-hosted OCR engine: cache it for a month, and hand the language data over still gzipped
         (Tesseract unpacks it itself)."""

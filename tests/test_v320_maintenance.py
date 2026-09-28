@@ -298,3 +298,25 @@ def test_no_pop_up_on_sign_in_pages_or_for_people_kept_out(app, site):
     _enable(site["owner"])
     assert 'id="whats-new"' not in app.test_client().get("/login").get_data(as_text=True)
     assert 'id="whats-new"' not in _client(app, "rm").get("/login").get_data(as_text=True)
+
+
+# --------------------------------------------------------------------------- v3.2.2: never "back" to the service worker
+
+def test_a_failed_save_never_redirects_to_the_service_worker(app, site):
+    """3.2's service worker made browsers report /sw.js as the page you came from, so "back to where you were"
+    after a refused save landed on the service worker's code."""
+    token = site["token"]
+    for bad in ("http://localhost/sw.js", "http://localhost/manifest.webmanifest", "http://localhost/static/css/app.css",
+                "http://localhost/healthz", f"http://localhost/api/career/{token}/notifications"):
+        res = site["owner"].post(f"/career/{token}/rename", data={"csrf_token": "tok", "name": ""},
+                                 headers={"Referer": bad})
+        assert res.status_code == 302 and res.location.endswith(f"/career/{token}/dashboard"), bad
+    res = site["owner"].post(f"/career/{token}/rename", data={"csrf_token": "tok", "name": ""},
+                             headers={"Referer": f"http://localhost/career/{token}/seasons"})
+    assert res.location.endswith(f"/career/{token}/seasons")          # a real page is still honoured
+
+
+def test_the_service_worker_passes_page_requests_on_unchanged():
+    from pathlib import Path
+    sw = (Path(__file__).resolve().parent.parent / "static" / "sw.js").read_text()
+    assert "fetch(event.request).then" in sw and "fetch(event.request, {" not in sw
