@@ -2804,6 +2804,10 @@ def register_routes(app):
         flash(f"{name}'s target is now {t['status'].lower()}.", "success")
         return _admin_back(url_for("weekend", token=ctx["token"], event_id=event_id) + "#targets")
 
+    def _safe_next(target):
+        """A same-site path to go back to after a form (never another site)."""
+        return bool(target) and target.startswith("/") and not target.startswith("//") and "\\" not in target
+
     def _admin_back(default):
         """Race Master tools post back to Team management when that's where they were used (v2.4)."""
         if request.form.get("back") == "admin":
@@ -2939,12 +2943,13 @@ def register_routes(app):
             abort(403)
         mine = ctx["my_driver"]["id"] if ctx["my_driver"] else None
         iid = community.report_incident(conn, event_id, g.user["username"], mine, _form_int("accused_id"),
-                                        request.form.get("description"))
+                                        request.form.get("description"), request.form.get("session") or "weekend")
         who = next(i for i in community.incidents(conn, event_id=event_id) if i["id"] == iid)
         feed.notify(conn, who["accused_driver_id"], f"You've been reported for an incident at R{who['round_number']} "
                     f"{who['event_name']}. The Race Master will rule on it.", "incidents")
         flash("Incident reported. The Race Master will review it.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#incidents")
+        return redirect(request.form.get("next") if _safe_next(request.form.get("next"))
+                        else url_for("weekend", token=ctx["token"], event_id=event_id) + "#incidents")
 
     @app.route("/career/<token>/incidents")
     @career_page()
@@ -2962,7 +2967,10 @@ def register_routes(app):
     @app.route("/career/<token>/incidents/<int:incident_id>/delete", methods=["POST"])
     @career_page(master_only=True)
     def incident_delete(conn, ctx, incident_id):
+        row = conn.execute("SELECT event_id FROM incidents WHERE id = ?", (incident_id,)).fetchone()
         conn.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
+        if row and S.get_event(conn, row["event_id"]):
+            community.refresh_stewards_story(conn, S.get_event(conn, row["event_id"]))
         flash("Report deleted.", "success")
         return redirect(request.referrer or url_for("incidents_page", token=ctx["token"]))
 

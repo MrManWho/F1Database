@@ -209,7 +209,8 @@ def test_incident_reports_and_rulings(app, master_client):
                        data={"ruling": "warning", "note": "Avoidable contact", "csrf_token": "tok"})
     with storage.session(token) as conn:
         assert community.incidents(conn)[0]["ruling"] == "warning"
-        assert any("Ben Okafor given a warning" in n["headline"] for n in feed.latest(conn, 5))
+        assert any("1 warning" in n["headline"] and "Ben Okafor: Warning" in n["body"]   # 4.0: one stewards' story
+                       for n in feed.latest(conn, 5))
     page = ana.get(f"/career/{token}/rivalry?a={a}&b={b}").get_data(as_text=True)
     assert "Incidents between them" in page and "Avoidable contact" in page
     assert "Incidents" in ana.get(f"/career/{token}/incidents").get_data(as_text=True)

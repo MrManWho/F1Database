@@ -467,7 +467,7 @@ def contract_history(conn, driver_id):
 
 # --------------------------------------------------------------------------- incidents
 
-def report_incident(conn, event_id, username, reporter_driver_id, accused_id, description):
+def report_incident(conn, event_id, username, reporter_driver_id, accused_id, description, session="weekend"):
     event = S.get_event(conn, event_id)
     if not event or event["status"] == C.EVENT_NOT_RUN:
         raise ValidationError("You can report incidents once a race has results")
@@ -476,18 +476,23 @@ def report_incident(conn, event_id, username, reporter_driver_id, accused_id, de
         raise ValidationError("Pick a driver who was in that race")
     if accused_id == reporter_driver_id:
         raise ValidationError("You can't report yourself")
+    session = session or "weekend"
+    if session not in C.INCIDENT_SESSIONS or (session == "sprint" and not event["is_sprint"]):
+        raise ValidationError("Choose the session it happened in")
     description = (description or "").strip()
     if len(description) < 5:
         raise ValidationError("Say what happened (lap, corner, what they did)")
     if len(description) > 1000:
         raise ValidationError("Keep it under 1000 characters")
     cur = conn.execute("""INSERT INTO incidents(event_id, reporter, reporter_driver_id, accused_driver_id, description,
-                          status, created_at) VALUES(?,?,?,?,?, 'Open', ?)""",
-                       (event_id, username, reporter_driver_id, accused_id, description, now_iso()))
+                          status, created_at, session) VALUES(?,?,?,?,?, 'Open', ?, ?)""",
+                       (event_id, username, reporter_driver_id, accused_id, description, now_iso(), session))
     return cur.lastrowid
 
 
 def rule_incident(conn, incident_id, ruling, note, username):
+    """4.0: a ruling updates the round's single stewards' story instead of posting a headline of its own, so a
+    busy race makes one news item, not one per report. The drivers involved still get their own notification."""
     from . import feed
     inc = conn.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
     if not inc:
@@ -495,20 +500,96 @@ def rule_incident(conn, incident_id, ruling, note, username):
     if ruling not in C.INCIDENT_RULINGS:
         raise ValidationError("Choose a ruling")
     note = (note or "").strip()[:500]
+    unchanged = inc["status"] == "Decided" and inc["ruling"] == ruling
     conn.execute("UPDATE incidents SET status = 'Decided', ruling = ?, ruling_note = ?, decided_by = ?, decided_at = ? "
                  "WHERE id = ?", (ruling, note, username, now_iso(), incident_id))
     event = S.get_event(conn, inc["event_id"])
-    dmap = S.driver_map(conn)
-    accused = dmap[inc["accused_driver_id"]]["name"]
+    refresh_stewards_story(conn, event)
+    if unchanged:
+        return      # only the explanation changed: the story is updated, nobody is notified again
     where = f"R{event['round_number']} {event['name']}"
-    headline = (f"No further action for {accused} after {where} incident" if ruling == "none"
-                else f"{accused} given a {C.INCIDENT_RULINGS[ruling].split(' (')[0].lower()} for {where} incident")
-    feed.post(conn, event["season_id"], "paddock", headline, note or inc["description"][:200], "incidents",
-              driver_id=inc["accused_driver_id"])
     feed.notify(conn, inc["accused_driver_id"], f"Ruling on the {where} incident: {C.INCIDENT_RULINGS[ruling]}.", "incidents")
-    if inc["reporter_driver_id"]:
+    if inc["reporter_driver_id"] and inc["reporter"] != username:
         feed.notify(conn, inc["reporter_driver_id"], f"Your {where} report was decided: {C.INCIDENT_RULINGS[ruling]}.",
                     "incidents")
+
+
+def stewards_ref(event_id):
+    return f"stewards:{event_id}"
+
+
+def stewards_story(conn, event):
+    """The round's stewards' story (headline, body) from its decided reports, or None when nothing is decided.
+    Sanctions are named one by one; reports with no further action are only counted."""
+    rows = [dict(r) for r in conn.execute("SELECT * FROM incidents WHERE event_id = ? ORDER BY id", (event["id"],))]
+    decided = [r for r in rows if r["status"] == "Decided"]
+    if not decided:
+        return None
+    dmap = S.driver_map(conn)
+    where = f"R{event['round_number']} {event['name']}"
+    sanctions = [r for r in decided if r["ruling"] != "none"]
+    cleared = len(decided) - len(sanctions)
+    open_ = len(rows) - len(decided)
+    counts = {}
+    for r in sanctions:
+        label = C.INCIDENT_RULINGS[r["ruling"]].split(" (")[0].lower()
+        counts[label] = counts.get(label, 0) + 1
+    if sanctions:
+        parts = [f"{n} {label}{'s' if n != 1 else ''}" for label, n in counts.items()]
+        headline = f"Stewards' decisions at {where}: " + ", ".join(parts)
+    else:
+        headline = f"Stewards take no further action on {cleared} incident{'s' if cleared != 1 else ''} at {where}"
+    lines = []
+    for r in sanctions:
+        who = dmap.get(r["accused_driver_id"], {}).get("name", "Unknown driver")
+        sess = C.INCIDENT_SESSIONS.get(r.get("session") or "weekend", "Weekend")
+        line = f"{who}: {C.INCIDENT_RULINGS[r['ruling']].split(' (')[0]}" + (f" ({sess})" if sess != "Weekend" else "")
+        if r["ruling_note"]:
+            line += f". {r['ruling_note']}"
+        lines.append(line)
+    if cleared and sanctions:
+        lines.append(f"No further action on {cleared} other report{'s' if cleared != 1 else ''}.")
+    elif cleared:
+        lines.append(f"{cleared} report{'s were' if cleared != 1 else ' was'} reviewed with no further action.")
+    if open_:
+        lines.append(f"{open_} report{'s' if open_ != 1 else ''} still under review.")
+    return headline, "\n".join(lines)
+
+
+def refresh_stewards_story(conn, event):
+    """Create, update or remove the round's single stewards' story (news.ref = stewards:<event id>)."""
+    from . import feed
+    ref = stewards_ref(event["id"])
+    story = stewards_story(conn, event)
+    existing = conn.execute("SELECT id FROM news WHERE ref = ?", (ref,)).fetchone()
+    if not story:
+        if existing:
+            conn.execute("DELETE FROM news WHERE id = ?", (existing["id"],))
+        return
+    headline, body = story
+    if existing:
+        conn.execute("UPDATE news SET headline = ?, body = ? WHERE id = ?", (headline, body, existing["id"]))
+    else:
+        feed.post(conn, event["season_id"], "paddock", headline, body, "incidents", ref=ref)
+
+
+def regroup_incident_news(conn):
+    """Schema 25: fold the one-headline-per-ruling stories older versions posted into one story per round."""
+    events = [r["event_id"] for r in conn.execute("SELECT DISTINCT event_id FROM incidents WHERE status = 'Decided'")]
+    for event_id in events:
+        event = S.get_event(conn, event_id)
+        if not event:
+            continue
+        where = f"R{event['round_number']} {event['name']}"
+        conn.execute("""DELETE FROM news WHERE kind = 'paddock' AND link = 'incidents' AND ref IS NULL
+                        AND season_id = ? AND headline LIKE ?""", (event["season_id"], f"% {where} incident"))
+        ref = stewards_ref(event_id)
+        story = stewards_story(conn, event)
+        if story and not conn.execute("SELECT 1 FROM news WHERE ref = ?", (ref,)).fetchone():
+            last = conn.execute("SELECT MAX(decided_at) FROM incidents WHERE event_id = ?", (event_id,)).fetchone()[0]
+            conn.execute("""INSERT INTO news(season_id, kind, headline, body, link, created_at, ref)
+                            VALUES(?, 'paddock', ?, ?, 'incidents', ?, ?)""",
+                         (event["season_id"], story[0], story[1], last or now_iso(), ref))
 
 
 def incidents(conn, event_id=None, driver_ids=None, season_id=None):
@@ -532,4 +613,5 @@ def incidents(conn, event_id=None, driver_ids=None, season_id=None):
         r["reporter_driver"] = dmap.get(r["reporter_driver_id"])
         r["reporter_name"] = names.get(r["reporter"], r["reporter"])
         r["ruling_label"] = C.INCIDENT_RULINGS.get(r["ruling"])
+        r["session_label"] = C.INCIDENT_SESSIONS.get(r.get("session") or "weekend", "Weekend")
     return rows

@@ -5,7 +5,7 @@ APP_VERSION = "4.0.0-alpha.3"
 POLICY_EFFECTIVE = "24 September 2026"
 # Bumped whenever a release changes how a driver's numbers are worked out (see impacts.py).
 CALC_VERSION = 4
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 GRID_SIZE = 22
 SEATS_PER_TEAM = 2
@@ -256,6 +256,9 @@ TARGET_GAP = 3             # places between Safe, Standard and Stretch finishing
 TARGET_STREAKS = (3, 5, 8, 10)   # consecutive targets hit that make a headline
 GATE_NOTE_MIN = 10               # characters a Race Master's gate bypass note needs
 GOAL_WEIGHT = 4.0   # each season goal adds or removes this much (scaled by how far into the season)
+
+# 4.0: the session an incident happened in ("weekend" = not tied to one session, e.g. reports from before 4.0)
+INCIDENT_SESSIONS = {"qualifying": "Qualifying", "sprint": "Sprint", "race": "Race", "weekend": "Weekend"}
 
 INCIDENT_RULINGS = {
     "none": "No further action",

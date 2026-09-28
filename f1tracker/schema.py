@@ -509,7 +509,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     ruling_note TEXT NOT NULL DEFAULT '',
     decided_by TEXT,
     created_at TEXT NOT NULL,
-    decided_at TEXT
+    decided_at TEXT,
+    session TEXT NOT NULL DEFAULT 'weekend'
 );
 
 CREATE TABLE IF NOT EXISTS team_notes (
@@ -618,6 +619,9 @@ def migrate(conn):
                the v3 tracker until they finish; new seasons use the track-aware model (meta ai_model:<season>).
     v23 -> v24 (4.0): pace_inputs.race_time and bench_race_time (a player's and their comparison AI driver's race
                times; the race gap is worked out from them). Existing rows keep the gap they were given.
+    v24 -> v25 (4.0): incidents.session (qualifying / sprint / race; existing reports become "weekend"). Incident
+               rulings are grouped into one stewards' story per round: the separate headlines older versions posted
+               for each ruling are folded into it once, when this version first opens the league.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -630,6 +634,7 @@ def migrate(conn):
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
         if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
             return
+    old_incidents = "incidents" in tables and "session" not in _columns(conn, "incidents")
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
         conn.execute("ALTER TABLE results ADD COLUMN sprint_status TEXT NOT NULL DEFAULT 'Not Run'")
@@ -738,6 +743,12 @@ def migrate(conn):
         if col not in pace_cols:
             # v24 (4.0): the two race times as typed; the gap is worked out from them
             conn.execute(f"ALTER TABLE pace_inputs ADD COLUMN {col} REAL")
+    if "session" not in _columns(conn, "incidents"):
+        # v25 (4.0): which session an incident happened in; older reports belong to the weekend as a whole
+        conn.execute("ALTER TABLE incidents ADD COLUMN session TEXT NOT NULL DEFAULT 'weekend'")
+    if old_incidents:
+        from . import community
+        community.regroup_incident_news(conn)
     if "career_status" not in _columns(conn, "drivers"):
         conn.execute("ALTER TABLE drivers ADD COLUMN career_status TEXT")
     if "team_orders" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}:
