@@ -34,7 +34,7 @@
       const inSessions = current === "sessions" && SESSION_ORDER.indexOf(session) > -1 && SESSION_ORDER.indexOf(session) < SESSION_ORDER.length - 1;
       next.hidden = i >= ORDER.length - 1;
       const label = inSessions ? LABELS[SESSION_ORDER[SESSION_ORDER.indexOf(session) + 1]] : (ORDER[i + 1] ? document.querySelector('[data-stage-link="' + ORDER[i + 1] + '"] b').textContent : "");
-      next.textContent = (next.dataset.readonly === "1" ? "Next: " : "Save & continue: ") + label + " →";
+      next.innerHTML = (next.dataset.readonly === "1" ? "Next" : "Save &amp; continue") + '<span class="ws-next-target">: ' + esc(label) + "</span> →";
     }
   }
   function show(stage, opts) {
@@ -117,7 +117,6 @@
     if (i > 0) goTo(ORDER[i - 1]);
   });
   if (next) {
-    next.dataset.readonly = /Next/.test(next.textContent) ? "1" : "0";
     next.addEventListener("click", function (e) {
       e.preventDefault();
       const si = SESSION_ORDER.indexOf(session);

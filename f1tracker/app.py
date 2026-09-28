@@ -1757,7 +1757,9 @@ def register_routes(app):
         before = (ctx["season"]["year"], nxt["round_number"]) if nxt else None
         gate = gates.status(conn, nxt["id"]) if nxt and sid == ctx["current_season_id"] else None
         my_target = _my_target(conn, ctx, nxt)
-        return page("dashboard.html", ctx, events=evs, next_event=nxt,
+        phase = raceweek.phase(nxt) if nxt else None
+        return page("dashboard.html", ctx, events=evs, next_event=nxt, phase=phase,
+                    waiting=_waiting_for(conn, ctx, nxt, gate, phase) if sid == ctx["current_season_id"] else [],
                     completed=sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE),
                     drivers=insights.standings_with_changes(conn, sid, 8),
                     progress=insights.season_progress(conn, sid),
@@ -1778,6 +1780,23 @@ def register_routes(app):
                                                    ctx["my_driver"]["id"] if ctx["my_driver"] else None,
                                                    manager=ctx.get("real", ctx)["is_master"]),
                     can_finish=bool(evs) and all(e["status"] == C.EVENT_COMPLETE for e in evs))
+
+    def _waiting_for(conn, ctx, nxt, gate, phase):
+        """4.0 Home: what the league is waiting on from other people (never the viewer's own tasks)."""
+        if not nxt:
+            return []
+        out = []
+        label = f"R{nxt['round_number']} {nxt['name']}"
+        me = ctx["my_driver"]["name"] if ctx["my_driver"] else None
+        if gate and gate.get("blocking"):
+            others = [p["driver"]["name"] for p in gate["players"] if not p["done"] and p["driver"]["name"] != me]
+            if others:
+                out.append(f"{label} can't start until {', '.join(others)} {'is' if len(others) == 1 else 'are'} ready.")
+        if phase == "live" and not ctx["can_run"]:
+            out.append(f"The results of {label} are being entered. You'll see them once the weekend is submitted.")
+        elif phase == "upcoming" and raceweek.enabled(conn) and not ctx["can_run"] and not (gate and gate.get("blocking")):
+            out.append(f"The paddock for {label} hasn't opened yet.")
+        return out
 
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()

@@ -546,8 +546,18 @@ def pending_actions(conn, ctx):
             out.append(("Choose your growth pledge for this season", "pledge", "hot"))
         todo = gates.my_todo(conn, sid, me["id"])
         if todo and todo["press"]:
+            pe = todo.get("press_event") or todo["event"]
             out.append((f"Answer {todo['press']} press question{'s' if todo['press'] != 1 else ''} before "
-                        f"R{todo['event']['round_number']} can start", "dashboard#press", "warn"))
+                        f"R{todo['event']['round_number']} can start", f"weekend/{pe['id']}?stage=debrief#press", "warn"))
+        if not (todo and todo["press"]):      # 4.0: open post-race press is a task on Home even without round gates
+            for pen in teamlife.press_pens(conn, sid, me["id"]):
+                if pen["open"]:
+                    ev = pen["event"]
+                    out.append((f"Answer your R{ev['round_number']} post-race press ({pen['open']} question"
+                                f"{'s' if pen['open'] != 1 else ''})", f"weekend/{ev['id']}?stage=debrief#press", "warn"))
+        if todo and todo["prerace"]:
+            out.append((f"Answer {todo['prerace']} pre-race press question{'s' if todo['prerace'] != 1 else ''} for "
+                        f"R{todo['event']['round_number']}", f"weekend/{todo['event']['id']}?stage=prepare#prerace", "warn"))
         from . import teamgoals, ultimatums
         u = ultimatums.active(conn, sid, me["id"])
         if u and u["status"] == "Issued":
@@ -560,7 +570,12 @@ def pending_actions(conn, ctx):
         if nxt and ctx["team_life"]["targets"]:
             t = teamlife.target_for(conn, nxt["id"], me["id"])
             if t and not t["acknowledged_at"] and t["status"] == "Set":
-                out.append((f"Accept your R{nxt['round_number']} weekend target", "dashboard#target", "warn"))
+                out.append((f"Accept your R{nxt['round_number']} weekend target", f"weekend/{nxt['id']}?stage=prepare#target",
+                            "warn"))
+            elif not t and nxt["status"] == C.EVENT_NOT_RUN and not nxt.get("lights_at") and \
+                    teamlife.options_for(conn, nxt["id"], me["id"]):
+                out.append((f"Choose your R{nxt['round_number']} weekend target", f"weekend/{nxt['id']}?stage=prepare#target",
+                            "warn"))
     if ctx.get("is_master"):
         reqs = conn.execute("SELECT COUNT(*) FROM join_requests WHERE status = 'Pending'").fetchone()[0]
         if reqs:
@@ -581,5 +596,6 @@ def pending_actions(conn, ctx):
         for e in S.events(conn, sid):
             code, _label = timefmt.race_status(e["race_at"], e["status"], window, postponed=e["postponed"])
             if code == "pending":
-                out.append((f"Results pending for R{e['round_number']} {e['name']}", f"weekend/{e['id']}", "warn"))
+                out.append((f"Results pending for R{e['round_number']} {e['name']}", f"weekend/{e['id']}?stage=sessions",
+                            "warn"))
     return out

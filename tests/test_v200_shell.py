@@ -41,7 +41,7 @@ def test_race_master_can_view_as_other_roles_without_losing_permissions(app, mas
     assert rita.get(f"/career/{token}/settings").status_code == 200
     rita.post(f"/career/{token}/mode", data={"mode": "spectator", "csrf_token": "tok"})
     dash = rita.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "My Garage" not in dash and "Results entry" not in dash
+    assert ">Career<" not in dash and "Results entry" not in dash
     rita.post(f"/career/{token}/mode", data={"mode": "race_master", "csrf_token": "tok"})
     assert "Viewing <b>" not in rita.get(f"/career/{token}/dashboard").get_data(as_text=True)
     with storage.session(token) as conn:     # mode switches aren't league actions, so they aren't logged

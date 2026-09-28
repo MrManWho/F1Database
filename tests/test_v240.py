@@ -68,7 +68,7 @@ def test_choosing_locks_in_and_counts_its_own_reward(app, master_client):
     ana, ben = _client(app, "ana"), _client(app, "ben")
     with storage.session(token) as conn:
         ev = S.events(conn, S.current_season_id(conn))[0]
-    page = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    page = ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)     # 4.0: chosen in Prepare
     assert "Lock in Safe" in page and "Lock in Stretch" in page
     ana.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "stretch"})
     ana.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "safe"})   # can't change

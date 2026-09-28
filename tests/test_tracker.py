@@ -724,8 +724,9 @@ def test_weekend_completion_posts_news_notifications_and_backup(master_client):
         feed.mark_read(conn, "devon")
         assert feed.notifications_for(conn, "devon", players(conn)[0])[1] == 0
     assert any("after-round-1" in b["name"] for b in storage.list_auto_backups(token))
-    page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "wins the 2026 Australian GP" in page and "data-chart" in page
+    page = master_client.get(f"/career/{token}/news").get_data(as_text=True)     # 4.0: Home shows only the latest few
+    assert "wins the 2026 Australian GP" in page
+    assert "data-chart" in master_client.get(f"/career/{token}/drivers").get_data(as_text=True)
 
 
 def test_signing_is_announced_to_the_other_player(db, rng):

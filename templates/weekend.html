@@ -533,7 +533,7 @@
   {% else %}<div class="small muted ws-bar-note">{{ 'Spectator · view only' if ctx.is_spectator else ('Submitted' if ws.complete else 'Your changes save as you make them') }}</div>{% endif %}
   <div class="button-row">
     <a class="btn btn-ghost" href="{{ wk_url }}?stage={{ ws.prev_stage or ws.stage }}" data-ws-back {{ 'hidden' if not ws.prev_stage }}>← Back</a>
-    <a class="btn btn-primary" href="{{ wk_url }}?stage={{ ws.next_stage or ws.stage }}" data-ws-next {{ 'hidden' if not ws.next_stage }}>{{ 'Save & continue' if not ro else 'Next' }} →</a>
+    <a class="btn btn-primary" href="{{ wk_url }}?stage={{ ws.next_stage or ws.stage }}" data-ws-next data-readonly="{{ 1 if ro else 0 }}" {{ 'hidden' if not ws.next_stage }}>{{ 'Save & continue' if not ro else 'Next' }} →</a>
   </div>
 </div>
 

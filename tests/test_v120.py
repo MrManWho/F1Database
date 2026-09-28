@@ -274,7 +274,9 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
     r1 = _events(token)[0]
     # Round 1: no press gate (nothing before it), only the weekend-target gate.
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Weekend target" in dash and "Lock in Standard" in dash and "is waiting on you" in dash
+    assert "Choose your R1 weekend target" in dash                     # 4.0: a task on Home, done in Prepare
+    prep = ana.get(f"/career/{token}/weekend/{r1['id']}").get_data(as_text=True)
+    assert "Weekend target" in prep and "Lock in Standard" in prep and "Your tasks" in prep
     res = _api_save(kim, token, r1["id"])
     assert res.status_code == 423 and res.get_json()["gated"]
     assert "Ana Silva" in res.get_json()["error"] and "Only the Race Master" in res.get_json()["error"]
@@ -303,7 +305,7 @@ def test_gates_block_scorekeepers_until_linked_players_are_ready(app, master_cli
         assert {i["kind"] for i in gate["players"][0]["checks"]} == {"press", "target"}
         pens = teamlife.press_pens(conn, S.current_season_id(conn), a)
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "2 post-race press questions from R1" in dash and "required" in dash
+    assert "Answer 2 press questions before R2 can start" in dash      # 4.0: Home task, linked to R1's Debrief
     for q in pens[-1]["questions"]:
         ana.post(f"/career/{token}/press/{r1['id']}", data={"csrf_token": "tok", "question": q["key"],
                                                               "answer": q["answers"][0]["key"]})

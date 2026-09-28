@@ -113,7 +113,7 @@ def test_team_standing_page_and_admin_menu(app, master_client):
     assert "Relationships" in page and "My Garage" in page
     # The Race Master isn't a driver here: admin menu, no "My career".
     dash = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Player garages" in dash and "Relationships" in dash and "Team management" in dash and "My Garage" not in dash
+    assert "Player garages" in dash and "Relationships" in dash and "Team management" in dash and ">Career<" not in dash
     assert "Race Master</span>" in dash
     page = master_client.get(f"/career/{token}/team-standing").get_data(as_text=True)
     assert "Devon Corwin" in page and "Carsten Hale" in page
@@ -122,7 +122,7 @@ def test_team_standing_page_and_admin_menu(app, master_client):
         devon = players(conn)[0]
     master_client.post(f"/career/{token}/members", data={f"user_{devon}": "devon", "csrf_token": "tok"})
     dash = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "My Garage" in dash and "Race Master · Driver" in dash
+    assert ">Career<" in dash and "Race Master · Driver" in dash       # 4.0: the Career destination
 
 
 def test_members_page_is_clear_about_access(app, master_client):

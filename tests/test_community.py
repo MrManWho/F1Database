@@ -89,7 +89,8 @@ def test_race_night_time_checkins_and_countdown(app, master_client):
     assert "Who&#39;s racing?" in page or "Who's racing?" in page
     assert 'data-countdown="2030-03-02T01:00+00:00"' in page and "Fri, Mar 1 at 8:00 PM EST</time>" in page and "Lights out" in page
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Fri, Mar 1 at 8:00 PM EST" in dash and "Scheduled" in dash and "Who" in dash   # more than a week away
+    assert "Fri, Mar 1 at 8:00 PM EST" in dash and "Scheduled" in dash   # more than a week away
+    assert "Who" in page       # 4.0: check-ins live in the Race Weekend workspace (Prepare), not on Home
     # Once the race is done, check-ins close.
     with storage.session(token) as conn:
         run_event(conn, S.get_event(conn, ev["id"]))

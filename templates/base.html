@@ -45,44 +45,28 @@
       <a href="{{ href }}" class="{{ 'active' if active }}" {% if active %}aria-current="page"{% endif %} title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
       {%- endmacro %}
       {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot" title="{{ ctx.pending_offers }} offer(s) waiting">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
-      {# 4.0: five destinations (Home, Race Weekend, Championship, Career, Paddock) and a separate Manage League area #}
-      <div class="nav-group" role="group" aria-labelledby="nav-home">
-        <div class="nav-title" id="nav-home">Home</div>
-        {{ item(url_for('dashboard', token=t), 'Control Room', 'home', ep == 'dashboard') }}
-      </div>
-      <div class="nav-group" role="group" aria-labelledby="nav-race">
-        <div class="nav-title" id="nav-race">Race Weekend</div>
-        {{ item(url_for('seasons_page', token=t), 'Calendar', 'calendar', ep in ('seasons_page', 'season_review', 'season_rollover')) }}
-        {{ item(url_for('results_index', token=t), 'Results', 'flag', ep in ('results_index', 'race_summary') or (ep in ('weekend', 'weekend_next') and not ctx.can_run)) }}
-        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
-      </div>
-      <div class="nav-group" role="group" aria-labelledby="nav-championship">
-        <div class="nav-title" id="nav-championship">Championship</div>
-        {{ item(url_for('standings_page', token=t), 'Standings', 'standings', ep == 'standings_page') }}
-        {{ item(url_for('stats_page', token=t), 'Statistics', 'progress', ep == 'stats_page') }}
-        {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep == 'drivers_page' or (ep == 'driver_profile' and not (ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id))) }}
-        {{ item(url_for('teams_page', token=t), 'Teams', 'teams', ep in ('teams_page', 'team_profile')) }}
-        {{ item(url_for('records', token=t), 'Records', 'records', ep == 'records') }}
-        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
-      </div>
-      {% if ctx.my_driver %}
-      <div class="nav-group" role="group" aria-labelledby="nav-career">
-        <div class="nav-title" id="nav-career">Career · {{ ctx.my_driver.name }}</div>
-        {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
-        {{ item(url_for('driver_profile', token=t, driver_id=ctx.my_driver.id), 'Progression', 'progress', ep == 'driver_profile' and request.view_args.get('driver_id') == ctx.my_driver.id) }}
-        {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}
-        {{ item(url_for('offers_page', token=t), 'Contracts & offers', 'contracts', ep == 'offers_page') }}
-        {{ item(url_for('press_page', token=t), 'Press', 'press', ep == 'press_page') }}
-        {% if ctx.team_goals_on %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
-      </div>
-      {% endif %}
-      <div class="nav-group" role="group" aria-labelledby="nav-paddock">
-        <div class="nav-title" id="nav-paddock">Paddock</div>
-        {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
-        {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
-        {{ item(url_for('announcements_page', token=t), 'Announcements', 'news', ep == 'announcements_page') }}
-        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
-        {% if ctx.team_goals_on and not ctx.my_driver %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
+      {# 4.0: four destinations and More; Manage League sits apart and only shows for people who can use it #}
+      {% set champ_eps = ('standings_page', 'stats_page', 'drivers_page', 'teams_page', 'team_profile', 'records', 'rivalry_page', 'seasons_page', 'season_review', 'season_rollover', 'results_index', 'race_summary', 'championship') %}
+      {% set mine_profile = ep == 'driver_profile' and ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id %}
+      {% set career_eps = ('garage', 'team_standing', 'offers_page', 'press_page', 'pledge_page', 'my_career') + (('team_goals_page',) if ctx.my_driver else ()) %}
+      {% set more_eps = ('news_page', 'announcements_page', 'incidents_page', 'predictions_page', 'contracts_page', 'more_page') + (() if ctx.my_driver else ('team_goals_page',)) %}
+      <div class="nav-group nav-main" role="group" aria-label="Main">
+        {{ item(url_for('dashboard', token=t), 'Home', 'home', ep == 'dashboard') }}
+        {{ item(url_for('race_weekend', token=t), 'Race Weekend', 'flag', ep in ('weekend', 'weekend_next', 'race_weekend', 'weekend_reset')) }}
+        {{ item(url_for('standings_page', token=t), 'Championship', 'standings', ep in champ_eps or (ep == 'driver_profile' and not mine_profile)) }}
+        {% if ctx.my_driver %}{{ item(url_for('garage', token=t), 'Career', 'garage', ep in career_eps or mine_profile, badge) }}{% endif %}
+        <details class="nav-more" {{ 'open' if ep in more_eps }}>
+          <summary class="nav-more-toggle">{{ icon('menu') }}<span class="label">More</span><span class="chev" aria-hidden="true">▾</span></summary>
+          <div class="nav-more-items">
+            {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
+            {{ item(url_for('announcements_page', token=t), 'Announcements', 'news', ep == 'announcements_page') }}
+            {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
+            {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
+            {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
+            {% if ctx.team_goals_on and not ctx.my_driver %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
+            {{ item(url_for('help_page'), 'Help', 'help', false) }}
+          </div>
+        </details>
       </div>
       {% if ctx.can_run %}
       <div class="nav-group nav-admin" id="nav-admin">
@@ -90,7 +74,7 @@
           <span>Manage League</span><span class="chev" aria-hidden="true">▾</span></button>
         <div class="nav-admin-items" id="nav-admin-items">
         <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race weekends</div>
-        {{ item(url_for('weekend_next', token=t), 'Results entry', 'entry', ep in ('weekend', 'weekend_next')) }}
+        {{ item(url_for('race_weekend', token=t) ~ '?stage=sessions', 'Results entry', 'entry', false) }}
         {% if ctx.is_master %}{{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}{% endif %}
         </div>
         {% if ctx.is_master %}
@@ -113,10 +97,9 @@
         </div>
       </div>
       {% endif %}
-      <div class="nav-group nav-bottom">
+      <div class="nav-group nav-bottom" role="group" aria-label="Account">
         {{ item(url_for('my_settings', token=t), 'My settings', 'settings', ep == 'my_settings') }}
         {{ item(url_for('home'), 'All my leagues', 'library', false) }}
-        {{ item(url_for('help_page'), 'Help', 'help', false) }}
       </div>
     </nav>
     <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu" aria-label="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
@@ -218,31 +201,16 @@
         <b>{{ ctx.league_notice.title }}.</b> {{ ctx.league_notice.text }}
         <form method="post" action="{{ url_for('league_notice_seen', token=ctx.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Got it</button></form></div>
       {% endif %}
-      {% if ctx.race_now and request.endpoint != 'weekend' %}{% set rn = ctx.race_now %}
-      <div class="banner race-now-banner phase-{{ rn.phase }}" role="status">
-        {% if rn.phase == 'live' %}<span class="live-badge">● LIVE</span> <b>Lights out at R{{ rn.event.round_number }} {{ rn.event.name }}.</b>
-        {% else %}<span aria-hidden="true">🏁</span> <b>The paddock is open for R{{ rn.event.round_number }} {{ rn.event.name }}.</b>{% endif %}
-        <a href="{{ url_for('weekend', token=ctx.token, event_id=rn.event.id) }}#paddock">{{ 'Follow the race' if rn.phase == 'live' else 'Go to the paddock' }} →</a></div>
-      {% endif %}
-      {% if ctx.my_todo %}{% set td = ctx.my_todo %}
-      <div class="banner banner-warn todo-banner" role="status"><span aria-hidden="true">⏳</span>
-        <b>R{{ td.event.round_number }} {{ td.event.name }} is waiting on you.</b>
-        {% set parts = [] %}
-        {% if td.press %}{% set _ = parts.append(td.press ~ ' post-race press question' ~ ('s' if td.press != 1 else '') ~ (' from R' ~ td.press_event.round_number if td.press_event else '')) %}{% endif %}
-        {% if td.prerace %}{% set _ = parts.append(td.prerace ~ ' pre-race press question' ~ ('s' if td.prerace != 1 else '')) %}{% endif %}
-        {% if td.target %}{% set _ = parts.append('your weekend target to choose') %}{% endif %}
-        Still to do: {{ parts|join(', ') }}. The race can't start until everyone's ready.
-        <a href="{{ url_for('weekend', token=ctx.token, event_id=td.event.id) }}#paddock">Do it now →</a></div>
-      {% endif %}
+      {% include "_subnav.html" with context %}
       {% block content %}{% endblock %}
     </main>
     <nav class="bottom-nav" aria-label="Quick navigation">
       <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}" {% if ep == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}<span>Home</span></a>
-      <a href="{{ url_for('weekend_next', token=t) if ctx.can_run else url_for('results_index', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next', 'results_index', 'seasons_page') }}">{{ icon('entry' if ctx.can_run else 'flag') }}<span>Race</span></a>
-      <a href="{{ url_for('standings_page', token=t) }}" class="{{ 'active' if ep in ('standings_page', 'stats_page', 'records') }}">{{ icon('standings') }}<span>Championship</span></a>
-      {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}">{{ icon('garage') }}<span>Career</span></a>
-      {% else %}<a href="{{ url_for('news_page', token=t) }}" class="{{ 'active' if ep == 'news_page' }}">{{ icon('news') }}<span>Paddock</span></a>{% endif %}
-      <button type="button" data-open-menu aria-controls="sidebar">{{ icon('menu') }}<span>More</span></button>
+      <a href="{{ url_for('race_weekend', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next', 'race_weekend') }}">{{ icon('flag') }}<span>Race Weekend</span></a>
+      <a href="{{ url_for('standings_page', token=t) }}" class="{{ 'active' if ep in ('standings_page', 'stats_page', 'records', 'drivers_page', 'teams_page', 'seasons_page', 'results_index', 'race_summary') }}">{{ icon('standings') }}<span>Championship</span></a>
+      {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep in ('garage', 'team_standing', 'offers_page', 'press_page') }}">{{ icon('garage') }}<span>Career</span></a>
+      {% else %}<a href="{{ url_for('more_page', token=t) }}" class="{{ 'active' if ep == 'more_page' }}">{{ icon('news') }}<span>More</span></a>{% endif %}
+      <button type="button" data-open-menu aria-controls="sidebar">{{ icon('menu') }}<span>Menu</span></button>
     </nav>
   </div>
 

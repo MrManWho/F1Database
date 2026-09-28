@@ -1891,3 +1891,10 @@ body.rail .ws-bar { left: var(--sidebar); }
 .next-action.card { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .waiting-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
 .waiting-list li { font-size: .9rem; color: var(--muted); }
+.ws-bar .save-state { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sidebar nav summary { display: flex; align-items: center; gap: .7rem; padding: .6rem .75rem; border-radius: 8px; color: #c5ccd8; font-size: .9rem; }
+.sidebar nav summary:hover { background: var(--panel); color: #fff; }
+.sidebar nav summary .chev { margin-left: auto; font-size: .75rem; transition: transform .15s; }
+[data-theme="light"] .sidebar nav summary { color: #2b313a; }
+body.rail .sidebar nav summary .label, body.rail .sidebar nav summary .chev { display: none; }
+@media (max-width: 760px) { .ws-next-target { display: none; } }
