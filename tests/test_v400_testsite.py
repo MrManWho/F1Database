@@ -20,16 +20,24 @@ def test_off_by_default_nothing_changes(app, master_client):
 
 
 def test_the_test_site_shows_a_banner_and_never_sends_anything(app, master_client, monkeypatch):
+    """4.0 Phase 1: nothing is sent; every message is kept as a delivery preview instead (addresses masked)."""
+    from f1tracker import ops
+    import smtplib
     monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
-    auth.set_setting("smtp_host", "smtp.example.com")
-    auth.set_setting("smtp_from", "site@example.com")
+    monkeypatch.setattr(smtplib, "SMTP", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
+    monkeypatch.setattr(discord.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
     assert "TEST SITE" in master_client.get("/").get_data(as_text=True)
-    assert not mailer.configured() and not push.available()
-    queued = []
-    monkeypatch.setattr(outbox, "enqueue", lambda *a, **k: queued.append(a))
+    assert mailer.configured() and push.public_key() is None       # no device can subscribe to the test site
     discord.send_later("https://discord.com/api/webhooks/1/abc", ["hello"])
-    assert not mailer.send_later(["a@example.com"], "S", "T") and queued == []
-    monkeypatch.setattr(mailer, "send", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
+    assert mailer.send_later(["alex@example.com", "sam@example.com"], "Subject", "Text")
+    assert mailer.send(["alex@example.com"], "Direct", "Body") == 1
+    assert discord.post("https://discord.com/api/webhooks/1/abc", "direct post")
+    push.send(["alex"], "League", "Alert")
+    assert outbox.pending() == 0                                    # nothing queued to send
+    kinds = [p["kind"] for p in ops.previews()]
+    assert sorted(kinds) == ["discord", "discord", "email", "email", "push"]
+    email = next(p for p in ops.previews() if p["title"] == "Subject")
+    assert email["recipients"] == 2 and "alex@example.com" not in email["shown_to"] and "a•••@example.com" in email["shown_to"]
     outbox._send("email", {"to": ["a@example.com"], "subject": "s", "text": "t"})   # an imported leftover: dropped
 
 

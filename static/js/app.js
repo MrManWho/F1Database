@@ -330,12 +330,22 @@
       function () { document.execCommand && document.execCommand("copy"); });
   });
 
+  // 4.0: theme and density are saved to the account too, so they follow you to every device.
+  function savePreference(name, value) {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var body = new FormData();
+    body.append(name, value);
+    fetch("/account/preferences", { method: "POST", body: body, credentials: "same-origin",
+                                     headers: { "X-CSRF-Token": meta ? meta.content : "" } }).catch(function () {});
+  }
+
   // Theme
   var pick = document.getElementById("theme-pick");
   if (pick) {
     try { pick.value = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
     pick.addEventListener("change", function () {
       try { localStorage.setItem("f1-theme", pick.value); } catch (e) {}
+      savePreference("theme", pick.value);
       var t = pick.value;
       if (t === "auto") t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", t);
@@ -348,6 +358,7 @@
     try { dens.value = localStorage.getItem("f1-density") || "comfortable"; } catch (e) {}
     dens.addEventListener("change", function () {
       try { localStorage.setItem("f1-density", dens.value); } catch (e) {}
+      savePreference("density", dens.value);
       document.body.classList.toggle("compact", dens.value === "compact");
     });
   }

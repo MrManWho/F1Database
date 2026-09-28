@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import state %}
+{% block title %}Site change record{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Site owner</div><h1>Site change record</h1></div>
+  <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}#site-ops">Back to settings</a></div>
+<section class="card">
+  <p class="muted small">Every change made with the site owner's tools: accounts, leagues, site settings and backups. Newest first. Entries can't be edited or deleted, and only record who was affected, never passwords, emails or other values.</p>
+  {% if events %}
+  <div class="table-wrap"><table class="data-table compact">
+    <caption class="sr-only">Site change record</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Affected</th><th scope="col">Outcome</th></tr></thead>
+    <tbody>{% for e in events %}<tr><td class="small nowrap">{{ e.created_at|stamp }}</td><td>{{ names.get(e.actor, e.actor) }}</td>
+      <td><code>{{ e.action }}</code></td><td>{{ e.target or '—' }}</td><td>{{ 'Done' if e.outcome == 'done' else 'Refused' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}{{ state('empty', 'No changes yet', 'Changes made with the site owner tools are recorded here from version 4.0.') }}{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_macros.html" import state %}
+{% block title %}Site errors{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Site owner · {{ environment_label }}</div><h1>Site errors</h1></div>
+  <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}#site-ops">Back to settings</a></div>
+<section class="card">
+  <p class="muted small">Problems the site ran into, newest first, grouped when the same thing happens again. Email addresses, links and codes are removed before anything is saved, and no form values or passwords are ever kept. The newest 200 are kept.</p>
+  {% if errors %}
+  <div class="table-wrap"><table class="data-table compact">
+    <caption class="sr-only">Recent site errors</caption>
+    <thead><tr><th scope="col">Last seen</th><th scope="col">What</th><th scope="col">Where</th><th scope="col">Message</th><th scope="col" class="num">Times</th></tr></thead>
+    <tbody>{% for e in errors %}<tr><td class="small">{{ e.last_at|stamp }}</td><th scope="row">{{ e.kind }}</th><td><code>{{ e.place }}</code></td>
+      <td class="small">{{ e.message }}</td><td class="num">{{ e.count }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <form method="post" class="button-row" data-confirm='{"title": "Clear the error list?", "what": "The list is emptied. Nothing else changes.", "ok": "Clear"}'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost">Clear the list</button></form>
+  {% else %}{{ state('empty', 'No errors recorded', 'Nothing has gone wrong since the list was last cleared.') }}{% endif %}
+</section>
+{% endblock %}

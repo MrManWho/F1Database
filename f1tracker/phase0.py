@@ -46,6 +46,8 @@ def _who(rule, view, app_module):
         return "Race Master + Scorekeeper"
     if declared == "member":
         return "league member"
+    if declared == "self":
+        return "signed in (own account)"
     try:
         body = inspect.getsource(view)
     except (OSError, TypeError):

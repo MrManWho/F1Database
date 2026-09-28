@@ -22,4 +22,21 @@
   </table>
   </div>
 </section>
+<section class="card table-card" id="change-record">
+  <h2>Change record</h2>
+  <p class="muted small">Every change, exactly as it happened: who, when, what and, for members, league settings and rounds, the values before and after. Entries are never merged, edited or deleted. Private values such as a Discord webhook show only as “set” or “not set”.</p>
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <caption class="sr-only">Change record, newest first</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Change</th><th scope="col">Before → after</th></tr></thead>
+    <tbody>
+    {% for r in record %}
+      <tr><td class="small nowrap">{{ r.created_at|stamp }}</td><td>{{ names.get(r.actor, r.actor) }}</td>
+        <td>{{ r.label }}{% if r.target %} <span class="muted small">· {{ r.target }}</span>{% endif %}</td>
+        <td class="small">{% for k, b, a in r.changes %}<div><code>{{ k }}</code>: {{ b if b is not none else '—' }} → {{ a if a is not none else '—' }}</div>{% else %}<span class="muted">—</span>{% endfor %}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No changes recorded yet. The change record starts with version 4.0.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
 {% endblock %}

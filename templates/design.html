@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import state, delta %}
+{% block title %}Design system{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Paddock Legacy 4.0</div><h1>Design system</h1></div></div>
+<p class="muted">The building blocks every 4.0 page uses: one set of colours, spacing and type, one set of components, and one way of showing every state. Switch theme and density from the account menu to check both.</p>
+
+<section class="card" aria-labelledby="ds-colour">
+  <h2 id="ds-colour">Colour tokens</h2>
+  <div class="ds-swatches">
+    {% for name in ['--bg', '--panel', '--line', '--text', '--muted', '--accent', '--green', '--amber', '--blue', '--danger'] %}
+    <div class="ds-swatch"><span style="background: var({{ name }})"></span><code>{{ name }}</code></div>
+    {% endfor %}
+  </div>
+  <p class="muted small">Status is never shown by colour alone: every pill and change also has a word or a symbol.</p>
+</section>
+
+<section class="card" aria-labelledby="ds-type">
+  <h2 id="ds-type">Type and spacing</h2>
+  <p style="font-size: var(--font-2xl); margin: 0">Page title · --font-2xl</p>
+  <p style="font-size: var(--font-xl); margin: 0">Section title · --font-xl</p>
+  <p style="font-size: var(--font-lg); margin: 0">Card title · --font-lg</p>
+  <p style="font-size: var(--font-md); margin: 0">Body text · --font-md</p>
+  <p class="muted" style="font-size: var(--font-sm); margin: 0 0 var(--space-4)">Supporting text · --font-sm</p>
+  {% for n, px in [(1, 4), (2, 8), (3, 12), (4, 16), (5, 24), (6, 32)] %}
+  <div class="ds-row"><code>--space-{{ n }}</code><div class="ds-space" style="width: var(--space-{{ n }})"></div><span class="muted small">{{ px }} px</span></div>
+  {% endfor %}
+  <p class="muted small">Touch targets are at least <code>--target-min</code> (44 px). Motion uses <code>--motion-fast</code> / <code>--motion-base</code> and turns off when the device asks for reduced motion.</p>
+</section>
+
+<section class="card" aria-labelledby="ds-actions">
+  <h2 id="ds-actions">Actions</h2>
+  <div class="ds-row">
+    <button type="button" class="btn btn-primary">Primary action</button>
+    <button type="button" class="btn">Secondary</button>
+    <button type="button" class="btn btn-ghost">Quiet</button>
+    <button type="button" class="btn btn-sm">Small</button>
+    <button type="button" class="btn" disabled>Not available</button>
+  </div>
+  <div class="ds-row" style="margin-top: var(--space-5)"><button type="button" class="btn btn-danger">Destructive action</button>
+    <span class="muted small">Destructive actions sit apart from routine ones and always ask for confirmation.</span></div>
+</section>
+
+<section class="card" aria-labelledby="ds-status">
+  <h2 id="ds-status">Status and changes</h2>
+  <div class="ds-row"><span class="pill">Neutral</span><span class="pill pill-hot">Needs attention</span>
+    <span class="status-badge status-active">Current</span><span class="status-badge status-archived">Archived</span></div>
+  <div class="ds-row">Form {{ delta(2.4) }} · Reputation {{ delta(-1.2) }} · Value {{ delta(0) }}</div>
+  <div class="banner banner-info" role="note"><b>Information.</b> Something worth knowing, nothing to do.</div>
+  <div class="banner banner-warn" role="note"><b>Needs you.</b> Something is waiting for an action.</div>
+</section>
+
+<section class="card" aria-labelledby="ds-forms">
+  <h2 id="ds-forms">Forms</h2>
+  <form class="stack" onsubmit="return false">
+    <div class="grid-2">
+      <label>Text field<input placeholder="Type here"></label>
+      <label>Choice<select><option>First option</option><option>Second option</option></select></label>
+    </div>
+    <label class="check"><input type="checkbox" checked> A switch with its consequence in one sentence</label>
+  </form>
+</section>
+
+<section class="card table-card" aria-labelledby="ds-table">
+  <h2 id="ds-table">Tables</h2>
+  <div class="table-wrap"><table class="data-table">
+    <caption class="sr-only">Example standings</caption>
+    <thead><tr><th scope="col" class="num">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Points</th></tr></thead>
+    <tbody><tr><td class="num">1</td><th scope="row">Player One</th><td class="num">125</td></tr>
+      <tr><td class="num">2</td><th scope="row">Player Two</th><td class="num">98</td></tr></tbody>
+  </table></div>
+  <p class="muted small">Wide tables scroll inside their card, never the whole page.</p>
+</section>
+
+<section class="card" aria-labelledby="ds-states">
+  <h2 id="ds-states">States</h2>
+  <p class="muted small">Every core component has these six states, each with the same look and wording style.</p>
+  {{ state('loading', 'Loading standings…', 'This usually takes a moment.') }}
+  {{ state('empty', 'No results yet', 'Results appear here once the first round is submitted.') }}
+  {{ state('error', "Couldn't load this", 'Something went wrong on our side. It has been recorded; try again.', '#', 'Try again') }}
+  {{ state('offline', "You're offline", 'Your changes are kept on this device and saved when you reconnect.') }}
+  {{ state('locked', 'This round is submitted', 'Only the Race Master can correct a submitted round.') }}
+  {{ state('denied', "You can't open this", 'This page belongs to the Race Master of this league.') }}
+</section>
+{% endblock %}

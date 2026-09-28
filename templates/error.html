@@ -1,10 +1,13 @@
 {% extends "base.html" %}
+{% from "_macros.html" import state %}
 {% block title %}Error {{ code }}{% endblock %}
 {% block plain %}
 <section class="card empty-state">
   <div class="big-code">{{ code }}</div>
   <h1>Red flag</h1>
-  <p class="muted">{{ message }}</p>
+  {{ state({403: 'denied', 404: 'empty', 500: 'error'}.get(code, 'error'),
+           {403: "You can't open this page", 404: 'Not found', 413: 'Too large', 500: 'Something went wrong'}.get(code, 'Something went wrong'),
+           message) }}
   <a class="btn btn-primary" href="{{ url_for('home') }}">Back to my leagues</a>
 </section>
 {% endblock %}

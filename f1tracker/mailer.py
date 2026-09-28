@@ -34,7 +34,7 @@ def config():
 def configured():
     from . import testsite
     if testsite.on():
-        return False        # the 4.0 test site never sends email
+        return True         # 4.0 test site: every email is captured as a delivery preview, never sent
     cfg = config()
     return bool(cfg["smtp_host"] and cfg["smtp_from"])
 
@@ -44,6 +44,11 @@ def send(recipients, subject, text, html=None):
     recipients = [r for r in dict.fromkeys(recipients) if r]
     if not recipients:
         return 0
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture("email", {"to": recipients, "subject": subject, "text": text})
+        return len(recipients)
     cfg = config()
     if not configured():
         raise MailError("Email isn't set up yet (Accounts > Settings > Email).")

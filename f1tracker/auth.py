@@ -65,6 +65,10 @@ def accounts():
     if "email_paused" not in columns:
         # v2.0: one switch to stop every email from every league (league choices are kept separately).
         conn.execute("ALTER TABLE users ADD COLUMN email_paused INTEGER NOT NULL DEFAULT 0")
+    for col in ("theme", "density"):
+        if col not in columns:
+            # 4.0: display preferences follow the account to every device (NULL: not chosen yet)
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     # v1.19: screenshot import no longer uses a paid AI service, so a previously saved API key is removed.
     conn.execute("DELETE FROM settings WHERE key = 'anthropic_api_key'")
     # v1.18: race-result emails need an address; switch the option off where there's none to send to.
@@ -222,6 +226,23 @@ def verify(username, password):
     if user and check_password_hash(user["password_hash"], password or ""):
         return user
     return None
+
+
+THEMES = ("dark", "light", "auto")
+DENSITIES = ("comfortable", "compact")
+
+
+def set_preferences(username, theme=None, density=None):
+    """4.0: save the account's theme and/or density (either may be left out)."""
+    if theme is not None and theme not in THEMES:
+        raise AuthError("Choose dark, light or match my device")
+    if density is not None and density not in DENSITIES:
+        raise AuthError("Choose comfortable or compact")
+    with accounts() as conn:
+        if theme is not None:
+            conn.execute("UPDATE users SET theme = ? WHERE username = ?", (theme, normalise(username)))
+        if density is not None:
+            conn.execute("UPDATE users SET density = ? WHERE username = ?", (density, normalise(username)))
 
 
 def set_password(username, password, force_change=False):

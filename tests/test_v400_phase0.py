@@ -91,16 +91,11 @@ def test_route_inventory_lists_every_route(app):
     assert not missing, "run `python -m f1tracker.phase0 inventory docs/4.0`: " + ", ".join(missing)
 
 
-# Signed-in pages with no declared access level: each only touches the signed-in person's own account (or checks
-# the league's own join rules). A new route here must be reviewed and added on purpose.
-SELF_SERVICE = {"account_email", "account_export", "account_self_password", "account_session_end",
-                "account_sessions_end_others", "account_two_step", "career_join", "league_new_page", "logout",
-                "must_change_password", "push_subscribe", "push_test", "push_unsubscribe", "whats_new_ack"}
-
-
-def test_no_route_is_unexpectedly_open(app):
-    plain = {r["endpoint"] for r in phase0.routes(app) if r["who"] == "signed in"}
-    assert plain == SELF_SERVICE
+def test_every_route_declares_who_may_use_it(app):
+    """4.0 Phase 1: no route relies on a check hidden inside the view any more."""
+    undeclared = sorted(r["endpoint"] for r in phase0.routes(app) if r["who"].startswith("signed in (checks")
+                        or r["who"] == "signed in")
+    assert undeclared == []
 
 
 def test_table_inventory_follows_the_migration_decisions():

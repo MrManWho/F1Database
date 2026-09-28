@@ -171,6 +171,18 @@
   </form>
 </section>
 
+<section class="card" id="site-ops">
+  <h2>Site health</h2>
+  <p class="muted small">This copy of the site: <b>{{ environment_label }}</b> · v{{ APP_VERSION }}.</p>
+  <div class="button-row">
+    <a class="btn btn-ghost" href="{{ url_for('site_errors') }}">Site errors</a>
+    <a class="btn btn-ghost" href="{{ url_for('site_audit_page') }}">Site change record</a>
+    {% if test_site %}<a class="btn btn-ghost" href="{{ url_for('delivery_preview') }}">Delivery preview</a>{% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('design_page') }}">Design system</a>
+    <a class="btn btn-ghost" href="{{ url_for('healthz') }}">Health check</a>
+  </div>
+</section>
+
 {% if test_site %}
 <section class="card" id="test-import">
   <h2>Load the live site's leagues (test site only)</h2>

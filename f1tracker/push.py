@@ -17,7 +17,7 @@ def _b64(data):
 def available():
     from . import testsite
     if testsite.on():
-        return False        # the 4.0 test site never sends phone alerts
+        return True         # 4.0 test site: alerts are captured as delivery previews, never sent
     try:
         import pywebpush  # noqa: F401
     except ImportError:
@@ -51,7 +51,8 @@ def vapid_keys():
 
 
 def public_key():
-    return vapid_keys()[1] if available() else None
+    from . import testsite
+    return vapid_keys()[1] if available() and not testsite.on() else None
 
 
 def subscribe(username, sub):
@@ -93,6 +94,11 @@ def device_count(username):
 def send(usernames, title, body, url=None):
     """Deliver to every device these people turned alerts on for. Returns how many were delivered."""
     if not available():
+        return 0
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture("push", {"names": sorted(set(usernames)), "title": title, "body": body})
         return 0
     from pywebpush import WebPushException, webpush
     private, _ = vapid_keys()

@@ -9,10 +9,12 @@ import os
 from waitress import serve
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from f1tracker import ops
 from f1tracker.app import create_app
 from f1tracker.constants import APP_NAME, APP_VERSION
 from f1tracker.storage import data_dir
 
+ops.configure_logging()     # 4.0: structured JSON log lines for the host
 app = create_app({"SESSION_COOKIE_SECURE": os.environ.get("F1_TRACKER_SECURE_COOKIES", "1") == "1"})
 # The host terminates HTTPS and forwards the real client address (used by the login lockout).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

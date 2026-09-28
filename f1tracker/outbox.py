@@ -31,7 +31,13 @@ def _table(conn):
 
 
 def enqueue(kind, payload, background=True):
-    """Save a message and start sending it. kind: email / discord / push. Returns the row id."""
+    """Save a message and start sending it. kind: email / discord / push. Returns the row id.
+    4.0 test site: nothing is queued or sent; the message is saved as a delivery preview instead."""
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture(kind, payload)
+        return None
     now = time.time()
     with auth.accounts() as conn:
         _table(conn)

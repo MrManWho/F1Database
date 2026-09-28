@@ -2,6 +2,30 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## New in 4.0.0-alpha.1 (test site only, Phase 1)
+
+- **Environment badge.** `F1_TRACKER_ENV` = local / test / staging / production names each copy of the site. Without
+  it: the test site (`F1_TRACKER_TEST_SITE=1`) is *test*, a site on Render is *production*, anything else *local*. A
+  badge next to the version shows every name except production.
+- **Health check:** `GET /healthz` (public) returns JSON: ok, version, environment, schema and two checks (accounts
+  database, writable data folder); HTTP 503 if either fails. Point Render's health check path at it.
+- **Structured logs.** `server.py` logs JSON lines (time, level, logger, message, and per request: method, endpoint,
+  status, ms). Messages are scrubbed of email addresses, links and long tokens. No paths, names or form values.
+- **Site errors** (Account → Settings → Site health): errors grouped by kind and place, with a count; the newest 200.
+  Scrubbed the same way. Clear it when you've looked.
+- **Delivery preview** (test site): nothing is ever sent; each email, Discord post and phone alert is saved instead
+  (addresses masked, newest 300). An imported live backup has its SMTP password removed and every league's Discord
+  webhook replaced with a placeholder.
+- **Change record.** League files move to schema 22: `audit_events` (actor, time, action, target, before/after for
+  members and roles, league settings and rounds), protected by triggers so rows can't be edited or deleted. Race
+  Masters see it under Activity log → Change record. Site-owner actions go to `site_audit` in accounts.db (Account →
+  Settings → Site change record). Secrets are recorded only as "set" / "not set"; passwords never.
+- **Every route declares its access** (`public`, `self`, `member`, `ops`, `master`); tests call every site route
+  anonymously, as an ordinary member and as the owner, and every league route as each role.
+- **Theme and density** are stored on the account (`users.theme`, `users.density`).
+- **Rollback:** the schema 22 change only adds a table and two triggers. A v3 build opens a schema 22 file normally
+  (it ignores the extra table); the pre-upgrade backup is in `backups/` as usual.
+
 ## Before and after the upgrade
 
 - **Nothing to do to upgrade.** Each league upgrades itself (schema 17 → 18) the first time it's opened, after writing

@@ -217,3 +217,12 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {% macro seat_badge(st, detail=True) -%}
 <span class="seat-state tone-{{ st.tone }}">{% if st.problem %}<span aria-hidden="true">⚠️ </span>{% endif %}{{ st.label }}</span>{% if detail and st.detail %} <small class="muted">{{ st.detail }}</small>{% endif %}
 {%- endmacro %}
+
+{# 4.0 design system: one component for every non-content state (loading, empty, error, offline, locked, denied) #}
+{% macro state(kind, title, text='', href=None, action=None) -%}
+<div class="state state-{{ kind }}" role="{{ 'alert' if kind == 'error' else 'status' }}"{% if kind == 'loading' %} aria-busy="true"{% endif %}>
+  <span class="state-icon" aria-hidden="true">{{ {'loading': '', 'empty': '◌', 'error': '!', 'offline': '⇣', 'locked': '🔒', 'denied': '⛔'}[kind] }}</span>
+  <div class="state-body"><p class="state-title">{{ title }}</p>{% if text %}<p class="state-text">{{ text }}</p>{% endif %}
+    {% if href %}<a class="btn btn-sm" href="{{ href }}">{{ action or 'Continue' }}</a>{% endif %}</div>
+</div>
+{%- endmacro %}

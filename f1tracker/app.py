@@ -22,7 +22,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, announcements, calc3, engine, impacts, migration, offsite, stats, testsite, ultimatums
+from . import ai3, announcements, audit_trail, calc3, engine, impacts, migration, offsite, ops, stats, testsite, ultimatums
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -39,7 +39,7 @@ def _base_dir():
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
                     "reset_password", "login_code", "privacy_page", "terms_page", "public_page", "public_calendar", "public_calendar_ics", "public_standings", "public_round",
                     "public_driver", "public_team", "public_records", "public_news", "public_incidents", "service_worker", "web_manifest", "avatar", "unsubscribe",
-                    "home", "directory", "report_league", "help_page", "changelog_page", "demo_start"}
+                    "home", "directory", "report_league", "help_page", "changelog_page", "demo_start", "healthz"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
 AUDIT_LABELS = {
@@ -87,6 +87,7 @@ def create_app(config=None):
 
     register_hooks(app)
     register_routes(app)
+    ops.install_error_log()     # 4.0: errors the site logs are kept for the site owner (Account -> Site errors)
     # v3.1.2: the one-time 2.1.3 login reset ran long ago and was removed, so no start-up can ever erase logins.
     if not app.config.get("TESTING"):
         try:   # v3.1.2: send anything a restart interrupted (emails, Discord posts, phone alerts)
@@ -177,6 +178,20 @@ def register_hooks(app):
                 response.headers["Content-Type"] = "application/gzip"
         return response
 
+    @app.before_request
+    def request_clock():
+        g.started = time.monotonic()
+
+    @app.after_request
+    def request_log(response):
+        """4.0: one structured line per request (method, endpoint, status, time). No paths, names or form values."""
+        if not app.config.get("TESTING") and request.endpoint != "static":
+            logging.getLogger("f1tracker.requests").info(
+                "request", extra={"method": request.method, "endpoint": request.endpoint or "-",
+                                  "status": response.status_code,
+                                  "ms": round((time.monotonic() - g.get("started", time.monotonic())) * 1000)})
+        return response
+
     @app.after_request
     def send_alerts(response):
         news = discord.take()
@@ -223,7 +238,8 @@ def register_hooks(app):
                 app.logger.exception("push keys unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
                 "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new(),
-                "test_site": testsite.on()}
+                "test_site": testsite.on(), "environment": ops.environment(),
+                "environment_label": ops.environment_label()}
 
     def _whats_new():
         """This version's highlights, once per account, on ordinary page views only."""
@@ -244,6 +260,11 @@ def register_hooks(app):
     @app.errorhandler(404)
     def not_found(_e):
         return render_template("error.html", code=404, message="That league or page could not be found."), 404
+
+    @app.errorhandler(500)
+    def server_error(_e):
+        return render_template("error.html", code=500, message="Something went wrong on our side. It has been "
+                               "recorded for the site owner; please try again."), 500
 
     @app.errorhandler(413)
     def too_large(_e):
@@ -294,7 +315,19 @@ def master_required(fn):
         if not (g.user and g.user["is_master"]):
             if "token" not in kwargs or _load_league_role(kwargs["token"]) != "race_master":
                 abort(403)
-        return fn(*args, **kwargs)
+        result = fn(*args, **kwargs)
+        if request.method == "POST" and ("token" not in kwargs or request.endpoint == "delete"):
+            # 4.0: the site change record (append-only). The target is a username or league ID, never a value.
+            target = request.form.get("username") or request.form.get("league_id") or \
+                ", ".join(f"{k} {v}" for k, v in kwargs.items()) or None
+            status = getattr(result, "status_code", 200)
+            flashed = [c for c, _m in session.get("_flashes", [])]
+            outcome = "refused" if status >= 400 or "error" in flashed else "done"
+            try:
+                audit_trail.record_site(g.user["username"], request.endpoint, target, outcome)
+            except Exception:
+                logging.getLogger(__name__).exception("site change record failed")
+        return result
     wrapper.access = "master"
     return wrapper
 
@@ -398,6 +431,8 @@ def career_page(master_only=False, ops_only=False):
                     if gate is not None:
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
+                    started = audit_trail.begin(conn, request.endpoint, kwargs) \
+                        if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS else None
                     result = fn(conn, g.ctx, *args, **kwargs)
                     if request.method == "POST":
                         impacts.mark_stale(conn)   # numbers may have moved: take a fresh copy on the next page
@@ -407,6 +442,8 @@ def career_page(master_only=False, ops_only=False):
                         summary = g.get("audit_summary") or (label[:1].lower() + label[1:] + (": " + what if what else ""))
                         community.audit(conn, g.user["username"], label, what, summary=summary,
                                         link=g.get("audit_link") or link)
+                        audit_trail.record(conn, g.user["username"], request.endpoint, label, what,
+                                           g.get("audit_link") or link, started, kwargs)   # 4.0 change record
                     return result
             except CareerNotFound:
                 abort(404)
@@ -951,6 +988,41 @@ def register_routes(app):
         flash(f"Loaded {n} league{'s' if n != 1 else ''} and every login from the backup. Sign in with your live "
               "site username and password.", "success")
         return redirect(url_for("login"))
+
+    @app.route("/healthz")
+    def healthz():
+        """4.0: for the host's health check and uptime monitors. No private information."""
+        ok, details = ops.health()
+        return jsonify(details), (200 if ok else 503)
+
+    @app.route("/settings/errors", methods=["GET", "POST"])
+    @master_required
+    def site_errors():
+        """4.0: what went wrong on the site recently (kind, place, scrubbed message, how often)."""
+        if request.method == "POST":
+            ops.clear_errors()
+            flash("The error list was cleared.", "success")
+            return redirect(url_for("site_errors"))
+        return render_template("site_errors.html", errors=ops.errors())
+
+    @app.route("/settings/delivery-preview", methods=["GET", "POST"])
+    @master_required
+    def delivery_preview():
+        """4.0 test site: every email, Discord post and phone alert the site would have sent."""
+        if not testsite.on():
+            abort(404)
+        if request.method == "POST":
+            ops.clear_previews()
+            flash("The delivery previews were cleared.", "success")
+            return redirect(url_for("delivery_preview"))
+        return render_template("delivery_preview.html", previews=ops.previews())
+
+    @app.route("/settings/change-record")
+    @master_required
+    def site_audit_page():
+        """4.0: every change the site owner made to the site (append-only)."""
+        names = {u["username"]: u["display_name"] for u in auth.list_users()}
+        return render_template("site_audit.html", events=audit_trail.site_events(), names=names)
 
     @app.route("/settings/engine-scan")
     @master_required
@@ -4287,7 +4359,10 @@ def register_routes(app):
                         r["link"] = r.get("link") or link
         names = {u["username"]: u["display_name"] for u in auth.list_users()}
         people = sorted({r["username"] for r in community.audit_entries(conn, 2000)})
-        return page("activity.html", ctx, rows=rows, names=names, people=people, who=who)
+        record = audit_trail.events(conn, 200)
+        if who:
+            record = [r for r in record if r["actor"] == who]
+        return page("activity.html", ctx, rows=rows, names=names, people=people, who=who, record=record)
 
     @app.route("/career/<token>/weekend/<int:event_id>/weather", methods=["POST"])
     @career_page()
@@ -4637,6 +4712,20 @@ def register_routes(app):
         from . import changelog
         return render_template("changelog.html", versions=changelog.versions(_base_dir()))
 
+    @app.route("/design")
+    def design_page():
+        """4.0: the design system: tokens, components and every state a component can be in."""
+        return render_template("design.html")
+
+    @app.route("/account/preferences", methods=["POST"])
+    def account_preferences():
+        """4.0: theme and density are saved to the account, so they follow the person to every device."""
+        try:
+            auth.set_preferences(g.user["username"], request.form.get("theme"), request.form.get("density"))
+        except AuthError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True)
+
     # ---------------------------------------------------------------- app install & phone alerts
     @app.route("/sw.js")
     def service_worker():
@@ -4731,3 +4820,21 @@ def register_routes(app):
             abort(404)
         return send_file(io.BytesIO(data.encode("utf-8")), as_attachment=True,
                          download_name=f"career-{storage.sanitize_token(token)}.json", mimetype="application/json")
+
+    # 4.0: every route declares who may use it (checked by the permission tests and listed in the inventory).
+    # League pages declare it through career_page / master_required; these are the rest.
+    for endpoint, access in ROUTE_ACCESS.items():
+        app.view_functions[endpoint].access = access
+
+
+# "self": any signed-in person, acting only on their own account (or answering their own invitation, asking to join,
+# or creating a league where the site allows it). "ops": the Race Master or a Scorekeeper of that league (the
+# results API, which checks it inside). Public routes are PUBLIC_ENDPOINTS.
+ROUTE_ACCESS = {
+    **{e: "self" for e in ("accounts_page", "account_email", "account_export", "account_self_password",
+                           "account_session_end", "account_sessions_end_others", "account_two_step",
+                           "account_delete_self", "account_preferences", "career_join", "career_new",
+                           "invitation_answer", "league_new_page", "logout", "must_change_password", "push_subscribe",
+                           "push_test", "push_unsubscribe", "whats_new_ack", "design_page")},
+    **{e: "ops" for e in ("api_weekend", "api_weekend_state", "api_weekend_checklist")},
+}

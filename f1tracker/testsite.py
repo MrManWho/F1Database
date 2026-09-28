@@ -63,9 +63,32 @@ def import_backup(blob, passphrase):
             if extra.exists():
                 extra.unlink()
         os.replace(os.path.join(staging, "accounts.db"), str(base / "accounts.db"))
+        scrub_secrets()
         return loaded
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+
+
+PLACEHOLDER_WEBHOOK = "https://discord.com/api/webhooks/0/removed-on-the-test-site"
+
+
+def scrub_secrets():
+    """4.0 Phase 1: an imported live backup brings the site's email password and each league's Discord webhook.
+    The test site never sends anything, so it doesn't need them: the password is removed and each webhook is
+    replaced with a placeholder (so the league still counts as "Discord on" and its posts appear as previews)."""
+    import sqlite3
+    from . import auth
+    with auth.accounts() as conn:
+        conn.execute("DELETE FROM settings WHERE key = 'smtp_password'")
+    for path in storage.careers_dir().glob(f"*{storage.CAREER_EXT}"):
+        conn = sqlite3.connect(str(path))
+        try:
+            conn.execute("UPDATE meta SET value = ? WHERE key = 'discord_webhook' AND value != ''", (PLACEHOLDER_WEBHOOK,))
+            conn.commit()
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
 
 
 def seed():

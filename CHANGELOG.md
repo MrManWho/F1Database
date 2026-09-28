@@ -3,6 +3,29 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-alpha.1 · The foundation for 4.0 (test site)
+_Released September 28, 2026_
+> The first 4.0 build, on the test site only. Your career numbers, results and rules are exactly the same; this build
+> reorganises the menu and adds the safety groundwork the rest of 4.0 builds on.
+
+### Highlights
+- **A clearer menu.** Every league now has five places: **Home**, **Race Weekend**, **Championship**, **Career** (your driver) and **Paddock** (news and the community), with the Race Master's tools in their own **Manage League** area. Every page is where it was, just grouped more simply. The phone bar at the bottom matches.
+- **Your theme and density follow you.** Dark, light or match-my-device, and comfortable or compact, are now saved to your account, so every phone and computer you sign in on looks the same.
+- **A change record for every league.** Activity log → Change record lists every change exactly as it happened, with the values before and after for members and roles, league settings and rounds. Entries can never be edited or deleted.
+- **Nothing is sent from the test site.** Every email, Discord post and phone alert it would have sent is kept as a preview for the site owner to check instead.
+
+### Added
+- Site owner: Site errors (what went wrong recently, with private details removed), Site change record, Delivery preview (test site), Design system and a health check, all under Account → Settings → Site health.
+- An environment badge next to the version number (for example "4.0 test"), so a copy of the site is never mistaken for another.
+- A clearer message on pages you can't open, pages that don't exist and unexpected errors.
+
+### Changed
+- Menu groups renamed: League → Home, Race Weekend, Championship and Paddock; Manage → Manage League (Race weekends, Career management, League administration). Rivalries moved to Championship; Transfers to Paddock.
+- An imported live backup no longer keeps the live site's email password, and each league's Discord webhook is replaced with a placeholder on the test site.
+
+### Migration notes
+- League files move to format 22 (a new, empty change record). A backup is taken automatically before the upgrade, as always. Nothing else changes and no numbers are recalculated.
+
 ## 3.1.2 · Safer logins and messages
 _Released September 28, 2026_
 > Behind-the-scenes fixes that protect your logins, your messages and your backups.

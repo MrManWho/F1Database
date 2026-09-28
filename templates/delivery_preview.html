@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import state %}
+{% block title %}Delivery preview{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Site owner · test site</div><h1>Delivery preview</h1></div>
+  <a class="btn btn-ghost" href="{{ url_for('accounts_page') }}#site-ops">Back to settings</a></div>
+<section class="card">
+  <p class="muted small">The test site never sends anything. Every email, Discord post and phone alert it would have sent is shown here instead, newest first, with addresses shortened. The newest 300 are kept.</p>
+  {% if previews %}
+  <ul class="plain-list preview-list">{% for p in previews %}
+    <li class="preview-item"><div class="preview-head"><span class="pill">{{ {'email': 'Email', 'discord': 'Discord', 'push': 'Phone alert'}[p.kind] }}</span>
+      <b>{{ p.title }}</b> <span class="muted small">to {{ p.shown_to or '—' }}{% if p.recipients > 1 %} ({{ p.recipients }} people){% endif %} · {{ p.created_at|stamp }}</span></div>
+      <details><summary class="small">Show the message</summary><pre class="preview-body">{{ p.body }}</pre></details></li>{% endfor %}</ul>
+  <form method="post" class="button-row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost">Clear the previews</button></form>
+  {% else %}{{ state('empty', 'Nothing yet', 'When the site would send an email, Discord post or phone alert, it appears here instead.') }}{% endif %}
+</section>
+{% endblock %}

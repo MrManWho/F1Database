@@ -334,6 +334,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
     link TEXT
 );
 
+-- v22 (4.0): the change record. One row per change made in the league: who, when, what, the target, and for
+-- sensitive changes the values before and after. Rows can't be edited or deleted (triggers below).
+CREATE TABLE IF NOT EXISTS audit_events (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    label TEXT NOT NULL,
+    target TEXT,
+    link TEXT,
+    before TEXT,
+    after TEXT
+);
+CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_events
+BEGIN SELECT RAISE(ABORT, 'The change record cannot be edited'); END;
+CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events
+BEGIN SELECT RAISE(ABORT, 'The change record cannot be deleted'); END;
+
 CREATE TABLE IF NOT EXISTS team_relations (
     season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
     driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
@@ -574,6 +592,9 @@ def migrate(conn):
                for the AI tracker), ai_recs (the recommendation after each round); results.no_fault /
                points_override / sprint_points_override, events.gp_distance / sprint_distance / cancelled,
                drivers.career_status, team_orders.ruled_by / ruled_at / reason. Nothing existing changes.
+    v21 -> v22 (4.0): audit_events, the change record (actor, time, action, target and before/after values for
+               sensitive changes), protected by triggers so rows can't be edited or deleted. Created empty; the
+               plain-language Activity Log (audit_log) is unchanged. Nothing existing changes.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.

@@ -14,8 +14,8 @@
   {% if push_key %}<meta name="push-key" content="{{ push_key }}">{% endif %}
   <script>
     (function () {
-      var t = "dark";
-      try { t = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
+      var t = "dark", saved = {{ (user.theme if user and user.theme else '')|tojson }};
+      try { t = saved || localStorage.getItem("f1-theme") || "dark"; if (saved) localStorage.setItem("f1-theme", saved); } catch (e) {}
       if (t === "auto") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", t);
     })();
@@ -27,7 +27,7 @@
       {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
 {% if test_site %}<div class="test-site-banner" role="note"><b>TEST SITE</b> · for trying Paddock Legacy 4.0. Nothing here affects the real site, and it never sends emails, Discord posts or phone alerts.</div>{% endif %}
-<script>try { if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
+<script>try { var dsv = {{ (user.density if user and user.density else '')|tojson }}; if (dsv) localStorage.setItem("f1-density", dsv); if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% from "_icons.html" import icon %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
@@ -37,70 +37,72 @@
   <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <a class="brand" href="{{ url_for('dashboard', token=t) }}">
       <svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg>
-      <span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}</small></span>
+      <span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}{% if environment != 'production' %} <span class="env-badge env-{{ environment }}" title="Which copy of the site this is">{{ environment_label }}</span>{% endif %}</small></span>
     </a>
     <nav class="nav-scroll">
       {% macro item(href, label, ic, active, extra='') -%}
       <a href="{{ href }}" class="{{ 'active' if active }}" {% if active %}aria-current="page"{% endif %} title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
       {%- endmacro %}
       {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot" title="{{ ctx.pending_offers }} offer(s) waiting">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
-      <div class="nav-group" role="group" aria-labelledby="nav-league">
-        <div class="nav-title" id="nav-league">League</div>
+      {# 4.0: five destinations (Home, Race Weekend, Championship, Career, Paddock) and a separate Manage League area #}
+      <div class="nav-group" role="group" aria-labelledby="nav-home">
+        <div class="nav-title" id="nav-home">Home</div>
         {{ item(url_for('dashboard', token=t), 'Control Room', 'home', ep == 'dashboard') }}
+      </div>
+      <div class="nav-group" role="group" aria-labelledby="nav-race">
+        <div class="nav-title" id="nav-race">Race Weekend</div>
         {{ item(url_for('seasons_page', token=t), 'Calendar', 'calendar', ep in ('seasons_page', 'season_review', 'season_rollover')) }}
         {{ item(url_for('results_index', token=t), 'Results', 'flag', ep in ('results_index', 'race_summary') or (ep in ('weekend', 'weekend_next') and not ctx.can_run)) }}
+        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
+      </div>
+      <div class="nav-group" role="group" aria-labelledby="nav-championship">
+        <div class="nav-title" id="nav-championship">Championship</div>
         {{ item(url_for('standings_page', token=t), 'Standings', 'standings', ep == 'standings_page') }}
+        {{ item(url_for('stats_page', token=t), 'Statistics', 'progress', ep == 'stats_page') }}
         {{ item(url_for('drivers_page', token=t), 'Drivers', 'drivers', ep == 'drivers_page' or (ep == 'driver_profile' and not (ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id))) }}
         {{ item(url_for('teams_page', token=t), 'Teams', 'teams', ep in ('teams_page', 'team_profile')) }}
         {{ item(url_for('records', token=t), 'Records', 'records', ep == 'records') }}
-        {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
-        {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
-        {{ item(url_for('stats_page', token=t), 'Statistics', 'progress', ep == 'stats_page') }}
-        {{ item(url_for('announcements_page', token=t), 'Announcements', 'news', ep == 'announcements_page') }}
-        {% if ctx.team_goals_on %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
-        {% if ctx.features.predictions %}{{ item(url_for('predictions_page', token=t), 'Predictions', 'target', ep == 'predictions_page') }}{% endif %}
+        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
       </div>
       {% if ctx.my_driver %}
       <div class="nav-group" role="group" aria-labelledby="nav-career">
         <div class="nav-title" id="nav-career">Career · {{ ctx.my_driver.name }}</div>
         {{ item(url_for('garage', token=t), 'My Garage', 'garage', ep == 'garage', badge) }}
-        {{ item(url_for('offers_page', token=t), 'Contracts & offers', 'contracts', ep == 'offers_page') }}
-        {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}
-        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
-        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
-        {{ item(url_for('press_page', token=t), 'Press', 'press', ep == 'press_page') }}
         {{ item(url_for('driver_profile', token=t, driver_id=ctx.my_driver.id), 'Progression', 'progress', ep == 'driver_profile' and request.view_args.get('driver_id') == ctx.my_driver.id) }}
-      </div>
-      {% else %}
-      <div class="nav-group" role="group" aria-labelledby="nav-paddock">
-        <div class="nav-title" id="nav-paddock">Paddock</div>
-        {{ item(url_for('rivalry_page', token=t), 'Rivalries', 'rivalry', ep == 'rivalry_page') }}
-        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
+        {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}
+        {{ item(url_for('offers_page', token=t), 'Contracts & offers', 'contracts', ep == 'offers_page') }}
+        {{ item(url_for('press_page', token=t), 'Press', 'press', ep == 'press_page') }}
+        {% if ctx.team_goals_on %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
       </div>
       {% endif %}
+      <div class="nav-group" role="group" aria-labelledby="nav-paddock">
+        <div class="nav-title" id="nav-paddock">Paddock</div>
+        {{ item(url_for('news_page', token=t), 'News', 'news', ep == 'news_page') }}
+        {{ item(url_for('incidents_page', token=t), 'Incidents', 'incident', ep == 'incidents_page') }}
+        {{ item(url_for('announcements_page', token=t), 'Announcements', 'news', ep == 'announcements_page') }}
+        {{ item(url_for('contracts_page', token=t), 'Transfers', 'market', ep == 'contracts_page') }}
+        {% if ctx.team_goals_on and not ctx.my_driver %}{{ item(url_for('team_goals_page', token=t), 'Team goals', 'target', ep == 'team_goals_page') }}{% endif %}
+      </div>
       {% if ctx.can_run %}
       <div class="nav-group nav-admin" id="nav-admin">
         <button type="button" class="nav-title nav-toggle" id="nav-admin-toggle" aria-expanded="true" aria-controls="nav-admin-items">
-          <span>Manage</span><span class="chev" aria-hidden="true">▾</span></button>
+          <span>Manage League</span><span class="chev" aria-hidden="true">▾</span></button>
         <div class="nav-admin-items" id="nav-admin-items">
-        {# v3.0: Race Master tools in four groups #}
-        <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race</div>
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race weekends</div>
         {{ item(url_for('weekend_next', token=t), 'Results entry', 'entry', ep in ('weekend', 'weekend_next')) }}
         {% if ctx.is_master %}{{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}{% endif %}
         </div>
         {% if ctx.is_master %}
-        <div class="nav-sub" role="group" aria-labelledby="nav-sub-people"><div class="nav-subtitle" id="nav-sub-people">People</div>
-        {{ item(url_for('members', token=t), 'Members & roles', 'players', ep == 'members') }}
-        {{ item(url_for('paddock_admin', token=t), 'Drivers & teams', 'settings', ep == 'paddock_admin') }}
-        {{ item(url_for('team_admin', token=t), 'Team management', 'teams', ep == 'team_admin') }}
-        </div>
-        <div class="nav-sub" role="group" aria-labelledby="nav-sub-career"><div class="nav-subtitle" id="nav-sub-career">Career</div>
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-career"><div class="nav-subtitle" id="nav-sub-career">Career management</div>
         {{ item(url_for('grid_page', token=t), 'Grid & contracts', 'grid', ep == 'grid_page') }}
         {{ item(url_for('market_page', token=t), 'Market administration', 'market', ep == 'market_page') }}
+        {{ item(url_for('paddock_admin', token=t), 'Drivers & teams', 'settings', ep == 'paddock_admin') }}
+        {{ item(url_for('team_admin', token=t), 'Team management', 'teams', ep == 'team_admin') }}
         {% if not ctx.my_driver %}{{ item(url_for('garage', token=t), 'Player garages', 'garage', ep == 'garage', badge) }}
         {{ item(url_for('team_standing', token=t), 'Relationships', 'teams', ep == 'team_standing') }}{% endif %}
         </div>
-        <div class="nav-sub" role="group" aria-labelledby="nav-sub-system"><div class="nav-subtitle" id="nav-sub-system">System</div>
+        <div class="nav-sub" role="group" aria-labelledby="nav-sub-admin"><div class="nav-subtitle" id="nav-sub-admin">League administration</div>
+        {{ item(url_for('members', token=t), 'Members & roles', 'players', ep == 'members') }}
         {{ item(url_for('league_settings', token=t), 'League settings', 'toggles', ep in ('league_settings', 'league_settings_section')) }}
         {{ item(url_for('delivery_log_page', token=t), 'Notifications', 'bell', ep == 'delivery_log_page') }}
         {{ item(url_for('activity_log', token=t), 'Activity log', 'log', ep == 'activity_log') }}
@@ -234,11 +236,11 @@
       {% block content %}{% endblock %}
     </main>
     <nav class="bottom-nav" aria-label="Quick navigation">
-      <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}">{{ icon('home') }}<span>Control</span></a>
-      <a href="{{ url_for('weekend_next', token=t) if ctx.can_run else url_for('results_index', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next', 'results_index') }}">{{ icon('entry' if ctx.can_run else 'flag') }}<span>{{ 'Enter' if ctx.can_run else 'Results' }}</span></a>
-      <a href="{{ url_for('standings_page', token=t) }}" class="{{ 'active' if ep == 'standings_page' }}">{{ icon('standings') }}<span>Standings</span></a>
-      {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}">{{ icon('garage') }}<span>Garage</span></a>
-      {% else %}<a href="{{ url_for('news_page', token=t) }}" class="{{ 'active' if ep == 'news_page' }}">{{ icon('news') }}<span>News</span></a>{% endif %}
+      <a href="{{ url_for('dashboard', token=t) }}" class="{{ 'active' if ep == 'dashboard' }}" {% if ep == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}<span>Home</span></a>
+      <a href="{{ url_for('weekend_next', token=t) if ctx.can_run else url_for('results_index', token=t) }}" class="{{ 'active' if ep in ('weekend', 'weekend_next', 'results_index', 'seasons_page') }}">{{ icon('entry' if ctx.can_run else 'flag') }}<span>Race</span></a>
+      <a href="{{ url_for('standings_page', token=t) }}" class="{{ 'active' if ep in ('standings_page', 'stats_page', 'records') }}">{{ icon('standings') }}<span>Championship</span></a>
+      {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" class="{{ 'active' if ep == 'garage' }}">{{ icon('garage') }}<span>Career</span></a>
+      {% else %}<a href="{{ url_for('news_page', token=t) }}" class="{{ 'active' if ep == 'news_page' }}">{{ icon('news') }}<span>Paddock</span></a>{% endif %}
       <button type="button" data-open-menu aria-controls="sidebar">{{ icon('menu') }}<span>More</span></button>
     </nav>
   </div>
@@ -278,7 +280,7 @@
 
 {% else %}
   <header class="plain-head">
-    <a class="brand" href="{{ url_for('home') }}"><svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/><rect x="13" y="15.6" width="2.3" height="2.3" opacity=".0"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg><span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}</small></span></a>
+    <a class="brand" href="{{ url_for('home') }}"><svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/><rect x="13" y="15.6" width="2.3" height="2.3" opacity=".0"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg><span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}{% if environment != 'production' %} <span class="env-badge env-{{ environment }}" title="Which copy of the site this is">{{ environment_label }}</span>{% endif %}</small></span></a>
     {% if user %}
     <div class="topbar-actions">
       <a class="btn btn-ghost btn-sm" href="{{ url_for('accounts_page') }}">Accounts</a>
