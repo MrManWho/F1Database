@@ -22,7 +22,7 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, announcements, audit_trail, calc3, engine, impacts, migration, offsite, ops, stats, testsite, ultimatums
+from . import ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, migration, offsite, ops, stats, testsite, ultimatums
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -1807,6 +1807,13 @@ def register_routes(app):
             rec["for_next"] = True
             if event["ai_difficulty"] is None:
                 rec["this_round"] = "This round was marked \"Don't track\", so it isn't part of the history."
+            shown = ai_track.frozen(conn, event["id"])
+            if shown:    # 4.0: the recommendation made before this round, kept as it was, and the AI actually used
+                used = f"AI {shown['ai_used']} was used" if shown["ai_used"] is not None else "the AI wasn't tracked"
+                rec["this_round"] = (f"Before this round the recommendation was AI {shown['recommended']} (F1Laps "
+                                     f"{shown['baseline']:g} for {shown['circuit']}, league {shown['league_adjustment']:+g}, "
+                                     f"track history {shown['track_history']:+g}; snapshot {shown['dataset_version']}); "
+                                     f"{used}.")
             return rec
         rec = S.difficulty_recommendation(conn, (season["year"], event["round_number"]))
         rec["for_next"] = False
@@ -4214,6 +4221,7 @@ def register_routes(app):
                 storage.set_meta(conn, "career_name", name)
             if "team_life" in request.form and mine("weekends"):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
+                storage.set_meta(conn, "ai_track_history", "1" if request.form.get("ai_track_history") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
                 smd = (request.form.get("sprint_min_distance") or "").strip()
                 if smd.isdigit() and 0 <= int(smd) <= 100:
@@ -4305,6 +4313,8 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
+                    ai_track_history=storage.get_meta(conn, "ai_track_history", "1") == "1",
+                    ai_track_on=ai_track.uses_track(conn, ctx["current_season_id"]), ai_snapshot=ai_track.snapshot(),
                     difficulty_mode=S.difficulty_mode(conn), sprint_min=_sprint_min(conn),
                     calc_label=engine.label(conn, ctx["current_season_id"]),
                     calc_engine=engine.season_engine(conn, ctx["current_season_id"]),

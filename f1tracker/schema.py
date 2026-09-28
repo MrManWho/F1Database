@@ -352,6 +352,24 @@ BEGIN SELECT RAISE(ABORT, 'The change record cannot be edited'); END;
 CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events
 BEGIN SELECT RAISE(ABORT, 'The change record cannot be deleted'); END;
 
+-- v23 (4.0): the track-aware AI recommendation shown for each round, frozen when the round is first submitted:
+-- the F1Laps snapshot and model versions, each part of the sum, the AI actually used, and the full explanation.
+CREATE TABLE IF NOT EXISTS ai_track_recs (
+    event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    season_id INTEGER NOT NULL,
+    circuit TEXT,
+    dataset_version TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    baseline REAL NOT NULL,
+    league_adjustment REAL NOT NULL,
+    track_history REAL NOT NULL,
+    recommended INTEGER NOT NULL,
+    ai_used INTEGER,
+    confidence REAL,
+    explanation TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS team_relations (
     season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
     driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
@@ -595,6 +613,9 @@ def migrate(conn):
     v21 -> v22 (4.0): audit_events, the change record (actor, time, action, target and before/after values for
                sensitive changes), protected by triggers so rows can't be edited or deleted. Created empty; the
                plain-language Activity Log (audit_log) is unchanged. Nothing existing changes.
+    v22 -> v23 (4.0): ai_track_recs, the track-aware AI recommendation shown before each round (frozen at the first
+               submission; the AI actually used is kept separately). Created empty. Seasons already under way keep
+               the v3 tracker until they finish; new seasons use the track-aware model (meta ai_model:<season>).
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.

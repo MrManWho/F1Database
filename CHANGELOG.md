@@ -3,6 +3,28 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-alpha.2 · A track-aware AI recommendation (test site)
+_Released September 28, 2026_
+> One AI level for the whole weekend, starting from what players really use at each circuit in F1 26 and learning
+> from how your league races. Seasons already under way keep their current recommendation until they finish.
+
+### Highlights
+- **One AI setting for the weekend.** The recommendation covers qualifying, the Sprint and the race together. No Time Trials or personal baseline needed.
+- **Starts from each circuit's real average.** Every round begins from the F1Laps average AI for that circuit in F1 26 (for example Monaco 80, Canada 84, Las Vegas 76), so the level changes sensibly from track to track.
+- **Learns your league.** After each weekend it compares every player with their AI teammate (or cars of similar speed, or where the car should finish). If everyone agrees it moves further, up to 2 after one weekend, 3 after two in a row and 4 after three; mixed results move it little or not at all.
+- **Fair to bad luck.** DNFs, DNS, DSQ, major incidents and no-fault results never count as "too hard"; wet or disrupted races count less; beating your teammate is never a bad sign.
+- **Everything explained.** Each recommendation shows the F1Laps baseline, the league adjustment, track history, the evidence and the confidence, and warns when the drivers are so far apart that no single AI suits everyone.
+
+### Added
+- Track history: after repeated visits to a circuit, part of the baseline is replaced by how your league's players did there (up to ±3). Race Masters can switch it off in League settings → Race weekends.
+- Each round keeps the recommendation made before it next to the AI actually used, and never recalculates it later.
+
+### Changed
+- New leagues and every new season use the track-aware recommendation. A season already under way keeps the tracker it started with.
+
+### Migration notes
+- League files move to format 23 (a new, empty table for the saved recommendations). A backup is taken first; nothing else changes.
+
 ## 4.0.0-alpha.1 · The foundation for 4.0 (test site)
 _Released September 28, 2026_
 > The first 4.0 build, on the test site only. Your career numbers, results and rules are exactly the same; this build

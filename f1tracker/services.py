@@ -97,6 +97,8 @@ def seed_career(conn, token, name, year, player_names=None):
     # v2.5: a new league starts on the current calculation engine; there's nothing to migrate.
     set_meta(conn, "calc_engine", str(C.NEW_LEAGUE_ENGINE))
     set_meta(conn, "calc_choice", "new")
+    from . import ai_track
+    ai_track.start_season(conn, season_id)      # 4.0: the track-aware AI recommendation from round 1
     sync_not_run_results(conn, season_id)
     return season_id
 
@@ -1236,6 +1238,8 @@ def create_next_season(conn, source_id, year):
         conn.execute("INSERT INTO events(season_id, round_number, name, location, is_sprint) VALUES(?,?,?,?,?)",
                      (new_id, e["round_number"], e["name"], e["location"], e["is_sprint"]))
     set_meta(conn, "current_season_id", new_id)
+    from . import ai_track
+    ai_track.start_season(conn, new_id)         # 4.0: a new season starts on the track-aware AI recommendation
     sync_not_run_results(conn, new_id)
     return new_id
 

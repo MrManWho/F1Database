@@ -1,0 +1,154 @@
+{
+  "game": "F1 26",
+  "source": "F1Laps",
+  "source_date": "2026-09-28",
+  "dataset_version": "f1laps-f126-2026-09-28",
+  "model_version": "track-aware-1",
+  "note": "Average AI difficulty per circuit in F1 26 from F1Laps, entered by hand as a local snapshot. The site never contacts F1Laps. When F1 26 gets meaningful AI changes, add a new snapshot file and point CURRENT at it; recommendations already made keep the values they were made with.",
+  "circuits": [
+    {
+      "key": "australia",
+      "label": "Australia",
+      "circuit": "Albert Park",
+      "ai": 81
+    },
+    {
+      "key": "china",
+      "label": "China",
+      "circuit": "Shanghai International Circuit",
+      "ai": 81
+    },
+    {
+      "key": "japan",
+      "label": "Japan",
+      "circuit": "Suzuka",
+      "ai": 82
+    },
+    {
+      "key": "bahrain",
+      "label": "Bahrain",
+      "circuit": "Bahrain International Circuit",
+      "ai": 82
+    },
+    {
+      "key": "saudi_arabia",
+      "label": "Saudi Arabia",
+      "circuit": "Jeddah Corniche Circuit",
+      "ai": 82
+    },
+    {
+      "key": "miami",
+      "label": "Miami",
+      "circuit": "Miami International Autodrome",
+      "ai": 82
+    },
+    {
+      "key": "canada",
+      "label": "Canada",
+      "circuit": "Circuit Gilles Villeneuve",
+      "ai": 84
+    },
+    {
+      "key": "monaco",
+      "label": "Monaco",
+      "circuit": "Circuit de Monaco",
+      "ai": 80
+    },
+    {
+      "key": "catalunya",
+      "label": "Catalunya",
+      "circuit": "Circuit de Barcelona-Catalunya",
+      "ai": 80
+    },
+    {
+      "key": "austria",
+      "label": "Austria",
+      "circuit": "Red Bull Ring",
+      "ai": 83
+    },
+    {
+      "key": "great_britain",
+      "label": "Great Britain",
+      "circuit": "Silverstone",
+      "ai": 82
+    },
+    {
+      "key": "belgium",
+      "label": "Belgium",
+      "circuit": "Spa-Francorchamps",
+      "ai": 83
+    },
+    {
+      "key": "hungary",
+      "label": "Hungary",
+      "circuit": "Hungaroring",
+      "ai": 81
+    },
+    {
+      "key": "netherlands",
+      "label": "Netherlands",
+      "circuit": "Zandvoort",
+      "ai": 84
+    },
+    {
+      "key": "monza",
+      "label": "Monza",
+      "circuit": "Monza",
+      "ai": 82
+    },
+    {
+      "key": "madrid",
+      "label": "Madrid",
+      "circuit": "Madring",
+      "ai": 80
+    },
+    {
+      "key": "azerbaijan",
+      "label": "Azerbaijan",
+      "circuit": "Baku City Circuit",
+      "ai": 79
+    },
+    {
+      "key": "singapore",
+      "label": "Singapore",
+      "circuit": "Marina Bay",
+      "ai": 82
+    },
+    {
+      "key": "austin",
+      "label": "Austin",
+      "circuit": "Circuit of the Americas",
+      "ai": 79
+    },
+    {
+      "key": "mexico",
+      "label": "Mexico",
+      "circuit": "Autódromo Hermanos Rodríguez",
+      "ai": 79
+    },
+    {
+      "key": "brazil",
+      "label": "Brazil",
+      "circuit": "Interlagos",
+      "ai": 78
+    },
+    {
+      "key": "las_vegas",
+      "label": "Las Vegas",
+      "circuit": "Las Vegas Strip Circuit",
+      "ai": 76
+    },
+    {
+      "key": "qatar",
+      "label": "Qatar",
+      "circuit": "Lusail International Circuit",
+      "ai": 78
+    },
+    {
+      "key": "abu_dhabi",
+      "label": "Abu Dhabi",
+      "circuit": "Yas Marina",
+      "ai": 78
+    }
+  ]
+}

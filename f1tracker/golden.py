@@ -148,6 +148,7 @@ def play(engine, name="Golden League"):
             one, two = [p["id"] for p in S.player_drivers(conn)]
             # One player in a midfield car, one in a backmarker, each with an AI teammate.
             S.place_players(conn, sid, {one: (teams["Williams"], 1), two: (teams["Haas"], 2)})
+            conn.execute("UPDATE meta SET value = 'v3' WHERE key = ?", (f"ai_model:{sid}",))  # the v3.1.2 reference
             relations.ensure(conn, sid)
             for row in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (sid,)).fetchall():
                 relations.set_pledge(conn, sid, row["driver_id"], 1)

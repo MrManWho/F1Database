@@ -277,7 +277,9 @@ def _limit(weekends):
 
 def recommendation(conn, before=None):
     """The engine 3 recommendation (same keys as services.difficulty_recommendation, plus the 2.5 detail)."""
-    from . import services as S
+    from . import ai_track, services as S
+    if ai_track.uses_track(conn, ai_track.season_for(conn, before)):
+        return ai_track.recommendation(conn, before)       # 4.0: seasons on the track-aware model
     hist = history(conn, before)
     rec = {"current": None, "recommended": None, "direction": None, "average": None, "sample": [], "players": [],
            "sweet_spot": None, "note": None, "history_rounds": len(hist), "engine": 3, "excluded": [], "used": [],
@@ -523,6 +525,10 @@ def _evidence(rec, usable, weekends):
 
 def store(conn, event_id):
     """Remember the recommendation after this round (for reversal damping and change notices)."""
+    from . import ai_track
+    row = conn.execute("SELECT season_id FROM events WHERE id = ?", (event_id,)).fetchone()
+    if row and ai_track.uses_track(conn, row[0]):
+        return ai_track.store(conn, event_id)              # 4.0: seasons on the track-aware model
     rec = recommendation(conn)
     conn.execute("""INSERT INTO ai_recs(event_id, engine, current, recommended, direction, detail, created_at)
                     VALUES(?,?,?,?,?,?,?) ON CONFLICT(event_id) DO UPDATE SET engine = excluded.engine,

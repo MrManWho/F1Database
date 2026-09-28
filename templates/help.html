@@ -135,6 +135,16 @@
 </section>
 <section class="card help" id="difficulty">
   <h2>AI difficulty</h2>
+  <p><b>Track-aware recommendation (4.0, new seasons):</b> one AI level for the whole weekend (qualifying, the Sprint and the race), worked out as <b>F1Laps track baseline + learned league adjustment + track history</b>. No Time Trials or personal baseline needed.</p>
+  <ul>
+    <li><b>F1Laps track baseline</b>: the average AI players use at that circuit in F1 26 (for example Monaco 80, Canada 84, Las Vegas 76), from a snapshot kept on this site. It changes from track to track without any limit.</li>
+    <li><b>Learned league adjustment</b>: starts at 0 and is learned from each completed weekend. Every player driver is judged on their own (against their AI teammate, or AI cars of similar speed, or where the car should finish), then combined: if everyone agrees it moves further; mixed evidence moves it a little or not at all. It moves at most 2 after one weekend, 3 after two weekends in a row pointing the same way and 4 after three or more.</li>
+    <li><b>Track history</b>: once your league has raced a circuit a few times, part of the baseline is replaced by how your players actually got on there (no influence before the first visit, at most ±3). The Race Master can switch this off.</li>
+    <li>A DNF, DNS, DSQ, a major incident or a no-fault result never counts as "the AI is too hard"; wet or disrupted races count less; finishing ahead of your teammate is never a bad sign.</li>
+    <li>If the drivers' own levels are more than six apart, it says so: no single AI setting can suit everyone.</li>
+    <li>The recommendation shown before each round is saved as it was, next to the AI you actually used, and is never recalculated later. A new F1Laps snapshot only affects future rounds.</li>
+  </ul>
+  <p>Seasons that started before 4.0 keep the Version 3 tracker below until they finish.</p>
   <p><b>Calculation Version 3:</b> each session is compared first with your AI teammate, then with AI cars one place either side in car strength, then two places either side, then (with less confidence) the car's expected finish. The recommendation shows which one was used for each player. Add lap times under <em>Pace &amp; conditions</em> on the round page and it also compares qualifying time and race pace per lap. Finishing last right behind your teammate is "about right"; being 30 seconds behind them brings the AI down. Damaged, penalised or mechanically failed sessions are left out; wet, safety-car or strategy-distorted ones count less; a Sprint counts half. It can move after every usable weekend (up to 3 after one weekend, 4 after two or three, 6 after that; up to 5 at once after a clean session more than 0.45 s a lap off), and one opposite result can only reverse it by one level. Each player gets their own sweet spot.</p>
   <p><b>Version 2 leagues:</b> Enter the AI level (0–110) you raced on each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level, with the latest counting most. Each player driver's result is read two ways:</p>
   <ul>

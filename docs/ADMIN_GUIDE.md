@@ -2,6 +2,22 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## New in 4.0.0-alpha.2: the track-aware AI recommendation
+
+- **Model:** `f1tracker/ai_track.py` (`track-aware-1`). New leagues and each new season use it (meta
+  `ai_model:<season id>`); seasons already under way keep the v3 tracker until they finish.
+- **Baselines:** `f1tracker/data/ai_baselines/<version>.json` holds the F1Laps F1 26 averages per circuit with game,
+  source, source date, dataset and model versions. The site never contacts F1Laps.
+- **Updating the baselines** when F1 26 gets meaningful AI changes: copy the current file to a new name (for example
+  `f1laps-f126-2027-03-01.json`), change the values, `source_date` and `dataset_version`, then set
+  `CURRENT_SNAPSHOT` in `ai_track.py` to the new name. Keep old files: rounds already played name the snapshot they
+  used. Only future rounds change.
+- **Stored per round** (schema 23, `ai_track_recs`): the recommendation shown before the round (baseline, league
+  adjustment, track history, final, confidence, full explanation, snapshot and model versions), frozen at the first
+  submission, and the AI actually used. A correction updates only the AI used.
+- **Circuits not in the snapshot** (a custom round) use the average of all circuits and say so.
+- **League setting:** Race weekends → "Use each circuit's history in this league" (on by default).
+
 ## New in 4.0.0-alpha.1 (test site only, Phase 1)
 
 - **Environment badge.** `F1_TRACKER_ENV` = local / test / staging / production names each copy of the site. Without

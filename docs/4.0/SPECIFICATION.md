@@ -743,13 +743,35 @@ After production launch, freeze new features for at least one complete champions
 
 1. **Where to build:** the existing Python codebase, `release-4.0` branch. Not rebuilt elsewhere.
 2. **Database:** per-league SQLite (Option A).
-3. **AI tracker:** the real v3 limits, exactly; the specification text is corrected (4.10). Any change is an Engine 4 decision with its own simulation.
+3. **AI tracker:** (superseded for new seasons by the owner's later decision below: the track-aware recommendation) the real v3 limits, exactly; the specification text is corrected (4.10). Any change is an Engine 4 decision with its own simulation.
 4. **Engine 2:** see section 3, "Engine 2".
 5. **Timing:** production cutover at the start of Season Two, never mid-season. No calendar deadline: if 4.0 hasn't passed every P0 release gate by the Season Two boundary, v3 stays in use and migration waits.
 6. **Human testing:** two existing players test the normal driver and Race Master workflows; a third person who has never used Paddock Legacy does the first-time-driver test without coaching; a documented NVDA/VoiceOver walkthrough (a real screen-reader user if available).
 7. **Browsers and devices:** section 8.4.
 8. **Retirements:** section 7, "Not migrated"; the site-admin quick form becomes the Race Master quick-create flow (4.3); Engine 2 is not offered for new seasons (section 3).
 9. **Test-site persistence:** S5.
+
+### Owner decision after Phase 1: the track-aware AI recommendation (approved change)
+
+The owner replaced the AI tracker for 4.0 with a simpler, track-aware model (`f1tracker/ai_track.py`, model
+`track-aware-1`). It applies to **new leagues and to each new season**; a season already under way keeps the v3
+tracker until it finishes (formula freeze). Section 4.10's v3 rules stay true for those seasons and for the golden
+fixtures, which remain the v3.1.2 reference.
+
+- One recommended AI for the whole weekend; no separate qualifying/Sprint/race settings; no Time Trials or personal
+  baseline.
+- `recommended_ai = F1Laps track baseline + learned league adjustment + optional personal track history`.
+- Baselines: a versioned local snapshot of F1Laps' F1 26 averages (game, source, source date, dataset and model
+  versions, a value per circuit). No live connection; updated by adding a snapshot. Historic recommendations are
+  frozen with the snapshot they used.
+- League adjustment starts at 0, learned from completed weekends (each player judged separately against teammate,
+  car and realistic finish, then combined; agreement moves more, mixed little or none). Caps: ±2 after one weekend,
+  ±3 after two aligned weekends, ±4 after three or more. Track-to-track baseline changes are not capped.
+- DNF, DNS, DSQ, major incidents and no-fault results give no negative evidence; wet and disrupted races count less;
+  beating a teammate is never negative.
+- Personal track history: zero influence before a visit, growing with repeated visits, capped at ±3.
+- The AI actually used is recorded separately from the recommendation. A warning shows when two players' own levels
+  differ by more than six.
 
 ### Corrections to the original text (documentation only, not formula changes)
 
