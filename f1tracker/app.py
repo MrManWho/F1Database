@@ -952,6 +952,13 @@ def register_routes(app):
               "site username and password.", "success")
         return redirect(url_for("login"))
 
+    @app.route("/settings/engine-scan")
+    @master_required
+    def engine_scan():
+        """4.0 Phase 0: which leagues and seasons still use Calculation Version 2 (read-only)."""
+        from . import phase0
+        return render_template("engine_scan.html", scan=phase0.scan())
+
     @app.route("/settings/offsite-snooze", methods=["POST"])
     @master_required
     def offsite_snooze():

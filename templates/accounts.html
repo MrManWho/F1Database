@@ -187,6 +187,11 @@
     <div><button class="btn btn-danger">Load backup</button></div>
   </form>
 </section>
+<section class="card">
+  <h2>Calculation engine scan</h2>
+  <p class="muted small">After loading the live backup, check which leagues and seasons still use Calculation Version 2. Read-only.</p>
+  <div><a class="btn btn-ghost" href="{{ url_for('engine_scan') }}">Open the scan</a></div>
+</section>
 {% endif %}
 <section class="card" id="offsite">
   <h2>Encrypted backup to keep somewhere else</h2>

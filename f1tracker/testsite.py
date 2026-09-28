@@ -6,9 +6,17 @@ Switched on with the environment variable F1_TRACKER_TEST_SITE=1 on the test sit
     may carry real Discord webhooks and real players' addresses);
   * the site owner can load an encrypted site backup from the live site (Account -> Settings), to try new features
     on a copy of the real leagues. Nothing flows back to the live site.
+
+The free test service forgets its data when it restarts. To set it up again (4.0 Phase 0):
+    python -m f1tracker.testsite seed                 add a fictional league with a played season
+    python -m f1tracker.testsite import backup.plbk   load a live-site backup (asks for its passphrase, or reads
+                                                      F1_TRACKER_BACKUP_PASSPHRASE)
+Both refuse to run unless F1_TRACKER_TEST_SITE=1, so they can never touch the live site. On the hosted test site,
+the same import is on Account -> Settings.
 """
 
 import os
+import sys
 import shutil
 import tempfile
 import zipfile
@@ -58,3 +66,34 @@ def import_backup(blob, passphrase):
         return loaded
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+
+
+def seed():
+    """A fictional league with two player drivers and eight played rounds (the golden-fixture season)."""
+    if not on():
+        raise offsite.BackupError("Seeding is only possible on the test site (F1_TRACKER_TEST_SITE=1)")
+    from . import constants as C, golden
+    return golden.play(C.ENGINE_CURRENT, name="Test League (fictional)")
+
+
+def _main(argv):
+    import getpass
+    try:
+        if len(argv) == 2 and argv[1] == "seed":
+            print("Added league", seed())
+            return 0
+        if len(argv) == 3 and argv[1] == "import":
+            with open(argv[2], "rb") as fh:
+                blob = fh.read()
+            phrase = os.environ.get("F1_TRACKER_BACKUP_PASSPHRASE") or getpass.getpass("Passphrase: ")
+            print(f"Loaded {import_backup(blob, phrase)} leagues and every login.")
+            return 0
+    except offsite.BackupError as exc:
+        print(exc)
+        return 1
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv))

@@ -50,7 +50,7 @@ def _who(rule, view, app_module):
         body = inspect.getsource(view)
     except (OSError, TypeError):
         body = ""
-    if re.search(r"is_master|abort\(403\)", body):
+    if re.search(r"is_master|abort\(403\)|_may_enter_results|, 403", body):
         return "signed in (checks inside)"
     return "signed in"
 

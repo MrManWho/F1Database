@@ -24,6 +24,22 @@ A separate copy of Paddock Legacy for building and trying 4.0 while the live sit
    type REPLACE. Then sign in with your **live** username and password.
 3. Nothing goes back to the live site. Load it again whenever the test site has restarted.
 
+## Checking which leagues still use Calculation Version 2 (4.0 Phase 0)
+
+After loading the live backup: Account → Settings → *Calculation engine scan* (`/settings/engine-scan`). It reads every
+league file without changing anything and says whether any **active** season still uses Version 2. If one does, the
+Version 2 code stays until that season finishes; otherwise Version 2 can be retired from new calculations.
+
+## Resetting the test site from a command line
+
+The free service forgets its data on restart. With a shell (locally, or a paid instance), and only when
+`F1_TRACKER_TEST_SITE=1` is set:
+
+    python -m f1tracker.testsite seed                  a fictional league with eight played rounds
+    python -m f1tracker.testsite import backup.plbk    load a live-site backup (passphrase prompt, or
+                                                       F1_TRACKER_BACKUP_PASSPHRASE)
+    python -m f1tracker.phase0 scan                    the engine scan as text
+
 ## Release day
 
 When the season is over, `release-4.0` is merged into the live branch and pushed. The live site updates to 4.0
