@@ -237,3 +237,18 @@ def test_a_season_already_under_way_keeps_the_v3_tracker_and_the_next_season_swi
         assert not ai_track.uses_track(conn, sid)
         new = S.create_next_season(conn, sid, 2027)
         assert ai_track.uses_track(conn, new) and not ai_track.uses_track(conn, sid)
+
+
+def test_an_unfinished_round_page_shows_the_recommendation(app, master_client):
+    """4.0.0-alpha.3 regression: a round with results entered but not yet submitted crashed the round page."""
+    res = master_client.post("/careers/new", data={"name": "Open Round League", "year": "2026", "csrf_token": "tok",
+                                                   "player_name": ["Ana Silva"], "player_login": [""]})
+    token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    with storage.session(token) as conn:
+        ev = S.events(conn, S.current_season_id(conn))[0]
+    page = master_client.get(f"/career/{token}/weekend/{ev['id']}")
+    assert page.status_code == 200 and "F1Laps track baseline" in page.get_data(as_text=True)
+    with storage.session(token) as conn:
+        run_event(conn, S.get_event(conn, ev["id"]), difficulty=82, complete=False)
+    page = master_client.get(f"/career/{token}/weekend/{ev['id']}")
+    assert page.status_code == 200 and "AI 82 is recorded for this round" in page.get_data(as_text=True)

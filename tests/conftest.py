@@ -22,6 +22,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "weekends: run with race weekends at their real default (on)")
     config.addinivalue_line("markers", "engine3: new leagues use the real default calculation engine (3)")
     config.addinivalue_line("markers", "trackai: new seasons use the real default AI model (4.0 track-aware)")
+    config.addinivalue_line("markers", "pacerequired: race times are required on tracked rounds (the 4.0 default)")
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +66,15 @@ def ai_model_default(request, monkeypatch):
     from f1tracker import ai_track
     if not request.node.get_closest_marker("trackai"):
         monkeypatch.setattr(ai_track, "NEW_SEASON_MODEL", "v3")
+
+
+@pytest.fixture(autouse=True)
+def pace_required_default(request, monkeypatch):
+    """Tests written before 4.0.0-alpha.3 submit tracked rounds without race times. Mark @pytest.mark.pacerequired for
+    the real default (race times required on tracked rounds)."""
+    from f1tracker import ai3
+    if not request.node.get_closest_marker("pacerequired"):
+        monkeypatch.setattr(ai3, "PACE_REQUIRED_DEFAULT", "0")
 
 
 @pytest.fixture

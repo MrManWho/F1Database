@@ -616,6 +616,8 @@ def migrate(conn):
     v22 -> v23 (4.0): ai_track_recs, the track-aware AI recommendation shown before each round (frozen at the first
                submission; the AI actually used is kept separately). Created empty. Seasons already under way keep
                the v3 tracker until they finish; new seasons use the track-aware model (meta ai_model:<season>).
+    v23 -> v24 (4.0): pace_inputs.race_time and bench_race_time (a player's and their comparison AI driver's race
+               times; the race gap is worked out from them). Existing rows keep the gap they were given.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -731,6 +733,11 @@ def migrate(conn):
             conn.execute(f"ALTER TABLE events ADD COLUMN {col} {ddl}")
     if "position" not in _columns(conn, "team_goals"):
         conn.execute("ALTER TABLE team_goals ADD COLUMN position INTEGER")   # engine 3 finishing goals
+    pace_cols = _columns(conn, "pace_inputs")
+    for col in ("race_time", "bench_race_time"):
+        if col not in pace_cols:
+            # v24 (4.0): the two race times as typed; the gap is worked out from them
+            conn.execute(f"ALTER TABLE pace_inputs ADD COLUMN {col} REAL")
     if "career_status" not in _columns(conn, "drivers"):
         conn.execute("ALTER TABLE drivers ADD COLUMN career_status TEXT")
     if "team_orders" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}:

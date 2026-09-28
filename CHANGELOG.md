@@ -3,6 +3,22 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-alpha.3 · Race times made easy (test site)
+_Released September 28, 2026_
+> Type two race times instead of working out a gap, and every tracked round now includes them. Also brings over the
+> live site's maintenance mode and its fixes.
+
+### Highlights
+- **Just type the two race times.** Under Pace & conditions, enter your race time and your AI teammate's (or the driver you choose to compare with) straight from the game's results screen. The site works out the gap, and shows it as you type.
+- **Race times are part of every tracked round.** Before a round with a tracked AI level can be submitted, each player who finished enters their race times and laps, or ticks "Don't submit times" for that session. The final check says exactly who's missing. The Race Master can switch this off in League settings → Race weekends.
+- **Fixed:** the round page could fail to open for a round that had results entered but wasn't submitted yet.
+
+### Added
+- Maintenance mode, the sign-in fix and the fix for links landing on a page of code, from the live site (3.2–3.2.2).
+
+### Migration notes
+- League files move to format 24 (the two race times are stored alongside the gap). Existing lap-time entries keep the gap they were given.
+
 ## 4.0.0-alpha.2 · A track-aware AI recommendation (test site)
 _Released September 28, 2026_
 > One AI level for the whole weekend, starting from what players really use at each circuit in F1 26 and learning

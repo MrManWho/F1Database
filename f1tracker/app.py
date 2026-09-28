@@ -1834,7 +1834,8 @@ def register_routes(app):
                 out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
         return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
                 "drivers": [r for r in S.weekend_rows(conn, event["id"]) if not r["driver"]["is_player"]],
-                "fmt": ai3.format_time}
+                "fmt": ai3.format_time, "required": ai3.pace_required(conn),
+                "missing": ai3.missing_pace(conn, event, rows) if event["status"] != C.EVENT_COMPLETE else []}
 
     def _my_target(conn, ctx, event):
         """v2.4: this driver's target at a round: what they chose, or the three to choose from."""
@@ -1895,8 +1896,8 @@ def register_routes(app):
         if event["ai_difficulty"] is not None:
             rec["this_round"] = (f"AI {event['ai_difficulty']} is recorded for this round. It counts toward the "
                                  "recommendation once the round is completed.")
-            if not rec["history_rounds"]:
-                rec["reason"] = rec["this_round"]
+            if not rec.get("history_rounds") and rec.get("engine") != "track":
+                rec["reason"] = rec["this_round"]      # (the track-aware one always has a reason: its baseline)
         return rec
 
     @app.route("/career/<token>/weekend/<int:event_id>/reopen", methods=["POST"])
@@ -4298,6 +4299,7 @@ def register_routes(app):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
                 storage.set_meta(conn, "ai_track_history", "1" if request.form.get("ai_track_history") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
+                storage.set_meta(conn, "pace_required", "1" if request.form.get("pace_required") else "0")
                 smd = (request.form.get("sprint_min_distance") or "").strip()
                 if smd.isdigit() and 0 <= int(smd) <= 100:
                     storage.set_meta(conn, "sprint_min_distance", smd)
@@ -4388,6 +4390,7 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
+                    pace_required=ai3.pace_required(conn),
                     ai_track_history=storage.get_meta(conn, "ai_track_history", "1") == "1",
                     ai_track_on=ai_track.uses_track(conn, ctx["current_season_id"]), ai_snapshot=ai_track.snapshot(),
                     difficulty_mode=S.difficulty_mode(conn), sprint_min=_sprint_min(conn),

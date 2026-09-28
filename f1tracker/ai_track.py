@@ -138,7 +138,7 @@ def _wet(conn, event_id):
 
 def weekend_evidence(conn, event):
     """Each player's evidence for one completed, tracked round: {driver_id: {...}} (implied change in AI levels)."""
-    from . import ai3, calc3, services as S
+    from . import ai3, calc3
     ranks = calc3.round_ranks(conn, event)
     rows = [dict(r) for r in conn.execute("""SELECT r.*, d.is_player, d.name FROM results r
                                              JOIN drivers d ON d.id = r.driver_id WHERE r.event_id = ?""", (event["id"],))]
@@ -372,7 +372,8 @@ def recommendation(conn, before=None):
     event = target_event(conn, before)
     rec = {"current": None, "recommended": None, "direction": None, "average": None, "sample": [], "players": [],
            "sweet_spot": None, "note": None, "engine": "track", "model": MODEL, "excluded": [], "used": [],
-           "recent": [], "band": None, "reason": "", "evidence": "", "confidence": 0.0, "track": None}
+           "recent": [], "band": None, "reason": "", "evidence": "", "confidence": 0.0, "track": None,
+           "history_rounds": 0}
     last_used = conn.execute("""SELECT e.ai_difficulty FROM events e JOIN seasons s ON s.id = e.season_id
                                 WHERE e.status = ? AND e.ai_difficulty IS NOT NULL
                                 ORDER BY s.year DESC, e.round_number DESC LIMIT 1""", (C.EVENT_COMPLETE,)).fetchone()
@@ -383,6 +384,7 @@ def recommendation(conn, before=None):
     stored = frozen(conn, event["id"]) if event.get("status") == C.EVENT_COMPLETE else None
     t = stored["explanation"] if stored else compute(conn, event)
     rec["track"] = t
+    rec["history_rounds"] = t["weekends"]
     rec["recommended"] = t["recommended"]
     rec["confidence"] = t["confidence"]
     rec["band"] = S.difficulty_band(t["recommended"])

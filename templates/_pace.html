@@ -1,14 +1,16 @@
 {# v2.5: optional lap-time evidence for the AI tracker. Needs: ctx, event, pace. #}
 {% if pace %}
 <section class="card pace-card" id="pace" aria-labelledby="pace-title">
-  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">(optional, for the AI recommendation)</small></h2></div>
-  <p class="muted small">Lap times make the AI recommendation much sharper: it compares you with your AI teammate (or cars of similar speed), not just finishing positions.
-    Leave anything blank you don't have. Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">({{ 'required on tracked rounds' if pace.required else 'optional' }}, for the AI recommendation)</small></h2></div>
+  <p class="muted small">Type your race time and your AI teammate's (or the driver you pick to compare with) straight from the game's results screen: the site works out the gap. Race times compare you with the AI, not just finishing positions, so the recommendation is much sharper.
+    {% if pace.required %}<b>On a tracked round every player who finished needs their race times (and laps) before the round can be submitted</b>, unless you tick <em>Don't submit times</em> for that session.{% else %}Leave anything blank you don't have.{% endif %}
+    Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+  {% if pace.missing %}<div class="banner banner-warn" role="status"><b>Still needed before this round can be submitted:</b> race times for {% for n, s in pace.missing %}{{ n }} ({{ s }}){{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}
   {% if wx and wx.wet %}<p class="small">🌧️ This round's weather is recorded as wet or changing. If it made a player's session unrepresentative, tick <em>Wet or changing conditions</em> for them below. Nothing is ticked for you.</p>{% endif %}
   {% for item in pace.entries %}{% set r = item.row %}{% set p = item.input %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
-      {% if p %}<span class="muted small">· {% if p.untracked %}not tracked{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· nothing entered</span>{% endif %}</summary>
+      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% elif pace.required %}race times missing{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· nothing entered</span>{% endif %}</summary>
     {% if pace.can_edit %}
     <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -20,12 +22,18 @@
         <label>Or compare with <select name="comp_driver_id"><option value="">—</option>{% for d in pace.drivers %}<option value="{{ d.driver_id }}" {{ 'selected' if p and p.comp_driver_id == d.driver_id }}>{{ d.driver.name }} ({{ d.team.name }})</option>{% endfor %}</select></label>
         <label>Their qualifying time <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.300" inputmode="decimal"></label>
         {% endif %}
-        <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+        <label>Your race time <input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
+        <label>{{ "AI teammate's" if item.session == 'sprint' else "Their" }} race time <small class="muted">({{ 'AI teammate' if item.session == 'sprint' else 'AI teammate, or the driver picked above' }})</small>
+          <input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
         <label>Laps you completed <input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}"></label>
+        <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
+        <details class="small"><summary>Or type the gap yourself</summary>
+          <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+          <span class="muted">Only used when the two race times are blank (for example if one of you was lapped).</span></details>
       </div>
       <fieldset class="flag-grid"><legend class="small">Anything unusual?</legend>
         {% for key, f in pace.flags.items() %}<label class="check small"><input type="checkbox" name="flag_{{ key }}" value="1" {{ 'checked' if p and key in p.flag_list }}> {{ f[0] }}</label>{% endfor %}
-        <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Do not track this session</label>
+        <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Don't submit times for this session (it won't count toward the AI recommendation)</label>
       </fieldset>
       {% if ctx.is_master %}
       <label class="small">Representative? <select name="representative">
@@ -39,4 +47,22 @@
   </details>
   {% endfor %}
 </section>
+<script>
+/* 4.0: show the gap as the two race times are typed (the site works it out the same way when saved) */
+(function () {
+  function secs(v) { v = (v || "").trim().replace(",", "."); if (!v) return null; var t = 0, parts = v.split(":");
+    for (var i = 0; i < parts.length; i++) { var n = parseFloat(parts[i]); if (isNaN(n)) return null; t = t * 60 + n; } return t; }
+  document.querySelectorAll(".pace-form").forEach(function (f) {
+    var a = f.querySelector("[data-race-time]"), b = f.querySelector("[data-bench-time]"), out = f.querySelector("[data-gap-preview]"),
+        laps = f.querySelector("[name=laps]");
+    if (!a || !b || !out) return;
+    function show() { var x = secs(a.value), y = secs(b.value);
+      if (x === null || y === null) { out.textContent = ""; return; }
+      var gap = x - y, l = parseInt(laps.value, 10);
+      out.textContent = "Gap: " + (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s (" + (gap >= 0 ? "behind" : "ahead") + ")" +
+        (l > 0 ? ", " + (gap >= 0 ? "+" : "") + (gap / l).toFixed(2) + " s a lap" : ""); }
+    [a, b, laps].forEach(function (el) { el.addEventListener("input", show); }); show();
+  });
+})();
+</script>
 {% endif %}
