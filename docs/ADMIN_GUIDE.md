@@ -42,6 +42,34 @@ This is for site admins and Race Masters. The What's New screen and Help cover e
 - **Rollback:** the schema 22 change only adds a table and two triggers. A v3 build opens a schema 22 file normally
   (it ignores the extra table); the pre-upgrade backup is in `backups/` as usual.
 
+## New in 3.2: maintenance mode
+
+- **Where:** Account → Settings → System controls (the site owner only: the account made with the setup code, not
+  every site Race Master). Turning it on needs MAINTENANCE typed; turning it off asks for confirmation. Every change
+  (on, edit, off) is recorded in the site change record (`site_audit` in accounts.db, append-only; 4.0 keeps it).
+- **Settings** (accounts.db `settings`): `maintenance_enabled`, `maintenance_message`, `maintenance_expected_end`
+  (UTC), `maintenance_pause_deliveries`, `maintenance_enabled_at`, `maintenance_enabled_by`.
+- **What happens:** a check before every request lets only the signed-in site owner through, judged from the
+  account in the database (no address, cookie, parameter or secret link can get round it). Everyone else, including
+  sessions already signed in, gets the maintenance page: HTTP 503, `Retry-After` (seconds to the expected reopening,
+  or 600), `Cache-Control: no-store` and `Clear-Site-Data: "cache"`; the JSON API gets
+  `{"ok": false, "maintenance": true, ...}` with 503. Reachable by anyone: sign-in (and its two-step code), sign-out,
+  static files, the service worker, `/maintenance` and `/healthz`. A non-owner can sign in but still sees the closed
+  page.
+- **Open pages:** the service worker never serves pages from a cache and empties any cache on a maintenance answer;
+  an open page reloads to the closed page on its next request, when the tab is shown again, or within two minutes.
+- **Deliveries:** with *Pause outgoing deliveries* on, emails, phone alerts and Discord posts are saved in the outbox
+  and not sent (direct test sends are refused). Turning it off (or turning maintenance off with *Also resume*) sends
+  them, once each. The pause is its own switch: it can be used without closing the site.
+- **Emergency switch:** set `FORCE_MAINTENANCE=true` in Render (service → Environment). Maintenance is on while
+  either the setting or the variable is on; the website can't turn the variable off, and the owner's pages say when
+  it's set. Remove it and let Render redeploy to reopen.
+- **Still works for the owner:** backups, upgrades (league files upgrade when opened), integrity checks, restore and
+  every admin page.
+- **Controlled test after deploying (it's off by default):** open System controls, set a message, type MAINTENANCE and
+  turn it on; open the site in a private window (you should see the closed page) and check your own window still
+  works; turn it off and check the private window works again.
+
 ## Before and after the upgrade
 
 - **Nothing to do to upgrade.** Each league upgrades itself (schema 17 → 18) the first time it's opened, after writing

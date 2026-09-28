@@ -35,6 +35,9 @@ def save_settings(conn, url, results, news):
 
 
 def post(url, content):
+    from . import maintenance
+    if maintenance.deliveries_paused():
+        return False        # v3.2: paused by the site owner (queued posts wait in the outbox)
     from . import testsite
     if testsite.on():
         from . import ops

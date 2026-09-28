@@ -3,6 +3,8 @@
 {% block title %}{{ {'setup': 'First-time setup', 'register': 'Sign up', 'forgot': 'Forgot password', 'reset': 'New password', 'must_change': 'Choose your password'}.get(mode, 'Log in') }}{% endblock %}
 {% block plain %}
 <section class="auth-card card">
+  {% if site_closed %}<div class="banner banner-warn" role="note"><b>The site is closed for maintenance.</b> Only the site owner can use it right now. <a href="{{ url_for('maintenance_page') }}">Why?</a>
+    {% if user %}<p>You're signed in as <b>{{ user.username }}</b>, which isn't the site owner's account. Sign in below with the owner's account (this signs <b>{{ user.username }}</b> out on this device).</p>{% endif %}</div>{% endif %}
   <div class="kicker">{{ 'Welcome to the paddock' if mode == 'setup' else 'Paddock access' }}</div>
   {% if mode == 'setup' %}
   <h1>Create the site owner</h1>

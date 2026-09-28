@@ -1,3 +1,27 @@
+/* v3.2: maintenance mode. If the site closes while this page is open, any request it makes gets a 503 marked as
+   maintenance: reload so the closed page shows instead of a page that looks usable. The site owner (who can keep
+   working) is never reloaded. A light check every two minutes and on returning to the tab catches idle pages. */
+(function () {
+  if (!window.fetch) return;
+  // the site owner keeps working; sign-in pages stay put (reloading them would only show them again)
+  var owner = document.body && (document.body.hasAttribute("data-maint-owner") || document.body.hasAttribute("data-maint-open"));
+  var realFetch = window.fetch.bind(window);
+  function closed() { if (!owner) window.location.reload(); }
+  window.fetch = function () {
+    return realFetch.apply(null, arguments).then(function (res) {
+      if (res.status === 503 && res.headers.get("X-Paddock-Maintenance")) closed();
+      return res;
+    });
+  };
+  function check() {
+    if (owner || document.hidden) return;
+    realFetch("/healthz", { cache: "no-store", credentials: "same-origin" }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.maintenance) closed(); }).catch(function () {});
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
+  setInterval(check, 120000);
+})();
+
 (function () {
   "use strict";
   const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";

@@ -44,6 +44,9 @@ def send(recipients, subject, text, html=None):
     recipients = [r for r in dict.fromkeys(recipients) if r]
     if not recipients:
         return 0
+    from . import maintenance
+    if maintenance.deliveries_paused():
+        raise MailError("Outgoing email is paused by the site owner (System controls). Try again later.")
     from . import testsite
     if testsite.on():
         from . import ops

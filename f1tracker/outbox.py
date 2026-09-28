@@ -6,6 +6,9 @@ accounts.db first, sent in the background, and deleted as soon as it's sent. Any
 mail server that was briefly down) is sent again when the site starts and then about once a minute, up to
 MAX_ATTEMPTS times with a growing wait.
 
+v3.2: while the site owner has deliveries paused (System controls), messages are still saved here but nothing is
+sent; they go out, once each, when the pause is lifted.
+
 Rows hold what's needed to send (addresses, text, a Discord webhook URL) only until it's sent or given up, and the
 site never shows or exports them. Nothing is kept afterwards: the league delivery logs keep counts, never content.
 """
@@ -43,11 +46,18 @@ def enqueue(kind, payload, background=True):
         _table(conn)
         oid = conn.execute("INSERT INTO outbox(kind, payload, created_at, next_at) VALUES(?,?,?,?)",
                            (kind, json.dumps(payload), now, now)).lastrowid
+    if _paused():
+        return oid          # v3.2: deliveries are paused; it waits safely here until they resume
     if background:
         threading.Thread(target=process, args=(oid,), daemon=True).start()
     else:
         process(oid)
     return oid
+
+
+def _paused():
+    from . import maintenance
+    return maintenance.deliveries_paused()
 
 
 def _claim(oid):
@@ -82,6 +92,8 @@ def _send(kind, p):
 
 def process(oid):
     """Send one message; delete it when sent, or schedule a retry (dropped after MAX_ATTEMPTS)."""
+    if _paused():
+        return False        # v3.2: paused: left untouched (no attempt used) for when deliveries resume
     row = _claim(oid)
     if not row:
         return False
@@ -111,6 +123,8 @@ def pending():
 
 def drain(background=True):
     """Send everything that's due (left over from a restart, or waiting for a retry)."""
+    if _paused():
+        return 0
     now = time.time()
     with auth.accounts() as conn:
         _table(conn)

@@ -1747,3 +1747,8 @@ body.rail .nav-subtitle { display: none; }
 .bottom-nav a span, .bottom-nav button span { white-space: nowrap; font-size: .68rem; }
 /* the test-site banner sits beside the fixed sidebar on wide screens instead of covering its top */
 @media (min-width: 901px) { body.with-sidebar .test-site-banner { margin-left: var(--sidebar); } }
+/* v3.2: the site owner's reminder while maintenance mode is on */
+.maintenance-owner-banner { position: sticky; top: 0; z-index: 100; background: #e10600; color: #fff; text-align: center;
+  padding: .4rem .8rem; font-size: .85rem; }
+.maintenance-owner-banner a { color: #fff; text-decoration: underline; }
+@media (min-width: 901px) { body.with-sidebar .maintenance-owner-banner { margin-left: var(--sidebar); } }

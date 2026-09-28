@@ -48,6 +48,40 @@ _Released September 28, 2026_
 ### Migration notes
 - League files move to format 22 (a new, empty change record). A backup is taken automatically before the upgrade, as always. Nothing else changes and no numbers are recalculated.
 
+## 3.2.2 · No more landing on a page of code
+_Released September 28, 2026_
+> A fix for a bug introduced in 3.2.
+
+### Highlights
+- **Saving a race time (and other forms) takes you back to the right page again.** Since 3.2, when a save couldn't be completed (for example a time that wasn't accepted, or an expired session), the site could send you to a page full of code instead of back to where you were. It now always returns you to the page you came from, or to the league's Control Room.
+
+### Fixed
+- The app's background helper (the service worker) changed how page requests were passed on in 3.2, which made browsers report it as the page you came from. It now passes requests on unchanged, and the site never sends anyone "back" to a file that isn't a page.
+
+## 3.2.1 · Signing in during maintenance
+_Released September 28, 2026_
+> A fix for the site owner signing in while the site is closed.
+
+### Highlights
+- **Signing in during maintenance works smoothly.** The site owner's sign-in page no longer gets stuck showing What's New over and over when someone else was signed in on the same device.
+
+### Fixed
+- If someone else was already signed in on the same device while the site was closed for maintenance, the site owner's sign-in page kept popping up What's New and reloading instead of letting the owner sign in. The sign-in pages no longer show What's New or reload themselves, and they say which account is signed in so the owner can sign in over it.
+
+## 3.2 · Maintenance mode
+_Released September 28, 2026_
+> A safe way to close the site for a short while, for example during the move to 4.0. It's off unless the site owner turns it on.
+
+### Highlights
+- **A proper "we'll be right back" page.** When the site owner closes the site for maintenance, everyone sees a Paddock Legacy page saying the paddock is temporarily closed, with the owner's message and, if known, when it's expected to reopen. Nothing about your leagues or account is shown there.
+- **Your data is safe while it's closed.** Nothing can be changed except by the site owner, and emails, phone alerts and Discord posts can be held back and sent afterwards, each once.
+- **No stale pages.** If the site closes while you have it open, the page switches to the closed page instead of looking usable.
+
+### Added
+- Site owner: Account → Settings → **System controls**: turn maintenance mode on (type MAINTENANCE to confirm) or off, set the message and the expected reopening time, and pause or resume outgoing deliveries. Every change is recorded.
+- A red banner for the site owner while maintenance mode is on, and a health check at `/healthz` for uptime monitors.
+- An emergency switch for the host: the environment variable `FORCE_MAINTENANCE=true` closes the site whatever the setting says.
+
 ## 3.1.2 · Safer logins and messages
 _Released September 28, 2026_
 > Behind-the-scenes fixes that protect your logins, your messages and your backups.

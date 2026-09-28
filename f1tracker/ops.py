@@ -70,8 +70,9 @@ def health():
     except Exception as exc:     # pragma: no cover
         checks["data_dir"] = f"error: {type(exc).__name__}"
     ok = all(v == "ok" for v in checks.values())
+    from . import maintenance
     return ok, {"ok": ok, "version": C.APP_VERSION, "environment": environment(), "schema": C.SCHEMA_VERSION,
-                "checks": checks}
+                "maintenance": maintenance.active(), "checks": checks}
 
 
 # --------------------------------------------------------------------------- structured logs

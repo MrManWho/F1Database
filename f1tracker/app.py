@@ -13,7 +13,7 @@ import time
 from functools import wraps
 from pathlib import Path
 
-from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file,
+from flask import (Flask, abort, flash, g, jsonify, make_response, redirect, render_template, request, send_file,
                    session, url_for)
 
 import random
@@ -22,7 +22,8 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, migration, offsite, ops, stats, testsite, ultimatums
+from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
+               ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
 from . import constants as C
 from .auth import AuthError
@@ -39,7 +40,8 @@ def _base_dir():
 PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "register_resend", "forgot",
                     "reset_password", "login_code", "privacy_page", "terms_page", "public_page", "public_calendar", "public_calendar_ics", "public_standings", "public_round",
                     "public_driver", "public_team", "public_records", "public_news", "public_incidents", "service_worker", "web_manifest", "avatar", "unsubscribe",
-                    "home", "directory", "report_league", "help_page", "changelog_page", "demo_start", "healthz"}
+                    "home", "directory", "report_league", "help_page", "changelog_page", "demo_start",
+                    "maintenance_page", "healthz"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
 AUDIT_LABELS = {
@@ -146,6 +148,11 @@ def register_hooks(app):
             elif g.user["is_steward"]:  # an old account-wide Scorekeeper: move it into their leagues first
                 roles.unify_legacy_scorekeepers()
                 g.user = auth.get_user(session["user"])
+        # v3.2: maintenance mode, checked on every request before any route runs. Only the real site owner (from
+        # their account, never an address, cookie, parameter or link) gets past it; everyone else, including
+        # sessions that were already signed in, gets the maintenance page or a 503 for the API.
+        if maintenance.active() and not maintenance.allowed(g.user, endpoint):
+            return maintenance_response()
         if g.user and g.user.get("must_change_password") and endpoint not in ("must_change_password", "logout"):
             # v3.1.1: the site owner reset this password; the person chooses their own before anything else
             if request.path.startswith("/api/"):
@@ -166,6 +173,18 @@ def register_hooks(app):
                 flash("Your session expired. Please try again.", "error")
                 return redirect(request.referrer or url_for("home"))
         return None
+
+    @app.after_request
+    def never_back_to_a_file(response):
+        """v3.2.2: a "back to where you were" redirect must land on a page, never on the service worker, the app
+        manifest, a static file, the health check or the API (a browser can report one of those as the referrer)."""
+        if 300 <= response.status_code < 400 and response.location:
+            from urllib.parse import urlsplit
+            path = urlsplit(response.location).path
+            if path in ("/sw.js", "/manifest.webmanifest", "/healthz") or path.startswith(("/static/", "/api/")):
+                token = (request.view_args or {}).get("token")
+                response.location = url_for("dashboard", token=token) if token else url_for("home")
+        return response
 
     @app.after_request
     def vendor_files(response):
@@ -236,16 +255,30 @@ def register_hooks(app):
                 key = push.public_key()
             except Exception:
                 app.logger.exception("push keys unavailable")
+        owner_view = None
+        if g.get("user"):
+            try:     # v3.2: the site owner sees a banner while maintenance is on
+                st = maintenance.state()
+                owner_view = st if st["active"] and maintenance.is_owner(g.user) else None
+            except Exception:
+                app.logger.exception("maintenance state unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
                 "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new(),
                 "test_site": testsite.on(), "environment": ops.environment(),
-                "environment_label": ops.environment_label()}
+                "environment_label": ops.environment_label(),
+                "maintenance_owner": owner_view,
+                "site_closed": request.endpoint in ("login", "login_code") and maintenance.active(),
+                "maintenance_open_page": request.endpoint in maintenance.OPEN_ENDPOINTS}
 
     def _whats_new():
         """This version's highlights, once per account, on ordinary page views only."""
         user = g.get("user")
         if not user or user.get("is_demo") or request.method != "GET" or request.path.startswith("/api/") \
                 or request.endpoint in ("changelog_page", "whats_new_ack", "must_change_password"):
+            return None
+        # v3.2.1: never on the sign-in pages, and never for someone maintenance mode is keeping out (agreeing would be
+        # blocked, and the page would keep coming back to the pop-up)
+        if request.endpoint in maintenance.OPEN_ENDPOINTS or (maintenance.active() and not maintenance.is_owner(user)):
             return None
         from . import changelog, whatsnew
         entry = changelog.entry(_base_dir(), C.APP_VERSION)
@@ -283,6 +316,48 @@ def _discord_news(items):
                 discord.send_later(cfg["url"], messages)
         except Exception:
             pass
+
+
+def wants_json():
+    return (request.path.startswith("/api/") or request.is_json
+            or request.headers.get("X-Requested-With") in ("fetch", "XMLHttpRequest")
+            or request.accept_mimetypes.best_match(["text/html", "application/json"]) == "application/json")
+
+
+def no_store(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+def maintenance_response():
+    """v3.2: the maintenance page (HTML) or a structured 503 (API): never cached, with Retry-After."""
+    st = maintenance.state()
+    wait = maintenance.retry_after(st["expected_end"])
+    message = st["message"] or maintenance.DEFAULT_MESSAGE
+    if wants_json():
+        response = jsonify(ok=False, maintenance=True, error="Paddock Legacy is temporarily closed for maintenance.",
+                           message=message, expected_end=st["expected_end"] or None, retry_after=wait)
+    else:
+        response = make_response(render_template("maintenance.html", message=message, expected_end=st["expected_end"]))
+        # an old copy of a page must never come back from a browser or app cache while the site is closed
+        response.headers["Clear-Site-Data"] = '"cache"'
+    response.status_code = 503
+    response.headers["Retry-After"] = str(wait)
+    response.headers["X-Paddock-Maintenance"] = "1"
+    return no_store(response)
+
+
+def owner_required(fn):
+    """v3.2: the site owner only (users.is_owner), not every site Race Master."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not maintenance.is_owner(g.user):
+            abort(403)
+        return fn(*args, **kwargs)
+    wrapper.access = "master"
+    return wrapper
 
 
 def is_master():
@@ -1152,7 +1227,7 @@ def register_routes(app):
                 f["devices"] = len(security.sessions(f["username"]))
                 f["leagues"] = [c["name"] for c in careers if f["username"] in c["members"]]
                 f["lock"] = auth.lock_status(f["username"])
-        return render_template("accounts.html", my_leagues=mine,
+        return render_template("accounts.html", is_site_owner=maintenance.is_owner(g.user), my_leagues=mine,
                                anyone_creates=onboarding.creation_policy() == "everyone",
                                reports=moderation.reports() if is_master() else [], reasons=moderation.REASONS,
                                delisted=moderation.delisted() if is_master() else set(), signups=auth.signups_allowed(),
@@ -4339,6 +4414,8 @@ def register_routes(app):
         cfg = discord.settings(conn)
         if not cfg["url"]:
             raise ValidationError("Save a Discord webhook URL first")
+        if maintenance.deliveries_paused():
+            raise ValidationError("Outgoing messages are paused by the site owner, so nothing was sent to Discord.")
         try:
             discord.post(cfg["url"], f"👋 Paddock Legacy is connected to **{ctx['career_name']}**.")
         except Exception as exc:
@@ -4735,6 +4812,53 @@ def register_routes(app):
         except AuthError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
+
+    # ---------------------------------------------------------------- v3.2: maintenance mode
+    @app.route("/maintenance")
+    def maintenance_page():
+        if maintenance.active():
+            return maintenance_response()
+        return redirect(url_for("home"))
+
+    @app.route("/settings/system", methods=["GET", "POST"])
+    @owner_required
+    def system_controls():
+        """Site owner only: maintenance mode and pausing outgoing deliveries."""
+        me = g.user["username"]
+        if request.method == "POST":
+            action = request.form.get("action")
+            try:
+                expected = maintenance.parse_expected(request.form.get("expected_end"), request.form.get("tz_offset"))
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("system_controls"))
+            pause = request.form.get("pause_deliveries") == "1"
+            message = request.form.get("message") or ""
+            if action == "enable":
+                if (request.form.get("confirm") or "").strip() != maintenance.CONFIRM_WORD:
+                    flash(f"Type {maintenance.CONFIRM_WORD} to turn maintenance mode on. Nothing was changed.", "error")
+                    return redirect(url_for("system_controls"))
+                maintenance.update(me, enabled=True, message=message, expected_end=expected, pause=pause)
+                flash("Maintenance mode is on. Only you can use the site until you turn it off.", "success")
+            elif action == "disable":
+                resume = request.form.get("resume_deliveries") == "1"
+                maintenance.update(me, enabled=False, pause=False if resume else None)
+                if resume:
+                    outbox.drain()      # anything held back goes out now, once each
+                flash("Maintenance mode is off. Everyone can use the site again."
+                      + (" Deliveries have resumed." if resume else ""), "success")
+            elif action == "save":
+                changes = maintenance.update(me, message=message, expected_end=expected, pause=pause)
+                if not pause:
+                    outbox.drain()
+                flash("Saved." if changes else "Nothing changed.", "success")
+            else:
+                abort(400)
+            return redirect(url_for("system_controls"))
+        return no_store(make_response(render_template(
+            "system_controls.html", st=maintenance.state(), history=maintenance.history(),
+            names={u["username"]: u["display_name"] for u in auth.list_users()}, waiting=outbox.pending(),
+            confirm_word=maintenance.CONFIRM_WORD, default_message=maintenance.DEFAULT_MESSAGE)))
 
     # ---------------------------------------------------------------- app install & phone alerts
     @app.route("/sw.js")
