@@ -24,10 +24,22 @@ self.addEventListener("notificationclick", function (event) {
   }));
 });
 
-/* Network first; if you're offline, show a simple message instead of the browser's error page. */
+/* v3.2: pages are never cached by the app, and when the site answers "closed for maintenance" any cache that
+   might exist is emptied, so an old page that looks usable can't come back. */
+function clearCaches() {
+  if (!self.caches) return Promise.resolve();
+  return caches.keys().then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); });
+}
+
+/* Network first (never from a cache); if you're offline, show a simple message instead of the browser's error page. */
 self.addEventListener("fetch", function (event) {
   if (event.request.mode !== "navigate") return;
-  event.respondWith(fetch(event.request).catch(function () {
+  event.respondWith(fetch(event.request, { cache: "no-store" }).then(function (res) {
+    if (res.status === 503 && res.headers.get("X-Paddock-Maintenance")) {
+      return clearCaches().then(function () { return res; });
+    }
+    return res;
+  }).catch(function () {
     return new Response("<meta name=viewport content='width=device-width'><body style='font-family:sans-serif;background:#07090f;color:#e8ecf3;padding:2rem'>" +
       "<h1>You're offline</h1><p>Reconnect and pull to refresh.</p>", { headers: { "Content-Type": "text/html" } });
   }));

@@ -145,6 +145,13 @@
   {% endif %}
 </section>
 
+{% if is_site_owner %}
+<section class="card" id="system">
+  <h2>System controls</h2>
+  <p class="muted small">Maintenance mode (close the site to everyone but you, for example during an upgrade) and pausing outgoing emails, phone alerts and Discord posts.</p>
+  <a class="btn btn-ghost" href="{{ url_for('system_controls') }}">Open system controls</a>
+</section>
+{% endif %}
 <section class="card" id="leagues">
   <h2>Leagues on this site</h2>
   <p class="muted small">Only the site admin sees this. Every league on the server with its ID, including demo leagues and any that can't be opened.</p>

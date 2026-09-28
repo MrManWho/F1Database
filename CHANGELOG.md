@@ -3,6 +3,20 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2 · Maintenance mode
+_Released September 28, 2026_
+> A safe way to close the site for a short while, for example during the move to 4.0. It's off unless the site owner turns it on.
+
+### Highlights
+- **A proper "we'll be right back" page.** When the site owner closes the site for maintenance, everyone sees a Paddock Legacy page saying the paddock is temporarily closed, with the owner's message and, if known, when it's expected to reopen. Nothing about your leagues or account is shown there.
+- **Your data is safe while it's closed.** Nothing can be changed except by the site owner, and emails, phone alerts and Discord posts can be held back and sent afterwards, each once.
+- **No stale pages.** If the site closes while you have it open, the page switches to the closed page instead of looking usable.
+
+### Added
+- Site owner: Account → Settings → **System controls**: turn maintenance mode on (type MAINTENANCE to confirm) or off, set the message and the expected reopening time, and pause or resume outgoing deliveries. Every change is recorded.
+- A red banner for the site owner while maintenance mode is on, and a health check at `/healthz` for uptime monitors.
+- An emergency switch for the host: the environment variable `FORCE_MAINTENANCE=true` closes the site whatever the setting says.
+
 ## 3.1.2 · Safer logins and messages
 _Released September 28, 2026_
 > Behind-the-scenes fixes that protect your logins, your messages and your backups.

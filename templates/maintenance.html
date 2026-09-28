@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Temporarily closed · Paddock Legacy</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <meta name="theme-color" content="#07090f">
+  <style>
+    :root { color-scheme: dark; --bg: #07090f; --panel: #111723; --line: #222c3d; --text: #e8ecf3; --muted: #9ba5b6; --red: #e10600; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background:
+      radial-gradient(1200px 500px at 50% -10%, rgba(225, 6, 0, .18), transparent 60%), var(--bg);
+      color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5; }
+    main { width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 32px 28px; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); text-align: center; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .brand svg { width: 44px; height: 44px; }
+    .brand strong { font-size: 1rem; letter-spacing: .12em; text-transform: uppercase; }
+    .flag { height: 6px; width: 100%; margin: 0 0 24px; border-radius: 3px;
+      background: repeating-linear-gradient(90deg, #fff 0 12px, #111 12px 24px); opacity: .85; }
+    h1 { font-size: 1.6rem; margin: 0 0 12px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    .message { color: var(--text); font-size: 1.05rem; white-space: pre-line; }
+    .reopen { display: inline-block; padding: 8px 14px; border-radius: 999px; background: rgba(225, 6, 0, .14);
+      color: #ffb3b0; font-weight: 600; margin-bottom: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 8px; }
+    button, .link { min-height: 44px; padding: 10px 18px; border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
+    button { background: var(--red); color: #fff; border: 1px solid var(--red); }
+    .link { color: var(--text); border: 1px solid var(--line); text-decoration: none; display: inline-flex; align-items: center; }
+    button:focus-visible, .link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+    small { display: block; margin-top: 20px; color: var(--muted); font-size: .8rem; }
+    @media (prefers-reduced-motion: no-preference) { .flag { animation: wave 3s ease-in-out infinite alternate; } }
+    @keyframes wave { from { opacity: .6; } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy logo"><rect width="32" height="32" rx="8" fill="#e10600"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg>
+    <strong>Paddock Legacy</strong>
+  </div>
+  <div class="flag" aria-hidden="true"></div>
+  <h1>The paddock is temporarily closed</h1>
+  <p class="message">{{ message }}</p>
+  {% if expected_end %}<p class="reopen">Expected to reopen <time datetime="{{ expected_end }}" id="reopen">{{ expected_end|replace('T', ' ')|replace('+00:00', ' UTC') }}</time></p>{% endif %}
+  <div class="actions">
+    <button type="button" id="refresh">Check again</button>
+    <a class="link" href="{{ url_for('login') }}">Site owner sign in</a>
+  </div>
+  <small aria-live="polite" id="auto">This page checks again automatically every two minutes.</small>
+</main>
+<script>
+(function () {
+  var t = document.getElementById("reopen");
+  if (t) { try { t.textContent = new Date(t.getAttribute("datetime")).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch (e) {} }
+  function again() { window.location.replace(window.location.pathname === "/maintenance" ? "/" : window.location.href); }
+  document.getElementById("refresh").addEventListener("click", again);
+  setTimeout(again, 120000);
+})();
+</script>
+</body>
+</html>

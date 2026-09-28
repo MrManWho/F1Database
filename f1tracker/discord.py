@@ -35,6 +35,9 @@ def save_settings(conn, url, results, news):
 
 
 def post(url, content):
+    from . import maintenance
+    if maintenance.deliveries_paused():
+        return False        # v3.2: paused by the site owner (queued posts wait in the outbox)
     body = json.dumps({"content": content[:1990], "allowed_mentions": {"parse": []}}).encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": "application/json", "User-Agent": "PaddockLegacy"})

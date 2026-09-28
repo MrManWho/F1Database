@@ -1700,3 +1700,8 @@ body.rail .nav-subtitle { display: none; }
 .weather-form .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .6rem; margin-bottom: .6rem; }
 .weather-icon { margin-left: .25rem; }
 .round-hero.stage-complete .round-badge { color: #06140c; }   /* v3.1: readable on the green "complete" badge */
+/* v3.2: the site owner's reminder while maintenance mode is on */
+.maintenance-owner-banner { position: sticky; top: 0; z-index: 100; background: #e10600; color: #fff; text-align: center;
+  padding: .4rem .8rem; font-size: .85rem; }
+.maintenance-owner-banner a { color: #fff; text-decoration: underline; }
+@media (min-width: 901px) { body.with-sidebar .maintenance-owner-banner { margin-left: var(--sidebar); } }

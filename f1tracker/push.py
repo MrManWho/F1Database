@@ -91,6 +91,9 @@ def send(usernames, title, body, url=None):
     """Deliver to every device these people turned alerts on for. Returns how many were delivered."""
     if not available():
         return 0
+    from . import maintenance
+    if maintenance.deliveries_paused():
+        return 0            # v3.2: paused by the site owner (queued alerts wait in the outbox)
     from pywebpush import WebPushException, webpush
     private, _ = vapid_keys()
     from . import mailer
