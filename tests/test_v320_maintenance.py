@@ -267,3 +267,34 @@ def test_a_site_without_an_owner_mark_falls_back_to_the_first_site_race_master(a
     auth.create_user("first", "First", "password1", is_master=True)
     auth.create_user("second", "Second", "password1", is_master=True)
     assert maintenance.is_owner(auth.get_user("first")) and not maintenance.is_owner(auth.get_user("second"))
+
+
+# --------------------------------------------------------------------------- v3.2.1: the sign-in loop
+
+@pytest.mark.whatsnew
+def test_signing_in_as_the_owner_from_a_blocked_session_has_no_pop_up_loop(app, site):
+    """A non-owner is signed in when maintenance starts. The owner's sign-in page must not show the What's New
+    pop-up (agreeing is blocked, so it came straight back), and signing in as the owner must work."""
+    c = _client(app, "drv")
+    _enable(site["owner"])
+    page = c.get("/login")
+    html = page.get_data(as_text=True)
+    assert page.status_code == 200 and 'id="whats-new"' not in html
+    assert "isn't the site owner's account" in html and "data-maint-open" in html
+    assert _is_closed(c.post("/whats-new", data={"csrf_token": "tok", "agree": "1"}))     # still blocked for them
+    res = c.post("/login", data={"username": "devon", "password": "password1", "csrf_token": "tok"})
+    assert res.status_code == 302
+    with c.session_transaction() as sess:
+        sess["csrf"] = "tok"
+    dash = c.get(f"/career/{site['token']}/dashboard")
+    assert dash.status_code == 200
+    if 'id="whats-new"' in dash.get_data(as_text=True):           # the owner can agree to it, once
+        assert c.post("/whats-new", data={"csrf_token": "tok", "agree": "1"}).status_code in (200, 302)
+        assert 'id="whats-new"' not in c.get(f"/career/{site['token']}/dashboard").get_data(as_text=True)
+
+
+@pytest.mark.whatsnew
+def test_no_pop_up_on_sign_in_pages_or_for_people_kept_out(app, site):
+    _enable(site["owner"])
+    assert 'id="whats-new"' not in app.test_client().get("/login").get_data(as_text=True)
+    assert 'id="whats-new"' not in _client(app, "rm").get("/login").get_data(as_text=True)

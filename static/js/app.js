@@ -3,7 +3,8 @@
    working) is never reloaded. A light check every two minutes and on returning to the tab catches idle pages. */
 (function () {
   if (!window.fetch) return;
-  var owner = document.body && document.body.hasAttribute("data-maint-owner");
+  // the site owner keeps working; sign-in pages stay put (reloading them would only show them again)
+  var owner = document.body && (document.body.hasAttribute("data-maint-owner") || document.body.hasAttribute("data-maint-open"));
   var realFetch = window.fetch.bind(window);
   function closed() { if (!owner) window.location.reload(); }
   window.fetch = function () {

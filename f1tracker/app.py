@@ -237,13 +237,18 @@ def register_hooks(app):
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
                 "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new(),
                 "maintenance_owner": owner_view,
-                "site_closed": request.endpoint in ("login", "login_code") and maintenance.active()}
+                "site_closed": request.endpoint in ("login", "login_code") and maintenance.active(),
+                "maintenance_open_page": request.endpoint in maintenance.OPEN_ENDPOINTS}
 
     def _whats_new():
         """This version's highlights, once per account, on ordinary page views only."""
         user = g.get("user")
         if not user or user.get("is_demo") or request.method != "GET" or request.path.startswith("/api/") \
                 or request.endpoint in ("changelog_page", "whats_new_ack", "must_change_password"):
+            return None
+        # v3.2.1: never on the sign-in pages, and never for someone maintenance mode is keeping out (agreeing would be
+        # blocked, and the page would keep coming back to the pop-up)
+        if request.endpoint in maintenance.OPEN_ENDPOINTS or (maintenance.active() and not maintenance.is_owner(user)):
             return None
         from . import changelog, whatsnew
         entry = changelog.entry(_base_dir(), C.APP_VERSION)

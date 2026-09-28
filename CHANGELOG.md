@@ -3,6 +3,16 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.1 · Signing in during maintenance
+_Released September 28, 2026_
+> A fix for the site owner signing in while the site is closed.
+
+### Highlights
+- **Signing in during maintenance works smoothly.** The site owner's sign-in page no longer gets stuck showing What's New over and over when someone else was signed in on the same device.
+
+### Fixed
+- If someone else was already signed in on the same device while the site was closed for maintenance, the site owner's sign-in page kept popping up What's New and reloading instead of letting the owner sign in. The sign-in pages no longer show What's New or reload themselves, and they say which account is signed in so the owner can sign in over it.
+
 ## 3.2 · Maintenance mode
 _Released September 28, 2026_
 > A safe way to close the site for a short while, for example during the move to 4.0. It's off unless the site owner turns it on.
