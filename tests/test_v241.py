@@ -30,7 +30,8 @@ def test_the_league_chooses_how_rounds_are_judged(app, master_client):
         assert S.difficulty_mode(conn) == "car"          # unknown values are ignored
     ana = app.test_client()
     login(ana, "ana")
-    assert "Against the whole grid" in ana.get("/help").get_data(as_text=True)
+    # 4.0: every league uses the latest calculations, so Help no longer describes this older setting
+    assert "Against the whole grid" not in ana.get("/help").get_data(as_text=True)
 
 
 def test_upgrading_from_2_4_shows_the_2_4_1_note(app, master_client):

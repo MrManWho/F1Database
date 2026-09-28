@@ -8,7 +8,7 @@
   <div class="press-grid">
   {% for q in press.questions %}
     <form method="post" action="{{ url_for('press_answer', token=ctx.token, event_id=press.event.id) }}" class="press-q">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="question" value="{{ q.key }}">{% if request.endpoint == 'press_page' %}<input type="hidden" name="back" value="press">{% endif %}
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="question" value="{{ q.key }}">{% if request.endpoint == 'press_page' %}<input type="hidden" name="back" value="press">{% endif %}{% if press_next is defined and press_next %}<input type="hidden" name="next" value="{{ press_next }}">{% endif %}
       <p class="press-question">“{{ q.text }}”</p>
       {% for a in q.answers %}
       <button class="btn btn-sm press-answer {{ 'chosen' if q.answered == a.key }}" name="answer" value="{{ a.key }}" {{ 'disabled' if q.answered }}>{{ a.text }}</button>

@@ -25,6 +25,7 @@ from . import (battle, circuits, delivery, demo, gates, league_profile, library,
 from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
                ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
+from . import workspace
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -1790,7 +1791,15 @@ def register_routes(app):
             session[f"season_{ctx['token']}"] = season["id"]
         evs = S.events(conn, season["id"])
         idx = next(i for i, e in enumerate(evs) if e["id"] == event_id)
-        return page("weekend.html", ctx, event=event, rows=S.weekend_rows(conn, event_id),
+        rows = S.weekend_rows(conn, event_id)
+        wk = _weekend_panel(conn, ctx, event)
+        gate = gates.status(conn, event_id)
+        my_target = _my_target(conn, ctx, event)
+        hub = _hub(conn, ctx, event, full=True)
+        ws = workspace.build(conn, ctx, event, rows, wk, gate, my_target, hub,
+                             requested=request.args.get("stage"), requested_session=request.args.get("session"))
+        return page("weekend.html", ctx, event=event, rows=rows, ws=ws,
+                    debrief=workspace.debrief(conn, ctx, event), circuit=circuits.lookup(event["name"], event["location"]),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
@@ -1800,12 +1809,12 @@ def register_routes(app):
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
                     distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
                     status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
-                    pace=_pace_panel(conn, ctx, event), hub=_hub(conn, ctx, event, full=True),
+                    pace=_pace_panel(conn, ctx, event), hub=hub,
                     wx=_weather_panel(conn, ctx, event),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
-                    gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id),
-                    wk=_weekend_panel(conn, ctx, event), my_target=_my_target(conn, ctx, event),
+                    gate=gate, reminded=gates.reminded(conn, event_id),
+                    wk=wk, my_target=my_target,
                     can_reset=ctx["is_master"] and not raceweek.reset_blocker(conn, event))
 
     def _sprint_min(conn):
@@ -1963,6 +1972,36 @@ def register_routes(app):
         if not nxt:
             abort(404)
         return redirect(url_for("weekend", token=ctx["token"], event_id=nxt["id"]))
+
+    # ------------------------------------------------------------------ 4.0 destinations
+    @app.route("/career/<token>/race-weekend")
+    @career_page()
+    def race_weekend(conn, ctx):
+        """Race Weekend: the workspace for the current round (the next one not yet complete, else the last)."""
+        sid = ctx["current_season_id"] or ctx["season"]["id"]
+        nxt = S.next_incomplete_event(conn, sid) or (S.events(conn, sid) or [None])[-1]
+        if not nxt:
+            flash("There are no rounds on the calendar yet.", "info")
+            return redirect(url_for("seasons_page", token=ctx["token"]))
+        args = {k: v for k, v in request.args.items() if k in ("stage", "session")}
+        return redirect(url_for("weekend", token=ctx["token"], event_id=nxt["id"], **args))
+
+    @app.route("/career/<token>/championship")
+    @career_page()
+    def championship(conn, ctx):
+        return redirect(url_for("standings_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/my-career")
+    @career_page()
+    def my_career(conn, ctx):
+        if not ctx["my_driver"]:
+            return redirect(url_for("more_page", token=ctx["token"]))
+        return redirect(url_for("garage", token=ctx["token"]))
+
+    @app.route("/career/<token>/more")
+    @career_page()
+    def more_page(conn, ctx):
+        return page("more.html", ctx)
 
     @app.route("/career/<token>/drivers")
     @career_page()
@@ -2667,7 +2706,9 @@ def register_routes(app):
                                   if effect < 0 else "Nobody reads much into it."), "success")
         if request.form.get("back") == "press":
             return redirect(url_for("press_page", token=ctx["token"]))
-        return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
+        if _safe_next(request.form.get("next")):          # 4.0: answered in the workspace's Debrief
+            return redirect(request.form.get("next"))
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=debrief#press")
 
     @app.route("/career/<token>/target/<int:event_id>/accept", methods=["POST"])
     @career_page()
@@ -3972,14 +4013,12 @@ def register_routes(app):
                 before = S.get_event(conn, event_id)
                 if not before:
                     return jsonify(ok=False, error="Event not found"), 404
-                if payload.get("mark_complete") and before["status"] == C.EVENT_COMPLETE:
-                    # A repeated "Submit weekend" (double tap, retry after a lost reply): already done, nothing reruns.
-                    return jsonify(ok=True, complete=True, already_submitted=True, revision=before["revision"],
-                                   market_opened=False,
-                                   summary_url=url_for("race_summary", token=token, event_id=event_id))
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
-                    return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
-                                   "can reopen or change it now."), 403
+                    # A repeated "Submit weekend" (double tap, a retry after a lost reply) lands here: it's already
+                    # done, nothing reruns, and the page can simply move on to the Debrief.
+                    return jsonify(ok=False, locked=True, already_submitted=bool(payload.get("mark_complete")),
+                                   error="This weekend has been submitted. Only the Race Master can reopen or change "
+                                   "it now."), 403
                 blocked = raceweek.results_blocked(conn, before)
                 if blocked:
                     return jsonify(ok=False, gated=True, not_started=True, error=blocked), 423

@@ -287,7 +287,7 @@ def test_round_page_is_its_own_round(app, master_client):
         ev = S.events(conn, S.current_season_id(conn))[0]
         run_event(conn, ev)
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
-    assert 'class="round-badge"' in page and 'data-tab="results"' in page and "Reset weekend" in page
+    assert 'class="round-badge"' in page and 'data-stage-link="sessions"' in page and "Reset weekend" in page  # 4.0 workspace
     assert "Reset weekend" not in _client(app, "kim").get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
 
 

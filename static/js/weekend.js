@@ -154,6 +154,7 @@
     ["all", "q", "s", "r"].forEach(function (k) { table.classList.toggle("only-" + k, k === key && k !== "all"); });
     sessionTabs.forEach(function (t) { const on = t.dataset.session === key; t.classList.toggle("is-on", on); t.setAttribute("aria-pressed", on ? "true" : "false"); });
     try { localStorage.setItem(SESSION_KEY, key); } catch (e) { /* private mode */ }
+    document.dispatchEvent(new CustomEvent("f1:session", { detail: key }));
   }
   sessionTabs.forEach(function (t) { t.addEventListener("click", function () { showSession(t.dataset.session); }); });
   (function () {
@@ -161,8 +162,16 @@
     try { saved = localStorage.getItem(SESSION_KEY); } catch (e) { /* private mode */ }
     const narrow = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
     const valid = sessionTabs.some(function (t) { return t.dataset.session === saved; });
+    // 4.0 workspace: it opens at the session that still needs doing (worked out on the server)
+    const preset = table.dataset.sessionDefault;
+    if (preset && sessionTabs.some(function (t) { return t.dataset.session === preset; })) { showSession(preset); return; }
     showSession(valid ? saved : (narrow ? "r" : "all"));
   })();
+  // 4.0: the workspace moves between sessions and stages; it flushes any unsaved edit first (never submits).
+  window.F1Weekend = {
+    showSession: showSession,
+    flush: function () { return (typeof dirty !== "undefined" && (dirty || saving)) ? save(false) : Promise.resolve(true); }
+  };
   const search = document.getElementById("entry-search");
   if (search) search.addEventListener("input", function () {
     const q = search.value.trim().toLowerCase();
@@ -255,6 +264,7 @@
     return send(sent).then(function (res) {
       saving = false;
       if (res.httpStatus === 409 && res.conflict) { resolveConflict(res.server); return false; }
+      if (res.httpStatus === 403 && res.locked && markComplete && res.already_submitted) { dirty = false; return { ok: true, already_submitted: true }; }
       if (res.httpStatus === 403 && res.locked) { lockOut(res.error); return false; }
       if (res.httpStatus === 423 && res.gated) {
         // The round is waiting on players (round gates). Keep the edits on this device; reload shows the checklist.
@@ -668,7 +678,7 @@
         }).join("") + "</ul></div>";
     }
     html += '<div class="check-block" role="alert"><h3 class="mini-head">⛔ Blocking errors (' + blocking.length + ")</h3>" +
-      (blocking.length ? "<ul>" + blocking.map(function (b) { return "<li>" + esc(b) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
+      (blocking.length ? "<ul>" + blocking.map(function (b) { return "<li>" + esc(b) + (window.F1Workspace ? window.F1Workspace.fixButton(b) : "") + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
     html += '<div class="check-warn"><h3 class="mini-head">⚠️ Warnings (' + warnings.length + ")</h3>" +
       (warnings.length ? "<ul>" + warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
     if (check.lock_notice) html += '<p class="lock-notice small"><span aria-hidden="true">🔒</span> ' + esc(check.lock_notice) + "</p>";
@@ -727,7 +737,8 @@
       forget();
       submitDlg.close();
       window.F1.toast("Results submitted. Standings and records have been recalculated.", "success");
-      setTimeout(function () { window.location.href = (res.summary_url || table.dataset.summaryUrl) + "?submitted=1"; }, 700);
+      // 4.0: straight on to the Debrief stage of the workspace
+      setTimeout(function () { window.location.href = table.dataset.summaryUrl || ((res.summary_url || "") + "?submitted=1"); }, 700);
     });
   });
 
