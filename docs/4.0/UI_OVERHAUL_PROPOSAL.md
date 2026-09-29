@@ -1,6 +1,6 @@
 # 4.0 UI and race-weekend overhaul: proposal for approval
 
-**State:** proposal only. Nothing in the app has been rebuilt yet. Audited against `release-4.0` at 4.0.0-alpha.3.
+**State:** approved (D1–D8) and built in 4.0.0-beta.1. Audited against `release-4.0` at 4.0.0-alpha.3.
 The clickable prototype is `prototype/weekend.html` (also published as a private link for review).
 
 ---

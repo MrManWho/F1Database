@@ -2,6 +2,31 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## New in 4.0.0-beta.1: the UI overhaul (test site)
+
+- **Navigation.** Home, Race Weekend, Championship, Career (drivers only) and More; Manage League is separate and shows
+  only for Race Masters (Scorekeepers get "Results entry"). New addresses: `/career/<league>/race-weekend` (the current
+  round's workspace; `?stage=prepare|sessions|review|debrief` and `&session=q|s|r` open a step directly),
+  `/championship` (→ Standings), `/my-career` (→ Garage, or More without a driver) and `/more`. Every old address
+  still works; `/weekend/<id>` is now the workspace.
+- **Where the workspace opens** is worked out from the saved round (`f1tracker/workspace.py`), never from the last
+  page someone visited: Prepare before lights out, Sessions once results can go in (at the first session that isn't
+  complete), Review when every session is entered (Scorekeepers and the Race Master), Debrief once submitted.
+- **Race Master tools** on the workspace (reopen, reset, team orders, targets and excuses) are in a separate
+  "Race Master tools" strip at the bottom. Opening a round early stays next to the ready board in Prepare.
+- **Double submit.** Result saves take the database write lock before reading the round, so two submissions arriving
+  together run one after the other; the post-race steps (headlines, emails, relationship changes) run once. A
+  Scorekeeper's repeated submit gets `already_submitted` and the page simply moves to the Debrief.
+- **Incidents.** `incidents.session` (qualifying / sprint / race / weekend). Rulings update one news item per round
+  (`news.ref = stewards:<event id>`) instead of posting a headline each; Discord gets one post when the story first
+  appears. Deleting reports updates or removes the story. On the first open under format 25, older one-per-ruling
+  headlines are folded into the round's story.
+- **Latest calculations only.** `engine.ensure_latest` runs when a league is opened: a league still on engine 2 is moved
+  with the non-destructive "from the next round" path (completed rounds keep their numbers; a Calculation Update
+  record is written with the actor "Paddock Legacy 4.0"), and the current season uses the track-aware AI model. The
+  Calculation Update pages now redirect to Home, and the engine scan is no longer linked from System controls (the
+  command `python -m f1tracker.phase0 scan` still works). The engine 2 code stays for the history it calculated.
+
 ## New in 4.0.0-alpha.2: the track-aware AI recommendation
 
 - **Model:** `f1tracker/ai_track.py` (`track-aware-1`). New leagues and each new season use it (meta

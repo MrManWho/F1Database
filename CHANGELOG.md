@@ -3,6 +3,29 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.1 · A new look and one place for each race weekend (test site)
+_Released September 28, 2026_
+> A redesigned site built around the race weekend: Home tells you what to do next, and every round has one
+> workspace that takes you from getting ready to the debrief. A busy race's incidents now make one news story.
+
+### Highlights
+- **One workspace for each race weekend.** Race Weekend walks through four steps: Prepare (your target, press, check-in and predictions, required things first), Sessions (Qualifying, the Sprint on Sprint weekends, then the Race, one at a time), Review & submit, and Debrief. The page always opens at the step the round has reached, and you can jump back to any step.
+- **Enter one session at a time.** Each session has its own results, weather and incidents. "Save & continue" saves and moves to the next session; it never submits. Your changes still save by themselves and are kept on your device if the connection drops.
+- **Review before you submit.** One list of everything that must be fixed, with a Fix button that takes you straight to the right session and box, then a summary of what will be submitted and a single Submit weekend button. Pressing it twice (or on two devices at once) only ever submits once.
+- **A Debrief for every round.** The podium, your weekend (with your Form, Reputation and championship changes and why they changed), your post-race press, your weekend target and the AI for the next round, all in one place. Only your own career numbers are shown.
+- **One stewards' story per race.** Ruling on incidents no longer posts a headline for each one. Each round has one news story that counts the decisions and names only real penalties, and it updates as rulings come in. Stories from before are combined the first time the league opens.
+- **Incidents belong to a session.** Report an incident from the session it happened in (Qualifying, Sprint or Race). Older reports show as "Weekend".
+- **Simpler navigation.** Home, Race Weekend, Championship, Career and More. Manage League sits apart and only appears for the people who can use it. Championship, Career and More have tabs for everything inside them. Old links still work.
+- **A clearer Home.** Where the league is, one next action, your own tasks, what the league is waiting on from others, and short summaries. The stacked banners are gone.
+- **Always the latest calculations.** There are no calculation versions to choose between any more. A league that was still on older calculations moves over the first time it's opened: everything already calculated stays exactly as it was and the latest rules apply from the next round. The season under way also switches to the track-aware AI recommendation.
+
+### Changed
+- Help no longer describes older calculation rules.
+- The weekend summary page is still there (Debrief → Full race summary) and the Press page keeps your full press history under Career.
+
+### Migration notes
+- League files move to format 25 (incidents record their session). Incident headlines from earlier versions are combined into one story per round.
+
 ## 4.0.0-alpha.3 · Race times made easy (test site)
 _Released September 28, 2026_
 > Type two race times instead of working out a gap, and every tracked round now includes them. Also brings over the
