@@ -95,6 +95,12 @@ _Released September 28, 2026_
 
 ### Migration notes
 - League files move to format 22 (a new, empty change record). A backup is taken automatically before the upgrade, as always. Nothing else changes and no numbers are recalculated.
+## 3.2.3 · No more money in deal terms
+_Released September 29, 2026_
+> A small display fix.
+
+### Highlights
+- **Deal terms no longer show a salary.** Some signings saved by older versions still listed an amount such as "$1.3M/yr" under Conditions on the Transfers page. The game has no money, so the amount is now left out; the rest of the deal (length, growth pledge) shows as before. Nothing saved was changed.
 
 ## 3.2.2 · No more landing on a page of code
 _Released September 28, 2026_
