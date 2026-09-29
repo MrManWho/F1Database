@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('web_manifest') }}">
-  <meta name="theme-color" content="#07090f">
+  <meta name="theme-color" content="#0e1013">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   {% if push_key %}<meta name="push-key" content="{{ push_key }}">{% endif %}
@@ -21,9 +21,10 @@
     })();
   </script>
   {% block meta %}{% endblock %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts-rc.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme4.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/race.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/race-pages.css') }}">
 </head>
 <body {% if maintenance_owner %}data-maint-owner {% endif %}{% if maintenance_open_page %}data-maint-open {% endif %}class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
       {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
@@ -116,7 +117,7 @@
     <header class="appbar">
       <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">{{ icon('menu') }}</button>
       <a class="appbar-brand" href="{{ url_for('dashboard', token=t) }}">
-        <svg class="appbar-mark" viewBox="0 0 40 28" aria-hidden="true"><path d="M6 26 16 2h9L15 26z" fill="var(--accent)"/><path d="M19 26 29 2h9L28 26z" fill="currentColor"/></svg>
+        <svg class="appbar-mark" viewBox="0 0 30 22" aria-hidden="true"><path d="M2 20 11 2h6L8 20z" fill="var(--accent)"/><path d="M13 20 22 2h6l-9 18z" fill="currentColor"/></svg>
         <span><b>Paddock Legacy</b><small>{{ ctx.career_name }}</small></span></a>
       <nav class="topnav" aria-label="Destinations">
         {% set champ_eps_ = ('standings_page', 'stats_page', 'drivers_page', 'teams_page', 'team_profile', 'records', 'rivalry_page', 'seasons_page', 'season_review', 'results_index', 'race_summary', 'driver_profile') %}

@@ -1782,6 +1782,7 @@ def register_routes(app):
         my_target = _my_target(conn, ctx, nxt)
         phase = raceweek.phase(nxt) if nxt else None
         return page("dashboard.html", ctx, events=evs, next_event=nxt, phase=phase,
+                    rc=insights.race_control(conn, ctx, sid, nxt, gate),
                     waiting=_waiting_for(conn, ctx, nxt, gate, phase) if sid == ctx["current_season_id"] else [],
                     completed=sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE),
                     drivers=insights.standings_with_changes(conn, sid, 8),

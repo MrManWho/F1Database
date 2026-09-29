@@ -599,3 +599,55 @@ def pending_actions(conn, ctx):
                 out.append((f"Results pending for R{e['round_number']} {e['name']}", f"weekend/{e['id']}?stage=sessions",
                             "warn"))
     return out
+
+
+# --------------------------------------------------------------------------- 4.0 "Race Control" Home
+
+def _code(name):
+    """Three-letter timing code from a driver's surname (VAL for Jordan Vale)."""
+    parts = [p for p in (name or "").replace("-", " ").split() if p]
+    last = parts[-1] if parts else "???"
+    letters = "".join(ch for ch in last if ch.isalpha())
+    return (letters[:3] or "???").upper()
+
+
+def race_control(conn, ctx, season_id, next_event, gate):
+    """What the Race Control home shows, read from the saved league (nothing is worked out differently)."""
+    from . import teamlife
+    table = standings_with_changes(conn, season_id, limit=999)
+    me = ctx.get("my_driver")
+    leader = table[0]["points"] if table else 0
+    tower = [{"pos": r["position"], "code": _code(r["driver"]["name"]), "name": r["driver"]["name"],
+              "team": r["team"]["color"] if r.get("team") else "#555", "points": r["points"],
+              "gap": "LEADER" if r["position"] == 1 else f"+{leader - r['points']:g}",
+              "change": r.get("change", 0), "player": bool(r["driver"]["is_player"]),
+              "me": bool(me and r["driver_id"] == me["id"]), "color": r["driver"].get("player_color")} for r in table]
+    lights = []
+    if gate and gate.get("active"):
+        lights = [{"name": p["driver"]["name"], "done": p["done"]} for p in gate["players"]]
+    out = {"tower": tower, "lights": lights, "lights_ready": sum(1 for l in lights if l["done"])}
+    done = [e for e in S.events(conn, season_id) if e["status"] == C.EVENT_COMPLETE]
+    out["last_event"] = done[-1] if done else None
+    if me:
+        finishes = []
+        for e in done:
+            r = conn.execute("SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (e["id"], me["id"])).fetchone()
+            if not r:
+                continue
+            fin = r["race_position"] if r["result_status"] in C.CLASSIFIED_STATUSES and r["race_position"] else None
+            finishes.append({"round": e["round_number"], "pos": fin, "status": r["result_status"]})
+        out["finishes"] = finishes
+        if done:
+            last = done[-1]
+            row = next((x for x in S.weekend_rows(conn, last["id"]) if x["driver_id"] == me["id"]), None)
+            if row:
+                fin = row["race_position"] if row["result_status"] in C.CLASSIFIED_STATUSES and row["race_position"] else None
+                out["last"] = {"event": last, "grid": row["qualifying_position"], "finish": fin, "status": row["result_status"],
+                               "points": row["gp_points"] + row["sprint_pts"],
+                               "gained": (row["qualifying_position"] - fin) if fin and row["qualifying_position"] else None,
+                               "target": teamlife.target_for(conn, last["id"], me["id"])}
+        mate = next((r for r in table if me and r["driver_id"] != me["id"] and r.get("team") and
+                     next((m for m in table if m["driver_id"] == me["id"]), {}).get("team") and
+                     r["team"]["id"] == next(m for m in table if m["driver_id"] == me["id"])["team"]["id"]), None)
+        out["teammate"] = mate["driver"]["name"] if mate else None
+    return out

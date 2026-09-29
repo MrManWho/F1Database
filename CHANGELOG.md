@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.6 · Race Control: a brand-new website (test site)
+_Released September 29, 2026_
+> Paddock Legacy is rebuilt as "Race Control": a website that looks and reads like a timing screen, from the first
+> page to the last.
+
+### Highlights
+- **A completely new look.** Carbon panels, flat instrument-style cards, bold condensed headlines and every number in a timing-screen font, so positions, gaps and points line up. Your league's colour is the one loud colour. Green means better or done, amber means it needs you, coral means worse or missed. A light "paper" version is in My settings → Theme.
+- **A new Home: Race Control.**
+  - **The championship as a timing tower** down the left: team colours, three-letter codes, gaps to the leader, who moved up or down, and every player highlighted.
+  - **The next race** in big letters with its countdown, the recommended AI and the circuit outline, plus start lights showing how many players are ready.
+  - **One "next action" bar**, your tasks, what the league is waiting on, and your last race (grid, finish, points and whether you hit your target).
+  - **Your season** on the right: your championship position, a line of every finish this season, and your stats.
+- **The Race Weekend, redrawn.** A race-programme header with the round number, a step bar drawn like timing sectors, target cards that lead with the real target and what it's worth, and a pit board with the AI level, weather, sessions and every player's target.
+- **Standings.** The top three lead the page, and every table reads like a timing screen.
+- **A new top bar and status strip.** Home, Race Weekend, Championship, Career and More across the top; your league, season, view and search in a thin strip underneath.
+- **Fixed:** the view-mode and league menus could open underneath the Race Weekend step bar.
+
 ## 4.0.0-beta.5 · The new look on every page (test site)
 _Released September 29, 2026_
 > The rest of the site catches up with the Race Weekend's new design.
