@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.5 · The new look on every page (test site)
+_Released September 29, 2026_
+> The rest of the site catches up with the Race Weekend's new design.
+
+### Highlights
+- **Every page gets the race-programme header.** Home, Championship, Career, More and the admin pages open with the same bold banner as the Race Weekend: big condensed title, a fine grid and a wash of your league's colour (your team's colour on Career pages).
+- **A podium on the standings.** The top three drivers sit above the table with their gap to the leader, and a player in the top three is outlined in their colour.
+- **Home, restyled.** The next action is one big button, the next race opens like a programme with the round number and circuit outline, and your driver card leads with your championship position.
+- **Career stat tiles.** Driver Value, Reputation, Form and the rest are clear tiles with their change since the last round.
+- **Section tabs and tables** use the new type throughout, in both the dark and light themes.
+
 ## 4.0.0-beta.4 · Creating a league keeps your answers (test site)
 _Released September 29, 2026_
 > A fix for the new-league setup.

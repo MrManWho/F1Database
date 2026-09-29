@@ -259,3 +259,64 @@ input, select, textarea { background: var(--bg-2); border-color: var(--line); co
 body.with-sidebar .test-site-banner { margin-left: 0 !important; }
 .ws-stepper li + li::before { left: calc(-100% + 1.75rem); right: calc(100% - 1.75rem); }
 @media (max-width: 760px) { .ws-stepper li + li::before { left: -50%; right: 50%; } }
+
+/* ------------------------------------------------------------------ page headers: the same "race programme" banner everywhere */
+.page-head, .profile-head, .home-head { position: relative; padding: 1.4rem 1.6rem; border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  align-items: flex-end;
+  background:
+    linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(0deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(115deg, var(--panel) 45%, color-mix(in srgb, var(--accent) 14%, var(--panel)) 100%); }
+.profile-head { background:
+    linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(0deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(115deg, var(--panel) 45%, color-mix(in srgb, var(--team, var(--accent)) 22%, var(--panel)) 100%);
+  border-left: 6px solid var(--team, var(--accent)); }
+.page-head h1, .profile-head h1, .home-head h1 { font-size: clamp(2.2rem, 5vw, 4rem); color: var(--ink-strong); margin: .2rem 0 .35rem; }
+.page-purpose { max-width: 70ch; color: var(--muted); }
+.nav-sub-strip + .page-head { margin-top: .4rem; }
+
+/* ------------------------------------------------------------------ standings podium */
+.standings-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0 0 1rem; }
+.sp-card { position: relative; display: flex; flex-direction: column; gap: .15rem; padding: 1rem 1.1rem 1rem 1.3rem; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); text-decoration: none !important; overflow: hidden; }
+.sp-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--team); }
+.sp-card.is-player { box-shadow: inset 0 0 0 2px var(--player, var(--accent)); }
+.sp-pos { font-family: var(--font-display); font-style: italic; font-weight: 800; font-size: 2.6rem; line-height: .9; color: var(--accent-text); }
+.sp-card.p1 .sp-pos { color: #d9a400; } .sp-card.p2 .sp-pos { color: #9aa6ad; } .sp-card.p3 .sp-pos { color: #b87333; }
+.sp-name { font-family: var(--font-display); font-weight: 800; font-size: 1.45rem; text-transform: uppercase; color: var(--ink-strong); }
+.sp-team { font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.sp-pts { margin-top: .3rem; font-size: .9rem; color: var(--muted); } .sp-pts b { font-family: var(--font-display); font-size: 1.4rem; color: var(--text); }
+@media (max-width: 640px) { .standings-podium { grid-template-columns: minmax(0, 1fr); } }
+.data-table td.num b, .data-table td.num strong { font-family: var(--font-display); font-size: 1.05rem; }
+
+/* ------------------------------------------------------------------ Home */
+.hero.next-race { border-top: 0; padding: 1.6rem 1.8rem;
+  background:
+    linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(0deg, var(--hero-grid) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(115deg, var(--panel) 45%, color-mix(in srgb, var(--accent) 16%, var(--panel)) 100%); }
+.hero .round-badge { background: none; color: var(--accent); font-family: var(--font-display); font-style: italic; font-weight: 800;
+  font-size: 3.4rem; line-height: .9; padding: 0; width: auto; height: auto; box-shadow: none; }
+.hero-circuit path { fill: none; stroke: var(--ink-strong); stroke-width: 2; opacity: .8; }
+.next-action { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; }
+.next-action .kicker { grid-column: 1 / -1; margin: 0; }
+.next-action .next-action-main { margin: 0; grid-row: 2; grid-column: 2; }
+.next-action > p.muted { margin: 0; grid-row: 2; grid-column: 1; font-size: 1rem; color: var(--text); }
+@media (max-width: 640px) { .next-action { grid-template-columns: minmax(0, 1fr); } .next-action .next-action-main, .next-action > p.muted { grid-column: 1; grid-row: auto; } }
+.my-card { background: linear-gradient(160deg, color-mix(in srgb, var(--team) 18%, var(--panel)), var(--panel) 60%); border-top: 0; border-left: 6px solid var(--team); }
+[data-theme="light"] .my-card { background: linear-gradient(160deg, color-mix(in srgb, var(--team) 12%, var(--panel)), var(--panel) 60%); }
+.my-pos { font-family: var(--font-display); font-size: 3.4rem; }
+.my-name { font-family: var(--font-display); font-weight: 800; font-size: 1.8rem; text-transform: uppercase; letter-spacing: .01em; }
+.my-stats b, .stat b, .stat .val, .stat strong { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; }
+.pending-list li { border-radius: 10px; }
+.leader-list .pos, .bar-list .pos { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; }
+.leader-list a, .data-table a { text-decoration: none; } .leader-list a:hover, .data-table a:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------------------ Career / garage and other stat tiles */
+.stat-grid .stat, .stat-grid > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem; }
+.stat-grid small, .stat small, .stat dt { text-transform: uppercase; letter-spacing: .14em; font-size: .68rem; color: var(--muted); font-weight: 700; }
+.news-kind { letter-spacing: .2em; }
+.news-list li, .news-item { border-color: var(--line-soft); }
+.tabs .tab { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 1.05rem; }
+.tabs .tab.is-on { box-shadow: inset 0 -3px 0 var(--accent); }
