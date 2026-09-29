@@ -1,11 +1,15 @@
 {# v2.4 weekend target: choose one of three and lock it in. Needs: ctx, mt (from _my_target). #}
 {% from "_macros.html" import target_state with context %}
+{% from "_icons.html" import icon %}
+{% set tier_icon = {"safe": "shield", "standard": "balance", "stretch": "trophy"} %}
 {% if mt %}{% set ev = mt.event %}
 <section class="card target-card" id="target">
-  <div class="card-head"><h2>🎯 Weekend target · R{{ ev.round_number }} {{ ev.name }}</h2>
+  <div class="kicker">Weekend target · R{{ ev.round_number }} {{ ev.name }}</div>
+  <div class="card-head"><h2>{{ 'Your weekend target' if mt.chosen else 'Choose your weekend target' }}</h2>
     {% if mt.chosen %}{{ target_state(mt.chosen) }}{% endif %}</div>
   {% if mt.chosen %}
-    <p class="target-text">{% if mt.chosen.tier %}<span class="pill tier-{{ mt.chosen.tier }}">{{ C.TARGET_TIERS[mt.chosen.tier].label }}</span> {% endif %}{{ mt.chosen.label }}</p>
+    <div class="target-chosen">{{ icon(tier_icon.get(mt.chosen.tier, 'target')) }}
+      <div><b>{{ C.TARGET_TIERS[mt.chosen.tier].label if mt.chosen.tier else 'Target' }}</b><p class="target-text">{{ mt.chosen.label }}</p></div></div>
     {% set hit = mt.chosen.hit if mt.chosen.hit is not none else C.TARGET_HIT %}{% set miss = mt.chosen.miss if mt.chosen.miss is not none else C.TARGET_MISSED %}
     <p class="muted small">Hit it: <b>{{ '%+g'|format(hit) }}</b> team relationship. Miss it: <b>{{ '%+g'|format(miss) }}</b>.
       It doesn't count if you don't take part, or if the Race Master rules a DNF wasn't your fault.
@@ -22,7 +26,8 @@
       <form method="post" action="{{ url_for('target_ack', token=ctx.token, event_id=ev.id) }}" class="target-option tier-{{ tier }}"
             onsubmit="return confirm('Lock in {{ o.tier_label }}: {{ o.label|e }}? You can\'t change it afterwards.');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="tier" value="{{ tier }}">
-        <div class="to-head"><b>{{ o.tier_label }}</b><span class="to-stakes"><span class="up">{{ '%+g'|format(o.hit) }}</span> / <span class="down">{{ '%+g'|format(o.miss) }}</span></span></div>
+        {{ icon(tier_icon.get(tier, 'target')) }}
+        <div class="to-head"><b>{{ o.tier_label }}</b><span class="to-stakes"><span class="up">{{ '%+g'|format(o.hit) }}</span> if hit · <span class="down">{{ '%+g'|format(o.miss) }}</span> if missed</span></div>
         <p class="to-label">{{ o.label }}</p>
         <p class="muted small">{{ o.blurb }}</p>
         <button class="btn btn-sm {{ 'btn-primary' if tier == 'standard' else '' }}">Lock in {{ o.tier_label }}</button>

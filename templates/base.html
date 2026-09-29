@@ -21,7 +21,9 @@
     })();
   </script>
   {% block meta %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme4.css') }}">
 </head>
 <body {% if maintenance_owner %}data-maint-owner {% endif %}{% if maintenance_open_page %}data-maint-open {% endif %}class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
       {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
@@ -110,8 +112,60 @@
   </aside>
   <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
   <div class="main">
-    <header class="topbar">
+    {# 4.0 look: a top app bar (brand, the five destinations, Manage league, alerts, account) over a slim league bar #}
+    <header class="appbar">
       <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">{{ icon('menu') }}</button>
+      <a class="appbar-brand" href="{{ url_for('dashboard', token=t) }}">
+        <svg class="appbar-mark" viewBox="0 0 40 28" aria-hidden="true"><path d="M6 26 16 2h9L15 26z" fill="var(--accent)"/><path d="M19 26 29 2h9L28 26z" fill="currentColor"/></svg>
+        <span><b>Paddock Legacy</b><small>{{ ctx.career_name }}</small></span></a>
+      <nav class="topnav" aria-label="Destinations">
+        {% set champ_eps_ = ('standings_page', 'stats_page', 'drivers_page', 'teams_page', 'team_profile', 'records', 'rivalry_page', 'seasons_page', 'season_review', 'results_index', 'race_summary', 'driver_profile') %}
+        <a href="{{ url_for('dashboard', token=t) }}" {% if ep == 'dashboard' %}aria-current="page"{% endif %}>Home</a>
+        <a href="{{ url_for('race_weekend', token=t) }}" {% if ep in ('weekend', 'weekend_next', 'race_weekend', 'weekend_reset') %}aria-current="page"{% endif %}>Race Weekend</a>
+        <a href="{{ url_for('standings_page', token=t) }}" {% if ep in champ_eps_ %}aria-current="page"{% endif %}>Championship</a>
+        {% if ctx.my_driver %}<a href="{{ url_for('garage', token=t) }}" {% if ep in ('garage', 'team_standing', 'offers_page', 'press_page', 'pledge_page') %}aria-current="page"{% endif %}>Career{% if ctx.pending_offers %} <span class="pill pill-hot">{{ ctx.pending_offers }}</span>{% endif %}</a>{% endif %}
+        <details class="dropdown topnav-more">
+          <summary {% if ep in ('news_page', 'announcements_page', 'incidents_page', 'predictions_page', 'contracts_page', 'more_page') %}aria-current="page"{% endif %}>More <span class="chev" aria-hidden="true">▾</span></summary>
+          <div class="dropdown-panel" role="menu">
+            <a role="menuitem" href="{{ url_for('news_page', token=t) }}">News</a>
+            <a role="menuitem" href="{{ url_for('announcements_page', token=t) }}">Announcements</a>
+            <a role="menuitem" href="{{ url_for('incidents_page', token=t) }}">Incidents</a>
+            {% if ctx.features.predictions %}<a role="menuitem" href="{{ url_for('predictions_page', token=t) }}">Predictions</a>{% endif %}
+            <a role="menuitem" href="{{ url_for('contracts_page', token=t) }}">Transfers</a>
+            {% if ctx.team_goals_on and not ctx.my_driver %}<a role="menuitem" href="{{ url_for('team_goals_page', token=t) }}">Team goals</a>{% endif %}
+            <a role="menuitem" href="{{ url_for('more_page', token=t) }}">Everything else</a>
+            <a role="menuitem" href="{{ url_for('help_page') }}">Help</a>
+          </div>
+        </details>
+      </nav>
+      <div class="appbar-actions">
+        {% if ctx.can_run %}
+        <details class="dropdown manage-menu">
+          <summary>{{ icon('settings') }}<span class="label">{{ 'Manage league' if ctx.is_master else 'Results entry' }}</span> <span class="chev" aria-hidden="true">▾</span></summary>
+          <div class="dropdown-panel manage-panel" role="menu">
+            <div class="dropdown-title">Race weekends</div>
+            <a role="menuitem" href="{{ url_for('race_weekend', token=t) }}?stage=sessions">Results entry</a>
+            {% if ctx.is_master %}<a role="menuitem" href="{{ url_for('seasons_page', token=t) }}#calendar">Calendar management</a>
+            <div class="dropdown-title">Career management</div>
+            <a role="menuitem" href="{{ url_for('grid_page', token=t) }}">Grid &amp; contracts</a>
+            <a role="menuitem" href="{{ url_for('market_page', token=t) }}">Market administration</a>
+            <a role="menuitem" href="{{ url_for('paddock_admin', token=t) }}">Drivers &amp; teams</a>
+            <a role="menuitem" href="{{ url_for('team_admin', token=t) }}">Team management</a>
+            <div class="dropdown-title">League administration</div>
+            <a role="menuitem" href="{{ url_for('members', token=t) }}">Members &amp; roles</a>
+            <a role="menuitem" href="{{ url_for('league_settings', token=t) }}">League settings</a>
+            <a role="menuitem" href="{{ url_for('delivery_log_page', token=t) }}">Notifications</a>
+            <a role="menuitem" href="{{ url_for('activity_log', token=t) }}">Activity log</a>
+            <a role="menuitem" href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a>{% endif %}
+          </div>
+        </details>
+        {% endif %}
+        <button class="icon-btn bell" type="button" id="bell" data-dialog="notif-dialog" aria-label="Notifications{{ ', ' ~ ctx.unread ~ ' unread' if ctx.unread }}"
+                data-url="{{ url_for('api_notifications', token=t) }}" data-read="{{ url_for('notifications_read', token=t) }}">🔔<span class="bell-count" id="bell-count" {{ 'hidden' if not ctx.unread }}>{{ ctx.unread }}</span></button>
+        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu">{{ user.display_name[:1]|upper }}</button>
+      </div>
+    </header>
+    <header class="topbar contextbar">
       <details class="dropdown league-switch" id="league-switch">
         <summary class="league-chip" aria-label="Switch league. Current league: {{ ctx.career_name }}">
           <span class="league-mark" {% if lg and lg.accent %}style="--accent: {{ lg.accent }}"{% endif %} aria-hidden="true">{{ lg.initials if lg else ctx.career_name[:2]|upper }}</span>
@@ -175,9 +229,6 @@
           <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
         </form>
         {% endif %}
-        <button class="icon-btn bell" type="button" id="bell" data-dialog="notif-dialog" aria-label="Notifications{{ ', ' ~ ctx.unread ~ ' unread' if ctx.unread }}"
-                data-url="{{ url_for('api_notifications', token=t) }}" data-read="{{ url_for('notifications_read', token=t) }}">🔔<span class="bell-count" id="bell-count" {{ 'hidden' if not ctx.unread }}>{{ ctx.unread }}</span></button>
-        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu">{{ user.display_name[:1]|upper }}</button>
       </div>
     </header>
     {% if ctx.is_demo %}

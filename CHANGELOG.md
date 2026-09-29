@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.3 · A whole new look (test site)
+_Released September 29, 2026_
+> Paddock Legacy gets a new design: a top bar with the five destinations, a race weekend that opens like a race
+> programme, and two themes.
+
+### Highlights
+- **A new look everywhere.** New type (a bold condensed face for headlines), new colours, new cards, buttons and tables on every page.
+- **Two themes.** Dark "Pit Wall" and light "Paddock Paper", both in your league's accent colour. Switch in My settings → Theme.
+- **Top navigation.** Home, Race Weekend, Championship, Career and More sit across the top, with Manage league (or Results entry for Scorekeepers) on the right. Your league, season and search are in the bar just below. Phones keep the bottom bar.
+- **A race weekend header worth looking at.** The round number, the Grand Prix in big letters, the circuit and its outline, and a step bar that says what each step is for.
+- **Weekend target cards.** Safe, Standard and Stretch each get an icon, the real target and what it's worth if you hit it or miss it.
+- **Weekend at a glance.** The AI level, the weather as recorded, the next session and the race time, plus every player driving this weekend and the target they chose.
+- **Pre-race interview.** It shows whether it's open, waiting for your answers or done, with a button straight to the questions.
+
+### Added
+- The live site's fix that leaves money out of old deal terms (3.2.3).
+
 ## 4.0.0-beta.2 · Results table fix (test site)
 _Released September 29, 2026_
 > The results table is tidy again when you enter one session at a time.

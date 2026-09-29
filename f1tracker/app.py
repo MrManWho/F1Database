@@ -1831,7 +1831,10 @@ def register_routes(app):
         hub = _hub(conn, ctx, event, full=True)
         ws = workspace.build(conn, ctx, event, rows, wk, gate, my_target, hub,
                              requested=request.args.get("stage"), requested_session=request.args.get("session"))
-        return page("weekend.html", ctx, event=event, rows=rows, ws=ws,
+        chosen = {t["driver_id"]: t for t in teamlife.targets_for_event(conn, event_id)} if ctx["team_life"]["targets"] else {}
+        weekend_drivers = [{"driver": r["driver"], "team": r["team"], "target": chosen.get(r["driver_id"])}
+                           for r in rows if r["driver"]["is_player"]]
+        return page("weekend.html", ctx, event=event, rows=rows, ws=ws, weekend_drivers=weekend_drivers,
                     debrief=workspace.debrief(conn, ctx, event), circuit=circuits.lookup(event["name"], event["location"]),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),

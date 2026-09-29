@@ -2,6 +2,7 @@
 {% from "_macros.html" import team_dot, difficulty, reaction_bar, comment_thread, target_state, race_clock, driver_link, delta with context %}
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
+{% from "_icons.html" import icon %}
 {# 4.0 Race Weekend workspace: Prepare · Sessions · Review & submit · Debrief, worked out from the saved round (workspace.py) #}
 {% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
 {% set gated = gate and gate.blocking %}
@@ -11,29 +12,31 @@
 {% set state_text = {'done': 'Done', 'current': 'In progress', 'upcoming': 'Upcoming', 'attention': 'Needs attention'} %}
 {% set wk_url = url_for('weekend', token=ctx.token, event_id=event.id) %}
 <header class="ws-head stage-{{ phase_key }}">
-  <div class="round-badge" aria-hidden="true"><small>Round</small><b>{{ event.round_number }}</b></div>
-  <div class="round-title">
-    <div class="kicker">Race weekend · {{ ctx.season.year }} · round {{ index }} of {{ total }}</div>
-    <h1>{% if circuit and circuit.flag %}<span class="flag" role="img" aria-label="{{ circuit.code }}">{{ circuit.flag }}</span> {% endif %}{{ event.name }}</h1>
+  <div class="round-badge ws-round" aria-label="Round {{ event.round_number }} of {{ total }}"><small>Round</small><b>{{ '%02d'|format(event.round_number) }}</b><span>Season {{ ctx.season.year }}</span></div>
+  <div class="ws-title">
+    <div class="kicker">Race weekend · round {{ index }} of {{ total }}</div>
+    <h1>{{ event.name }}{% if circuit and circuit.flag %}<span class="flag" role="img" aria-label="{{ circuit.code }}">{{ circuit.flag }}</span>{% endif %}</h1>
+    <div class="ws-where"><span>{{ circuit.circuit if circuit and circuit.circuit else event.location }}</span>{% if event.location and circuit and circuit.circuit and event.location not in circuit.circuit %}<span>{{ event.location }}</span>{% endif %}</div>
     <div class="hero-meta">
-      <span>{{ circuit.circuit if circuit and circuit.circuit else event.location }}</span>
       {% if event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
       {% for w in (wx.shown if wx else []) %}<span class="pill weather-pill {{ 'is-wet' if w.wet }}" title="{{ w.session_label }}: {{ w.text }}"><span aria-hidden="true">{{ w.icon }}</span> {{ w.session_label }}<span class="sr-only">: {{ w.text }}</span></span>{% endfor %}
       <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ wk.label if wk and wk.on else event.status }}</span>
     </div>
   </div>
+  {% if circuit and circuit.path %}<div class="ws-circuit" aria-hidden="true"><svg viewBox="0 0 100 60"><path d="{{ circuit.path }}"/></svg><small>{{ circuit.circuit or event.location }}</small></div>{% endif %}
   <nav class="round-nav" aria-label="Rounds">
     {% if prev_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}" title="{{ prev_event.name }}">← R{{ prev_event.round_number }}</a>{% endif %}
     {% if next_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}" title="{{ next_event.name }}">R{{ next_event.round_number }} →</a>{% endif %}
   </nav>
 </header>
 
+{% set step_blurb = {'prepare': 'Your target, press and pre-race tasks', 'sessions': 'Qualifying' ~ (', the Sprint' if event.is_sprint else '') ~ ' and the race', 'review': 'Check the results and submit', 'debrief': 'How it went and what changed'} %}
 <nav class="ws-stepper" aria-label="Weekend stages">
   <ol>
   {% for st in ws.stages %}
     <li><a href="{{ wk_url }}?stage={{ st.key }}" class="ws-step st-{{ st.state }} {{ 'is-on' if st.on }}" data-stage-link="{{ st.key }}" {% if st.on %}aria-current="step"{% endif %}>
       <span class="ws-num" aria-hidden="true">{{ '✓' if st.state == 'done' else ('!' if st.state == 'attention' else st.number) }}</span>
-      <span class="ws-step-text"><b>{{ st.label }}</b><small>{{ state_text[st.state] }}</small></span></a></li>
+      <span class="ws-step-text"><b>{{ st.label }}</b><small>{{ state_text[st.state] }}</small><em>{{ step_blurb[st.key] }}</em></span></a></li>
   {% endfor %}
   </ol>
 </nav>
@@ -52,6 +55,16 @@
 {# ============================================================== 1 PREPARE #}
 <section class="ws-stage" data-stage="prepare" id="stage-prepare" aria-labelledby="stage-prepare-title" {{ 'hidden' if ws.stage != 'prepare' }}>
   <h2 class="ws-stage-title" id="stage-prepare-title"><span class="ws-num" aria-hidden="true">1</span> Prepare</h2>
+  {% if my_target %}{% set mt = my_target %}{% include "_target_choice.html" with context %}{% endif %}
+  {% if wk and wk.on and ctx.my_driver and not ctx.is_spectator %}{% set pen_ = wk.pen if wk.pen and wk.pen.questions else none %}
+  <section class="card ws-interview" aria-label="Pre-race interview">
+    {{ icon('mic')|safe }}
+    <div><div class="kicker">Pre-race interview</div>
+      <h3>{% if pen_ and wk.phase == 'paddock' and pen_.open %}Ready to answer{% elif pen_ and not pen_.open %}Answered{% elif wk.phase in ('upcoming',) %}Opens with the paddock{% else %}Closed{% endif %}</h3>
+      <p class="muted small">{% if pen_ and wk.phase == 'paddock' and pen_.open %}{{ pen_.open }} question{{ 's' if pen_.open != 1 }} from the media before lights out.{% elif pen_ and not pen_.open %}What you said is below and in your press history.{% elif wk.phase == 'upcoming' %}The media ask two questions once the paddock opens.{% else %}Pre-race press closes at lights out.{% endif %}</p></div>
+    {% if pen_ and wk.phase == 'paddock' and pen_.open %}<a class="btn btn-primary" href="#prerace" data-open-details>Answer interview →</a>{% endif %}
+  </section>
+  {% endif %}
   {% set mine = ws.tasks|selectattr('stage', 'equalto', 'prepare')|list + ws.tasks|selectattr('key', 'equalto', 'press')|list %}
   {% if mine %}
   <section class="card ws-tasks" aria-labelledby="my-tasks-title">
@@ -78,7 +91,6 @@
   {% endif %}
 
   {% include "_paddock.html" with context %}
-  {% if my_target %}{% set mt = my_target %}{% include "_target_choice.html" with context %}{% endif %}
   {% if not (wk and wk.on) %}{% set full = True %}{% include "_gate.html" with context %}{% endif %}
   {% if not ws.complete %}
   <details class="card ws-optional" id="race-night-wrap" {{ 'open' if not mine or (ws.tasks|rejectattr('done')|selectattr('required')|list|length == 0) }}>
@@ -497,33 +509,30 @@
       <li class="st-{{ ws.stages[3].state }}"><b>Debrief</b><small>{{ state_text[ws.stages[3].state] }}</small></li>
     </ol>
   </section>
-  {% if my_target %}
-  <section class="card ws-target">
-    <h2>Your weekend target</h2>
-    {% if my_target.chosen %}<p class="small">{% if my_target.chosen.tier %}<span class="pill tier-{{ my_target.chosen.tier }}">{{ C.TARGET_TIERS[my_target.chosen.tier].label }}</span> {% endif %}{{ my_target.chosen.label }}</p>{{ target_state(my_target.chosen) }}
-    {% elif my_target.open %}<p class="small">Not chosen yet. <a href="?stage=prepare#target" data-stage-link="prepare">Choose →</a></p>
-    {% else %}<p class="muted small">No target this time.</p>{% endif %}
+  <section class="card ws-glance">
+    <h2>Weekend at a glance</h2>
+    <ul class="glance-rows">
+      <li>{{ icon('gauge') }}<span class="g-label">AI difficulty<small>{% if event.ai_difficulty is not none %}used this round{% elif event.ai_untracked %}not tracked{% elif rec.recommended is not none and not rec.for_next %}recommended{% else %}&nbsp;{% endif %}</small></span>
+        <span class="g-value big">{% if event.ai_difficulty is not none %}{{ event.ai_difficulty }}{% elif event.ai_untracked %}—{% elif rec.recommended is not none and not rec.for_next %}{{ rec.recommended }}{% else %}—{% endif %}</span></li>
+      <li>{{ icon('cloud') }}<span class="g-label">Weather<small>{{ 'as recorded' if wx and wx.shown else 'recorded after each session' }}</small></span>
+        <span class="g-value">{% if wx and wx.shown %}{% for w in wx.shown %}<span title="{{ w.session_label }}: {{ w.text }}">{{ w.icon }}</span>{% endfor %}{% else %}—{% endif %}</span></li>
+      <li>{{ icon('clock') }}<span class="g-label">{% set up = ws.sessions|rejectattr('done')|first %}{{ 'Next session' if up and not ws.complete else 'Sessions' }}<small>{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</small></span>
+        <span class="g-value">{% if ws.complete %}All done{% elif up %}{{ up.label }}{% else %}Review{% endif %}</span></li>
+      <li>{{ icon('flag') }}<span class="g-label">Race<small>{{ circuit.circuit if circuit and circuit.circuit else event.location }}</small></span>
+        <span class="g-value">{% if event.race_at %}<small>{{ event.race_at|race_time }}</small>{% else %}<small>not scheduled</small>{% endif %}</span></li>
+    </ul>
   </section>
-  {% endif %}
-  <section class="card ws-facts">
-    <h2>This weekend</h2>
-    <dl class="ws-dl">
-      <div><dt>Circuit</dt><dd>{{ circuit.circuit if circuit and circuit.circuit else (event.location or '—') }}</dd></div>
-      <div><dt>Format</dt><dd>{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</dd></div>
-      <div><dt>Race</dt><dd>{% if event.race_at %}{{ event.race_at|race_time }}{% else %}Not scheduled{% endif %}</dd></div>
-      <div><dt>AI level</dt><dd>{% if event.ai_difficulty is not none %}{{ event.ai_difficulty }} <small class="muted">used</small>{% elif event.ai_untracked %}Not tracked{% elif rec.recommended is not none and not rec.for_next %}{{ rec.recommended }} <small class="muted">recommended</small>{% else %}—{% endif %}</dd></div>
-      <div><dt>Weather</dt><dd>{% if wx and wx.shown %}{% for w in wx.shown %}{{ w.icon }} {{ w.session_label }}{{ ', ' if not loop.last }}{% endfor %}{% else %}<span class="muted">Recorded after each session</span>{% endif %}</dd></div>
-    </dl>
-  </section>
-  {% if ws.readiness.personal.has_tasks or ws.readiness.league %}
-  <section class="card ws-readiness">
-    <h2>Readiness</h2>
-    {% if ws.readiness.personal.has_tasks %}<p class="small"><b>You:</b> {{ '✅ ready' if ws.readiness.personal.ready else '⏳ ' ~ ws.readiness.personal.left|length ~ ' task' ~ ('s' if ws.readiness.personal.left|length != 1) ~ ' left' }}</p>{% endif %}
-    {% if ws.readiness.league %}{% set lg_ = ws.readiness.league %}
-    <p class="small"><b>League:</b> {{ lg_.ready }} of {{ lg_.total }} ready{% if lg_.bypass %} · opened early by the Race Master{% endif %}</p>
-    <span class="meter"><span style="width: {{ (lg_.ready / lg_.total * 100) if lg_.total else 0 }}%"></span></span>
-    {% if lg_.waiting %}<p class="muted small">Waiting on {{ lg_.waiting|join(', ') }}</p>{% endif %}
-    {% endif %}
+  {% if weekend_drivers %}
+  <section class="card ws-glance">
+    <h2>Drivers this weekend</h2>
+    <ul class="glance-rows glance-drivers">
+      {% for d in weekend_drivers %}
+      <li><span class="driver-dot" {% if d.driver.player_color %}style="--player: {{ d.driver.player_color }}"{% endif %} aria-hidden="true">{{ d.driver.name[:1] }}</span>
+        <span class="g-label"><b>{{ d.driver.name }}</b><small>{{ d.team.name if d.team else 'No seat' }}</small></span>
+        <span class="tier-tag {{ 'is-set' if d.target and d.target.tier }}">{% if d.target and d.target.tier %}{{ C.TARGET_TIERS[d.target.tier].label }} target{% elif ctx.team_life.targets %}No target yet{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if ws.readiness.league %}{% set lg_ = ws.readiness.league %}<p class="small muted">{{ lg_.ready }} of {{ lg_.total }} ready{% if lg_.waiting %} · waiting on {{ lg_.waiting|join(', ') }}{% endif %}{% if lg_.bypass %} · opened early{% endif %}</p>{% endif %}
   </section>
   {% endif %}
 </aside>
