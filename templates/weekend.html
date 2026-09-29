@@ -128,11 +128,11 @@
     {% if not ro %}
     <span class="tools-sep"></span>
     <span class="muted small">Quick order:</span>
-    <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position">Qualifying</button>
-    {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position">Sprint</button>{% endif %}
-    <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position">Race</button>
+    <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position" data-session-only="q">Qualifying</button>
+    {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position" data-session-only="s">Sprint</button>{% endif %}
+    <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position" data-session-only="r">Race</button>
     <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import from screenshot</button>
-    <select id="copy-order" class="btn-sm" aria-label="Copy one session's order into another">
+    <select id="copy-order" class="btn-sm" data-session-only="s r" aria-label="Copy one session's order into another">
       <option value="">Copy an order…</option>
       <option value="qualifying_position>race_position">Qualifying → Grand Prix</option>
       {% if event.is_sprint %}<option value="qualifying_position>sprint_position">Qualifying → Sprint</option>
@@ -174,13 +174,14 @@
          {% if v3_round %}data-distances='{{ distance_tables|tojson }}' data-sprint-full='{{ C.SPRINT_POINTS|tojson }}' data-sprint-min="{{ sprint_min }}"{% endif %}>
     <thead>
       <tr class="group-row">
-        <th rowspan="2" class="sticky-col">Driver</th>
+        <th class="sticky-col grp-driver"><span class="sr-only">Driver</span></th>
         <th class="grp grp-q">Qualifying</th>
         {% if event.is_sprint %}<th colspan="3" class="grp grp-s">Sprint</th>{% endif %}
         <th colspan="3" class="grp grp-r">Grand Prix</th>
         <th colspan="{{ 4 if ro else 5 }}" class="grp grp-b">Bonuses &amp; notes</th>
       </tr>
       <tr>
+        <th class="sticky-col">Driver</th>
         <th class="grp-q"><abbr title="Qualifying position">Pos</abbr></th>
         {% if event.is_sprint %}<th class="grp-s"><abbr title="Sprint finishing position">Pos</abbr></th><th class="grp-s">Status</th><th class="grp-s num"><abbr title="Sprint points">Pts</abbr></th>{% endif %}
         <th class="grp-r"><abbr title="Grand Prix finishing position">Pos</abbr></th><th class="grp-r">Status</th><th class="grp-r num"><abbr title="Grand Prix points">Pts</abbr></th>

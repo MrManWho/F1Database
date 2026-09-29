@@ -3,6 +3,15 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.2 · Results table fix (test site)
+_Released September 29, 2026_
+> The results table is tidy again when you enter one session at a time.
+
+### Highlights
+- **Fixed:** the results table's header could slide down over the first driver.
+- **Fixed:** entering a single session showed a stretched Driver column and a tiny position box. Each session now shows a compact table with just its own columns.
+- **Tidier tools:** each session only offers its own quick order, and "Copy an order" only appears for the Sprint and the Race.
+
 ## 4.0.0-beta.1 · A new look and one place for each race weekend (test site)
 _Released September 28, 2026_
 > A redesigned site built around the race weekend: Home tells you what to do next, and every round has one

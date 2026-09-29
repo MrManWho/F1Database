@@ -1898,3 +1898,12 @@ body.rail .ws-bar { left: var(--sidebar); }
 [data-theme="light"] .sidebar nav summary { color: #2b313a; }
 body.rail .sidebar nav summary .label, body.rail .sidebar nav summary .chev { display: none; }
 @media (max-width: 760px) { .ws-next-target { display: none; } }
+
+/* 4.0 fix: the results header sticks inside its own scrolling box, so it sits at the top of the table, never over a row */
+.table-card .entry-table th { top: 0; }
+/* One session at a time: no group row, and a table sized to its columns instead of a stretched Driver column */
+.entry-table.only-q .group-row, .entry-table.only-s .group-row, .entry-table.only-r .group-row { display: none; }
+.entry-table.only-q, .entry-table.only-s, .entry-table.only-r { width: auto; min-width: min(100%, 420px); }
+.entry-table.only-q .driver-cell, .entry-table.only-s .driver-cell, .entry-table.only-r .driver-cell { min-width: 200px; }
+.entry-table.only-q .pos-input { width: 4.5rem; }
+.ws-bar .btn[data-ws-next] { gap: 0; }
