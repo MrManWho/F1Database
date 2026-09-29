@@ -3,6 +3,13 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.4 · Creating a league keeps your answers (test site)
+_Released September 29, 2026_
+> A fix for the new-league setup.
+
+### Highlights
+- **Fixed:** if creating a league failed (for example a username that doesn't exist), the setup page started again from empty. It now keeps everything you typed, including extra player drivers and invitations, and opens at the step with the problem, with the reason shown at the top.
+
 ## 4.0.0-beta.3 · A whole new look (test site)
 _Released September 29, 2026_
 > Paddock Legacy gets a new design: a top bar with the five destinations, a race weekend that opens like a race

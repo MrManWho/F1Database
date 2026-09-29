@@ -1586,7 +1586,8 @@ def register_routes(app):
         if not onboarding.may_create(g.user):
             flash("On this site only administrators can create leagues. Ask one, or join an existing league.", "info")
             return redirect(url_for("home"))
-        return render_template("new_league.html", presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
+        draft = session.pop("league_draft", None)       # what was typed before a failed attempt, if any
+        return render_template("new_league.html", draft=draft, presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
                                join_modes=storage.JOIN_MODES, visibility=league_profile.VISIBILITY,
                                default_year=2026, features=C.FEATURES, order_modes=C.TEAM_ORDER_MODES,
                                calendar=C.CALENDAR, teams=C.TEAMS)
@@ -1694,6 +1695,14 @@ def register_routes(app):
             except CareerNotFound:
                 pass
             flash(str(exc), "error")
+            if wizard:
+                # 4.0: keep what was typed so the setup page can put it back (never the CSRF token or passwords)
+                draft = {k: [v[:200] for v in request.form.getlist(k)][:40] for k in request.form
+                         if k not in ("csrf_token",) and "password" not in k}
+                msg = str(exc).lower()
+                session["league_draft"] = {"fields": draft,
+                                           "step": 1 if any(w in msg for w in ("login", "driver", "drive", "invite",
+                                                                              "username", "player")) else 0}
             return redirect(url_for("league_new_page") if wizard else url_for("home"))
         if invites_to_mail and request.form.get("send_invites"):
             for username, what in invites_to_mail:
