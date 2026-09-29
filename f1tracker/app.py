@@ -72,6 +72,18 @@ QUIET_ENDPOINTS = {"view_mode", "league_notice_seen", "league_pin", "league_orde
                    "save_now"}
 
 
+_MONEY = __import__("re").compile(r"\s*[,;]?\s*(?:salary\s*:?\s*)?[$£€]\s?\d[\d.,]*\s*(?:[MmKk](?:illion)?)?"
+                                  r"(?:\s*(?:/\s*(?:yr|year)|per year|a year|p/?a))?", __import__("re").I)
+
+
+def _no_money(text):
+    """Remove money amounts (e.g. ", $1.3M/yr") from text saved by versions that still had salaries."""
+    if not text:
+        return text
+    cleaned = _MONEY.sub("", str(text)).strip(" ,;")
+    return cleaned
+
+
 def create_app(config=None):
     base = _base_dir()
     app = Flask(__name__, template_folder=str(base / "templates"), static_folder=str(base / "static"))
@@ -219,6 +231,8 @@ def register_hooks(app):
     app.add_template_filter(lambda v: timefmt.race(v, _tz()), "race_time")
     app.add_template_filter(lambda v: timefmt.race_at(v, _tz()), "race_at")
     app.add_template_filter(lambda v: timefmt.stamp(v, _tz()), "stamp")
+    # 3.2.3: deal terms saved by older versions can still mention a salary; the game has no money, so it's left out.
+    app.add_template_filter(_no_money, "no_money")
     app.add_template_filter(lambda v: timefmt.day(v, _tz()), "day")
     app.add_template_filter(lambda v: timefmt.ago(v, _tz()), "ago")
     app.add_template_filter(lambda v: timefmt.countdown(v), "countdown")

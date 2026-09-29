@@ -3,6 +3,13 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.3 · No more money in deal terms
+_Released September 29, 2026_
+> A small display fix.
+
+### Highlights
+- **Deal terms no longer show a salary.** Some signings saved by older versions still listed an amount such as "$1.3M/yr" under Conditions on the Transfers page. The game has no money, so the amount is now left out; the rest of the deal (length, growth pledge) shows as before. Nothing saved was changed.
+
 ## 3.2.2 · No more landing on a page of code
 _Released September 28, 2026_
 > A fix for a bug introduced in 3.2.

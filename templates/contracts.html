@@ -53,7 +53,7 @@
     <div class="contract-facts"><span>Role <b>{{ c.requested_role }}</b></span><span>Form <b>{{ c.form }}</b></span><span>Rep <b>{{ c.reputation }}</b></span></div>
     {% if c.team_response %}<p><b>Team:</b> {{ c.team_response }}</p>{% endif %}
     {% if c.outcome %}<p><b>Outcome:</b> {{ c.outcome }}</p>{% endif %}
-    {% if c.conditions %}<p><b>Conditions:</b> {{ c.conditions }}</p>{% endif %}
+    {% if c.conditions|no_money %}<p><b>Conditions:</b> {{ c.conditions|no_money }}</p>{% endif %}
     {% if c.notes %}<p class="muted">{{ c.notes }}</p>{% endif %}
     {% if ctx.is_master %}
     <form method="post" action="{{ url_for('contract_delete', token=ctx.token, contract_id=c.id) }}" onsubmit="return confirm('Delete this negotiation?');">
