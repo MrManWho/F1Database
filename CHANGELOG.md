@@ -3,6 +3,13 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.5 · The press fix on your Changes page
+_Released October 1, 2026_
+> A follow-up to 3.2.4.
+
+### Highlights
+- **The 3.2.4 press fix now shows on "Changes to your driver".** If a repeat press answer was removed from your league, your Changes page lists it with the round and what it did to your numbers, like any other change. 3.2.4 only sent a notification.
+
 ## 3.2.4 · Press questions stay put when Silly Season opens
 _Released October 1, 2026_
 > A fix for a bug in the press pen.

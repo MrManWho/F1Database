@@ -986,3 +986,33 @@ def remove_reasked_press(conn):
                       "anything it added to your team relationship. Your original answers are unchanged.",
                       None, now_iso(), "fix-3.2.4-press", "career"))
     return removed
+
+
+PRESS_FIX_KEY = "press-fix-3.2.4"
+PRESS_FIX_TITLE = "A repeat press answer was removed"
+PRESS_FIX_WHY = ("When Silly Season opened, an older round asked one of its press questions again by mistake. The "
+                 "extra answer has been removed, along with anything it added to your team relationship. Your "
+                 "original answers are unchanged.")
+
+
+def press_fix_with_notices(conn):
+    """3.2.5: the 3.2.4 clean-up, shown on each affected driver's Changes page with before and after numbers. Drivers
+    already cleaned up by 3.2.4 (which only sent a notification) get the same notice, naming the round."""
+    from . import impacts
+    first_open = conn.execute("SELECT MIN(opened_at) FROM market_windows").fetchone()[0]
+    extra = first_open and conn.execute(
+        """SELECT 1 FROM press_answers WHERE question NOT LIKE 'pre_%' GROUP BY event_id, driver_id
+           HAVING COUNT(*) > 2 AND MAX(created_at) >= ? LIMIT 1""", (first_open,)).fetchone()
+    if extra:
+        def fix(c):
+            out = {}
+            for did, rnd, _key in remove_reasked_press(c):
+                out.setdefault(did, []).append(f"R{rnd}: the repeat answer was removed.")
+            return out
+        impacts.record_change(conn, PRESS_FIX_KEY, PRESS_FIX_TITLE, PRESS_FIX_WHY, fix)
+    import re
+    for n in conn.execute("SELECT driver_id, text FROM notifications WHERE ref = 'fix-3.2.4-press' "
+                          "AND driver_id IS NOT NULL").fetchall():
+        rounds = re.match(r"Press fix \(([^)]*)\)", n["text"] or "")
+        detail = [f"{r.strip()}: the repeat answer was removed." for r in rounds.group(1).split(",")] if rounds else []
+        impacts.add_notice(conn, n["driver_id"], PRESS_FIX_KEY, PRESS_FIX_TITLE, PRESS_FIX_WHY, (), detail)

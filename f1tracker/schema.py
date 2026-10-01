@@ -527,6 +527,21 @@ def _assign_player_colors(conn):
         used.append(color)
 
 
+def _press_fix_once(conn):
+    """3.2.4/3.2.5: take back press answers given to questions a market window swapped in by mistake, with a change
+    notice for each driver affected (teamlife.press_fix_with_notices). Runs once per league."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'press_answers'").fetchone() or \
+            conn.execute("SELECT 1 FROM meta WHERE key = 'press_fix_notice'").fetchone():
+        return
+    from . import teamlife
+    try:
+        teamlife.press_fix_with_notices(conn)
+        conn.execute("INSERT INTO meta(key, value) VALUES('press_fix_notice', '1')")
+    except Exception:   # never stop a league opening over the repair; it's logged for the site owner
+        import logging
+        logging.getLogger(__name__).exception("press repair failed")
+
+
 def migrate(conn):
     """Bring any older save forward to SCHEMA_VERSION without discarding data.
 
@@ -568,8 +583,8 @@ def migrate(conn):
     v19 -> v20: weekend targets are chosen (v2.4): target_options (three per driver per round: safe, standard,
                stretch) and weekend_targets.tier / hit / miss (the choice and its reward and penalty). Targets set
                before this version have no tier and keep the old +2 / -1.5.
-    v21 -> v22 (3.2.4): no new columns; removes press answers to questions that a market window swapped in at
-               older rounds (teamlife.remove_reasked_press).
+    v21 -> v22 (3.2.4): no new columns (the version bump backs every league up before the press clean-up). The
+               clean-up itself (teamlife.press_fix_with_notices) runs once per league, tracked by meta press_fix_notice.
     v20 -> v21: the 2.5 calculation engine (see constants.ENGINE_*): season_calc (which engine each season uses and
                the Future-only cutoff), calc_migrations (every Calculation Update, with before/after values and the
                backup), round_ranks (the car rank used to judge each round), pace_inputs (optional lap-time evidence
@@ -587,11 +602,8 @@ def migrate(conn):
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
         if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
+            _press_fix_once(conn)
             return
-    old_version = None
-    if "meta" in tables:
-        row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-        old_version = int(row[0]) if row and str(row[0]).isdigit() else None
     conn.executescript(SCHEMA)
     if "sprint_status" not in _columns(conn, "results"):
         conn.execute("ALTER TABLE results ADD COLUMN sprint_status TEXT NOT NULL DEFAULT 'Not Run'")
@@ -707,15 +719,7 @@ def migrate(conn):
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()
         conn.execute("INSERT INTO meta(key, value) VALUES('join_mode', ?)",
                      ("requests" if opened and opened[0] == "1" else "invite",))
-    if old_version is not None and old_version < 22 and "press_answers" in tables:
-        # 3.2.4 (schema 22): take back press answers given to questions that were swapped in by mistake when a
-        # market window opened (the save is backed up before this runs).
-        from . import teamlife
-        try:
-            teamlife.remove_reasked_press(conn)
-        except Exception:   # never stop a league opening over the repair; it's logged for the site owner
-            import logging
-            logging.getLogger(__name__).exception("3.2.4 press repair failed")
+    _press_fix_once(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
