@@ -947,28 +947,36 @@ def remove_reasked_press(conn):
     to the team relationship a second time. Removes those extra answers (and their headlines), works the
     relationship extras out again, and tells each driver affected. Returns [(driver_id, round, question key)]."""
     from . import press
-    if not conn.execute("SELECT 1 FROM market_windows").fetchone():
+    first_open = conn.execute("SELECT MIN(opened_at) FROM market_windows").fetchone()[0]
+    if not first_open:
         return []
     removed, touched = [], {}
-    for r in conn.execute("""SELECT p.* FROM press_answers p WHERE p.question NOT LIKE 'pre_%'
-                             AND EXISTS (SELECT 1 FROM market_windows w WHERE w.opened_at <= p.created_at)
-                             ORDER BY p.created_at""").fetchall():
-        event = S.get_event(conn, r["event_id"])
+    # Every round asks each driver exactly two post-race questions, so a third answer can only be a repeat. Only the
+    # extra answers are removed: the first two stay, even if a later results correction changed the questions.
+    for pair in conn.execute("""SELECT event_id, driver_id FROM press_answers WHERE question NOT LIKE 'pre_%'
+                                GROUP BY event_id, driver_id HAVING COUNT(*) > 2""").fetchall():
+        rows = conn.execute("""SELECT * FROM press_answers WHERE event_id = ? AND driver_id = ?
+                               AND question NOT LIKE 'pre_%' ORDER BY created_at, rowid""",
+                            (pair["event_id"], pair["driver_id"])).fetchall()
+        event = S.get_event(conn, pair["event_id"])
         if not event:
             continue
-        questions, facts = _post_questions(conn, r["event_id"], r["driver_id"])
-        if not questions or r["question"] in {q["key"] for q in questions}:
-            continue
-        conn.execute("DELETE FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
-                     (r["event_id"], r["driver_id"], r["question"]))
-        bank = QUESTIONS.get(r["question"])
-        if bank:
-            asked = press._fill(bank[0], facts).replace("%", "\\%").replace("_", "\\_")
-            conn.execute("DELETE FROM news WHERE driver_id = ? AND created_at >= ? AND body LIKE ? ESCAPE '\\'",
-                         (r["driver_id"], r["created_at"],
-                          f'Asked "{asked}" after R{event["round_number"]} {event["name"]}, %'))
-        removed.append((r["driver_id"], event["round_number"], r["question"]))
-        touched.setdefault((event["season_id"], r["driver_id"]), []).append(f"R{event['round_number']}")
+        facts = None
+        for r in rows[2:]:
+            if r["created_at"] < first_open:
+                continue
+            if facts is None:
+                facts = _post_questions(conn, r["event_id"], r["driver_id"])[1]
+            conn.execute("DELETE FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
+                         (r["event_id"], r["driver_id"], r["question"]))
+            bank = QUESTIONS.get(r["question"])
+            if bank:
+                asked = press._fill(bank[0], facts).replace("%", "\\%").replace("_", "\\_")
+                conn.execute("DELETE FROM news WHERE driver_id = ? AND created_at >= ? AND body LIKE ? ESCAPE '\\'",
+                             (r["driver_id"], r["created_at"],
+                              f'Asked "{asked}" after R{event["round_number"]} {event["name"]}, %'))
+            removed.append((r["driver_id"], event["round_number"], r["question"]))
+            touched.setdefault((event["season_id"], r["driver_id"]), []).append(f"R{event['round_number']}")
     for (season_id, driver_id), rounds in touched.items():
         relations.add_bonus(conn, season_id, driver_id)
         conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref, category, username) "

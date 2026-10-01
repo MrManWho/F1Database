@@ -6,7 +6,7 @@ This is for site admins and Race Masters. The What's New screen and Help cover e
 
 - **The bug:** the post-race question about the transfer market was chosen by checking whether a market window was open *now*, not when the round was raced. When Silly Season opened, older rounds could swap their second question. With round gates on, those rounds came back as waiting for answers, and answering again counted toward the team relationship a second time.
 - **The fix:** whether a round asks about the market now depends only on whether a window was open when the round was first submitted (including the Silly Season that submission opened). It never changes afterwards.
-- **The clean-up (schema 22):** the first time each league opens on 3.2.4, a backup is taken (`<league>-before-v22-upgrade-*`). Then any post-race answer given after a market window opened, to a question that round doesn't ask, is removed together with its paddock headline. The relationship extras are worked out again from what remains, and each affected driver gets a notification naming the round. If the clean-up fails, the league still opens and the error is logged.
+- **The clean-up (schema 22):** the first time each league opens on 3.2.4, a backup is taken (`<league>-before-v22-upgrade-*`). Each round asks a driver exactly two post-race questions, so any third answer at a round that was given after a market window opened is removed, together with its paddock headline. The first two answers always stay, even if a results correction later changed the questions. The relationship extras are worked out again from what remains, and each affected driver gets a notification naming the round. If the clean-up fails, the league still opens and the error is logged.
 
 ## New in 3.2: maintenance mode
 

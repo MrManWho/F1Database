@@ -77,3 +77,16 @@ def test_answers_to_swapped_in_questions_are_taken_back_on_upgrade(career):
                             (d,)).fetchone()
         assert note and "R1" in note["text"]
     assert list(storage.backups_dir().glob(f"{career}-before-v22-upgrade-*"))
+
+
+def test_rounds_with_just_their_two_answers_are_never_touched(career):
+    """A results correction can change a round's questions afterwards; its two answers still stay."""
+    with storage.session(career) as conn:
+        sid, _asked = _play(conn, 3)
+        conn.execute("INSERT INTO market_windows(season_id, target_year, kind, status, opened_at) "
+                     "VALUES(?, 2027, 'Silly Season', 'Open', '2099-08-01 00:00:00')", (sid,))
+        conn.execute("UPDATE press_answers SET question = 'drought' WHERE rowid = (SELECT MIN(rowid) FROM press_answers "
+                     "WHERE question NOT LIKE 'pre_%')")
+        n = conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0]
+        assert teamlife.remove_reasked_press(conn) == []
+        assert conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] == n
