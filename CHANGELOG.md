@@ -3,6 +3,14 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.7 · Press questions stay put when Silly Season opens (test site)
+_Released October 1, 2026_
+> The 3.2.4 fix from the live site.
+
+### Highlights
+- **Older rounds no longer ask their press questions again.** Each round's questions are now fixed when the round is submitted, so opening (or closing) a market window never swaps a question at an older round.
+- **Answers given to those repeat questions are removed** the first time a league opens on this version, along with anything they added to the team relationship. Anyone affected gets a note naming the round.
+
 ## 4.0.0-beta.6 · Race Control: a brand-new website (test site)
 _Released September 29, 2026_
 > Paddock Legacy is rebuilt as "Race Control": a website that looks and reads like a timing screen, from the first

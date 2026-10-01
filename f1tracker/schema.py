@@ -564,6 +564,21 @@ def _assign_player_colors(conn):
         used.append(color)
 
 
+def _press_fix_once(conn):
+    """3.2.4 (also in 4.0): take back press answers given to questions a market window swapped in by mistake. Runs once
+    per league; a league already cleaned up by 3.2.4 has nothing left to remove."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'press_answers'").fetchone() or \
+            conn.execute("SELECT 1 FROM meta WHERE key = 'press_fix_324'").fetchone():
+        return
+    from . import teamlife
+    try:
+        teamlife.remove_reasked_press(conn)
+        conn.execute("INSERT INTO meta(key, value) VALUES('press_fix_324', '1')")
+    except Exception:   # never stop a league opening over the repair; it's logged for the site owner
+        import logging
+        logging.getLogger(__name__).exception("3.2.4 press repair failed")
+
+
 def migrate(conn):
     """Bring any older save forward to SCHEMA_VERSION without discarding data.
 
@@ -633,6 +648,7 @@ def migrate(conn):
     if "meta" in tables:
         row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
         if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
+            _press_fix_once(conn)
             return
     old_incidents = "incidents" in tables and "session" not in _columns(conn, "incidents")
     conn.executescript(SCHEMA)
@@ -761,6 +777,7 @@ def migrate(conn):
         opened = conn.execute("SELECT value FROM meta WHERE key = 'join_open'").fetchone()
         conn.execute("INSERT INTO meta(key, value) VALUES('join_mode', ?)",
                      ("requests" if opened and opened[0] == "1" else "invite",))
+    _press_fix_once(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
