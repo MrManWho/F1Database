@@ -348,6 +348,19 @@ def pre_keys(conn, event, driver_id):
     return keys[:PRE_PER_DRIVER], facts
 
 
+def market_open_after(conn, event):
+    """3.2.4: whether a market window was open when this round was first submitted (including one Silly Season opened
+    by that same submission). It never changes afterwards, so opening a window later can't swap a question at an
+    older round (which made answered rounds ask again). Rounds with no submission time keep the old rule."""
+    start = event.get("submitted_at") or ""
+    if not start[:1].isdigit():
+        if start:
+            return False   # submitted before v1.18: no time to go on
+        return bool(conn.execute("SELECT 1 FROM market_windows WHERE status = ?", (C.WINDOW_OPEN,)).fetchone())
+    return bool(conn.execute("SELECT 1 FROM market_windows WHERE opened_at <= datetime(?, '+5 minutes') "
+                             "AND (closed_at IS NULL OR closed_at >= ?)", (start, start)).fetchone())
+
+
 def post_keys(conn, event, driver_id):
     """The two post-race questions for this driver at this round (v2.3 bank)."""
     from . import teamlife
@@ -412,7 +425,7 @@ def post_keys(conn, event, driver_id):
     if t and t["status"] in ("Hit", "Missed"):
         facts["target"] = t["label"]
         pool.append("target_hit" if t["status"] == "Hit" else "target_missed")
-    if conn.execute("SELECT 1 FROM market_windows WHERE status = ?", (C.WINDOW_OPEN,)).fetchone():
+    if market_open_after(conn, event):
         pool.append("future")
     standings_pos = facts.get("champ_pos")
     if standings_pos and standings_pos <= 3 and event["round_number"] >= 3:

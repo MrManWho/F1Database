@@ -3,6 +3,14 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.4 · Press questions stay put when Silly Season opens
+_Released October 1, 2026_
+> A fix for a bug in the press pen.
+
+### Highlights
+- **Older rounds no longer ask their press questions again.** When Silly Season opened, a round from earlier in the season could swap its second question for one about the transfer market, so a round you'd already answered showed up as waiting for answers. Each round's questions are now fixed when the round is submitted, so opening (or closing) a market window never changes them.
+- **Answers given to those repeat questions have been removed.** If you answered one, that answer and anything it added to your team relationship have been taken back, and you'll find a note in your notifications saying which round. Your original answers are unchanged.
+
 ## 3.2.3 · No more money in deal terms
 _Released September 29, 2026_
 > A small display fix.

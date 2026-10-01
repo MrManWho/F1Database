@@ -89,7 +89,8 @@ def legacy_keys(conn, event_id, driver_id):
     mate = _teammate_result(conn, event_id, row)
     if finished and mate and mate["result_status"] == C.STATUS_FINISHED and mate["race_position"]:
         keys.append("beat_mate" if row["race_position"] < mate["race_position"] else "lost_mate")
-    if conn.execute("SELECT 1 FROM market_windows WHERE status = ?", (C.WINDOW_OPEN,)).fetchone():
+    event = S.get_event(conn, event_id)
+    if event and _press.market_open_after(conn, event):
         keys.insert(1, "future")
     keys.append("next")
     seen = []
@@ -936,3 +937,44 @@ def excuse(conn, event_id, driver_id, excused):
                  (1 if excused else 0, event_id, driver_id))
     judge_targets(conn, event_id)
     return target_for(conn, event_id, driver_id)
+
+
+# --------------------------------------------------------------------------- 3.2.4 repair
+
+def remove_reasked_press(conn):
+    """3.2.4: before this version, opening a market window (Silly Season) could swap the second question at older
+    rounds for the transfer-market one, so a round that was already answered asked again and the new answer added
+    to the team relationship a second time. Removes those extra answers (and their headlines), works the
+    relationship extras out again, and tells each driver affected. Returns [(driver_id, round, question key)]."""
+    from . import press
+    if not conn.execute("SELECT 1 FROM market_windows").fetchone():
+        return []
+    removed, touched = [], {}
+    for r in conn.execute("""SELECT p.* FROM press_answers p WHERE p.question NOT LIKE 'pre_%'
+                             AND EXISTS (SELECT 1 FROM market_windows w WHERE w.opened_at <= p.created_at)
+                             ORDER BY p.created_at""").fetchall():
+        event = S.get_event(conn, r["event_id"])
+        if not event:
+            continue
+        questions, facts = _post_questions(conn, r["event_id"], r["driver_id"])
+        if not questions or r["question"] in {q["key"] for q in questions}:
+            continue
+        conn.execute("DELETE FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
+                     (r["event_id"], r["driver_id"], r["question"]))
+        bank = QUESTIONS.get(r["question"])
+        if bank:
+            asked = press._fill(bank[0], facts).replace("%", "\\%").replace("_", "\\_")
+            conn.execute("DELETE FROM news WHERE driver_id = ? AND created_at >= ? AND body LIKE ? ESCAPE '\\'",
+                         (r["driver_id"], r["created_at"],
+                          f'Asked "{asked}" after R{event["round_number"]} {event["name"]}, %'))
+        removed.append((r["driver_id"], event["round_number"], r["question"]))
+        touched.setdefault((event["season_id"], r["driver_id"]), []).append(f"R{event['round_number']}")
+    for (season_id, driver_id), rounds in touched.items():
+        relations.add_bonus(conn, season_id, driver_id)
+        conn.execute("INSERT INTO notifications(driver_id, text, link, created_at, ref, category, username) "
+                     "VALUES(?,?,?,?,?,?,NULL)",
+                     (driver_id, f"Press fix ({', '.join(sorted(set(rounds)))}): when Silly Season opened, an older round "
+                      "asked you a question again by mistake. That second answer has been removed, along with "
+                      "anything it added to your team relationship. Your original answers are unchanged.",
+                      None, now_iso(), "fix-3.2.4-press", "career"))
+    return removed
