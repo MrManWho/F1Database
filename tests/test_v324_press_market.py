@@ -1,6 +1,8 @@
 """3.2.4: opening Silly Season never swaps a question at an older round, and answers given to swapped-in
 questions before this version are taken back (with anything they added to the team relationship)."""
 
+import json
+
 import pytest
 
 from conftest import players, run_event
@@ -68,14 +70,18 @@ def test_answers_to_swapped_in_questions_are_taken_back_on_upgrade(career):
         relations.add_bonus(conn, sid, d)
         assert relations.assess(conn, sid, d)["bonus"] > before
         kept = conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] - 1
-        conn.execute("DELETE FROM meta WHERE key = 'press_fix_324'")
-    with storage.session(career) as conn:        # the clean-up runs the next time the league opens
+        conn.execute("DELETE FROM meta WHERE key = 'press_fix_notice'")
+    with storage.session(career) as conn:        # opening the league upgrades it (after a backup)
         assert conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] == kept
         assert not conn.execute("SELECT 1 FROM press_answers WHERE question = 'future'").fetchone()
         assert relations.assess(conn, sid, d)["bonus"] == before
         note = conn.execute("SELECT text FROM notifications WHERE driver_id = ? AND ref = 'fix-3.2.4-press'",
                             (d,)).fetchone()
         assert note and "R1" in note["text"]
+        notice = conn.execute("SELECT * FROM impact_notices WHERE driver_id = ? AND key = 'press-fix-3.2.4'",
+                              (d,)).fetchone()
+        assert notice and "R1" in notice["details"]
+        assert any(c["stat"] == "relationship" for c in json.loads(notice["changes"]))
 
 
 def test_rounds_with_just_their_two_answers_are_never_touched(career):
@@ -89,3 +95,20 @@ def test_rounds_with_just_their_two_answers_are_never_touched(career):
         n = conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0]
         assert teamlife.remove_reasked_press(conn) == []
         assert conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] == n
+
+
+def test_leagues_cleaned_up_by_3_2_4_get_the_change_notice(career):
+    """3.2.4 only sent a notification; 3.2.5 puts the same fix on the driver's Changes page."""
+    with storage.session(career) as conn:
+        _play(conn, 1)
+        d = players(conn)[0]
+        conn.execute("INSERT INTO notifications(driver_id, text, created_at, ref, category) VALUES(?, "
+                     "'Press fix (R3, R4): when Silly Season opened...', '2026-10-01 02:00:00', 'fix-3.2.4-press', 'career')",
+                     (d,))
+        conn.execute("DELETE FROM meta WHERE key = 'press_fix_notice'")
+    with storage.session(career) as conn:
+        rows = conn.execute("SELECT * FROM impact_notices WHERE key = 'press-fix-3.2.4'").fetchall()
+        assert [r["driver_id"] for r in rows] == [d]
+        assert "R3" in rows[0]["details"] and "R4" in rows[0]["details"]
+    with storage.session(career) as conn:      # once only
+        assert conn.execute("SELECT COUNT(*) FROM impact_notices WHERE key = 'press-fix-3.2.4'").fetchone()[0] == 1

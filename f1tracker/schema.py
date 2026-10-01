@@ -565,15 +565,15 @@ def _assign_player_colors(conn):
 
 
 def _press_fix_once(conn):
-    """3.2.4 (also in 4.0): take back press answers given to questions a market window swapped in by mistake. Runs once
-    per league; a league already cleaned up by 3.2.4 has nothing left to remove."""
+    """3.2.4/3.2.5 (also in 4.0): take back press answers given to questions a market window swapped in by mistake,
+    with a change notice for each driver affected (teamlife.press_fix_with_notices). Runs once per league."""
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'press_answers'").fetchone() or \
-            conn.execute("SELECT 1 FROM meta WHERE key = 'press_fix_324'").fetchone():
+            conn.execute("SELECT 1 FROM meta WHERE key = 'press_fix_notice'").fetchone():
         return
     from . import teamlife
     try:
-        teamlife.remove_reasked_press(conn)
-        conn.execute("INSERT INTO meta(key, value) VALUES('press_fix_324', '1')")
+        teamlife.press_fix_with_notices(conn)
+        conn.execute("INSERT INTO meta(key, value) VALUES('press_fix_notice', '1')")
     except Exception:   # never stop a league opening over the repair; it's logged for the site owner
         import logging
         logging.getLogger(__name__).exception("3.2.4 press repair failed")
