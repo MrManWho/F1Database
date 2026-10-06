@@ -304,3 +304,28 @@ def test_the_ai_explanation_calls_the_f1laps_average_a_starting_reference(app, m
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "How this was worked out" in page
     assert "Community starting reference" in page and "not proof" in page
+
+
+@pytest.mark.weekends
+@pytest.mark.gates
+def test_each_saved_step_names_the_next_one_and_who_the_round_waits_on(app, master_client):
+    token, a, _b = _league(master_client)
+    ev = _events(token)[0]
+    _open_paddock(master_client, token, ev)
+    ana = _client(app, "ana")
+    with storage.session(token) as conn:
+        pen = teamlife.prerace_pen(conn, S.get_event(conn, ev["id"]), a)
+    said = []
+    for q in pen["questions"]:
+        ana.post(f"/career/{token}/weekend/{ev['id']}/prerace",
+                 data={"csrf_token": "tok", "question": q["key"], "answer": q["answers"][0]["key"]})
+        said += _flashes(ana)
+        with ana.session_transaction() as s:
+            s.pop("_flashes", None)
+    ana.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "standard"})
+    said += _flashes(ana)
+    assert "Next: answer your R1 pre-race press (1 question left)." in said[0]
+    assert "Next: choose your R1 weekend target." in said[1]
+    assert "You're ready for R1. It's waiting on Ben Okafor." in said[2]
+    page = ana.get(f"/career/{token}/weekend/{ev['id']}?stage=prepare").get_data(as_text=True)
+    assert "waiting on Ben Okafor" in page and "waiting on Ana Silva" not in page
