@@ -2,6 +2,16 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.11: a league one round from the end (test site)
+
+- **Account → Settings → Try a season finale** (site owner, test site only, `POST /settings/test-final-round`) runs
+  `testsite.seed_final_round(username)`: the golden-fixture league (`golden.play(..., rounds=-1)`, same seed, two player
+  drivers at Williams and Haas) with every round but the last played and submitted, named "Final Round Test
+  (fictional)". The signed-in owner is linked as Race Master driving Player One. The last round uses the site's
+  normal defaults (round gates and race weekends as for any new league).
+- Command line: `python -m f1tracker.testsite final-round [login]`. Both refuse to run without `F1_TRACKER_TEST_SITE=1`.
+- The free test service forgets its data on restart; click the button again to get a fresh one.
+
 ## 4.0.0-beta.10: linking a login to an existing player driver
 
 - **The bug:** a player driver that already existed (created with the league, added without a username, or loaded from a backup) could only get a login from the members table, and only once that person was already a league member. A join request naming that driver was refused as a duplicate name, and approving a request always created a new driver.

@@ -3,6 +3,13 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.11 · Try a season finale (test site)
+_Released October 6, 2026_
+> A practice league for trying the end of a season and the start of the next one.
+
+### Highlights
+- **A league with one round left, on demand.** Account → Settings → *Try a season finale* adds a fictional league with 23 of its 24 rounds already played, with you as Race Master driving Player One. Enter the last round, then start the new season from Seasons to see the rollover from start to finish. Test site only.
+
 ## 4.0.0-beta.10 · Link a login to any player driver (test site)
 _Released October 6, 2026_
 > Fixes player logins that couldn't be linked to a player driver already in the league.

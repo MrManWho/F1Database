@@ -134,8 +134,9 @@ def snapshot(conn):
     return out
 
 
-def play(engine, name="Golden League"):
-    """Create the fixed league in the current data folder and play its season. Returns the league id."""
+def play(engine, name="Golden League", rounds=ROUNDS):
+    """Create the fixed league in the current data folder and play its season. Returns the league id.
+    rounds: how many rounds to play (a negative number leaves that many rounds unplayed at the end)."""
     from . import relations, services as S, storage
     rng = random.Random(SEED)
     token = storage.new_token()
@@ -152,7 +153,7 @@ def play(engine, name="Golden League"):
             relations.ensure(conn, sid)
             for row in conn.execute("SELECT driver_id FROM team_relations WHERE season_id = ?", (sid,)).fetchall():
                 relations.set_pledge(conn, sid, row["driver_id"], 1)
-        for ev in S_events(token)[:ROUNDS]:
+        for ev in S_events(token)[:rounds]:
             with storage.session(token) as conn:
                 _enter(conn, ev, rng)
             with storage.session(token) as conn:

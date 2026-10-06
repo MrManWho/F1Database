@@ -90,3 +90,33 @@ def test_a_backup_with_unexpected_files_is_refused(app, monkeypatch, tmp_path):
         raise AssertionError("accepted")
     except offsite.BackupError as exc:
         assert "Unexpected file" in str(exc)
+
+
+def test_the_owner_adds_a_league_with_one_round_left_and_rolls_it_over(app, master_client, monkeypatch):
+    """4.0 test site: a fictional league one round from the end of its season, to try the finale and the rollover."""
+    from f1tracker import golden, services as S
+    assert master_client.post("/settings/test-final-round", data={"csrf_token": "tok"}).status_code == 404
+    monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
+    assert "one round left" in master_client.get("/accounts").get_data(as_text=True)
+    res = master_client.post("/settings/test-final-round", data={"csrf_token": "tok"})
+    assert res.status_code == 302
+    token = res.headers["Location"].split("/career/")[1].split("/")[0]
+    assert master_client.get(f"/career/{token}/dashboard").status_code == 200
+    with storage.session(token) as conn:
+        evs = S.events(conn, S.current_season_id(conn))
+        assert [e["status"] for e in evs].count("Complete") == len(evs) - 1 and evs[-1]["status"] != "Complete"
+        member = conn.execute("SELECT * FROM career_members WHERE username = 'devon'").fetchone()
+        assert member["role"] == "race_master" and member["driver_id"] == S.player_drivers(conn)[0]["id"]
+        golden._enter(conn, evs[-1], __import__("random").Random(1))
+    with storage.session(token) as conn:
+        golden._submit(conn, S.events(conn, S.current_season_id(conn))[-1])
+    assert master_client.get(f"/career/{token}/seasons/rollover").status_code == 200
+    with storage.session(token) as conn:
+        from f1tracker import seats
+        latest = S.list_seasons(conn)[-1]
+        review = seats.rollover_review(conn, latest["id"], latest["year"] + 1)
+    data = {"year": str(latest["year"] + 1), "csrf_token": "tok"}
+    data.update({f"decision_{r['driver']['id']}": "renew" for r in review["rows"] if r["needs_decision"]})
+    assert master_client.post(f"/career/{token}/seasons/new", data=data).status_code == 302
+    with storage.session(token) as conn:
+        assert S.get_season(conn, S.current_season_id(conn))["year"] == latest["year"] + 1
