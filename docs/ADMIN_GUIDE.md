@@ -2,6 +2,14 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.14: Python version pinned
+- `.python-version` (3.11) fixes the Python version Render uses, on the test site and, after the switch merge, on the
+  live site. The live site already runs 3.11 (its build installs `cp311` packages).
+- Why: Python 3.12 changed how `sum()` adds floating-point numbers. The calculations are tuned on 3.11; on 3.12/3.13
+  the golden-season tests fail (Driver Value ±0.5, car-adjusted rating ±2.6, AI recommendation ±3, one car-rank swap).
+- Don't remove or raise it without re-running `tests/test_v400_phase0.py` and `tests/test_v400_phase1.py` on the new
+  version and treating any difference as a calculation change (approval and change notices).
+
 ## 4.0.0-beta.13: reliability and speed
 
 - **Where forms go back to** (`f1tracker/navigation.py`). `shell.js` adds a hidden `return_to` (path, query and

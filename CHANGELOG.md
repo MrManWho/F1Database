@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.14 · Same numbers on every server (test site)
+_Released October 6, 2026_
+> The site now always runs on the same version of Python as the live site, so every career number comes out exactly
+> the same wherever it's worked out.
+
+### Highlights
+- **No hidden number drift.** Newer versions of Python add up decimals in a slightly different way, which could move a Driver Value by half a point or the recommended AI by a few levels. The site is now fixed to Python 3.11, the version the live site has always used, so moving to 4.0 can't change anyone's numbers this way.
+
+### Nothing changed in
+- Formulas, standings, career numbers, permissions and league data. No league file format change.
+
 ## 4.0.0-beta.13 · Faster pages, and forms that bring you back (test site)
 _Released October 6, 2026_
 > Saving something now takes you back to where you were, says clearly whether it saved, and never saves twice.
