@@ -462,6 +462,8 @@ def career_page(master_only=False, ops_only=False):
                             and request.endpoint not in SPECTATOR_POST_OK:
                         abort(403)  # spectators are strictly read-only, whatever endpoint is called
                     roles.touch(conn, g.user["username"])
+                    # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
+                    market.close_settled_windows(conn)
                     season_id = _selected_season(conn, token)
                     g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
                     g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)

@@ -2,6 +2,12 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.9 / 3.2.6: transfer windows close by themselves
+
+- **The bug:** nothing closed a market window except the Race Master's *Close window* button (Market administration) or the season rollover, so a Silly Season with every deal done stayed open indefinitely.
+- **The fix:** `market.close_if_settled` closes a window when no offer in it is Pending and every active player driver has an Accepted offer in it, a contract covering its target year, or no approach left (or no team left to approach). It runs after each signing and decline, and `market.close_settled_windows` runs on every league page load, which also closes windows left open before this version. Closing posts a paddock headline and one notification (dedupe `window:<id>:closed`). No schema change.
+- A driver who still has approaches left keeps the window open; close it by hand if they're done.
+
 ## New in 4.0.0-beta.1: the UI overhaul (test site)
 
 - **Navigation.** Home, Race Weekend, Championship, Career (drivers only) and More; Manage League is separate and shows
