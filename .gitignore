@@ -6,3 +6,8 @@ build/
 dist/
 *.spec
 *.f1career
+
+# Local development (dev.py / dev.bat): the PC's own data, never committed
+.devdata/
+.devdata-*/
+*.plbk
