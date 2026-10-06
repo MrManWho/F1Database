@@ -2,6 +2,12 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.16: failed pop-up forms
+
+- `shell.js` form restore: when the restored form sits in a closed `<dialog>`, it calls `showModal()` and repeats the
+  flashed error inside the form as `p.form-error` (the dialog covers the toast). `.form-error` is `#b3261e` in the light
+  theme. New test: each saved weekend step names the next one and who the round waits on. No schema change.
+
 ## 4.0.0-beta.15: League Readiness Check
 
 - **Where.** `GET/POST /career/<league>/readiness` (`readiness_page`, access `ops`), linked from Manage League. GET runs

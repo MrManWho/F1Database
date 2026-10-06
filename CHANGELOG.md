@@ -3,6 +3,14 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.16 · A failed report reopens where you left it (test site)
+_Released October 6, 2026_
+> Small fixes from checking beta.13 on a phone in both themes.
+
+### Highlights
+- **A report that didn't send reopens with what you typed.** If an incident report (or any form in a pop-up) couldn't be saved, its pop-up now opens again with your text and the reason at the top, instead of the text sitting hidden in a closed pop-up.
+- **Error messages are easier to read in the light theme.**
+
 ## 4.0.0-beta.15 · League Readiness Check (test site)
 _Released October 6, 2026_
 > One page that tells the Race Master what needs attention in the league and where to fix it, without changing anything.
