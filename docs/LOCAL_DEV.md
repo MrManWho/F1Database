@@ -114,6 +114,12 @@ Undo:
 
 Don't use `git push --force` or `git reset --hard` on a branch anyone else uses.
 
+## Releasing a beta
+
+When the work is ready, type `/ship-4-0` in Claude Code. It pulls in what's on GitHub and bumps the version. It
+writes the changelog and admin notes, runs the tests, then shows you a summary and asks before it pushes
+`release-4.0`. That push redeploys the 4.0 test site.
+
 ## Working with cloud Claude sessions
 
 Claude sessions in the project chat also push to `release-4.0`. Before starting local work, run `git pull`. Before

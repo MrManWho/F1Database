@@ -3,6 +3,19 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.19 · Running 4.0 on your own computer (test site)
+_Released October 6, 2026_
+> A safe way to run and edit 4.0 on a Windows PC, with the browser updating as files change. The site itself is unchanged.
+
+### Highlights
+- **dev.bat runs a private local copy** at http://127.0.0.1:5050, with its own data in the project's `.devdata` folder. It never sends emails, Discord posts or phone alerts, and it won't start if anything would point it at the live site or the desktop app's saves.
+- **The open page updates as you edit.** Page and script changes reload it, and style changes apply in place. If you've typed into a form, a Reload bar appears instead, so nothing you typed is lost.
+- **Fictional test leagues in one command:** a league with eight rounds played, and one with only its last round left for trying the finale and rollover.
+- **/ship-4-0 in Claude Code** releases the next beta the usual way: version number, changelog, admin notes and tests, then it asks before pushing to the test site.
+
+### Nothing changed in
+- Formulas, standings, career numbers, the AI recommendation policy, permissions, league data and how the live and test sites start.
+
 ## 4.0.0-beta.18 · Two small fixes after the redesign (test site)
 _Released October 6, 2026_
 > The race time's Clear button works, and the league list can't fall behind a change.

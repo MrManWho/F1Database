@@ -2,6 +2,21 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.19: local development
+
+- **`dev.py` / `dev.bat`** (docs/LOCAL_DEV.md) run the Flask dev server on 127.0.0.1:5050 with `F1_TRACKER_DATA_DIR`
+  = `.devdata/`, `F1_TRACKER_ENV=local` and `F1_TRACKER_TEST_SITE=1` (so every send becomes a delivery preview,
+  including an imported outbox). It refuses to start on Python other than 3.11, with `RENDER`, `SMTP_*` or
+  `F1_TRACKER_BACKUP_PASSPHRASE` set, or with a data folder outside the project (the desktop app's
+  `%LOCALAPPDATA%\F1UniverseTracker` and `/data` by name). `dev.bat seed|finale LOGIN` reuse `testsite.seed()` and
+  `seed_final_round()`. `reset` renames `.devdata`, and never deletes it.
+- **Live reload** is development only: a `/__dev/events` stream (answered before the site's own request hooks) and a
+  small injected script. `create_app` accepts `STATIC_FINGERPRINT_FRESH`, which recomputes the `?v=` fingerprint on
+  every page so edited CSS/JS gets a new address. Nothing in `server.py`, `render.yaml` or `launcher.py` changed.
+- **CLAUDE.md** and **.claude/settings.json** are for Claude Code on a local PC. Push, merge, rebase, reset and clean
+  always ask first. `/ship-4-0` (.claude/skills/ship-4-0) releases the next 4.0 beta the
+  usual way: version, CHANGELOG, admin guide, tests, then a confirmed push to `release-4.0` (never the live branch).
+
 ## 4.0.0-beta.18: league list cache and race time Clear
 
 - **League list cache** (`storage.list_careers`, added in beta.17). It was keyed only on the league file's and its
