@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.15 · League Readiness Check (test site)
+_Released October 6, 2026_
+> One page that tells the Race Master what needs attention in the league and where to fix it, without changing anything.
+
+### Highlights
+- **Manage League → Readiness check.** A summary at the top: the league and season, an overall status, how many blocking issues, warnings and optional items there are, when it last checked, and *Run check again*.
+- **Four separate answers, never one "everything is ready".** Ready to submit the current weekend; ready to close the season; ready to start the next season; league data ready for the 4.0 transition. Each one says *Ready*, *Needs attention*, *Blocked*, *Not checked* or *Check failed*. It is never green when a check failed or hasn't run.
+- **Every finding says what to do.** For example: "Round 8: Carson's grand prix timing is incomplete. Enter the race gap and laps, or tick Don't submit times. Blocks: Submit weekend. [Open Round 8 timing]". Each one also says why it matters and who can fix it. Filter by blocking, warnings, optional, category or season. Passed checks stay folded away.
+- **Only the rules the site already has.** Something only counts as blocking if the site already refuses that action, like the round gate, Submit weekend, required race times or two drivers signed for one seat. Weather, notes and Driver of the Day are optional and never lower readiness.
+- **Earlier seasons stay as they were.** Anything a season never tracked is *Not applicable*, not missing. Missing upgrade-notice acknowledgements are information only. A driver without a seat is a valid outcome, not an error. A contract without a seat is still flagged.
+- **4.0 transition checklist.** Migration status, tracking coverage of earlier seasons, historical records, season-end processing, and whether next season's contracts and grid are finalised. Blockers link straight to the fix. It works for a league moving to 4.0 mid-season or between seasons. Site deployment (Render, restore tests) is kept separate and isn't claimed.
+- **Read-only.** Checking never recalculates, submits, closes a window, marks anything read, sends anything or repairs a record. The quick checks run each time the page opens. *Run full check* also reads every earlier season, and its result is kept until the league changes ("Changes since last check: run again").
+- **Scorekeepers** see only the race-weekend findings they can act on. Private press answers and contract terms are never shown.
+
+### Nothing changed in
+- Formulas, standings, career numbers, permissions of existing pages and league data. No league file format change.
+
 ## 4.0.0-beta.14 · Same numbers on every server (test site)
 _Released October 6, 2026_
 > The site now always runs on the same version of Python as the live site, so every career number comes out exactly

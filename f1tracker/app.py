@@ -70,7 +70,7 @@ AUDIT_LABELS = {
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"readiness_page", "view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -524,8 +524,11 @@ def _selected_season(conn, token):
     return sid
 
 
-def career_page(master_only=False, ops_only=False):
-    """Open the career, enforce access, and turn ValidationErrors into flashed messages."""
+def career_page(master_only=False, ops_only=False, read_only=False):
+    """Open the career, enforce access, and turn ValidationErrors into flashed messages. read_only (4.0, the League
+    Readiness Check): skip everything opening a page normally does to the league (closing settled transfer windows,
+    publishing due announcements, opening a due paddock, refreshing kept numbers, "last seen" times, the change
+    record), so viewing it changes nothing."""
     def deco(fn):
         @wraps(fn)
         def wrapper(token, *args, **kwargs):
@@ -550,9 +553,10 @@ def career_page(master_only=False, ops_only=False):
                     if g.league_role == "spectator" and request.method == "POST" \
                             and request.endpoint not in SPECTATOR_POST_OK:
                         abort(403)  # spectators are strictly read-only, whatever endpoint is called
-                    roles.touch(conn, g.user["username"])
-                    # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
-                    market.close_settled_windows(conn)
+                    if not read_only:
+                        roles.touch(conn, g.user["username"])
+                        # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
+                        market.close_settled_windows(conn)
                     season_id = _selected_season(conn, token)
                     g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
                     g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
@@ -587,7 +591,7 @@ def career_page(master_only=False, ops_only=False):
                         conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
                     g.ctx["team_goals_on"] = teamgoals.enabled(conn)
-                    if not request.path.startswith("/api/"):
+                    if not request.path.startswith("/api/") and not read_only:
                         announcements.publish_due(conn)
                         raceweek.tick(conn, g.ctx["current_season_id"])   # v2.3: the paddock opens an hour before
                     g.ctx["race_weekends"] = raceweek.enabled(conn)
@@ -599,9 +603,10 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
-                        if mine and not request.path.startswith("/api/") else None
-                    storage.touch_opened(conn)
-                    impacts.on_open(conn, is_api=request.path.startswith("/api/"), refresh_stale=False)
+                        if mine and not request.path.startswith("/api/") and not read_only else None
+                    if not read_only:
+                        storage.touch_opened(conn)
+                        impacts.on_open(conn, is_api=request.path.startswith("/api/"), refresh_stale=False)
                     g.ctx["league_notice"] = impacts.announcement_for(conn, g.user["username"]) \
                         if not request.path.startswith("/api/") else None
                     g.ctx["calc_reminder"] = migration.reminder(conn) \
@@ -614,13 +619,14 @@ def career_page(master_only=False, ops_only=False):
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
                     started = audit_trail.begin(conn, request.endpoint, kwargs) \
-                        if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS else None
+                        if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not read_only else None
                     result = fn(conn, g.ctx, *args, **kwargs)
-                    if request.method == "GET" and not request.path.startswith("/api/"):
+                    if request.method == "GET" and not request.path.startswith("/api/") and not read_only:
                         impacts.refresh_if_stale(conn)   # after the page: reuses what the page worked out
-                    if request.method == "POST":
+                    if request.method == "POST" and not read_only:
                         impacts.mark_stale(conn)   # numbers may have moved: take a fresh copy on the next page
-                    if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not g.get("repeat"):
+                    if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not g.get("repeat") \
+                            and not read_only:
                         label = AUDIT_LABELS.get(request.endpoint, request.endpoint.replace("_", " ").capitalize())
                         what, link = described
                         summary = g.get("audit_summary") or (label[:1].lower() + label[1:] + (": " + what if what else ""))
@@ -3176,6 +3182,33 @@ def register_routes(app):
                     review=tracking.review_items(conn), features=tracking.FEATURES,
                     acks=tracking.acknowledged(conn, mig["id"]) if mig and ctx["is_master"] else [],
                     seasons={s["id"]: s for s in ctx["seasons"]})
+
+    @app.route("/career/<token>/readiness", methods=["GET", "POST"])
+    @career_page(ops_only=True, read_only=True)
+    def readiness_page(conn, ctx):
+        """4.0: the League Readiness Check. Read-only: checks run on a private copy of the league (readiness.py), and
+        opening or running it changes nothing in the league. The quick checks run on every visit; the full-history
+        checks run when the Race Master asks and are kept (outside the league file) until the league changes.
+        Scorekeepers see only the weekend findings they can act on; the server filters, not the page."""
+        from . import readiness
+        full = request.method == "POST"          # GET runs the quick checks; the full-history check is a POST
+        if full and not ctx["real"]["is_master"]:
+            abort(403)
+        conn.commit()                    # nothing of this request's is pending, so others can save while we check
+        report = readiness.run(conn, history=full)
+        if full and report["fingerprint"]:
+            readiness.save_history(ctx["token"], report, g.user["username"])
+        if request.method == "POST":
+            flash("Full check done. Nothing in the league was changed." if not report["failed"]
+                  else report["failed"], "success" if not report["failed"] else "error")
+            return redirect(url_for("readiness_page", token=ctx["token"]))
+        v = readiness.view(report, readiness.load_history(ctx["token"]), ctx["is_master"])
+        latest = storage.list_auto_backups(ctx["token"])[:1] if ctx["is_master"] else []
+        return page("readiness.html", ctx, v=v, report=report, severities=readiness.SEVERITIES,
+                    categories=readiness.CATEGORIES, targets=readiness.TARGETS,
+                    transition=readiness.transition_view(v, conn) if ctx["is_master"] else None,
+                    coverage=readiness.COVERAGE_NOTE, latest_backup=latest[0] if latest else None,
+                    app_version=C.APP_VERSION, site_owner=maintenance.is_owner(g.user))
 
     @app.route("/career/<token>/team-management")
     @career_page(master_only=True)

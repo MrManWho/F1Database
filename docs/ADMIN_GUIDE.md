@@ -2,6 +2,45 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.15: League Readiness Check
+
+- **Where.** `GET/POST /career/<league>/readiness` (`readiness_page`, access `ops`), linked from Manage League. GET runs
+  the quick checks. POST (Race Master only, 403 otherwise) also runs the full-history checks and keeps that result in
+  `<data dir>/readiness/<league>.json`, outside the league file. The page uses `career_page(read_only=True)`, which
+  skips everything opening a page normally does to a league: `roles.touch`, closing settled windows, publishing
+  announcements, the paddock tick, `touch_opened`, `impacts.on_open`/`refresh_if_stale`, `gates.my_todo` (it can offer
+  targets), the change record and `mark_stale`. A test compares every table before and after a visit and a run.
+- **How checks stay read-only.** `readiness.run` copies the league into memory with SQLite's backup API (one consistent
+  snapshot) and runs every check on the copy. Reused helpers that write as a side effect (`weekend_rows` syncing the
+  entry list, `teamlife._bank_since`, `recalc.preview`'s savepoint) only touch the copy. Anything they queue for
+  notifications or Discord is dropped.
+- **Fingerprint and staleness.** `readiness.fingerprint` hashes every league table except activity
+  (notifications, news, logs, chat, check-ins, predictions), `career_members.last_active` and volatile meta keys. A kept
+  full check whose fingerprint differs from the live league shows as out of date and counts as *Not checked*. The
+  fingerprint is taken again after checking, so a save that lands mid-check marks everything out of date.
+- **Checks** (26, in `readiness.CHECKS`, each with what it verifies, shown under *What each check verifies*):
+  - Members and drivers: logins (`weekend.unlinked_players`), assignments (duplicate logins, AI or deleted drivers,
+    `PRAGMA foreign_key_check`), seats (`seats.season_states`; free agents and released drivers are valid outcomes).
+  - Race weekends: weekend start (`weekend.results_blocked`, `gates.status(issue=False)`), results
+    (`S.submission_check`), timing (`ai3.missing_pace`, legacy-aware), weather (optional), saved-but-unsubmitted rounds,
+    player tasks (pledges, team goals, press that no gate requires), incidents (never blocking), submitted rounds of
+    this season (quick) and earlier seasons (full).
+  - Career and contracts: rounds left, dismissals awaiting a decision, pending offers (counts only, never terms),
+    transfer windows (never closed by the checker), and `seats.rollover_review` for next season (team conflicts are
+    blocking because `season_new` refuses them). Season-end processing for earlier seasons is a full check.
+  - Migration and tracking: file format and 4.0 tables, the Calculation Update and `calc_version`, the tracking record
+    compared with `tracking._plan`, review items, pending change notices, upgrade-notice acknowledgements (optional),
+    and historical records (full).
+  - Derived: standings are live; `recalc.preview(history=False)` for the season under way under its own rules; stored
+    Reputation carried between seasons compared without re-running any formula (full).
+- **Severity.** *Blocking* only when an existing rule refuses an action, and it names that action. *Warning* needs
+  attention. *Optional* never changes a status. Target statuses, worst first: Check failed, Blocked, Not checked, Needs
+  attention, Ready (plus Not applicable, for example no round left to submit). A check that raises is *Check failed*
+  with only the exception type, never its message.
+- **Permissions.** Each check has an audience. Scorekeepers get `ops` checks only (race weekends) and only the weekend
+  target. Findings carry names and counts, never press answers or offer terms.
+- **Speed.** Quick checks took about 0.04 s, and the full check about 0.1 s, on a two-season test league.
+
 ## 4.0.0-beta.14: Python version pinned
 - `.python-version` (3.11) fixes the Python version Render uses, on the test site and, after the switch merge, on the
   live site. The live site already runs 3.11 (its build installs `cp311` packages).

@@ -79,6 +79,7 @@
         <div class="nav-admin-items" id="nav-admin-items">
         <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race weekends</div>
         {{ item(url_for('race_weekend', token=t) ~ '?stage=sessions', 'Results entry', 'entry', false) }}
+        {{ item(url_for('readiness_page', token=t), 'Readiness check', 'gauge', ep == 'readiness_page') }}
         {% if ctx.is_master %}{{ item(url_for('seasons_page', token=t) ~ '#calendar', 'Calendar management', 'calendar', false) }}{% endif %}
         </div>
         {% if ctx.is_master %}
@@ -147,6 +148,7 @@
           <div class="dropdown-panel manage-panel" role="menu">
             <div class="dropdown-title">Race weekends</div>
             <a role="menuitem" href="{{ url_for('race_weekend', token=t) }}?stage=sessions">Results entry</a>
+            <a role="menuitem" href="{{ url_for('readiness_page', token=t) }}">Readiness check</a>
             {% if ctx.is_master %}<a role="menuitem" href="{{ url_for('seasons_page', token=t) }}#calendar">Calendar management</a>
             <div class="dropdown-title">Career management</div>
             <a role="menuitem" href="{{ url_for('grid_page', token=t) }}">Grid &amp; contracts</a>
