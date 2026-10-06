@@ -3,6 +3,15 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 3.2.6 · Silly Season closes by itself
+_Released October 6, 2026_
+> A fix for transfer windows that stayed open after every deal was done.
+
+### Highlights
+- **Silly Season no longer stays open forever.** A transfer window now closes the moment its last offer is signed or turned down and every player driver is sorted: signed with a team, already under contract, or out of offers and approaches. Everyone gets a notification and a paddock headline when it closes.
+- **Windows already stuck open close on their own.** If your league has a window with nothing left to decide, it closes the next time anyone opens the league. Signings made in it stand as they are.
+- The Race Master can still close a window early from Market administration; any offers nobody answered then expire, as before.
+
 ## 3.2.5 · The press fix on your Changes page
 _Released October 1, 2026_
 > A follow-up to 3.2.4.

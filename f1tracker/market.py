@@ -479,6 +479,46 @@ def close_window(conn, window_id):
                  (C.WINDOW_CLOSED, now_iso(), window_id))
 
 
+def _window_settled(conn, window):
+    """Nothing is left to decide in this window: no offer is waiting for an answer, and every active player driver
+    has signed (in this window or an earlier deal for that season), or has no approach left to make."""
+    if conn.execute("SELECT 1 FROM offers WHERE window_id = ? AND status = ?",
+                    (window["id"], C.OFFER_PENDING)).fetchone():
+        return False
+    for p in S.player_drivers(conn):
+        if not p["active"]:
+            continue
+        if conn.execute("SELECT 1 FROM offers WHERE window_id = ? AND driver_id = ? AND status = ?",
+                        (window["id"], p["id"], C.OFFER_ACCEPTED)).fetchone():
+            continue
+        if locked_in(conn, window["season_id"], p["id"], window["target_year"]):
+            continue
+        if approaches_left(conn, window["id"], p["id"]) > 0 and approachable_teams(conn, window["id"], p["id"]):
+            return False
+    return True
+
+
+def close_if_settled(conn, window_id):
+    """3.2.6: close a window by itself once its last offer is answered and every player driver is sorted.
+    Returns True when it closed the window."""
+    window = conn.execute("SELECT * FROM market_windows WHERE id = ?", (window_id,)).fetchone()
+    if not window or window["status"] != C.WINDOW_OPEN or not _window_settled(conn, window):
+        return False
+    close_window(conn, window_id)
+    ref = f"window:{window_id}"
+    feed.post(conn, window["season_id"], "market", f"{window['kind']} closes: the {window['target_year']} deals are done",
+              "Every offer has been answered and every player driver is sorted.", "contracts", ref=ref)
+    feed.notify(conn, None, f"The {window['kind']} has closed: every {window['target_year']} deal is done", "contracts",
+                ref=ref, category="market", dedupe=f"{ref}:closed")
+    return True
+
+
+def close_settled_windows(conn):
+    """Close every open window with nothing left to decide (also heals windows left open before 3.2.6)."""
+    return [w["id"] for w in conn.execute("SELECT id FROM market_windows WHERE status = ? ORDER BY id",
+                                          (C.WINDOW_OPEN,)).fetchall() if close_if_settled(conn, w["id"])]
+
+
 def get_offer(conn, offer_id):
     row = conn.execute("""SELECT o.*, w.target_year, w.status AS window_status, w.season_id AS window_season
                           FROM offers o JOIN market_windows w ON w.id = o.window_id WHERE o.id = ?""",
@@ -860,6 +900,7 @@ def decline_offer(conn, offer_id, rng=None):
                  (C.OFFER_DECLINED, "Declined", now_iso(), offer_id))
     _log(conn, offer_id, "driver", "decline", "Thanks, but no thanks.")
     ensure_lifeline(conn, offer["window_id"], offer["driver_id"], rng)
+    close_if_settled(conn, offer["window_id"])
 
 
 def accept_offer(conn, offer_id):
@@ -888,6 +929,7 @@ def accept_offer(conn, offer_id):
                   f"{offer['years']}-year deal{pledge}", offer["reason"], stamp))
     feed.on_signed(conn, offer, "news")
     apply_signings(conn)
+    close_if_settled(conn, offer["window_id"])
     return offer
 
 
@@ -1103,7 +1145,8 @@ def overview(conn, season_id):
     else:
         status, detail = "Closed", "No transfer window is open"
     if open_w:
-        next_cond = "Closes when the Race Master closes it. Unanswered offers then expire."
+        next_cond = ("Closes by itself once every offer is answered and every player driver has signed (or has no "
+                     "approaches left). The Race Master can also close it sooner; unanswered offers then expire.")
     elif conn.execute("SELECT 1 FROM market_windows WHERE target_year = ?", (next_year,)).fetchone():
         next_cond = f"The {next_year} window has already run. The next one opens during the {next_year} season."
     elif evs and done < half:

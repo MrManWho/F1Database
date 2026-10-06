@@ -2,6 +2,12 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 3.2.6: transfer windows close by themselves
+
+- **The bug:** nothing closed a market window except the Race Master's *Close window* button (Market administration) or the season rollover, so a Silly Season with every deal done stayed open, with its banner and "open" market status, indefinitely.
+- **The fix:** `market.close_if_settled` closes a window when no offer in it is Pending and every active player driver has an Accepted offer in it, a contract covering its target year, or no approach left (or no team left to approach). It runs after each signing and decline, and `market.close_settled_windows` runs on every league page load, which also closes windows left open before 3.2.6 and catches talks that collapse or approaches that are turned down. Closing posts a paddock headline and one notification (dedupe `window:<id>:closed`). No schema change.
+- A driver who still has approaches left keeps the window open; close it by hand if they're done.
+
 ## 3.2.4: press questions and Silly Season
 
 - **The bug:** the post-race question about the transfer market was chosen by checking whether a market window was open *now*, not when the round was raced. When Silly Season opened, older rounds could swap their second question. With round gates on, those rounds came back as waiting for answers, and answering again counted toward the team relationship a second time.
