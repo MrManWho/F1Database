@@ -7,9 +7,9 @@ Every version of Paddock Legacy, newest first: what changed for the people using
 _Released October 6, 2026_
 > The race time's Clear button works, and the league list can't fall behind a change.
 
-### Fixed
+### Highlights
 - **Clear** next to a round's race time now clears it. Before, the time you'd set stayed put.
-- The list of your leagues (the league switcher, Your leagues, account export and account deletion) always reflects a change made a moment earlier, even on servers whose clocks only tick once a second.
+- **Your leagues are always up to date.** The league switcher, Your leagues, account export and account deletion always reflect a change made a moment earlier, even on servers whose clocks only tick once a second.
 
 ### Nothing changed in
 - Formulas, standings, career numbers, the AI recommendation policy, permissions and league data.
