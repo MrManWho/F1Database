@@ -515,7 +515,7 @@
       <li>{{ icon('gauge') }}<span class="g-label">AI difficulty<small>{% if event.ai_difficulty is not none %}used this round{% elif event.ai_untracked %}not tracked{% elif rec.recommended is not none and not rec.for_next %}recommended{% else %}&nbsp;{% endif %}</small></span>
         <span class="g-value big">{% if event.ai_difficulty is not none %}{{ event.ai_difficulty }}{% elif event.ai_untracked %}—{% elif rec.recommended is not none and not rec.for_next %}{{ rec.recommended }}{% else %}—{% endif %}</span></li>
       <li>{{ icon('cloud') }}<span class="g-label">Weather<small>{{ 'as recorded' if wx and wx.shown else 'recorded after each session' }}</small></span>
-        <span class="g-value">{% if wx and wx.shown %}{% for w in wx.shown %}<span title="{{ w.session_label }}: {{ w.text }}">{{ w.icon }}</span>{% endfor %}{% else %}—{% endif %}</span></li>
+        <span class="g-value">{% if wx and wx.shown %}{% for w in wx.shown %}<span title="{{ w.session_label }}: {{ w.text }}">{{ w.icon }}</span>{% endfor %}{% elif wx %}<small class="muted">{{ wx.empty }}</small>{% else %}—{% endif %}</span></li>
       <li>{{ icon('clock') }}<span class="g-label">{% set up = ws.sessions|rejectattr('done')|first %}{{ 'Next session' if up and not ws.complete else 'Sessions' }}<small>{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</small></span>
         <span class="g-value">{% if ws.complete %}All done{% elif up %}{{ up.label }}{% else %}Review{% endif %}</span></li>
       <li>{{ icon('flag') }}<span class="g-label">Race<small>{{ circuit.circuit if circuit and circuit.circuit else event.location }}</small></span>

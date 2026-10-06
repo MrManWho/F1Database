@@ -83,7 +83,7 @@
 {% if wet_dry %}
 <section class="card table-card" id="weather">
   <h2>In the wet</h2>
-  <p class="muted small">Grand Prix results in rounds where the race was recorded as light rain, heavy rain or changing, against dry ones. Only rounds with the race's weather recorded count.</p>
+  <p class="muted small">Grand Prix results in rounds where the race was recorded as light rain, heavy rain or changing, against dry ones. Only rounds with the race's weather recorded count.{% if wet_cover %} <span class="coverage">{{ wet_cover }}.</span>{% endif %}</p>
   <div class="table-wrap">
   <table class="data-table compact">
     <caption class="sr-only">Wet and dry Grand Prix records</caption>

@@ -25,7 +25,7 @@ from . import (battle, circuits, delivery, demo, gates, league_profile, library,
 from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
                ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
-from . import workspace
+from . import tracking, workspace
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -70,7 +70,7 @@ AUDIT_LABELS = {
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"view_mode", "league_notice_seen", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -519,6 +519,7 @@ def career_page(master_only=False, ops_only=False):
                         if g.ctx["is_master"] and engine.choice(conn) == "later" \
                         and not session.get(f"calc_reminder_hidden_{token}") else None
                     g.ctx["calc_engine"] = engine.season_engine(conn, g.ctx["current_season_id"])
+                    _legacy_context(conn, g.ctx, token)
                     gate = _mandatory_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
@@ -616,11 +617,11 @@ HELP_TOPICS = [("weekend", "The race weekend"), ("roles", "Roles and permissions
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
-                     "league_pin", "league_order", "league_leave"}
+                     "league_pin", "league_order", "league_leave", "upgrade_notice_ack", "upgrade_notice_hide"}
 
 
 IMPACT_EXEMPT = {"impact_page", "league_notice_seen", "api_notifications", "notifications_read", "notifications_clear", "help_page",
-                 "timezone_detect", "view_mode", "whats_new_ack"}
+                 "timezone_detect", "view_mode", "whats_new_ack", "upgrade_notice_ack", "upgrade_notice_hide"}
 
 
 # v2.4: League settings is a hub with one page per area. key: (title, what it covers)
@@ -663,6 +664,43 @@ def _mandatory_steps(conn, ctx, master_only=False):
         if seat and not teamgoals.choice(conn, sid, seat[0]) and not teamgoals.locked(conn, sid, seat[0]):
             steps.append(("team_goals_page", "Choose your team's goal first."))
     return steps
+
+
+# 4.0: pages that show a season's history, where the legacy-season banner explains (once) what that season tracked.
+LEGACY_BANNER_PAGES = {"dashboard", "standings_page", "stats_page", "results_index", "seasons_page", "weekend",
+                       "race_summary", "my_career", "driver_profile", "team_profile", "team_standing", "season_review"}
+LEGACY_ROUND_PAGES = {"weekend", "race_summary"}
+# The season under way after a mid-season upgrade shows the banner only where the earlier rounds are the subject.
+LEGACY_MIXED_PAGES = {"stats_page", "results_index", "seasons_page", "season_review"}
+
+
+def _legacy_context(conn, ctx, token):
+    """4.0: the legacy-season banner for this page, and this person's one-time upgrade notice (shown only once
+    nothing mandatory is waiting and no other pop-up is open, so notices never stack)."""
+    ctx["legacy"], ctx["upgrade_notice"] = None, None
+    if request.path.startswith("/api/") or request.method != "GET":
+        return
+    season = ctx["season"]
+    if request.endpoint == "season_review":
+        season = S.get_season(conn, (request.view_args or {}).get("season_id")) or season
+    summary = tracking.season_summary(conn, season)
+    if summary and request.endpoint in LEGACY_BANNER_PAGES:
+        if season["id"] != ctx["current_season_id"] or request.endpoint in LEGACY_MIXED_PAGES:
+            ctx["legacy"] = summary
+        elif request.endpoint in LEGACY_ROUND_PAGES:
+            event = S.get_event(conn, (request.view_args or {}).get("event_id"))
+            if event and any(f["from_round"] is None or event["round_number"] < f["from_round"]
+                             for f in summary["features"]):
+                ctx["legacy"] = summary
+    if request.endpoint in MANDATORY_ENDPOINTS or request.endpoint in IMPACT_EXEMPT or ctx.get("is_demo"):
+        return
+    notice = tracking.notice_for(conn, g.user["username"], site_owner=bool(g.user.get("is_master")))
+    if not notice or session.get(f"upgrade_hidden_{token}_{notice['migration']['id']}"):
+        return
+    if _mandatory_steps(conn, ctx):
+        return          # changes to agree to (and other required steps) come first; the notice follows after them
+    ctx["upgrade_notice"] = notice
+    ctx["league_notice"] = None       # the one-off league banner waits for the next page, so the two never stack
 
 
 def _mandatory_gate(conn, ctx, master_only=False):
@@ -1891,6 +1929,7 @@ def register_routes(app):
         return {"recorded": recorded, "shown": weather.describe(recorded, event), "sessions": weather.sessions_for(event),
                 "session_labels": weather.SESSIONS, "conditions": weather.CONDITIONS,
                 "can_edit": ctx["can_run"] or ctx["is_master"],
+                "empty": tracking.empty_text(conn, event, "weather"),
                 "wet": any(weather.is_wet(k) for k in recorded.values())}
 
     def _pace_panel(conn, ctx, event):
@@ -1905,7 +1944,8 @@ def register_routes(app):
                 out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
         return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
                 "drivers": [r for r in S.weekend_rows(conn, event["id"]) if not r["driver"]["is_player"]],
-                "fmt": ai3.format_time, "required": ai3.pace_required(conn),
+                "fmt": ai3.format_time, "legacy": not tracking.round_tracked(conn, event, "race_times"),
+                "required": ai3.pace_required(conn) and tracking.round_tracked(conn, event, "race_times"),
                 "missing": ai3.missing_pace(conn, event, rows) if event["status"] != C.EVENT_COMPLETE else []}
 
     def _my_target(conn, ctx, event):
@@ -1930,6 +1970,8 @@ def register_routes(app):
         me = ctx["my_driver"]
         if me and wk["phase"] in ("paddock", "live", "complete") and S.driver_seats(conn, event["season_id"]).get(me["id"]):
             wk["pen"] = teamlife.prerace_pen(conn, event, me["id"])
+            if not workspace._legacy_ok(conn, event, "prerace_press", wk["pen"]):
+                wk.pop("pen")        # pre-race press wasn't part of this round's rules (nothing was answered)
         return wk
 
     def _entrants(conn, event_id):
@@ -2152,7 +2194,10 @@ def register_routes(app):
         from . import weather
         return page("stats.html", ctx, rows=rows, sprint=stats.sprint_table(rows), chart=chart,
                     reliability=stats.teams_reliability(conn, sid), pairs=pairs, years=years, sos=sos,
-                    players_only=players_only, wet_dry=weather.driver_splits(conn, sid, players_only))
+                    players_only=players_only, wet_dry=weather.driver_splits(conn, sid, players_only),
+                    wet_cover=tracking.coverage(conn, sid, "weather", sum(
+                        1 for e_id, w in weather.for_season(conn, sid).items() if w.get("race") and
+                        (S.get_event(conn, e_id) or {}).get("status") == C.EVENT_COMPLETE)))
 
     @app.route("/api/career/<token>/search")
     @career_page()
@@ -2936,6 +2981,51 @@ def register_routes(app):
     def league_notice_seen(conn, ctx):
         impacts.dismiss_announcement(conn, g.user["username"])
         return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
+
+    @app.route("/career/<token>/upgrade-notice", methods=["POST"])
+    @career_page()
+    def upgrade_notice_ack(conn, ctx):
+        """4.0: "Got it" on the upgrade notice, stored for this person, this league and this migration only."""
+        tracking.acknowledge(conn, g.user["username"], _form_int("migration_id"), site_owner=bool(g.user.get("is_master")))
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        nxt = request.form.get("next")
+        return redirect(nxt if _safe_next(nxt) else url_for("dashboard", token=ctx["token"]))
+
+    @app.route("/career/<token>/upgrade-notice/later", methods=["POST"])
+    @career_page()
+    def upgrade_notice_hide(conn, ctx):
+        """4.0: "Not now" hides the notice for this browser session only. Nothing is acknowledged, so it comes back
+        the next time this league is opened."""
+        mid = _form_int("migration_id")
+        if mid:
+            session[f"upgrade_hidden_{ctx['token']}_{mid}"] = True
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        nxt = request.form.get("next")
+        return redirect(nxt if _safe_next(nxt) else url_for("dashboard", token=ctx["token"]))
+
+    @app.route("/career/<token>/legacy-tracking", methods=["GET", "POST"])
+    @career_page()
+    def legacy_tracking(conn, ctx):
+        """4.0: what each season tracked, where the league's 4.0 tracking began, and (Race Master) confirming the
+        start of a feature that was first recorded part-way through a season. Only the tracking record changes."""
+        if request.method == "POST":
+            if not ctx["is_master"]:
+                abort(403)
+            raw = request.form.get("from_round", "")
+            try:
+                tracking.set_start(conn, _form_int("season_id"), request.form.get("feature", ""),
+                                   None if raw in ("", "none") else int(raw), g.user["username"])
+                flash("Saved. Only the tracking record changed; no result or number did.", "success")
+            except (ValidationError, ValueError) as exc:
+                flash(str(exc), "error")
+            return redirect(url_for("legacy_tracking", token=ctx["token"]))
+        mig = tracking.migration(conn)
+        return page("legacy_tracking.html", ctx, migration=mig, rows=tracking.all_rows(conn),
+                    review=tracking.review_items(conn), features=tracking.FEATURES,
+                    acks=tracking.acknowledged(conn, mig["id"]) if mig and ctx["is_master"] else [],
+                    seasons={s["id"]: s for s in ctx["seasons"]})
 
     @app.route("/career/<token>/team-management")
     @career_page(master_only=True)

@@ -73,6 +73,8 @@ def my_tasks(conn, ctx, event, wk, gate, my_target, hub):
                       "done": not needs, "required": bool(life.get("gates") and life.get("gate_targets")),
                       "closed": not my_target["open"] and not chosen})
     pen = (wk or {}).get("pen") if wk else None
+    if pen and not _legacy_ok(conn, event, "prerace_press", pen):
+        pen = None                                # pre-race press wasn't part of this round's rules
     if pen and pen.get("questions"):
         waiting = (wk or {}).get("phase") == "paddock" and pen.get("open")
         tasks.append({"key": "prerace", "text": "Answer your pre-race press", "stage": "prepare", "anchor": "prerace",
@@ -92,12 +94,23 @@ def my_tasks(conn, ctx, event, wk, gate, my_target, hub):
                       "done": bool(hub.get("my_picks")), "required": False})
     if event["status"] == C.EVENT_COMPLETE:
         pen = press_pen_for(conn, event, me["id"])
+        if pen and not _legacy_ok(conn, event, "press", pen):
+            pen = None                            # post-race press wasn't part of this round's rules
         if pen and pen["questions"]:
             tasks.append({"key": "postpress", "text": "Answer your post-race press", "stage": "debrief",
                           "anchor": "press", "done": not pen["open"], "required": bool(event.get("press_required"))
                           and bool(life.get("gates") and life.get("gate_press"))})
     tasks.sort(key=lambda t: (t["done"], not t["required"]))
     return tasks
+
+
+def _legacy_ok(conn, event, feature, pen):
+    """A press pen belongs on this round: the feature was tracked then, or something was answered anyway (stored
+    answers always show)."""
+    from . import tracking
+    if tracking.round_tracked(conn, event, feature):
+        return True
+    return any(q.get("answered") for q in pen.get("questions") or [])
 
 
 def press_pen_for(conn, event, driver_id):
@@ -188,5 +201,7 @@ def debrief(conn, ctx, event):
     me = ctx.get("my_driver")
     mine = next((h for h in summary["humans"] if me and h["driver"]["id"] == me["id"]), None)
     pen = press_pen_for(conn, event, me["id"]) if me and not ctx.get("is_spectator") else None
+    if pen and not _legacy_ok(conn, event, "press", pen):
+        pen = None
     wdc_me = next((w for w in summary["wdc"] if me and w["row"]["driver"]["id"] == me["id"]), None)
     return {"summary": summary, "mine": mine, "pen": pen, "wdc_me": wdc_me}

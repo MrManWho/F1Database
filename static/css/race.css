@@ -171,3 +171,13 @@ label { color: var(--rc-sub); }
 body.with-sidebar .test-site-banner { margin-left: 0 !important; }
 /* the status strip's menus (league, view mode) must open above sticky page parts like the Race Weekend step bar */
 .contextbar { position: relative; z-index: 35; }
+
+/* 4.0: legacy seasons and the one-time upgrade notice */
+.legacy-banner { display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .9rem; font-size: .85rem; }
+.legacy-banner p { margin: .15rem 0 0; }
+.upgrade-notice { border-left: 4px solid var(--rc-info); }
+.upgrade-notice p { margin: 0 0 .7rem; line-height: 1.45; }
+.upgrade-notice .button-row { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; align-items: center; }
+.upgrade-notice .btn-primary { min-width: 7rem; min-height: 44px; }
+.coverage { color: var(--rc-sub); font-style: italic; }
+.legacy-table td.not-tracked { color: var(--rc-sub); }

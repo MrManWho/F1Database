@@ -1,7 +1,8 @@
 {# v2.5: optional lap-time evidence for the AI tracker. Needs: ctx, event, pace. #}
 {% if pace %}
 <section class="card pace-card" id="pace" aria-labelledby="pace-title">
-  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">({{ 'required on tracked rounds' if pace.required else 'optional' }}, for the AI recommendation)</small></h2></div>
+  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">({{ 'not required for this round' if pace.legacy else 'required on tracked rounds' if pace.required else 'optional' }}, for the AI recommendation)</small></h2></div>
+  {% if pace.legacy %}<p class="muted small">Race times: Not tracked under this season's rules. Anything entered for this round is kept and still used.</p>{% endif %}
   <p class="muted small">Type your race time and your AI teammate's (or the driver you pick to compare with) straight from the game's results screen: the site works out the gap. Race times compare you with the AI, not just finishing positions, so the recommendation is much sharper.
     {% if pace.required %}<b>On a tracked round every player who finished needs their race times (and laps) before the round can be submitted</b>, unless you tick <em>Don't submit times</em> for that session.{% else %}Leave anything blank you don't have.{% endif %}
     Flag anything that made the session unrepresentative and it's left out or counts less.</p>
@@ -10,7 +11,7 @@
   {% for item in pace.entries %}{% set r = item.row %}{% set p = item.input %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
-      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% elif pace.required %}race times missing{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· nothing entered</span>{% endif %}</summary>
+      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% elif pace.required %}race times missing{% elif pace.legacy and p.race_gap is none %}race times not tracked{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· {{ "race times not tracked under this season's rules" if pace.legacy else 'nothing entered' }}</span>{% endif %}</summary>
     {% if pace.can_edit %}
     <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

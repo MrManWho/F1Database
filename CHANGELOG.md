@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.12 · Earlier seasons look complete under their own rules (test site)
+_Released October 6, 2026_
+> When a league moves up from 3.x, its earlier seasons are shown under the rules they were played with, and everyone
+> gets one short note about the upgrade.
+
+### Highlights
+- **Nothing to re-enter.** Things the old website never collected (race times, incidents by session, the AI recommendation shown before each round) are hidden or marked "Not tracked under this season's rules" on older rounds. They never count as missing, incomplete or zero, and older rounds never ask for race times before they can be saved again.
+- **Gaps are still gaps.** Something the season did track but that was never entered shows "Not recorded", so a real gap isn't mistaken for an old rule.
+- **A small "Legacy season" note** on the history pages of an older season, saying where your league's new tracking begins (for example "from Round 7 of this season"). It appears once per page, not on every card.
+- **Fair statistics.** Statistics that rely on tracking only count rounds where it was tracked, and say so: "Based on 3 eligible rounds · Tracked since Round 3 of the 2026 season".
+- **"Your league has been upgraded to Paddock Legacy 4.0".** The first time each member opens an upgraded league, a short note explains what changed and where new tracking begins. *Got it* is remembered for your account in that league, on every device. *Not now* only hides it until next time. Leagues created on 4.0 never show it.
+- **Your history is untouched.** Results, standings, Form, Reputation, relationships, contracts, offers and next season's grid stay exactly as they were. If a league also recalculates, that is explained separately and still goes through *Changes to your driver*.
+- **What each season tracked** (League → the note's *What was tracked* link) lists, season by season, when each feature began. If something was first used part-way through a season, the Race Master confirms the real start round there.
+
+### Migration notes
+- League files move to format 26 (the upgrade record, what each season tracked, and who has seen the upgrade note). A league last saved by 3.x records this once, the first time 4.0 opens it. Nothing existing changes.
+
 ## 4.0.0-beta.11 · Try a season finale (test site)
 _Released October 6, 2026_
 > A practice league for trying the end of a season and the start of the next one.

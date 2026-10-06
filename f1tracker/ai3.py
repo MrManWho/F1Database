@@ -145,6 +145,9 @@ def missing_pace(conn, event, rows=None):
     from . import services as S
     if not pace_required(conn) or event["ai_difficulty"] is None or event["ai_untracked"] or not E.round_v3(conn, event):
         return []
+    from . import tracking
+    if not tracking.round_tracked(conn, event, "race_times"):
+        return []       # a round played before the league's 4.0 update never asked for race times
     rows = rows if rows is not None else S.weekend_rows(conn, event["id"])
     sessions = [("gp", "result_status", "Grand Prix")]
     if event["is_sprint"] and _sprints_tracked(conn):

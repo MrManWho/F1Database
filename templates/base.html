@@ -253,6 +253,14 @@
         <b>{{ ctx.league_notice.title }}.</b> {{ ctx.league_notice.text }}
         <form method="post" action="{{ url_for('league_notice_seen', token=ctx.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Got it</button></form></div>
       {% endif %}
+      {% if ctx.legacy %}{% set lg = ctx.legacy %}{% set mig = lg.migration %}
+      <aside class="banner banner-info legacy-banner" aria-labelledby="legacy-title"><span aria-hidden="true">🗂</span>
+        <div><b id="legacy-title">Legacy season</b>
+        <p>{% if mig and mig.start_year == lg.season.year and mig.start_round > 1 %}Rounds 1–{{ mig.start_round - 1 }} of this season used an earlier tracking system.{% else %}This season used an earlier tracking system.{% endif %}
+          Recorded results and career history are preserved.
+          Some additional tracking begins with your league's 4.0 update{% if lg.start %}: {{ 'from ' if 'Round' in lg.start else 'in ' }}{{ lg.start }}{% endif %}.
+          <a href="{{ url_for('legacy_tracking', token=ctx.token) }}">What was tracked</a></p></div></aside>
+      {% endif %}
       {% include "_subnav.html" with context %}
       {% block content %}{% endblock %}
     </main>
@@ -352,6 +360,51 @@
     </form>
   </div>
 </dialog>
+{% endif %}
+
+{% if ctx and ctx.upgrade_notice and not whats_new %}{% set un = ctx.upgrade_notice %}
+<dialog id="upgrade-notice" class="dialog upgrade-notice" aria-labelledby="un-title" aria-describedby="un-body" open>
+  <div class="dialog-head"><div><div class="kicker">ℹ️ {{ ctx.career_name }} · for your information</div>
+    <h2 id="un-title">Your league has been upgraded to Paddock Legacy 4.0</h2></div></div>
+  <div id="un-body">
+    <p>4.0 introduces additional features and tracking. Your league's existing history remains available.</p>
+    <p>Earlier seasons may not include information that the previous website never collected. Those sections will be hidden or marked as not tracked, and they will not count as incomplete or as zero.</p>
+    <p>New tracking begins from {{ un.start or "the season or round shown for your league" }}. You do not need to re-enter previous seasons.</p>
+    {% if un.calc %}<p class="small">{{ un.calc }}</p>{% endif %}
+  </div>
+  <form method="post" action="{{ url_for('upgrade_notice_ack', token=ctx.token) }}" data-un-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="migration_id" value="{{ un.migration.id }}">
+    <input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else '' }}">
+    <div class="button-row">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('changelog_page') }}">See what's new in 4.0</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('legacy_tracking', token=ctx.token) }}">Migration details</a>
+      <button class="btn btn-ghost btn-sm" type="submit" formaction="{{ url_for('upgrade_notice_hide', token=ctx.token) }}" data-un-later>Not now</button>
+      <button class="btn btn-primary" type="submit" data-un-ok autofocus>Got it</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  // Shown as a modal where the browser supports it (focus stays inside; Esc closes it for now). Without script it is
+  // simply an open panel. Only "Got it" is stored; closing any other way leaves it to come back next time.
+  var d = document.getElementById("upgrade-notice"); if (!d) return;
+  var form = d.querySelector("[data-un-form]");
+  if (d.showModal) { d.close(); d.showModal(); }
+  function send(action, done) {
+    fetch(action, { method: "POST", body: new FormData(form), credentials: "same-origin",
+                    headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { if (r.ok) { done(); } else { form.action = action; form.submit(); } })
+      .catch(function () { form.action = action; form.submit(); });
+  }
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var later = e.submitter && e.submitter.hasAttribute("data-un-later");
+    send(later ? e.submitter.getAttribute("formaction") : form.action, function () { d.close(); });
+  });
+  d.addEventListener("cancel", function () { send(d.querySelector("[data-un-later]").getAttribute("formaction"), function () {}); });
+})();
+</script>
 {% endif %}
 
 {% if whats_new %}

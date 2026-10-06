@@ -2,6 +2,36 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.12: legacy seasons and the upgrade notice
+
+- **What counts as an upgrade.** `schema.migrate` calls `tracking.record_upgrade` once when it opens a league file with league data but no `audit_events` table (or a schema below 22). Live 3.2.4–3.2.6 files say schema 22 too, which is why the table is the test and not the number. It covers both ways in: opening a copied live file and *Import a league*. New 4.0 leagues and the test-site leagues earlier betas already opened get no record and no notice. Re-import a fresh live copy to try it.
+- **Tables (format 26).**
+  - `tracking_migrations`: one row per kind (`4.0`), with from_schema, migrated_at, start_year/start_round and the audience (usernames in the league at the upgrade).
+  - `season_tracking`: per season and feature, `from_round` (NULL = not tracked that season), `review`, `source` (`upgrade` / `records` / `owner`) and a detail line.
+  - `tracking_notice_acks`: (migration_id, username, acked_at).
+  - A season with no rows is fully tracked.
+- **Where tracking starts.** 4.0 features (race times, incidents by session, the stored pre-round AI recommendation) start at the first round of the season under way with no results entered. A round already in progress finishes under the old rules. If every round is played, they start at round 1 of the next season.
+- **3.x features are read from the data.** Weather, weekend targets, pre-race press and post-race press come from what each season actually holds: stored entries, targets offered, `press_required`, the paddock opened. Release dates are never used.
+  - First used at round 1: tracked all season.
+  - First used later: tracked from that round and flagged `review`.
+  - Never used: not tracked that season.
+- **Owner review.** `GET/POST /career/<league>/legacy-tracking` shows the record to every member. The Race Master can confirm or change the start round of a 3.x feature. They can't move a start past a round that has data, and can't move 4.0 starts. Only the record changes.
+- **Display rules.**
+  - `tracking.round_tracked` / `empty_text` decide "Not recorded" against "Not tracked under this season's rules".
+  - `ai3.missing_pace` never asks for race times on an untracked round.
+  - Press pens and tasks are hidden on rounds where press wasn't tracked and nothing was answered.
+  - `tracking.coverage` gives the "Based on N eligible rounds · Tracked since …" line.
+  - Stored values always show.
+- **The notice.**
+  - Who sees it: members of the league at the upgrade, plus the site owner.
+  - When: after any mandatory step (change notices, pledge, team goal) and never on the same page as the site-wide What's New pop-up. The one-off league banner waits a page.
+  - *Got it* (`POST /career/<league>/upgrade-notice`) is stored in the league file per username and migration. *Not now* or Esc (`POST …/upgrade-notice/later`) only sets a flag in that browser session.
+  - The calculation line is chosen from `calc_migrations` made since the upgrade:
+    - `full`: a separate recalculation sentence, pointing to Changes to your driver.
+    - `future`: "latest calculations from round N; everything before is unchanged".
+    - Otherwise: "No results, standings or career outcomes were recalculated."
+- **Nothing is recalculated.** Recording tracking never touches `season_calc`, results or career numbers. Calculation changes still go through `engine` / `migration` and the change notices.
+
 ## 4.0.0-beta.11: a league one round from the end (test site)
 
 - **Account → Settings → Try a season finale** (site owner, test site only, `POST /settings/test-final-round`) runs

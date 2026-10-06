@@ -5,7 +5,7 @@
   {% if wx.shown %}
   <ul class="weather-list">{% for w in wx.shown %}
     <li class="weather-chip {{ 'is-wet' if w.wet }}"><span aria-hidden="true">{{ w.icon }}</span> <b>{{ w.session_label }}</b> {{ w.text }}</li>{% endfor %}</ul>
-  {% elif not wx.can_edit %}<p class="muted small">No weather recorded for this round.</p>{% endif %}
+  {% elif not wx.can_edit %}<p class="muted small">{{ wx.empty or 'Not recorded' }}.</p>{% endif %}
   {% if wx.can_edit %}
   <form method="post" action="{{ url_for('weekend_weather', token=ctx.token, event_id=event.id) }}" class="weather-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

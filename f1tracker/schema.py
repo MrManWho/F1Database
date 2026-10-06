@@ -637,6 +637,11 @@ def migrate(conn):
     v24 -> v25 (4.0): incidents.session (qualifying / sprint / race; existing reports become "weekend"). Incident
                rulings are grouped into one stewards' story per round: the separate headlines older versions posted
                for each ruling are folded into it once, when this version first opens the league.
+    v25 -> v26 (4.0): legacy-season tracking (tracking.py): tracking_migrations (the one-time 4.0 upgrade of a league
+               last written by 3.x: when, from which schema, where new tracking starts and who was a member),
+               season_tracking (per season and feature, the round tracking began, and whether the Race Master should
+               confirm it) and tracking_notice_acks (who pressed "Got it" on the upgrade notice). Read from the stored
+               records once; nothing existing changes and nothing is recalculated.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -651,7 +656,17 @@ def migrate(conn):
             _press_fix_once(conn)
             return
     old_incidents = "incidents" in tables and "session" not in _columns(conn, "incidents")
+    from . import tracking
+    old_version = 1
+    if "meta" in tables:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        try:
+            old_version = int(row[0]) if row else 1
+        except (TypeError, ValueError):
+            old_version = 1
+    pre_40 = tracking.is_pre_40(tables, old_version)
     conn.executescript(SCHEMA)
+    tracking.ensure_tables(conn)
     if "sprint_status" not in _columns(conn, "results"):
         conn.execute("ALTER TABLE results ADD COLUMN sprint_status TEXT NOT NULL DEFAULT 'Not Run'")
         conn.execute(
@@ -778,6 +793,9 @@ def migrate(conn):
         conn.execute("INSERT INTO meta(key, value) VALUES('join_mode', ?)",
                      ("requests" if opened and opened[0] == "1" else "invite",))
     _press_fix_once(conn)
+    if pre_40:
+        # 4.0: a league last written by 3.x. Record what each season tracked and where new tracking begins (once).
+        tracking.record_upgrade(conn, old_version)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
