@@ -3,6 +3,23 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.13 · Faster pages, and forms that bring you back (test site)
+_Released October 6, 2026_
+> Saving something now takes you back to where you were, says clearly whether it saved, and never saves twice.
+> League pages do far less work, so Home and Race Weekend open two to four times faster.
+
+### Highlights
+- **No more surprise trips to Home.** Answering pre-race press from Prepare brings you back to that round's Prepare; post-race press from the Debrief goes back to the Debrief; the standalone Press page stays on the Press page. Every other form goes back to the page, step and section it was sent from.
+- **When something doesn't save, you're told why, on the same page.** A mistake in a form keeps what you typed and shows the reason. A page left open too long, or being signed out, says so plainly ("that wasn't saved") instead of silently dropping you on Home. Signing back in returns you to where you were. Something only the Race Master can do now says so, with a button back to where you were.
+- **Saved means saved.** Buttons show "Saving…" while a form is on its way. Results entry shows *Saving…*, *Saved* (only once the site has confirmed it), *Saved on this device — waiting to sync* when the connection drops, or *Couldn't save* with a Retry button. A form sent while offline isn't lost: you're told, and what you typed stays.
+- **Pressing twice, or retrying after a lost connection, never counts twice.** Interview answers, weekend targets, pledges, signing or declining a contract, and incident reports are each saved once; the second press just says "Already saved". Two people (or two tabs) acting at the same moment are handled one after the other.
+- **"Fix" on Review & submit leads back to Review.** After fixing something from the checklist, the button reads *Save & return to Review* instead of carrying on through the remaining sessions.
+- **Faster pages.** League Home went from about 0.3–0.4 s to about 0.1 s of server time in a three-season test league, Race Weekend from about 0.17 s to 0.08 s, Career and Standings about twice as fast. Stylesheets and scripts are now kept by your browser between visits instead of being checked on every page.
+- **Clearer AI recommendation.** The F1Laps figure is now called the *community starting reference*, a starting point and not proof of what suits your league. The breakdown says when track history is turned off, describes how much evidence is behind the confidence, and, for a finished round, shows the AI actually used next to the one recommended. The calculation itself is unchanged.
+
+### Nothing changed in
+- Formulas, standings, career numbers, permissions and league data. No league file format change.
+
 ## 4.0.0-beta.12 · Earlier seasons look complete under their own rules (test site)
 _Released October 6, 2026_
 > When a league moves up from 3.x, its earlier seasons are shown under the rules they were played with, and everyone

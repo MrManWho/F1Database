@@ -2,6 +2,38 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.13: reliability and speed
+
+- **Where forms go back to** (`f1tracker/navigation.py`). `shell.js` adds a hidden `return_to` (path, query and
+  #fragment) to every POST form. `navigation.back(default, token, anchor, prefer)` uses, in order: a destination the
+  route chose, `return_to`, an older `next` field, then the Referer, but only after `navigation.safe` has matched it to
+  a GET page of this site (never `/api/`, `/static/`, sign-in or sign-out pages, other hosts, or another league's
+  pages). Otherwise each route has its own fallback (the round's stage, the standalone page), never the site Home.
+- **Failures.** A CSRF failure or signed-out POST flashes why and returns to the page (signed out: sign in with `next`).
+  `fetch` callers get JSON (`400 {expired: true}` / `401`). A failed form stores `session["_form_failed"]`; the next page
+  prints `<meta name="form-failed">` and `shell.js` restores the typed values from `sessionStorage` (never passwords).
+  POST 403s now render an explanation and a back link (status stays 403). GET pages that raise `ValidationError` flash it
+  and return to the referring page.
+- **Once-only writes.** Every league POST starts with `BEGIN IMMEDIATE`, so concurrent requests run one at a time. A
+  repeated identical press answer, target choice, pledge, offer accept/decline or incident report returns "Already …"
+  without writing, notifying or adding an Activity Log entry (`g.repeat`). A different answer to an answered question is
+  still refused.
+- **Speed** (measured with the test client on a 3-season, 72-round league; repeat-load server time and SQL statements):
+  League Home 295 ms / 7,334 → 101 ms / 1,804; Home after a save 418 / 9,188 → 119 / 2,041; Race Weekend 171 / 5,071 →
+  77 / 1,693; Debrief 179 / 3,664 → 91 / 1,557; Career 196 / 3,562 → 102 / 1,140; Standings 64 / 1,102 → 41 / 383;
+  historical Home 168 / 2,828 → 85 / 1,411. Causes fixed: `services.sync_not_run_results` rewrote every upcoming
+  lineup (300+ UPDATEs) on each page; standings, round ranks, the AI tracker replay and the difficulty recommendation
+  were recomputed many times per request (now remembered per connection by `f1tracker/memo.py`, dropped automatically on
+  any write or `ROLLBACK`); `teamlife.press_pens` rebuilt questions for every past round; the change-notice snapshot was
+  refreshed before the page instead of after. Static files carry `?v=<mtime>` and are cached for a year.
+- **AI tracker policy (needs a decision).** The 4.0.0-alpha.2 notes say a season under way keeps the tracker it started
+  with; 4.0.0-beta.1 says the season under way switches to the track-aware recommendation when the league first opens
+  on 4.0. The code does the beta.1 thing (`engine.ensure_latest`); the schema notes were corrected to match. Stored
+  recommendations for finished rounds are never recalculated.
+- **Known calculation mismatch (not changed).** `test_golden_season_matches_exactly[3]` and
+  `test_no_career_numbers_changed` fail on release-4.0 since beta.6 (a round-7 car-rank tie order and a round-1 AI
+  recommendation of 83 instead of 85). Left for a decision; no formula was touched.
+
 ## 4.0.0-beta.12: legacy seasons and the upgrade notice
 
 - **What counts as an upgrade.** `schema.migrate` calls `tracking.record_upgrade` once when it opens a league file with league data but no `audit_events` table (or a schema below 22). Live 3.2.4–3.2.6 files say schema 22 too, which is why the table is the test and not the number. It covers both ways in: opening a copied live file and *Import a league*. New 4.0 leagues and the test-site leagues earlier betas already opened get no record and no notice. Re-import a fresh live copy to try it.

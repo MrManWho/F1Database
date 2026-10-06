@@ -24,7 +24,7 @@ from . import calc3, engine
 from . import constants as C
 from . import feed
 from . import services as S
-from .storage import now_iso
+from .storage import get_meta, now_iso
 
 
 def growth_level(index):
@@ -466,7 +466,8 @@ def set_pledge(conn, season_id, driver_id, growth):
     if not rel:
         raise S.ValidationError("You don't have a race seat this season")
     t = targets_for(conn, season_id, driver_id, rel["team_id"], growth)
-    if rel["pledged"] and rel["growth"] == growth and all(rel[k] == t[k] for k in ("form_base", "form_target", "rep_target", "finish_base", "finish_target")):
+    if rel["pledged"] and rel["growth"] == growth and get_meta(conn, f"pledge_terms_{season_id}_{driver_id}") is None \
+            and all(rel[k] == t[k] for k in ("form_base", "form_target", "rep_target", "finish_base", "finish_target")):
         return t   # 4.0.0-beta.13: the same pledge sent twice (a double press or a retry) changes nothing the second time
     conn.execute("""UPDATE team_relations SET growth = ?, form_base = ?, form_target = ?, rep_target = ?,
                     finish_base = ?, finish_target = ?, pledged = 1, updated_at = ? WHERE season_id = ? AND driver_id = ?""",
