@@ -83,7 +83,7 @@ def test_spectators_are_read_only_on_every_route(app, master_client):
             assert res.status_code in (401, 403, 404, 405), (rule.endpoint, method, res.status_code)
 
 
-MASTER_ONLY = {"season_new", "season_rollover", "seat_resolve", "league_settings", "members", "member_update", "member_remove",
+MASTER_ONLY = {"season_new", "season_rollover", "seat_resolve", "league_settings", "members", "member_update", "member_remove", "members_link",
                "paddock_admin", "paddock_move_results", "paddock_driver", "paddock_driver_delete", "market_open",
                "market_close", "market_delete", "calendar_save", "calendar_add", "calendar_delete", "weekend_reopen",
                "gate_bypass", "target_excuse", "delivery_log_page", "activity", "grid_players", "grid_save"}

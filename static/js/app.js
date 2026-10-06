@@ -254,12 +254,16 @@
     var field = scope && scope.querySelector("[data-driver-field]");
     if (!field) return;
     var input = field.querySelector("input");
+    var pick = field.querySelector("select[name=driver_id]");   // 4.0.0-beta.10: a player driver already in the league
     function sync() {
       var drives = sel.value === "driver" || sel.value === "driver_scorekeeper";
+      var existing = drives && pick && pick.value;
       field.style.opacity = drives ? "" : "0.4";
-      if (input) { input.required = drives; input.disabled = !drives; }
+      if (pick) pick.disabled = !drives;
+      if (input) { input.required = drives && !existing; input.disabled = !drives; input.hidden = !!existing; }
     }
     sel.addEventListener("change", sync);
+    if (pick) pick.addEventListener("change", sync);
     sync();
   });
 })();

@@ -3,6 +3,15 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.10 · Link a login to any player driver (test site)
+_Released October 6, 2026_
+> Fixes player logins that couldn't be linked to a player driver already in the league.
+
+### Highlights
+- **Link login, right where it's needed.** Every driver under *Members & roles → Player drivers without a login* now has a username box and a **Link login** button. The person is added to the league as a Member if they aren't in it yet; a Race Master or Scorekeeper keeps their role.
+- **Joining as a driver who's already on the grid works.** Asking to join with the name of a player driver nobody drives yet used to be refused ("There's already a driver with that name"). Now the request goes through, and approving it hands them that driver instead of making a duplicate. The Race Master can also pick the driver from a list when approving.
+- Real F1 drivers and drivers someone already drives still can't be claimed.
+
 ## 4.0.0-beta.9 · Silly Season closes by itself (test site)
 _Released October 6, 2026_
 > The 3.2.6 fix from the live site, plus the 3.2.5 note that beta.8 carried.

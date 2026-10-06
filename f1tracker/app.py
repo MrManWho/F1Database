@@ -65,7 +65,7 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
     "target_ack": "Chose a weekend target", "gate_bypass": "Opened a round early", "paddock_open": "Opened the paddock", "weekend_reset": "Reset a round", "recalculate_page": "Recalculated everything",
-    "members_no_account": "Changed a driver's login requirement", "race_start": "Started the race",
+    "members_no_account": "Changed a driver's login requirement", "members_link": "Linked a login to a player driver", "race_start": "Started the race",
     "prerace_answer": "Answered pre-race press", "gate_remind": "Sent a round reminder",
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
@@ -1497,7 +1497,10 @@ def register_routes(app):
                 if drives:
                     if len(driver_name) < 2:
                         raise ValidationError("Choose a driver name")
-                    if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
+                    taken = conn.execute("SELECT id, is_player FROM drivers WHERE lower(name) = lower(?)",
+                                         (driver_name,)).fetchone()
+                    if taken and not (taken["is_player"] and _free_player(conn, taken["id"])):
+                        # 4.0.0-beta.10: asking for a player driver nobody drives yet claims it; anything else is taken
                         raise ValidationError("There's already a driver with that name in this league")
                 if not ratelimit.allow("join-request", me, JOIN_LIMIT, 3600):
                     raise ValidationError("You've sent a lot of join requests. Try again in an hour.")
@@ -3860,6 +3863,51 @@ def register_routes(app):
             market.offers_for_player(conn, did)
         return name
 
+    def _free_player(conn, driver_id):
+        """A player driver no league member drives yet."""
+        return not conn.execute("SELECT 1 FROM career_members WHERE driver_id = ?", (driver_id,)).fetchone()
+
+    def _free_player_named(conn, name):
+        name = " ".join((name or "").split())
+        row = conn.execute("SELECT id FROM drivers WHERE is_player = 1 AND lower(name) = lower(?)", (name,)).fetchone()
+        return row["id"] if row and _free_player(conn, row["id"]) else None
+
+    def _link_login(conn, username, driver_id, scorekeeper=False):
+        """4.0.0-beta.10: give an existing player driver to a login, adding them to the league if they aren't in it.
+        A Race Master or Scorekeeper keeps their role; a Spectator becomes a Member (spectators can't drive)."""
+        user = auth.get_user(username) if username else None
+        if not user:
+            raise ValidationError(f"There's no login called {username}. They can sign up first." if username
+                                  else "Enter their username")
+        held = conn.execute("SELECT driver_id FROM career_members WHERE username = ? AND driver_id IS NOT NULL",
+                            (user["username"],)).fetchone()
+        if held and held["driver_id"] != driver_id:
+            raise ValidationError(f"{user['username']} already drives {S.driver_map(conn)[held['driver_id']]['name']} "
+                                  "in this league. Change their driver in the members table instead.")
+        current = roles.effective_role(conn, user)
+        role = current if current in ("race_master", "scorekeeper") else ("scorekeeper" if scorekeeper else "member")
+        roles.set_member(conn, user["username"], role, driver_id)
+        raceweek.set_no_account(conn, driver_id, False)
+        return S.driver_map(conn)[driver_id]["name"]
+
+    @app.route("/career/<token>/members/link/<int:driver_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def members_link(conn, ctx, driver_id):
+        """4.0.0-beta.10: link a login to a player driver straight from "Player drivers without a login"."""
+        driver = S.driver_map(conn).get(driver_id)
+        if not driver or not driver["is_player"]:
+            abort(404)
+        username = auth.normalise(request.form.get("username"))
+        name = _link_login(conn, username, driver_id)
+        user = auth.get_user(username)
+        g.audit_summary = f"linked {user['display_name']} to {name}"
+        g.audit_link = "members"
+        if user["username"] != g.user["username"]:
+            feed.notify(conn, None, f"You now drive {name} in {ctx['career_name']}", "dashboard", category="roles",
+                        username=user["username"])
+        flash(f"{user['display_name']} now drives {name}.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
     @app.route("/career/<token>/members/no-account/<int:driver_id>", methods=["POST"])
     @career_page(master_only=True)
     def members_no_account(conn, ctx, driver_id):
@@ -3900,8 +3948,12 @@ def register_routes(app):
                 raise ValidationError("That login no longer exists")
             keeper = role in ("driver_scorekeeper", "scorekeeper")
             if role in ("driver", "driver_scorekeeper"):
-                name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
-                                   bool(request.form.get("send_offers")), scorekeeper=keeper)
+                existing = _driver_from_form() or _free_player_named(conn, request.form.get("driver_name") or req["driver_name"])
+                if existing:   # 4.0.0-beta.10: they take over a player driver already in the league
+                    name = _link_login(conn, req["username"], existing, scorekeeper=keeper)
+                else:
+                    name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
+                                       bool(request.form.get("send_offers")), scorekeeper=keeper)
                 what = f"as {name}" + (" (and Scorekeeper)" if keeper else "")
             else:
                 roles.set_member(conn, req["username"], "scorekeeper" if keeper else "spectator", None)

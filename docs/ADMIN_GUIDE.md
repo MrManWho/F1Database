@@ -2,6 +2,11 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.10: linking a login to an existing player driver
+
+- **The bug:** a player driver that already existed (created with the league, added without a username, or loaded from a backup) could only get a login from the members table, and only once that person was already a league member. A join request naming that driver was refused as a duplicate name, and approving a request always created a new driver.
+- **The fix:** `POST /career/<league>/members/link/<driver_id>` (Race Master only, audited as "Linked a login to a player driver") links a username to a player driver nobody drives, adding them as Member if needed, keeping a Race Master or Scorekeeper role, and clearing that driver's *No account* tick. `career_join` accepts the name of a player driver nobody drives; `members_request` approval links the chosen (or same-named) free player driver instead of calling `add_player_driver`. F1 drivers and driven player drivers are still refused. No schema change.
+
 ## 4.0.0-beta.9 / 3.2.6: transfer windows close by themselves
 
 - **The bug:** nothing closed a market window except the Race Master's *Close window* button (Market administration) or the season rollover, so a Silly Season with every deal done stayed open indefinitely.

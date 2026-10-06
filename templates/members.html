@@ -9,7 +9,7 @@
   <h2>Join requests</h2>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>Login</th><th>Asked for</th><th>Approve as</th><th>Driver name</th><th>Message</th><th></th></tr></thead>
+    <thead><tr><th>Login</th><th>Asked for</th><th>Approve as</th><th>Driver</th><th>Message</th><th></th></tr></thead>
     <tbody>{% for r in requests %}
       <tr>
         <td><strong>{{ r.username }}</strong>{% if r.user %}<br><small class="muted">{{ r.user.display_name }}</small>{% endif %}</td>
@@ -17,7 +17,12 @@
         <td><select form="approve-{{ r.id }}" name="role" data-join-role>
           {% for key, label in C.LEAGUE_ROLES.items() %}<option value="{{ key }}" {{ 'selected' if key == r.role }}>{{ label }}</option>{% endfor %}
         </select></td>
-        <td data-driver-field><input form="approve-{{ r.id }}" name="driver_name" value="{{ r.driver_name }}" maxlength="60"
+        <td data-driver-field>
+          {% if free_drivers %}<select form="approve-{{ r.id }}" name="driver_id" aria-label="Driver for {{ r.username }}">
+            <option value="">New driver (name below)</option>
+            {% for p in free_drivers %}<option value="{{ p.id }}" {{ 'selected' if p.name|lower == (r.driver_name or '')|lower }}>{{ p.name }}</option>{% endfor %}
+          </select>{% endif %}
+          <input form="approve-{{ r.id }}" name="driver_name" value="{{ r.driver_name }}" maxlength="60"
                placeholder="Needed for driving roles" {{ 'required' if r.role in ('driver', 'driver_scorekeeper') }}></td>
         <td class="small">{{ r.message or '—' }}</td>
         <td>
@@ -135,7 +140,16 @@
       {% if p.id in no_account %}<span class="pill">No account</span> <button class="btn btn-sm btn-ghost" name="on" value="0">Undo</button>
       {% else %}<span class="pill pill-hot">Needs a login</span> <button class="btn btn-sm btn-ghost" name="on" value="1" title="They don't want a login">No account</button>{% endif %}
     </form>
-    <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button></li>{% endfor %}</ul>
+    <button type="submit" form="offers-{{ p.id }}" class="btn btn-sm btn-ghost">Send offers</button>
+    <form method="post" action="{{ url_for('members_link', token=ctx.token, driver_id=p.id) }}" class="inline link-login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="username" list="link-logins" required autocomplete="off" spellcheck="false" placeholder="their username"
+             aria-label="Login for {{ p.name }}">
+      <button class="btn btn-sm btn-primary">Link login</button>
+    </form></li>{% endfor %}</ul>
+  <datalist id="link-logins">{% for u in users %}<option value="{{ u.username }}">{{ u.display_name }}</option>{% endfor %}</datalist>
+  <p class="muted small">Type the username of the person who drives them. They're added to the league as a Member if they
+    aren't in it yet; a Race Master or Scorekeeper keeps their role.</p>
 </section>
 {% endif %}
 
