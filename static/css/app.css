@@ -1015,6 +1015,7 @@ a.driver-link.is-player:hover { text-decoration: underline; }
 .pw-field input { flex: 1; min-width: 0; }
 .pw-caps { color: var(--amber); margin: 0; }
 .form-error { color: #ff7a70; margin: 0; }
+[data-theme="light"] .form-error { color: #b3261e; }
 label.check.is-disabled { opacity: .55; }
 
 /* v1.18 help navigation */

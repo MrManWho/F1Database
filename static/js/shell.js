@@ -351,6 +351,19 @@
   var first = forms[0];
   var stage = first.closest(".ws-stage");
   if (stage && window.F1Workspace && window.F1Workspace.show) window.F1Workspace.show(stage.dataset.stage, { keepScroll: true });
+  // A form that lives in a pop-up (e.g. Report an incident) opens again, so what was typed is actually seen.
+  var dlg = first.closest("dialog");
+  if (dlg && !dlg.open && dlg.showModal) {
+    // The pop-up covers the page's message, so the reason is repeated inside it.
+    var why = document.querySelector("#toasts .toast-error span");
+    if (why && !first.querySelector(".form-error")) {
+      var p = document.createElement("p");
+      p.className = "form-error"; p.setAttribute("role", "alert"); p.textContent = why.textContent;
+      first.insertBefore(p, first.firstChild);
+    }
+    try { dlg.showModal(); } catch (e) { /* already open elsewhere */ }
+    return;
+  }
   setTimeout(function () { first.scrollIntoView({ block: "center" }); }, 60);
   }
 })();
