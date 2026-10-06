@@ -9,6 +9,7 @@ Switched on with the environment variable F1_TRACKER_TEST_SITE=1 on the test sit
 
 The free test service forgets its data when it restarts. To set it up again (4.0 Phase 0):
     python -m f1tracker.testsite seed                 add a fictional league with a played season
+    python -m f1tracker.testsite final-round [login]  add a fictional league with only its last round left
     python -m f1tracker.testsite import backup.plbk   load a live-site backup (asks for its passphrase, or reads
                                                       F1_TRACKER_BACKUP_PASSPHRASE)
 Both refuse to run unless F1_TRACKER_TEST_SITE=1, so they can never touch the live site. On the hosted test site,
@@ -99,11 +100,33 @@ def seed():
     return golden.play(C.ENGINE_CURRENT, name="Test League (fictional)")
 
 
+FINAL_ROUND_NAME = "Final Round Test (fictional)"
+
+
+def seed_final_round(username=None):
+    """A fictional league whose season has every round played except the last, for trying the season finale and
+    the new-season rollover. username (optional) is linked as Race Master driving Player One. Returns the league id."""
+    if not on():
+        raise offsite.BackupError("Seeding is only possible on the test site (F1_TRACKER_TEST_SITE=1)")
+    from . import auth, constants as C, golden, roles
+    token = golden.play(C.ENGINE_CURRENT, name=FINAL_ROUND_NAME, rounds=-1)
+    user = auth.get_user(username) if username else None
+    if user:
+        from . import services as S
+        with storage.session(token) as conn:
+            driver = S.player_drivers(conn)[0]
+            roles.set_member(conn, user["username"], "race_master", driver["id"])
+    return token
+
+
 def _main(argv):
     import getpass
     try:
         if len(argv) == 2 and argv[1] == "seed":
             print("Added league", seed())
+            return 0
+        if len(argv) in (2, 3) and argv[1] == "final-round":
+            print("Added league", seed_final_round(argv[2] if len(argv) == 3 else None))
             return 0
         if len(argv) == 3 and argv[1] == "import":
             with open(argv[2], "rb") as fh:

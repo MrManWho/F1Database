@@ -1081,6 +1081,17 @@ def register_routes(app):
               "site username and password.", "success")
         return redirect(url_for("login"))
 
+    @app.route("/settings/test-final-round", methods=["POST"])
+    @master_required
+    def seed_final_round_league():
+        """Test site only: a fictional league with only its last round left, to try the finale and the rollover."""
+        if not testsite.on():
+            abort(404)
+        token = testsite.seed_final_round(g.user["username"])
+        flash("Added a fictional league with 23 of 24 rounds played. You drive Player One. Enter the last round, "
+              "then start the new season from Seasons.", "success")
+        return redirect(url_for("dashboard", token=token))
+
     @app.route("/healthz")
     def healthz():
         """4.0: for the host's health check and uptime monitors. No private information."""
