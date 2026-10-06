@@ -461,7 +461,7 @@ def test_browser_offline_queue_recovery_conflict_and_lock(app, master_client, li
         ctx.set_offline(True)
         q(page).fill("4")
         page.wait_for_timeout(1300)
-        assert "Offline" in page.locator("#save-state").inner_text()
+        assert "Saved on this device" in page.locator("#save-state").inner_text()
         assert page.evaluate("Object.keys(localStorage).some(k => k.startsWith('f1-recovery:kim|'))")
         ctx.set_offline(False)
         page.evaluate("window.dispatchEvent(new Event('online'))")

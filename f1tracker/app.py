@@ -403,10 +403,10 @@ def _version_static_files(app):
         if endpoint == "static" and "filename" in values and "v" not in values:
             name = values["filename"]
             if name not in stamps:
-                try:
-                    stamps[name] = format(int(os.stat(os.path.join(app.static_folder, name)).st_mtime), "x")
-                except OSError:
-                    stamps[name] = None
+                path = os.path.join(app.static_folder, name)
+                # a folder address (the screenshot reader's vendor/tesseract/) gets file names appended in the
+                # browser, so it must stay bare: "?v=" there broke every OCR file address
+                stamps[name] = (format(int(os.stat(path).st_mtime), "x") if os.path.isfile(path) else None)
             if stamps[name]:
                 values["v"] = stamps[name]
 
