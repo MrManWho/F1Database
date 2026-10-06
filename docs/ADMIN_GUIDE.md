@@ -77,9 +77,10 @@ This is for site admins and Race Masters. The What's New screen and Help cover e
   with; 4.0.0-beta.1 says the season under way switches to the track-aware recommendation when the league first opens
   on 4.0. The code does the beta.1 thing (`engine.ensure_latest`); the schema notes were corrected to match. Stored
   recommendations for finished rounds are never recalculated.
-- **Known calculation mismatch (not changed).** `test_golden_season_matches_exactly[3]` and
-  `test_no_career_numbers_changed` fail on release-4.0 since beta.6 (a round-7 car-rank tie order and a round-1 AI
-  recommendation of 83 instead of 85). Left for a decision; no formula was touched.
+- **Python version matters for calculations.** `test_golden_season_matches_exactly[3]` and
+  `test_no_career_numbers_changed` pass on Python 3.11 (what the live site runs) and fail on 3.12+, whose `sum()`
+  adds floats with extra precision (e.g. two teams with exactly equal results at round 7 swap car rank; AI
+  recommendations move by up to 3). Run the tests, and the site, on 3.11.
 
 ## 4.0.0-beta.12: legacy seasons and the upgrade notice
 
