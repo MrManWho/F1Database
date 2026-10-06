@@ -144,7 +144,7 @@
     <li>If the drivers' own levels are more than six apart, it says so: no single AI setting can suit everyone.</li>
     <li>The recommendation shown before each round is saved as it was, next to the AI you actually used, and is never recalculated later. A new F1Laps snapshot only affects future rounds.</li>
   </ul>
-  <p><b>Race times:</b> on the round page, under <em>Pace &amp; conditions</em>, type your race time and your AI teammate's (or a driver you pick) from the game's results screen, plus the laps you completed; the site works out the gap. On a tracked round these are needed before the round can be submitted, unless you tick <em>Don't submit times</em> for that session (a DNF or DNS never needs them). The Race Master can switch the requirement off.</p>
+  <p><b>Race times:</b> on the round page, under <em>Sessions</em> in each race session's <em>Race times</em> section, type your race time and your AI teammate's (or a driver you pick) from the game's results screen, plus the laps you completed; the site works out the gap. On a tracked round these are needed before the round can be submitted, unless you tick <em>Don't submit times</em> for that session (a DNF or DNS never needs them). The Race Master can switch the requirement off.</p>
   <p>Each recommendation shows the game's level band: {% for lo, hi, name in C.DIFF_BANDS %}<b>{{ name }}</b> {{ lo }}–{{ hi }}{{ ', ' if not loop.last else '' }}{% endfor %}. Most players are comfortable in the low 80s.
     A one-line summary underneath says which rounds were used, which weren't and why, and whether Sprint points counted.</p>
   <p>DNFs and rounds marked <em>Don't track</em> don't count. Sprint points count unless the league turns that off. It's a suggestion: the Race Master picks the level.</p>
@@ -189,7 +189,7 @@
   <h2>Weather</h2>
   <p>A Scorekeeper or the Race Master records the conditions of each session as they were in the game: qualifying, the Sprint and the race. The choices are dry, overcast, light rain, heavy rain or changing. Use the <em>Weather</em> card on the round page's Results tab.
     The weather shows on the round page, the calendar, the results list and the race summary, and <em>Statistics → In the wet</em> compares each driver's wet and dry races.</p>
-  <p>Weather is a record only. It doesn't change points, Form, Reputation, team relationships or the AI recommendation. If rain made someone's session unrepresentative, the Race Master can still tick <em>Wet or changing conditions</em> for that player under <a href="#difficulty">Pace &amp; conditions</a>. Resetting a weekend clears its weather.</p>
+  <p>Weather is a record only. It doesn't change points, Form, Reputation, team relationships or the AI recommendation. If rain made someone's session unrepresentative, the Race Master can still tick <em>Wet or changing conditions</em> for that player in the session's <a href="#race-times">Race times</a> section. Resetting a weekend clears its weather.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="incidents">

@@ -152,11 +152,15 @@
   const sessionTabs = Array.prototype.slice.call(document.querySelectorAll("[data-session]"));
   function showSession(key) {
     ["all", "q", "s", "r"].forEach(function (k) { table.classList.toggle("only-" + k, k === key && k !== "all"); });
-    sessionTabs.forEach(function (t) { const on = t.dataset.session === key; t.classList.toggle("is-on", on); t.setAttribute("aria-pressed", on ? "true" : "false"); });
+    sessionTabs.forEach(function (t) {
+      const on = t.dataset.session === key; t.classList.toggle("is-on", on);
+      if (t.tagName === "A") { if (on) t.setAttribute("aria-current", "true"); else t.removeAttribute("aria-current"); }
+      else t.setAttribute("aria-pressed", on ? "true" : "false");
+    });
     try { localStorage.setItem(SESSION_KEY, key); } catch (e) { /* private mode */ }
     document.dispatchEvent(new CustomEvent("f1:session", { detail: key }));
   }
-  sessionTabs.forEach(function (t) { t.addEventListener("click", function () { showSession(t.dataset.session); }); });
+  sessionTabs.forEach(function (t) { t.addEventListener("click", function (e) { if (t.tagName === "A") e.preventDefault(); showSession(t.dataset.session); }); });
   (function () {
     let saved = null;
     try { saved = localStorage.getItem(SESSION_KEY); } catch (e) { /* private mode */ }
@@ -638,70 +642,39 @@
     table.querySelectorAll('input[type=radio]').forEach(function (r) { r.checked = false; });
     schedule();
   });
-  // ---- Review and submit: the server checks the saved results; nothing is submitted with a blocking error.
+  // ---- Review and submit (4.0): one Submit action on the Review step, no extra confirmation. It waits for any
+  // save, sends what's pending, asks the server for its own check and submits straight away when nothing blocks.
+  // Anything blocking, or a warning that wasn't on screen when Submit was pressed, updates the Review list instead.
+  // The server refuses a second or simultaneous submission, so pressing twice never submits twice.
   const submitBtn = document.getElementById("mark-complete");
-  const submitDlg = document.getElementById("submit-dialog");
-  const submitBody = document.getElementById("submit-body");
-  const submitGo = document.getElementById("submit-go");
-  const confirmBox = document.getElementById("confirm-submit");
-  const acceptBox = document.getElementById("accept-warnings");
-  const acceptRow = document.getElementById("accept-warnings-row");
-  let lastCheck = null;
+  const submitErr = document.getElementById("submit-error");
   function esc(t) { const d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
+  function text(t) { return typeof t === "string" ? t : (t && t.text) || ""; }
+  function submitMessage(msg) { if (submitErr) { submitErr.textContent = msg || ""; submitErr.hidden = !msg; } }
   function renderChecklist(check, clientBlocking) {
-    lastCheck = check;
-    const blocking = (clientBlocking || []).concat(check.blocking || []);
-    const warnings = check.warnings || [];
-    const s = check.summary || {};
-    const out = s.out || {};
-    const list = function (items) { return items && items.length ? items.map(esc).join(", ") : "—"; };
-    let html = '<dl class="submit-summary">' +
-      "<div><dt>Round</dt><dd>R" + esc(s.round) + " " + esc(s.event) + " · " + (s.sprint ? "Sprint weekend" : "Standard weekend") + "</dd></div>" +
-      "<div><dt>Pole</dt><dd>" + esc(s.pole || "—") + "</dd></div>" +
-      (s.sprint ? "<div><dt>Sprint winner</dt><dd>" + esc(s.sprint_winner || "—") + "</dd></div>" : "") +
-      "<div><dt>Grand Prix winner</dt><dd>" + esc(s.winner || "—") + "</dd></div>" +
-      "<div><dt>Podium</dt><dd>" + list(s.podium) + "</dd></div>" +
-      "<div><dt>DNF / DNS / DSQ</dt><dd>" + list(out.DNF) + " / " + list(out.DNS) + " / " + list(out.DSQ) + "</dd></div>" +
-      "<div><dt>Fastest Lap</dt><dd>" + esc(s.fastest_lap || "—") + "</dd></div>" +
-      "<div><dt>Driver of the Day</dt><dd>" + esc(s.dotd || "—") + "</dd></div>" +
-      "<div><dt>AI difficulty</dt><dd>" + (s.ai_difficulty == null ? "Not tracked" : esc(s.ai_difficulty)) + "</dd></div></dl>";
-    if (s.players && s.players.length) {
-      html += '<h3 class="mini-head">Player results</h3><ul class="plain-list small">' + s.players.map(function (p) {
-        return "<li><b>" + esc(p.name) + "</b>: Q " + (p.quali ? "P" + esc(p.quali) : "—") + (p.sprint ? " · Sprint " + esc(p.sprint) : "") +
-          " · Race " + esc(p.race) + " · " + esc(p.points) + " pts</li>";
-      }).join("") + "</ul>";
-    }
-    if (check.player_issues && check.player_issues.length) {
-      html += '<div class="check-players" role="alert"><h3 class="mini-head">👤 Player drivers with missing results</h3><ul>' +
-        check.player_issues.map(function (p) {
-          return '<li><span class="p-dot" style="background:' + esc(p.color || "#4aa3ff") + '"></span><b>' + esc(p.name) + "</b>: " + p.missing.map(esc).join(", ") + "</li>";
-        }).join("") + "</ul></div>";
-    }
-    html += '<div class="check-block" role="alert"><h3 class="mini-head">⛔ Blocking errors (' + blocking.length + ")</h3>" +
-      (blocking.length ? "<ul>" + blocking.map(function (b) { return "<li>" + esc(b) + (window.F1Workspace ? window.F1Workspace.fixButton(b) : "") + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
-    html += '<div class="check-warn"><h3 class="mini-head">⚠️ Warnings (' + warnings.length + ")</h3>" +
-      (warnings.length ? "<ul>" + warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>" : '<p class="small">None. ✓</p>') + "</div>";
-    if (check.lock_notice) html += '<p class="lock-notice small"><span aria-hidden="true">🔒</span> ' + esc(check.lock_notice) + "</p>";
-    submitBody.innerHTML = html;
-    acceptRow.hidden = !warnings.length;
-    acceptBox.checked = false; confirmBox.checked = false;
-    submitGo.dataset.blocked = blocking.length ? "1" : "0";
-    updateGo();
-    if (submitDlg && !submitDlg.open && submitDlg.showModal) submitDlg.showModal();
+    const blocking = (clientBlocking || []).concat(((check && check.blocking) || []).map(text));
+    const warnings = ((check && check.warnings) || []).map(text);
+    if (window.F1Workspace && window.F1Workspace.renderChecks) window.F1Workspace.renderChecks(blocking, warnings);
+    if (blocking.length) submitMessage("Fix " + (blocking.length === 1 ? "the item" : "the " + blocking.length + " items") + " under Must fix, then submit.");
+    return { blocking: blocking, warnings: warnings };
   }
-  function updateGo() {
-    submitGo.disabled = submitGo.dataset.blocked === "1" || !confirmBox.checked || (!acceptRow.hidden && !acceptBox.checked);
+  function shownWarnings() {
+    return Array.prototype.map.call(document.querySelectorAll("[data-checklist] .check-list.is-warn li > span:first-child"), function (el) { return el.textContent.trim(); });
   }
-  if (confirmBox) { confirmBox.addEventListener("change", updateGo); acceptBox.addEventListener("change", updateGo); }
+  let submitting = false;
   if (submitBtn) submitBtn.addEventListener("click", function () {
-    submitBody.innerHTML = '<p class="muted">Saving and checking the results…</p>';
-    if (submitDlg.showModal && !submitDlg.open) submitDlg.showModal();
+    if (submitting) return;
+    submitting = true;
+    const label = submitBtn.textContent;
+    submitBtn.disabled = true; submitBtn.textContent = "Checking…";
+    submitMessage("");
+    const seen = shownWarnings();
     // Wait for any save in flight, then push the latest edits, so the check runs on what's really on the server.
     const idle = function () { return new Promise(function (done) {
       let n = 0; (function wait() { if (!saving || n++ > 40) done(); else setTimeout(wait, 250); })();
     }); };
-    const flush = idle().then(function () { return dirty ? save(false).then(idle) : true; });
-    flush.then(function () {
+    const flushed = idle().then(function () { return dirty ? save(false).then(idle) : true; });
+    flushed.then(function () {
       const pending = [];
       if (locked) pending.push("This round is locked. Only the Race Master can change it.");
       if (dirty || saving) pending.push(navigator.onLine === false ? "You're offline: some edits haven't reached the server yet." : "Some edits haven't saved yet.");
@@ -709,11 +682,27 @@
       if (recalc() > 0) pending.push("Some positions are invalid or duplicated (highlighted in the table).");
       return fetch(table.dataset.checklistUrl, { credentials: "same-origin" }).then(function (r) { return r.json(); })
         .then(function (check) {
-          if (!check.ok) { submitBody.innerHTML = '<p class="form-error" role="alert">' + esc(check.error || "Couldn't check the results.") + "</p>"; return; }
-          renderChecklist(check, pending);
+          if (!check.ok) { submitMessage(check.error || "Couldn't check the results. Try again."); return false; }
+          const now = renderChecklist(check, pending);
+          if (now.blocking.length) { const box = document.querySelector("[data-checklist]"); if (box) box.scrollIntoView({ block: "start" }); return false; }
+          const fresh = now.warnings.filter(function (w) { return seen.indexOf(w) < 0; });
+          if (fresh.length) { submitMessage("There's a new warning above. Check it, then press Submit weekend again."); return false; }
+          submitBtn.textContent = "Submitting…";
+          return save(true).then(function (res) {
+            if (!res) { if (!(submitErr && !submitErr.hidden)) submitMessage(lastError ? "Couldn't submit: " + lastError : "Couldn't submit. Your results are kept; try again."); return false; }
+            forget();
+            window.F1.toast("Results submitted. Standings and records have been recalculated.", "success");
+            // straight on to the Debrief step of the workspace
+            setTimeout(function () { window.location.href = table.dataset.summaryUrl || ((res.summary_url || "") + "?submitted=1"); }, 500);
+            return true;
+          });
         });
     }).catch(function () {
-      submitBody.innerHTML = '<p class="form-error" role="alert">You appear to be offline. Results can be submitted once your edits have reached the server.</p>';
+      submitMessage("You appear to be offline. The results can be submitted once your edits have reached the server.");
+      return false;
+    }).then(function (done) {
+      if (done === true) return;
+      submitting = false; submitBtn.disabled = false; submitBtn.textContent = label;
     });
   });
   const corrBtn = document.getElementById("save-corrections");
@@ -728,17 +717,6 @@
       if (!res) return;
       corrBtn.disabled = true; corrBtn.textContent = "✓ Weekend complete";
       window.F1.toast("Corrections saved. Standings and ratings have been recalculated.", "success");
-    });
-  });
-  if (submitGo) submitGo.addEventListener("click", function () {
-    submitGo.disabled = true;
-    save(true).then(function (res) {
-      if (!res) { updateGo(); return; }
-      forget();
-      submitDlg.close();
-      window.F1.toast("Results submitted. Standings and records have been recalculated.", "success");
-      // 4.0: straight on to the Debrief stage of the workspace
-      setTimeout(function () { window.location.href = table.dataset.summaryUrl || ((res.summary_url || "") + "?submitted=1"); }, 700);
     });
   });
 

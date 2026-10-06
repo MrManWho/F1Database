@@ -832,7 +832,7 @@ def submission_check(conn, event_id):
     pace_missing = ai3.missing_pace(conn, event, rows)
     if pace_missing:   # 4.0: race times against the AI are required on a tracked round
         blocking.append("Race times missing for " + ", ".join(f"{n} ({s})" for n, s in pace_missing)
-                        + ": enter them under Pace & conditions on the round page, or tick \"Don't submit times\"")
+                        + ": enter them under Sessions, Race times on the round page, or tick \"Don't submit times\"")
     elif event["ai_difficulty"] is None:
         warnings.append("AI difficulty deliberately not tracked for this round (the recommender will skip it)")
     # Positions within a session must run 1, 2, 3… with no holes (a classified gap can't happen).

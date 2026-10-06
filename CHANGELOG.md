@@ -3,6 +3,35 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.17 · The 4.0 redesign (test site)
+_Released October 6, 2026_
+> A new look for the whole site in navy, white and orange, and a race weekend page with a clear place for every job.
+> Every feature is still here, and no numbers or rules changed.
+
+### Highlights
+- **Each race weekend is one page with four steps.** Prepare, Sessions, Review & submit and Debrief run down the left, with the round's sessions (Qualifying, Sprint, Race) under Sessions. The page opens on the step you need. A link to a step or a section still goes straight there.
+- **Each session is its own workspace.** Its results table comes first, then everything that belongs to that session: race times, weather (once the session has run), incidents and penalties, and the AI level and distance for the race. Finished parts fold away. Anything required that isn't done stays open and says who it's for.
+- **Save & continue never submits.** The bar at the bottom shows whether your changes are saved ("Saving…", "Saved", "Saved on this device — waiting to sync", "Couldn't save — retry") and names the next step.
+- **Review & submit is one screen.** It lists what must be fixed, the warnings and any optional details nobody entered, then a summary of what will be submitted. **Fix** takes you to the exact field and brings you back. There's one **Submit weekend** button with no extra pop-up, and pressing it twice still submits once.
+- **The Debrief keeps three things apart:** the weekend is submitted, your own post-race tasks, and whether the league is ready for the next round.
+- **Weekend overview and Waiting on**, on the right of every step. They show the AI level, the format, the race clock, each session's state, and who the round is waiting for, by name.
+- **Home starts with one next action.** Below it are the current weekend, your tasks, what the league is waiting on, the last race, the championship and your career.
+- **No weather before the race.** Weather only appears once a session has run, as a record of that session.
+- **Light theme by default** for anyone who hasn't picked one. Dark is still in your settings, and both themes were checked page by page.
+- **Sign-in, Your leagues, new-league setup and the error pages** have the same navy header as the rest of the site.
+- **Your league's colour** marks your league: its badge in the league switcher, on Your leagues and on its public page. Buttons and highlights are the site's orange everywhere, so they're always readable.
+- **Faster on sites with many leagues.** Every page used to re-read every league on the server to build the league switcher. On a test server with 33 leagues, pages now load 40–50% faster (Home 92 → 50 ms, a race weekend 93 → 49 ms).
+
+### Fixed
+- In leagues with race weekends switched on, the round page left out the race story's facts, the fan vote, the list of who's checked in and everyone's predictions. They're shown again.
+- If saving one player's race times failed, what you typed came back in every player's form. It now comes back only in that player's form, for the right session.
+- Home no longer asks you to accept a weekend target that was already locked in for you at lights out.
+- While a round's results are being entered, Home's **Waiting for** says so for Race Masters too, the same as the round page.
+- Screenshot import works again. Since beta.13 it couldn't load its reading engine, so every import failed.
+
+### Nothing changed in
+- Formulas, standings, career numbers, the AI recommendation policy, permissions and league data. No league file format change.
+
 ## 4.0.0-beta.16 · A failed report reopens where you left it (test site)
 _Released October 6, 2026_
 > Small fixes from checking beta.13 on a phone in both themes.

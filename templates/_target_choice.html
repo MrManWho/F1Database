@@ -3,10 +3,10 @@
 {% from "_icons.html" import icon %}
 {% set tier_icon = {"safe": "shield", "standard": "balance", "stretch": "trophy"} %}
 {% if mt %}{% set ev = mt.event %}
-<section class="card target-card" id="target">
-  <div class="kicker">Weekend target · R{{ ev.round_number }} {{ ev.name }}</div>
+<section class="{{ 'ws-inner' if bare is defined and bare else 'card' }} target-card" id="target">
+  {% if not (bare is defined and bare) %}<div class="kicker">Weekend target · R{{ ev.round_number }} {{ ev.name }}</div>
   <div class="card-head"><h2>{{ 'Your weekend target' if mt.chosen else 'Choose your weekend target' }}</h2>
-    {% if mt.chosen %}{{ target_state(mt.chosen) }}{% endif %}</div>
+    {% if mt.chosen %}{{ target_state(mt.chosen) }}{% endif %}</div>{% endif %}
   {% if mt.chosen %}
     <div class="target-chosen">{{ icon(tier_icon.get(mt.chosen.tier, 'target')) }}
       <div><b>{{ C.TARGET_TIERS[mt.chosen.tier].label if mt.chosen.tier else 'Target' }}</b><p class="target-text">{{ mt.chosen.label }}</p></div></div>

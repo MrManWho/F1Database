@@ -272,8 +272,17 @@
     var raw = (submitter && submitter.getAttribute("formaction")) || form.getAttribute("action") || location.pathname;
     try { return new URL(raw, location.href).pathname; } catch (e) { return raw; }
   }
+  // hidden fields that tell same-address forms apart (which driver, which session): the copy only goes back into
+  // the form they match, never into every form that posts to the same place
+  function hiddenKeys(form) {
+    var keys = [];
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.name && (el.type || "").toLowerCase() === "hidden" && el.name !== "csrf_token" && el.name !== "return_to" && el.name !== "next") keys.push([el.name, el.value]);
+    });
+    return keys;
+  }
   function remember(form, path) {
-    var fields = [];
+    var fields = [], keys = hiddenKeys(form);
     Array.prototype.forEach.call(form.elements, function (el) {
       if (!el.name || el.disabled) return;
       var type = (el.type || "").toLowerCase();
@@ -283,7 +292,7 @@
       else if (el.tagName === "SELECT" && el.multiple) fields.push([el.name, Array.prototype.filter.call(el.options, function (o) { return o.selected; }).map(function (o) { return o.value; })]);
       else fields.push([el.name, el.value]);
     });
-    try { sessionStorage.setItem(KEY, JSON.stringify({ action: path, at: Date.now(), fields: fields })); } catch (e) { /* private mode */ }
+    try { sessionStorage.setItem(KEY, JSON.stringify({ action: path, at: Date.now(), fields: fields, keys: keys })); } catch (e) { /* private mode */ }
   }
   document.addEventListener("submit", function (e) {
     var form = e.target;
@@ -327,6 +336,13 @@
   var forms = Array.prototype.filter.call(document.querySelectorAll("form"), function (f) {
     return (f.getAttribute("method") || "").toLowerCase() === "post" && actionPath(f) === saved.action;
   });
+  if (forms.length > 1 && saved.keys && saved.keys.length) {
+    forms = forms.filter(function (f) {
+      var mine = hiddenKeys(f);
+      return saved.keys.every(function (k) { return mine.some(function (m) { return m[0] === k[0] && m[1] === k[1]; }); });
+    });
+    if (forms.length > 1) forms = forms.slice(0, 1);
+  }
   if (!forms.length) return;
   forms.forEach(function (form) {
     var seen = {};
@@ -351,6 +367,13 @@
   var first = forms[0];
   var stage = first.closest(".ws-stage");
   if (stage && window.F1Workspace && window.F1Workspace.show) window.F1Workspace.show(stage.dataset.stage, { keepScroll: true });
+  // a form that belongs to one session (a sprint race time, a qualifying weather report) shows that session
+  var only = first.closest("[data-session-only]");
+  if (only && only.dataset.sessionOnly.indexOf(" ") < 0 && window.F1Weekend && window.F1Weekend.showSession) window.F1Weekend.showSession(only.dataset.sessionOnly);
+  // ...and the tab it sits under (one player's race times out of several)
+  var panel = first.closest('[role="tabpanel"][hidden]');
+  var tab = panel && panel.id && document.querySelector('[role="tab"][aria-controls="' + panel.id + '"]');
+  if (tab) tab.click();
   // A form that lives in a pop-up (e.g. Report an incident) opens again, so what was typed is actually seen.
   var dlg = first.closest("dialog");
   if (dlg && !dlg.open && dlg.showModal) {

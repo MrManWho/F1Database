@@ -4,11 +4,12 @@
 {% set ev = event %}
 {% set stages = [('upcoming', 'Upcoming'), ('paddock', 'Paddock open'), ('live', 'Lights out'), ('complete', 'Chequered flag')] %}
 {% set here = stages|map(attribute=0)|list %}{% set at = here.index(wk.phase) %}
-<section class="card paddock-card phase-{{ wk.phase }}" id="paddock" aria-labelledby="paddock-title">
-  <div class="card-head">
+{% set bare_ = bare is defined and bare %}
+<section class="{{ 'ws-inner' if bare_ else 'card' }} paddock-card phase-{{ wk.phase }}" id="paddock" {% if not bare_ %}aria-labelledby="paddock-title"{% endif %}>
+  {% if not bare_ %}<div class="card-head">
     <h2 id="paddock-title">{{ {'upcoming': '📅', 'paddock': '🏁', 'live': '🚦', 'complete': '🏆'}[wk.phase] }} {{ wk.label }}</h2>
     {% if wk.phase in ('upcoming', 'paddock') %}{{ race_clock(ev) }}{% elif wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% endif %}
-  </div>
+  </div>{% else %}<div class="paddock-clock">{% if wk.phase in ('upcoming', 'paddock') %}{{ race_clock(ev) }}{% elif wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% endif %}</div>{% endif %}
   <ol class="phase-track" aria-label="Race weekend stages">
     {% for key, label in stages %}
     <li class="{{ 'done' if loop.index0 < at else 'now' if loop.index0 == at else '' }}" {% if loop.index0 == at %}aria-current="step"{% endif %}>{{ label }}</li>
@@ -83,7 +84,7 @@
     <p class="small muted">Chequered flag. {% if ev.lights_at %}Started {{ ev.lights_at|stamp }}.{% endif %}</p>
   {% endif %}
 
-  {% if wk.pen and wk.pen.questions %}{% set pen = wk.pen %}
+  {% if wk.pen and wk.pen.questions and not (skip_pen is defined and skip_pen) %}{% set pen = wk.pen %}
   <div class="press-pen prerace" id="prerace">
     <h3 class="mini-head">🎙️ Pre-race press{% if wk.phase == 'paddock' %} · {{ pen.open }} question{{ 's' if pen.open != 1 }} waiting{% endif %}</h3>
     {% if wk.phase == 'paddock' %}<p class="muted small">What you say gets back to your team and some answers make headlines. {% if ctx.team_life.gates and ctx.team_life.gate_press %}Answer both before lights out.{% else %}Closes at lights out.{% endif %}</p>{% endif %}

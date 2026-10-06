@@ -743,7 +743,7 @@ def test_every_league_page_renders_on_a_version_3_league(app, master_client):
             checked += 1
     assert checked > 60
     page = master_client.get(f"/career/{token}/weekend/{evs[0]['id']}").get_data(as_text=True)
-    assert "Pace &amp; conditions" in page and "Grand Prix distance" in page and "Classified retirement" in page
+    assert "Race times" in page and "Grand Prix distance" in page and "Classified retirement" in page  # 4.0: per-session sections
     kim = app.test_client()
     login(kim, "kim")
     r = kim.post(f"/career/{token}/weekend/{evs[0]['id']}/pace", data={"csrf_token": "tok", "driver_id": a, "session": "gp",

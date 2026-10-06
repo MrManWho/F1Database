@@ -9,31 +9,34 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('web_manifest') }}">
-  <meta name="theme-color" content="#0e1013">
+  <meta name="theme-color" content="#0e1a2b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   {% if push_key %}<meta name="push-key" content="{{ push_key }}">{% endif %}
   <script>
     (function () {
-      var t = "dark", saved = {{ (user.theme if user and user.theme else '')|tojson }};
-      try { t = saved || localStorage.getItem("f1-theme") || "dark"; if (saved) localStorage.setItem("f1-theme", saved); } catch (e) {}
+      var t = "light", saved = {{ (user.theme if user and user.theme else '')|tojson }};
+      try { t = saved || localStorage.getItem("f1-theme") || "light"; if (saved) localStorage.setItem("f1-theme", saved); } catch (e) {}
       if (t === "auto") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", t);
     })();
   </script>
   {% block meta %}{% endblock %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts-rc.css') }}">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/Barlow-400.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/BarlowSemiCondensed-700.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/race.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/race-pages.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pl.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pl-pages.css') }}">
 </head>
 <body {% if maintenance_owner %}data-maint-owner {% endif %}{% if maintenance_open_page %}data-maint-open {% endif %}class="{% if ctx is defined and ctx %}with-sidebar{% else %}plain{% endif %}"
-      {% if ctx is defined and ctx and ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %}
+      {% if ctx is defined and ctx and ctx.accent %}style="--league: {{ ctx.accent }}; --on-league: {{ ctx.on_accent }};"{% endif %}
       {% if ctx is defined and ctx and ctx.is_master and not ctx.timezone_set %}data-tz-detect="{{ url_for('timezone_detect', token=ctx.token) }}"{% endif %}>
 {% if test_site %}<div class="test-site-banner" role="note"><b>TEST SITE</b> · for trying Paddock Legacy 4.0. Nothing here affects the real site, and it never sends emails, Discord posts or phone alerts.</div>{% endif %}
 <script>try { var dsv = {{ (user.density if user and user.density else '')|tojson }}; if (dsv) localStorage.setItem("f1-density", dsv); if (localStorage.getItem("f1-rail") === "1") document.body.classList.add("rail"); if (localStorage.getItem("f1-admin-nav") === "0") document.documentElement.classList.add("admin-nav-closed"); if (localStorage.getItem("f1-density") === "compact") document.body.classList.add("compact"); } catch (e) {}</script>
 {% if maintenance_owner %}<div class="maintenance-owner-banner" role="status"><b>Maintenance mode is on.</b> Only you can use the site{% if maintenance_owner.forced %} (the Render override <code>FORCE_MAINTENANCE</code> is set: remove it in Render to reopen){% endif %}. <a href="{{ url_for('system_controls') }}">System controls</a></div>{% endif %}
 {% from "_icons.html" import icon %}
+{% macro pl_mark(cls='appbar-mark') %}<svg class="{{ cls }}" viewBox="0 0 48 30" aria-hidden="true"><g transform="translate(5 0) skewX(-12)"><path fill="currentColor" fill-rule="evenodd" d="M3 27V3h12.5a7.6 7.6 0 0 1 0 15.2H9.4V27zm6.4-18.7v4.6h5.5a2.3 2.3 0 0 0 0-4.6z"/><path fill="currentColor" d="M22 3h6.4v18.4H38V27H22z"/><path fill="#f4581c" d="M31 3h12l-1.6 5.3H31z"/></g></svg>{% endmacro %}
 {% if ctx is defined and ctx %}
   {% set t = ctx.token %}
   <a class="skip-link" href="#main">Skip to content</a>
@@ -119,7 +122,7 @@
     <header class="appbar">
       <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">{{ icon('menu') }}</button>
       <a class="appbar-brand" href="{{ url_for('dashboard', token=t) }}">
-        <svg class="appbar-mark" viewBox="0 0 30 22" aria-hidden="true"><path d="M2 20 11 2h6L8 20z" fill="var(--accent)"/><path d="M13 20 22 2h6l-9 18z" fill="currentColor"/></svg>
+        {{ pl_mark() }}
         <span><b>Paddock Legacy</b><small>{{ ctx.career_name }}</small></span></a>
       <nav class="topnav" aria-label="Destinations">
         {% set champ_eps_ = ('standings_page', 'stats_page', 'drivers_page', 'teams_page', 'team_profile', 'records', 'rivalry_page', 'seasons_page', 'season_review', 'results_index', 'race_summary', 'driver_profile') %}
@@ -142,37 +145,15 @@
         </details>
       </nav>
       <div class="appbar-actions">
-        {% if ctx.can_run %}
-        <details class="dropdown manage-menu">
-          <summary>{{ icon('settings') }}<span class="label">{{ 'Manage league' if ctx.is_master else 'Results entry' }}</span> <span class="chev" aria-hidden="true">▾</span></summary>
-          <div class="dropdown-panel manage-panel" role="menu">
-            <div class="dropdown-title">Race weekends</div>
-            <a role="menuitem" href="{{ url_for('race_weekend', token=t) }}?stage=sessions">Results entry</a>
-            <a role="menuitem" href="{{ url_for('readiness_page', token=t) }}">Readiness check</a>
-            {% if ctx.is_master %}<a role="menuitem" href="{{ url_for('seasons_page', token=t) }}#calendar">Calendar management</a>
-            <div class="dropdown-title">Career management</div>
-            <a role="menuitem" href="{{ url_for('grid_page', token=t) }}">Grid &amp; contracts</a>
-            <a role="menuitem" href="{{ url_for('market_page', token=t) }}">Market administration</a>
-            <a role="menuitem" href="{{ url_for('paddock_admin', token=t) }}">Drivers &amp; teams</a>
-            <a role="menuitem" href="{{ url_for('team_admin', token=t) }}">Team management</a>
-            <div class="dropdown-title">League administration</div>
-            <a role="menuitem" href="{{ url_for('members', token=t) }}">Members &amp; roles</a>
-            <a role="menuitem" href="{{ url_for('league_settings', token=t) }}">League settings</a>
-            <a role="menuitem" href="{{ url_for('delivery_log_page', token=t) }}">Notifications</a>
-            <a role="menuitem" href="{{ url_for('activity_log', token=t) }}">Activity log</a>
-            <a role="menuitem" href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a>{% endif %}
-          </div>
-        </details>
-        {% endif %}
         <button class="icon-btn bell" type="button" id="bell" data-dialog="notif-dialog" aria-label="Notifications{{ ', ' ~ ctx.unread ~ ' unread' if ctx.unread }}"
-                data-url="{{ url_for('api_notifications', token=t) }}" data-read="{{ url_for('notifications_read', token=t) }}">🔔<span class="bell-count" id="bell-count" {{ 'hidden' if not ctx.unread }}>{{ ctx.unread }}</span></button>
-        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu">{{ user.display_name[:1]|upper }}</button>
+                data-url="{{ url_for('api_notifications', token=t) }}" data-read="{{ url_for('notifications_read', token=t) }}">{{ icon('bell') }}<span class="bell-count" id="bell-count" {{ 'hidden' if not ctx.unread }}>{{ ctx.unread }}</span></button>
+        <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu"><span class="av-name">{{ user.display_name }}</span><span class="av-dot" aria-hidden="true">{{ user.display_name[:1]|upper }}</span><span class="chev" aria-hidden="true">▾</span></button>
       </div>
     </header>
     <header class="topbar contextbar">
       <details class="dropdown league-switch" id="league-switch">
         <summary class="league-chip" aria-label="Switch league. Current league: {{ ctx.career_name }}">
-          <span class="league-mark" {% if lg and lg.accent %}style="--accent: {{ lg.accent }}"{% endif %} aria-hidden="true">{{ lg.initials if lg else ctx.career_name[:2]|upper }}</span>
+          <span class="league-mark" {% if ctx.accent %}style="--accent: {{ ctx.accent }}; --on-accent: {{ ctx.on_accent }};"{% endif %} aria-hidden="true">{{ lg.initials if lg else ctx.career_name[:2]|upper }}</span>
           <span class="league-name"><b>{{ ctx.career_name }}</b><small>{{ ctx.role }}{% if lg and lg.muted %} · 🔕 muted{% endif %}</small></span>
           <span class="chev" aria-hidden="true">▾</span>
         </summary>
@@ -232,6 +213,30 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-ghost btn-sm" type="submit">Save now</button>
         </form>
+        {% endif %}
+        {% if ctx.can_run %}
+        <details class="dropdown manage-menu" id="manage-menu">
+          <summary>{{ icon('settings') }}<span class="label">{{ 'Manage league' if ctx.is_master else 'Results entry' }}</span> <span class="chev" aria-hidden="true">▾</span></summary>
+          <div class="dropdown-panel manage-panel" role="menu">
+            <div class="dropdown-title">Race weekends</div>
+            <a role="menuitem" href="{{ url_for('race_weekend', token=t) }}?stage=sessions">Results entry</a>
+            <a role="menuitem" href="{{ url_for('readiness_page', token=t) }}">Readiness check</a>
+            {% if ctx.is_master %}<a role="menuitem" href="{{ url_for('seasons_page', token=t) }}#calendar">Calendar management</a>
+            <div class="dropdown-title">Career management</div>
+            <a role="menuitem" href="{{ url_for('grid_page', token=t) }}">Grid &amp; contracts</a>
+            <a role="menuitem" href="{{ url_for('market_page', token=t) }}">Market administration</a>
+            <a role="menuitem" href="{{ url_for('paddock_admin', token=t) }}">Drivers &amp; teams</a>
+            <a role="menuitem" href="{{ url_for('team_admin', token=t) }}">Team management</a>
+            {% if not ctx.my_driver %}<a role="menuitem" href="{{ url_for('garage', token=t) }}">Player garages</a>
+            <a role="menuitem" href="{{ url_for('team_standing', token=t) }}">Relationships</a>{% endif %}
+            <div class="dropdown-title">League administration</div>
+            <a role="menuitem" href="{{ url_for('members', token=t) }}">Members &amp; roles</a>
+            <a role="menuitem" href="{{ url_for('league_settings', token=t) }}">League settings</a>
+            <a role="menuitem" href="{{ url_for('delivery_log_page', token=t) }}">Notifications</a>
+            <a role="menuitem" href="{{ url_for('activity_log', token=t) }}">Activity log</a>
+            <a role="menuitem" href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a>{% endif %}
+          </div>
+        </details>
         {% endif %}
       </div>
     </header>
@@ -312,11 +317,11 @@
 
 {% else %}
   <header class="plain-head">
-    <a class="brand" href="{{ url_for('home') }}"><svg class="brand-mark" viewBox="0 0 32 32" role="img" aria-label="Paddock Legacy"><rect width="32" height="32" rx="8" fill="var(--red)"/><path d="M10.5 25V8h7a5.6 5.6 0 0 1 0 11.2h-7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff"><rect x="13" y="11" width="2.3" height="2.3"/><rect x="15.3" y="13.3" width="2.3" height="2.3"/><rect x="13" y="15.6" width="2.3" height="2.3" opacity=".0"/></g><rect x="20" y="22" width="6" height="3.2" rx="1" fill="#fff" opacity=".9"/></svg><span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}{% if environment != 'production' %} <span class="env-badge env-{{ environment }}" title="Which copy of the site this is">{{ environment_label }}</span>{% endif %}</small></span></a>
+    <a class="brand" href="{{ url_for('home') }}" aria-label="Paddock Legacy home">{{ pl_mark('brand-mark') }}<span><strong>Paddock Legacy</strong><small>v{{ APP_VERSION }}{% if environment != 'production' %} <span class="env-badge env-{{ environment }}" title="Which copy of the site this is">{{ environment_label }}</span>{% endif %}</small></span></a>
     {% if user %}
     <div class="topbar-actions">
       <a class="btn btn-ghost btn-sm" href="{{ url_for('accounts_page') }}">Accounts</a>
-      <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}">{{ user.display_name[:1]|upper }}</button>
+      <button class="avatar" type="button" data-dialog="account-dialog" title="{{ user.display_name }}" aria-label="Account menu"><span class="av-name">{{ user.display_name }}</span><span class="av-dot" aria-hidden="true">{{ user.display_name[:1]|upper }}</span></button>
     </div>
     {% endif %}
   </header>

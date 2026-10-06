@@ -95,7 +95,8 @@ def test_a_tracked_round_cant_be_submitted_without_race_times(app, master_client
     assert res.status_code == 422
     assert any("Race times missing for Player One (Grand Prix)" in b for b in res.get_json()["checklist"]["blocking"])
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
-    assert "Still needed before this round can be submitted" in page and 'name="race_time"' in page
+    # 4.0 redesign: Review & submit lists it under Must fix, with the race time fields under Sessions → Race times
+    assert "Must fix (1)" in page and "Race times missing for Player One (Grand Prix)" in page and 'name="race_time"' in page
     _pace(master_client, token, ev, one, race_time="1:32:45.123", bench_race_time="1:32:32.700", laps="58")
     assert _submit(master_client, token, ev, payload).status_code == 200
     with storage.session(token) as conn:

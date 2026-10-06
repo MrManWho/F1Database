@@ -37,7 +37,8 @@ def fix_target(message):
     """Where to fix a checklist message: (session key or None, element id or None)."""
     m = message.lower()
     if "race times" in m:
-        return "r", "pace"
+        # 4.0: each race session has its own Race times section; Sprint-only gaps go to the Sprint's
+        return ("s", "pace-sprint") if "(sprint)" in m and "(grand prix)" not in m else ("r", "pace")
     if "ai difficulty" in m:
         return "r", "ai-difficulty"
     if "weekend notes" in m:

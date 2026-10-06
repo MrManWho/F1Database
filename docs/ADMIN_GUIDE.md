@@ -2,6 +2,47 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.17: the 4.0 redesign
+
+- **What it is.** A new look and layout for the existing features. The feature-to-destination map, the navigation and
+  the round page's layout are in `docs/4.0/REDESIGN_MAP.md`. No route, schema, formula or permission changed.
+- **Styles.** `static/css/pl.css` is the design system: tokens for both themes, the app bar, buttons, pills and
+  links. `static/css/pl-pages.css` holds page layouts (round page, Home, Championship, pages outside a league). Both
+  load after `app.css`. `race.css`, `race-pages.css`, `fonts-rc.css` and the Saira and IBM Plex fonts were deleted;
+  Barlow is served from `static/fonts` (OFL licence alongside). A base rule written as `.x, html[data-theme] .x`
+  outranks a plain `.x.is-on` or `.x:hover`, so its state rules carry the same `html[data-theme]` prefix.
+- **League colour.** `base.html` now puts the league's accent on `<body>` as `--league` / `--on-league` instead of
+  `--accent`. `--accent` (and the old `--red`) is the site orange everywhere, so older `app.css` rules that used them
+  turn orange rather than red or the league's colour. The league badge (`.league-mark`) still gets the league's
+  colour inline. Where `app.css` used red to mean a problem (Readiness blockers, missed targets, danger banners),
+  `pl.css` keeps it on the red `--bad` tokens.
+- **Round page.** `templates/weekend.html` is built from one `sec()` macro: a `<details class="ws-sec">` with a state,
+  a Required/Optional tag, who it's for and a summary. Sections that belong to one session carry
+  `data-session-only="q|s|r"` plus `data-session-strict`. `static/js/workspace.js` switches steps and sessions and
+  renders the Review checklist. `static/js/weekend.js` saves the table and submits. Submitting first re-reads the
+  checklist; a warning the user hasn't seen yet stops it once. The server's own once-only guard is unchanged.
+- **Debrief readiness** (`app.weekend`). `next_gate` is the next round's gate status, read with `issue=False`, so
+  opening the Debrief never issues targets or press. It's only read while that round hasn't started.
+- **League list cache** (`storage.list_careers`). Each league's summary is kept, keyed by the league file's and its
+  `-wal` file's modification time and size. Any write to a league, from any process, changes the key and the summary
+  is read again. Callers get their own copy. Speed, repeat loads of each page on the same server (median ms), base
+  beta.16 vs beta.17:
+  - one league: about the same (Home 52.7 → 52.4, round 48.8 → 44.1, Standings 30.6 → 32.9);
+  - 33 leagues: Home 92.0 → 49.5, round 93.1 → 49.0, Standings 61.7 → 33.0, Statistics 91.8 → 37.4, News 52.8 → 18.8.
+  - The first visit to the round page downloads about 100 KB more (the fonts, now actually used, and the new CSS).
+    It's all cached for a year after that.
+- **Home's lists.** `insights.pending_actions` now counts a weekend target as done once it has a tier (chosen, or
+  locked in as Standard at lights out), the same rule as the round gate (`gates.py`). Only a pre-2.4 target without a
+  tier still asks to be accepted. Home's Waiting for also names results still to enter while a round is live, for
+  Race Masters as well.
+- **Theme default.** A browser with no saved theme gets light (it was dark). Saved choices are kept.
+- **Static fingerprint and folders.** `_version_static_files` only adds `?v=` to files. Since beta.13 it also stamped
+  the screenshot reader's folder address (`vendor/tesseract/`), so every file the reader added to it 404'd and
+  screenshot import always failed.
+- **Tests updated for the new page:** "Submit weekend", "Race times" and "Must fix" replace the old dialog and card
+  wording. `test_v230` now checks a driver has no paddock button (its form action), since Waiting on names the
+  "Open the paddock" job for everyone. The permission checks are unchanged.
+
 ## 4.0.0-beta.16: failed pop-up forms
 
 - `shell.js` form restore: when the restored form sits in a closed `<dialog>`, it calls `showModal()` and repeats the

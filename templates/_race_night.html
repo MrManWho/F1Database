@@ -2,13 +2,14 @@
 {% from "_macros.html" import team_dot, race_clock, battle_row, target_state with context %}
 {% set ev = hub.event %}
 {% set wk = url_for('weekend', token=ctx.token, event_id=ev.id) %}
-<section class="card race-night" id="race-night">
-  <div class="card-head">
+{% set bare_ = bare is defined and bare %}
+<section class="{{ 'ws-inner' if bare_ else 'card' }} race-night" id="race-night">
+  {% if not bare_ %}<div class="card-head">
     <h2>{{ 'Race story' if hub.complete else 'Race night' }}</h2>
     {% if not hub.complete %}{{ race_clock(ev) }}{% endif %}
-  </div>
+  </div>{% endif %}
 
-  {% if full and ctx.is_master and not hub.complete %}
+  {% if full and ctx.is_master and not hub.complete and not (hide_time is defined and hide_time) %}
   <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=ev.id) }}" class="inline-form race-time-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ ev.race_at|time_input }}"></label>
@@ -25,6 +26,7 @@
 
   {% if full and hub.story is defined %}
   {% set st = hub.story %}
+  {% if not (hide_podium is defined and hide_podium) %}
   <div class="podium">
     {% for r in st.podium %}
     <div class="podium-step p{{ loop.index }}" style="--team: {{ r.team.color }}">
@@ -32,6 +34,7 @@
     </div>
     {% endfor %}
   </div>
+  {% endif %}
   <div class="story-facts">
     {% if st.pole %}<span>⏱ Pole <b>{{ st.pole.driver.name }}</b></span>{% endif %}
     {% if st.fastest_lap %}<span>🟣 Fastest lap <b>{{ st.fastest_lap.driver.name }}</b></span>{% endif %}

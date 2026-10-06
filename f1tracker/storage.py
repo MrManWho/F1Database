@@ -263,8 +263,50 @@ def all_league_files():
     return out
 
 
+# 4.0: every page lists the viewer's leagues, which used to open every league file on the server each time.
+# A league's summary is now kept until its file (or its write-ahead log) changes, so an unchanged league is
+# never re-read; any write to it, from any process, changes the file's timestamp and size and refreshes it.
+_SUMMARIES = {}
+
+
+def _file_stamp(path):
+    stamp = []
+    for p in (str(path), str(path) + "-wal"):
+        try:
+            st = os.stat(p)
+            stamp += [st.st_mtime_ns, st.st_size]
+        except OSError:
+            stamp += [None, None]
+    return tuple(stamp) if stamp[0] is not None else None
+
+
+def _copy_summary(info):
+    """A caller may change what it's given; the kept copy stays as read (one level of lists and dicts deep)."""
+    out = {}
+    for k, v in info.items():
+        if isinstance(v, dict):
+            v = {a: dict(b) if isinstance(b, dict) else b for a, b in v.items()}
+        elif isinstance(v, list):
+            v = list(v)
+        out[k] = v
+    return out
+
+
+def _summary_cached(path):
+    stamp = _file_stamp(path)          # taken before reading, so a write during the read is never hidden
+    hit = _SUMMARIES.get(str(path))
+    if stamp is not None and hit and hit[0] == stamp:
+        return _copy_summary(hit[1])
+    info = _summary(path)
+    if info is None or stamp is None:
+        _SUMMARIES.pop(str(path), None)
+        return info
+    _SUMMARIES[str(path)] = (stamp, info)
+    return _copy_summary(info)
+
+
 def list_careers():
-    items = [s for s in (_summary(p) for p in careers_dir().glob(f"*{CAREER_EXT}")) if s]
+    items = [s for s in (_summary_cached(p) for p in careers_dir().glob(f"*{CAREER_EXT}")) if s]
     items.sort(key=lambda c: c["last_opened"] or "", reverse=True)
     return items
 

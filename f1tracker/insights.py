@@ -569,7 +569,8 @@ def pending_actions(conn, ctx):
         nxt = S.next_incomplete_event(conn, sid)
         if nxt and ctx["team_life"]["targets"]:
             t = teamlife.target_for(conn, nxt["id"], me["id"])
-            if t and not t["acknowledged_at"] and t["status"] == "Set":
+            # a target locked in by choosing it, or for you at lights out, is done (as the round gate counts it)
+            if t and not (t["acknowledged_at"] or t["tier"]) and t["status"] == "Set":
                 out.append((f"Accept your R{nxt['round_number']} weekend target", f"weekend/{nxt['id']}?stage=prepare#target",
                             "warn"))
             elif not t and nxt["status"] == C.EVENT_NOT_RUN and not nxt.get("lights_at") and \

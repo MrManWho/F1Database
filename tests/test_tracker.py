@@ -857,7 +857,7 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
                        json={"results": [{"driver_id": ids[0], "race_position": 1}], "ai_difficulty": 88})
     assert res.get_json()["ok"]
     page = steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
-    assert "Submit results" in page and "View only" not in page
+    assert "Submit weekend" in page and "View only" not in page   # 4.0 redesign: Review & submit
     # Scorekeepers only enter results: no admin pages, calendar or grid changes.
     assert steward.get(f"/career/{token}/paddock").status_code == 403
     assert steward.post(f"/career/{token}/calendar/add", data={"name": "X GP", "csrf_token": "tok"}).status_code == 403

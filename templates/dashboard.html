@@ -2,8 +2,9 @@
 {% from "_macros.html" import team_dot, driver_link, difficulty, race_clock, pattrs with context %}
 {% block title %}Home{% endblock %}
 {% block content %}
-{# 4.0 "Race Control" home: the championship as a timing tower, the next race with its start lights, your move,
-   your pit board and your season. Only actions the person can take are offered. #}
+{# 4.0 Home: one next action, the current race weekend, your tasks and what the league is waiting on, then a compact
+   championship and your career on the right. Only actions the person can take are offered. #}
+{% from "_icons.html" import icon %}
 {% set t = ctx.token %}
 {% set rw = url_for('race_weekend', token=t) %}
 {% set na = none %}
@@ -16,13 +17,11 @@
 {% elif next_event %}{% set na = {'text': 'Follow R' ~ next_event.round_number ~ ' ' ~ next_event.name, 'href': rw, 'why': 'Results and news appear once the round is submitted.'} %}
 {% endif %}
 
-<div class="rc-strip" role="status">
-  <span>{{ ctx.career_name }}</span><span>{{ ctx.season.year }}</span>
-  {% if next_event %}<span>Round {{ next_event.round_number }}/{{ events|length }}</span>
-  <span class="{{ 'is-live' if phase == 'live' }}">{% if phase == 'live' %}● LIVE{% elif phase == 'paddock' %}Paddock open{% elif phase == 'complete' %}Complete{% else %}Upcoming{% endif %}</span>
-  {% else %}<span>Season complete</span>{% endif %}
-  <span class="rc-strip-end">{{ completed }} of {{ events|length }} rounds complete</span>
-</div>
+<header class="home-head">
+  <div class="kicker">{{ ctx.career_name }} · Season {{ ctx.season.year }}</div>
+  <h1>Home</h1>
+  <p class="page-purpose">{% if next_event %}Round {{ next_event.round_number }} of {{ events|length }} · {% else %}Season complete · {% endif %}{{ completed }} of {{ events|length }} rounds complete</p>
+</header>
 
 {% if backup_due %}
 <div class="banner banner-warn backup-due" role="status"><span aria-hidden="true">💾</span>
@@ -31,170 +30,181 @@
   <form method="post" action="{{ url_for('offsite_snooze') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Remind me in a week</button></form></div>
 {% endif %}
 
-<div class="rc-home">
-  <aside class="rc-tower" aria-label="Drivers' championship">
-    <div class="rc-tower-head"><span>Championship</span><small>{{ 'After R' ~ rc.last_event.round_number if rc.last_event else 'Before R1' }}</small></div>
-    <ol class="rc-tower-list">
-      {% for d in rc.tower %}
-      <li class="{{ 'is-me' if d.me }} {{ 'is-player' if d.player }}" {% if d.color %}style="--player: {{ d.color }}"{% endif %}>
-        <span class="tw-pos">{{ d.pos }}</span>
-        <span class="tw-bar" style="background: {{ d.team }}" aria-hidden="true"></span>
-        <span class="tw-code" title="{{ d.name }}">{{ d.code }}<span class="sr-only"> {{ d.name }}</span></span>
-        <span class="tw-move {{ 'up' if d.change > 0 else 'down' if d.change < 0 }}" aria-label="{{ 'up ' ~ d.change if d.change > 0 else 'down ' ~ (0 - d.change) if d.change < 0 else 'no change' }}">{{ '▲' if d.change > 0 else '▼' if d.change < 0 else '' }}</span>
-        <span class="tw-gap">{{ d.gap }}</span>
-      </li>
-      {% else %}<li class="muted small">No drivers yet.</li>{% endfor %}
-    </ol>
-    <a class="rc-tower-foot" href="{{ url_for('standings_page', token=t) }}">Full standings →</a>
-  </aside>
+{% if na %}
+<section class="home-action next-action" aria-labelledby="next-action-title">
+  <div class="ha-text"><div class="ha-kicker" id="next-action-title">Next action</div><p class="ha-title">{{ na.text }}</p><p class="ha-why">{{ na.why }}</p></div>
+  <a class="btn btn-primary btn-go" href="{{ na.href }}">Go {{ icon('arrow-right') }}</a>
+</section>
+{% endif %}
 
-  <div class="rc-center">
-    <section class="rc-next" aria-labelledby="rc-next-title">
+{% for w in windows %}
+<div class="banner banner-hot"><strong>{{ w.kind }} open</strong> · teams are making offers for {{ w.target_year }}.
+  {% if ctx.my_driver %}<a href="{{ url_for('offers_page', token=t) }}">Check your offers →</a>{% endif %}</div>
+{% endfor %}
+
+<div class="home-grid">
+  <div class="home-main">
+    <section class="card home-weekend" aria-labelledby="rc-next-title">
       {% if next_event %}
-      <div class="rc-next-main">
-        <div class="rc-eyebrow">Next up · Round {{ '%02d'|format(next_event.round_number) }} of {{ events|length }}{{ ' · Sprint weekend' if next_event.is_sprint }}</div>
-        <h1 id="rc-next-title">{% if circuit.flag %}<span class="flag" role="img" aria-label="{{ circuit.code }}">{{ circuit.flag }}</span> {% endif %}{{ next_event.name }}</h1>
-        <div class="rc-where">{{ circuit.circuit or next_event.location }}{% if next_event.location and circuit.circuit and next_event.location not in circuit.circuit %} · {{ next_event.location }}{% endif %}</div>
-        <dl class="rc-readouts">
-          <div><dt>{{ 'Status' if phase == 'live' else 'Lights out in' }}</dt><dd>{% if phase == 'live' %}<span class="live-badge">● LIVE</span>{% elif next_event.race_at and next_event.race_at|countdown %}{{ next_event.race_at|countdown }}{% elif next_event.race_at %}{{ next_event.race_at|race_time }}{% else %}Not set{% endif %}</dd></div>
-          <div><dt>Recommended AI</dt><dd>{{ rec.recommended if rec and rec.recommended is not none else '—' }}</dd></div>
-          <div><dt>Format</dt><dd>{{ 'SPR' if next_event.is_sprint else 'STD' }}</dd></div>
-        </dl>
-        <div class="rc-clock">{{ race_clock(next_event) }}</div>
-        {% if rec %}<details class="rc-ai-why"><summary>How the AI level is worked out</summary>{{ difficulty(rec, compact=True) }}</details>{% endif %}
+      <div class="hw-head">
+        <div class="hw-flag" aria-hidden="true">{% if circuit.flag %}{{ circuit.flag }}{% else %}<b>{{ '%02d'|format(next_event.round_number) }}</b>{% endif %}</div>
+        <div class="hw-title">
+          <div class="ws-kicker"><span>Round {{ '%02d'|format(next_event.round_number) }}</span> / {{ 'Sprint weekend' if next_event.is_sprint else 'Race weekend' }}</div>
+          <div class="ws-name"><h2 id="rc-next-title">{% if circuit.flag %}<span class="sr-only">{{ circuit.code }} </span>{% endif %}{{ next_event.name }}</h2>
+            <span class="status-badge status-{{ 'live' if phase == 'live' else 'paddock-open' if phase == 'paddock' else 'complete' if phase == 'complete' else 'upcoming' }}">{% if phase == 'live' %}Live{% elif phase == 'paddock' %}Paddock open{% elif phase == 'complete' %}Complete{% else %}Upcoming{% endif %}</span></div>
+          <div class="ws-where">{{ circuit.circuit or next_event.location }}{% if next_event.location and circuit.circuit and next_event.location not in circuit.circuit %} · {{ next_event.location }}{% endif %}</div>
+        </div>
+        <div class="ws-hero hw-hero" aria-hidden="true">{% if circuit.path %}<svg viewBox="0 0 100 60"><path d="{{ circuit.path }}"/></svg>{% endif %}</div>
       </div>
-      <div class="rc-next-side">
-        <svg class="rc-circuit" viewBox="0 0 100 60" aria-hidden="true"><path d="{{ circuit.path }}"/></svg>
+      <dl class="hw-readouts">
+        <div><dt>{{ 'Status' if phase == 'live' else 'Lights out in' }}</dt><dd>{% if phase == 'live' %}<span class="live-badge"><span class="live-dot" aria-hidden="true"></span>LIVE</span>{% elif next_event.race_at and next_event.race_at|countdown %}{{ next_event.race_at|countdown }}{% elif next_event.race_at %}{{ next_event.race_at|race_time }}{% else %}Not set{% endif %}</dd></div>
+        <div><dt>Recommended AI</dt><dd>{{ rec.recommended if rec and rec.recommended is not none else '—' }}</dd></div>
+        <div><dt>Format</dt><dd>{{ 'Sprint' if next_event.is_sprint else 'Standard' }}</dd></div>
+        {% if rc.lights %}<div><dt>Grid ready</dt><dd>{{ rc.lights_ready }}/{{ rc.lights|length }}</dd></div>{% endif %}
+      </dl>
+      <div class="hw-foot">
+        <div class="rc-clock">{{ race_clock(next_event) }}</div>
         {% if rc.lights %}
         <div class="rc-lights" aria-label="Grid readiness: {{ rc.lights_ready }} of {{ rc.lights|length }} ready">
           <div class="rc-light-row">{% for l in rc.lights %}<span class="rc-light {{ 'on' if l.done }}" title="{{ l.name }}: {{ 'ready' if l.done else 'not ready yet' }}"></span>{% endfor %}</div>
-          <span class="rc-lights-label">Grid ready {{ rc.lights_ready }}/{{ rc.lights|length }}{% set waiting = rc.lights|rejectattr('done')|map(attribute='name')|list %}{% if waiting %} · waiting on {{ waiting|join(', ') }}{% endif %}</span>
+          <span class="rc-lights-label">{% set waiting_l = rc.lights|rejectattr('done')|map(attribute='name')|list %}{% if waiting_l %}Waiting on {{ waiting_l|join(', ') }}{% else %}Everyone's ready{% endif %}</span>
         </div>
         {% endif %}
-        <a class="rc-link" href="{{ url_for('weekend', token=t, event_id=next_event.id) }}">Open the race weekend →</a>
+        <a class="btn btn-outline" href="{{ url_for('weekend', token=t, event_id=next_event.id) }}">Open the race weekend {{ icon('arrow-right') }}</a>
       </div>
+      {% if rec %}<details class="rc-ai-why"><summary>How the AI level is worked out</summary>{{ difficulty(rec, compact=True) }}</details>{% endif %}
       {% else %}
-      <div class="rc-next-main">
-        <div class="rc-eyebrow">Season complete</div>
-        <h1 id="rc-next-title">All {{ events|length }} rounds are in the books</h1>
-        <p><a href="{{ url_for('season_review', token=t, season_id=ctx.season.id) }}">See the season review →</a></p>
+      <div class="hw-done">
+        <div class="ws-kicker">Season complete</div>
+        <h2 id="rc-next-title">All {{ events|length }} rounds are in the books</h2>
+        <p><a class="btn btn-outline" href="{{ url_for('season_review', token=t, season_id=ctx.season.id) }}">See the season review {{ icon('arrow-right') }}</a></p>
       </div>
       {% endif %}
     </section>
 
-    {% if na %}
-    <section class="rc-move next-action" aria-labelledby="next-action-title">
-      <div><div class="rc-eyebrow" id="next-action-title">Next action</div><p class="rc-move-text">{{ na.text }}</p><p class="rc-move-why">{{ na.why }}</p></div>
-      <a class="btn rc-move-btn" href="{{ na.href }}">Go →</a>
-    </section>
-    {% endif %}
-
-    {% for w in windows %}
-    <div class="banner banner-hot"><strong>{{ w.kind }} open</strong> · teams are making offers for {{ w.target_year }}.
-      {% if ctx.my_driver %}<a href="{{ url_for('offers_page', token=t) }}">Check your offers →</a>{% endif %}</div>
-    {% endfor %}
-
-    <div class="rc-grid-2">
+    <div class="home-2col">
       {% if not ctx.is_spectator %}
-      <section class="card rc-pitboard pending-card" aria-labelledby="pending-title">
+      <section class="card pending-card" aria-labelledby="pending-title">
         <h2 id="pending-title">Your tasks</h2>
         {% if pending %}
-        <ul class="rc-tasks pending-list">
-          {% for text, link, tone in pending %}<li class="pt-{{ tone }}"><span class="rc-dot" aria-hidden="true"></span><a href="/career/{{ t }}/{{ link }}">{{ text }}</a></li>{% endfor %}
+        <ul class="home-tasks pending-list">
+          {% for text, link, tone in pending %}<li class="pt-{{ tone }}"><span class="st-ico {{ 'is-attention' if tone in ('hot', 'warn') else 'is-optional' }}" aria-hidden="true">{{ '!' if tone in ('hot', 'warn') else 'i' }}</span><a href="/career/{{ t }}/{{ link }}">{{ text }}</a></li>{% endfor %}
         </ul>
-        {% else %}<p class="muted small">✓ Nothing is waiting on you right now.</p>{% endif %}
-        {% if waiting %}
-        <h3 class="rc-sub-head">Waiting for…</h3>
-        <ul class="rc-waiting waiting-list">{% for w in waiting %}<li>{{ w }}</li>{% endfor %}</ul>
-        {% endif %}
-      </section>
-      {% elif waiting %}
-      <section class="card"><h2>Waiting for…</h2><ul class="rc-waiting waiting-list">{% for w in waiting %}<li>{{ w }}</li>{% endfor %}</ul></section>
-      {% endif %}
-
-      {% if rc.last %}{% set L = rc.last %}
-      <section class="card rc-last" aria-labelledby="rc-last-title">
-        <div class="card-head"><h2 id="rc-last-title">Last race · R{{ L.event.round_number }} {{ L.event.name }}</h2>
-          <a class="small" href="{{ url_for('weekend', token=t, event_id=L.event.id) }}?stage=debrief">Debrief →</a></div>
-        <div class="rc-readout-row">
-          <div><small>Grid</small><b>{{ 'P' ~ L.grid if L.grid else '—' }}</b></div>
-          <div><small>Finish</small><b class="{{ 'up' if L.gained and L.gained > 0 else 'down' if L.gained and L.gained < 0 }}">{{ 'P' ~ L.finish if L.finish else L.status }}</b></div>
-          <div><small>Points</small><b>+{{ L.points }}</b></div>
-        </div>
-        {% if L.target %}<p class="small muted">Target <span class="rc-ink">{{ L.target.label }}</span> · {% if L.target.status == 'Hit' %}<span class="up">hit</span>{% elif L.target.status == 'Missed' %}<span class="down">missed</span>{% else %}{{ L.target.status|lower }}{% endif %}</p>{% endif %}
+        {% else %}<p class="home-clear"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span> Nothing is waiting on you right now.</p>{% endif %}
       </section>
       {% endif %}
+      <section class="card home-waiting" aria-labelledby="waiting-title">
+        <h2 id="waiting-title">Waiting for…</h2>
+        {% if waiting %}<ul class="home-waiting-list waiting-list">{% for w in waiting %}<li><span class="st-ico is-current" aria-hidden="true"></span><span>{{ w }}</span></li>{% endfor %}</ul>
+        {% else %}<p class="home-clear"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span> The league isn't waiting on anyone.</p>{% endif %}
+      </section>
     </div>
 
-{% if notices_ %}
-  <section class="card announce-card" id="announcements" aria-labelledby="announce-title">
-    <div class="card-head"><h2 id="announce-title">Announcements</h2>
-      {% if ctx.is_master %}<a class="btn btn-sm btn-ghost" href="{{ url_for('announcements_page', token=t) }}">Manage</a>{% endif %}</div>
-    {% for a in notices_ %}
-    <article class="announce{{ ' pinned' if a.pinned }}">
-      <h3>{% if a.pinned %}<span class="pill">Pinned</span> {% endif %}{{ a.title }}</h3>
-      {% if a.body %}<p class="pre-line">{{ a.body }}</p>{% endif %}
-      <small class="muted">{{ a.published_at|ago }}{% if a.expires_at %} · until {{ a.expires_at|stamp }}{% endif %}</small>
-    </article>
-    {% endfor %}
-  </section>
-  {% endif %}
+    {% if rc.last %}{% set L = rc.last %}
+    <section class="card rc-last" aria-labelledby="rc-last-title">
+      <div class="card-head"><h2 id="rc-last-title">Last race · R{{ L.event.round_number }} {{ L.event.name }}</h2>
+        <a class="small" href="{{ url_for('weekend', token=t, event_id=L.event.id) }}?stage=debrief">Debrief →</a></div>
+      <div class="ws-stat-row">
+        <div><small>Grid</small><b>{{ 'P' ~ L.grid if L.grid else '—' }}</b></div>
+        <div><small>Finish</small><b class="{{ 'up' if L.gained and L.gained > 0 else 'down' if L.gained and L.gained < 0 }}">{{ 'P' ~ L.finish if L.finish else L.status }}</b></div>
+        <div><small>Points</small><b>+{{ L.points }}</b></div>
+      </div>
+      {% if L.target %}<p class="small muted">Target <b>{{ L.target.label }}</b> · {% if L.target.status == 'Hit' %}<span class="up">hit</span>{% elif L.target.status == 'Missed' %}<span class="down">missed</span>{% else %}{{ L.target.status|lower }}{% endif %}</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if notices_ %}
+    <section class="card announce-card" id="announcements" aria-labelledby="announce-title">
+      <div class="card-head"><h2 id="announce-title">Announcements</h2>
+        {% if ctx.is_master %}<a class="btn btn-sm btn-ghost" href="{{ url_for('announcements_page', token=t) }}">Manage</a>{% endif %}</div>
+      {% for a in notices_ %}
+      <article class="announce{{ ' pinned' if a.pinned }}">
+        <h3>{% if a.pinned %}<span class="pill">Pinned</span> {% endif %}{{ a.title }}</h3>
+        {% if a.body %}<p class="pre-line">{{ a.body }}</p>{% endif %}
+        <small class="muted">{{ a.published_at|ago }}{% if a.expires_at %} · until {{ a.expires_at|stamp }}{% endif %}</small>
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
   </div>
 
-  <aside class="rc-side" aria-label="Your season">
+  <aside class="home-side" aria-label="Championship and your career">
+    <section class="card rc-tower" aria-labelledby="tower-title">
+      <div class="card-head"><h2 id="tower-title">Championship</h2><small class="muted">{{ 'After R' ~ rc.last_event.round_number if rc.last_event else 'Before R1' }}</small></div>
+      <ol class="rc-tower-list">
+        {% for d in rc.tower[:10] %}
+        <li class="{{ 'is-me' if d.me }} {{ 'is-player' if d.player }}" {% if d.color %}style="--player: {{ d.color }}"{% endif %}>
+          <span class="tw-pos">{{ d.pos }}</span>
+          <span class="tw-bar" style="background: {{ d.team }}" aria-hidden="true"></span>
+          <span class="tw-code" title="{{ d.name }}"><span class="tw-name">{{ d.name }}</span></span>
+          <span class="tw-move {{ 'up' if d.change > 0 else 'down' if d.change < 0 }}" aria-label="{{ 'up ' ~ d.change if d.change > 0 else 'down ' ~ (0 - d.change) if d.change < 0 else 'no change' }}">{{ '▲' if d.change > 0 else '▼' if d.change < 0 else '' }}</span>
+          <span class="tw-gap">{{ d.gap }}</span>
+        </li>
+        {% else %}<li class="muted small">No drivers yet.</li>{% endfor %}
+        {% for d in rc.tower[10:] if d.me or d.player %}
+        <li class="{{ 'is-me' if d.me }} is-player tw-extra" {% if d.color %}style="--player: {{ d.color }}"{% endif %}>
+          <span class="tw-pos">{{ d.pos }}</span><span class="tw-bar" style="background: {{ d.team }}" aria-hidden="true"></span>
+          <span class="tw-code" title="{{ d.name }}"><span class="tw-name">{{ d.name }}</span></span>
+          <span class="tw-move {{ 'up' if d.change > 0 else 'down' if d.change < 0 }}" aria-label="{{ 'up ' ~ d.change if d.change > 0 else 'down ' ~ (0 - d.change) if d.change < 0 else 'no change' }}">{{ '▲' if d.change > 0 else '▼' if d.change < 0 else '' }}</span>
+          <span class="tw-gap">{{ d.gap }}</span></li>
+        {% endfor %}
+      </ol>
+      <a class="small" href="{{ url_for('standings_page', token=t) }}">Full standings →</a>
+    </section>
+
     {% if card and card.row %}{% set r = card.row %}
-    <section class="rc-driver my-card" style="--team: {{ r.team.color if r.team else 'var(--accent)' }}">
-      <div class="rc-eyebrow">Your driver · {{ r.team.name if r.team else 'No seat' }}{% if contract %} · {{ contract.role }} to {{ contract.end_year }}{% endif %}</div>
+    <section class="card rc-driver my-card" style="--team: {{ r.team.color if r.team else 'var(--orange)' }}">
+      <div class="kicker">Your career · {{ r.team.name if r.team else 'No seat' }}{% if contract %} · {{ contract.role }} to {{ contract.end_year }}{% endif %}</div>
       <div class="rc-driver-line"><span class="rc-driver-pos my-pos">P{{ r.position }}</span><span class="rc-driver-name my-name">{{ card.driver.name }}</span></div>
+      {% if rc.finishes %}
+      {% set n = rc.tower|length or 22 %}{% set step = (250 / ((rc.finishes|length - 1) if rc.finishes|length > 1 else 1)) %}
+      <div class="rc-season" aria-label="Finishing positions this season">
+        <div class="mini-head">Finishes this season</div>
+        <svg viewBox="0 0 292 96" class="rc-spark" role="img" aria-label="{% for f in rc.finishes %}R{{ f.round }} {{ 'P' ~ f.pos if f.pos else f.status }}{{ ', ' if not loop.last }}{% endfor %}">
+          <line x1="24" y1="10" x2="292" y2="10"/><line x1="24" y1="48" x2="292" y2="48"/><line x1="24" y1="86" x2="292" y2="86"/>
+          <polyline points="{% for f in rc.finishes %}{{ 34 + loop.index0 * step }},{{ 10 + ((f.pos or n) - 1) / ((n - 1) if n > 1 else 1) * 76 }} {% endfor %}"/>
+          <text x="0" y="8" class="rc-spark-label">P1</text><text x="0" y="94" class="rc-spark-label">P{{ n }}</text>
+          {% for f in rc.finishes %}<circle cx="{{ 34 + loop.index0 * step }}" cy="{{ 10 + ((f.pos or n) - 1) / ((n - 1) if n > 1 else 1) * 76 }}" r="{{ 4 if loop.last else 2.6 }}" class="{{ 'is-out' if not f.pos }}"/>{% endfor %}
+        </svg>
+      </div>
+      {% endif %}
+      <div class="rc-tiles my-stats">
+        <div><small>Points</small><b>{{ r.points }}</b></div>
+        <div><small>Wins</small><b>{{ r.wins }}</b></div>
+        <div><small>Podiums</small><b>{{ r.podiums }}</b></div>
+        <div><small>Form</small><b>{{ r.form }}</b></div>
+        <div><small>Reputation</small><b>{{ r.reputation }}</b></div>
+        <div><small>Last {{ card.form|length or 1 }}</small><b class="rc-mini-form">{% for f in card.form %}<span class="res res-{{ f.kind }}" title="R{{ f.round }} {{ f.event }}">{{ f.label }}</span>{% else %}—{% endfor %}</b></div>
+      </div>
+      <p class="rc-note small">{% if rc.teammate %}Teammate: <b>{{ rc.teammate }}</b> · {% endif %}<a href="{{ url_for('garage', token=t) }}">Open your career →</a></p>
     </section>
-    {% if rc.finishes %}
-    {% set n = rc.tower|length or 22 %}{% set step = (250 / ((rc.finishes|length - 1) if rc.finishes|length > 1 else 1)) %}
-    <section class="rc-season" aria-label="Finishing positions this season">
-      <div class="rc-sub-head">Finishes this season</div>
-      <svg viewBox="0 0 292 96" class="rc-spark" role="img" aria-label="{% for f in rc.finishes %}R{{ f.round }} {{ 'P' ~ f.pos if f.pos else f.status }}{{ ', ' if not loop.last }}{% endfor %}">
-        <line x1="24" y1="10" x2="292" y2="10"/><line x1="24" y1="48" x2="292" y2="48"/><line x1="24" y1="86" x2="292" y2="86"/>
-        <polyline points="{% for f in rc.finishes %}{{ 34 + loop.index0 * step }},{{ 10 + ((f.pos or n) - 1) / ((n - 1) if n > 1 else 1) * 76 }} {% endfor %}"/>
-        <text x="0" y="8" class="rc-spark-label">P1</text><text x="0" y="94" class="rc-spark-label">P{{ n }}</text>
-        {% for f in rc.finishes %}<circle cx="{{ 34 + loop.index0 * step }}" cy="{{ 10 + ((f.pos or n) - 1) / ((n - 1) if n > 1 else 1) * 76 }}" r="{{ 4 if loop.last else 2.6 }}" class="{{ 'is-out' if not f.pos }}"/>{% endfor %}
-      </svg>
-    </section>
-    {% endif %}
-    <div class="rc-tiles my-stats">
-      <div><small>Points</small><b>{{ r.points }}</b></div>
-      <div><small>Wins</small><b>{{ r.wins }}</b></div>
-      <div><small>Podiums</small><b>{{ r.podiums }}</b></div>
-      <div><small>Form</small><b>{{ r.form }}</b></div>
-      <div><small>Reputation</small><b>{{ r.reputation }}</b></div>
-      <div><small>Last {{ card.form|length or 1 }}</small><b class="rc-mini-form">{% for f in card.form %}<span class="res res-{{ f.kind }}" title="R{{ f.round }} {{ f.event }}">{{ f.label }}</span>{% else %}—{% endfor %}</b></div>
-    </div>
-    {% if rc.teammate %}<p class="rc-note">Teammate: <b>{{ rc.teammate }}</b>. <a href="{{ url_for('garage', token=t) }}">Open your career →</a></p>
-    {% else %}<p class="rc-note"><a href="{{ url_for('garage', token=t) }}">Open your career →</a></p>{% endif %}
     {% elif card %}
-    <section class="rc-driver my-card"><div class="rc-eyebrow">Your driver</div><div class="rc-driver-name my-name">{{ card.driver.name }}</div>
+    <section class="card rc-driver my-card"><div class="kicker">Your career</div><div class="rc-driver-name my-name">{{ card.driver.name }}</div>
       <p class="muted">No seat yet. Check <a href="{{ url_for('offers_page', token=t) }}">Contracts &amp; offers</a>.</p></section>
     {% else %}
-  {% set p = progress %}
-  <section class="card ring-card season-card-v2" aria-label="Season completion">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 120 120" class="ring" role="img" aria-label="{{ p.pct }}% of the season complete">
-        <circle cx="60" cy="60" r="52" class="ring-bg"/>
-        <circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray: {{ 326.7 * p.pct / 100 }} 326.7"/>
-      </svg>
-      <div class="ring-label"><strong>{{ p.pct }}%</strong><span>{{ p.completed }} / {{ p.total }} rounds</span></div>
-    </div>
-    <div class="season-info">
-    <dl class="season-facts compact-facts">
-      <div><dt>Completed</dt><dd>{{ p.completed }} round{{ 's' if p.completed != 1 }}</dd></div>
-      <div><dt>Remaining</dt><dd>{{ p.remaining }} round{{ 's' if p.remaining != 1 }}</dd></div>
-      <div><dt>Current round</dt><dd>{% if p.current %}R{{ p.current.round_number }} · {{ p.current.name }}{% else %}Season finished{% endif %}</dd></div>
-      {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} done · {{ p.sprints_left }} left</dd></div>{% endif %}
-      <div><dt>Next event</dt><dd>{% if p.next_event %}{{ p.next_event.name }}{% if p.next_event.race_at %} · {{ p.next_event.race_at|race_time }}{% else %} · <span class="muted">not scheduled</span>{% endif %}{% else %}—{% endif %}</dd></div>
-      <div><dt>Projected finish</dt><dd>{% if p.finish_at %}{{ p.finish_at|day }}{% elif p.remaining == 0 %}Done{% elif p.last_scheduled %}<span class="muted">{{ p.unscheduled_left }} round{{ 's' if p.unscheduled_left != 1 }} not scheduled yet</span>{% else %}<span class="muted">Not scheduled yet</span>{% endif %}</dd></div>
-    </dl>
-    <p class="season-leaders small muted">{% if p.wdc %}<abbr title="Drivers' Championship">WDC</abbr> leader {{ driver_link(ctx, p.wdc.driver) }} ({{ p.wdc.points }}){% endif %}{% if p.wcc %} · <abbr title="Constructors' Championship">WCC</abbr> {{ p.wcc.team.name }} ({{ p.wcc.points }}){% endif %}{% if p.avg_ai is not none %} · avg AI {{ p.avg_ai }}{% endif %}{% if p.milestone %} · next milestone: {{ p.milestone.label|lower }} after R{{ p.milestone.round }}{% endif %}</p>
-    </div>
-  </section>
+    {% set p = progress %}
+    <section class="card ring-card season-card-v2" aria-label="Season completion">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 120 120" class="ring" role="img" aria-label="{{ p.pct }}% of the season complete">
+          <circle cx="60" cy="60" r="52" class="ring-bg"/>
+          <circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray: {{ 326.7 * p.pct / 100 }} 326.7"/>
+        </svg>
+        <div class="ring-label"><strong>{{ p.pct }}%</strong><span>{{ p.completed }} / {{ p.total }} rounds</span></div>
+      </div>
+      <div class="season-info">
+      <dl class="season-facts compact-facts">
+        <div><dt>Completed</dt><dd>{{ p.completed }} round{{ 's' if p.completed != 1 }}</dd></div>
+        <div><dt>Remaining</dt><dd>{{ p.remaining }} round{{ 's' if p.remaining != 1 }}</dd></div>
+        <div><dt>Current round</dt><dd>{% if p.current %}R{{ p.current.round_number }} · {{ p.current.name }}{% else %}Season finished{% endif %}</dd></div>
+        {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} done · {{ p.sprints_left }} left</dd></div>{% endif %}
+        <div><dt>Next event</dt><dd>{% if p.next_event %}{{ p.next_event.name }}{% if p.next_event.race_at %} · {{ p.next_event.race_at|race_time }}{% else %} · <span class="muted">not scheduled</span>{% endif %}{% else %}—{% endif %}</dd></div>
+        <div><dt>Projected finish</dt><dd>{% if p.finish_at %}{{ p.finish_at|day }}{% elif p.remaining == 0 %}Done{% elif p.last_scheduled %}<span class="muted">{{ p.unscheduled_left }} round{{ 's' if p.unscheduled_left != 1 }} not scheduled yet</span>{% else %}<span class="muted">Not scheduled yet</span>{% endif %}</dd></div>
+      </dl>
+      <p class="season-leaders small muted">{% if p.wdc %}<abbr title="Drivers' Championship">WDC</abbr> leader {{ driver_link(ctx, p.wdc.driver) }} ({{ p.wdc.points }}){% endif %}{% if p.wcc %} · <abbr title="Constructors' Championship">WCC</abbr> {{ p.wcc.team.name }} ({{ p.wcc.points }}){% endif %}{% if p.avg_ai is not none %} · avg AI {{ p.avg_ai }}{% endif %}{% if p.milestone %} · next milestone: {{ p.milestone.label|lower }} after R{{ p.milestone.round }}{% endif %}</p>
+      </div>
+    </section>
     {% endif %}
+
     <section class="card rc-news" aria-labelledby="rc-news-title">
       <div class="card-head"><h2 id="rc-news-title">Paddock news</h2><a class="small" href="{{ url_for('news_page', token=t) }}">All →</a></div>
       {% set news = news[:4] %}{% include "_news_list.html" %}

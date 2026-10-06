@@ -1981,7 +1981,7 @@ def register_routes(app):
                     can_finish=bool(evs) and all(e["status"] == C.EVENT_COMPLETE for e in evs))
 
     def _waiting_for(conn, ctx, nxt, gate, phase):
-        """4.0 Home: what the league is waiting on from other people (never the viewer's own tasks)."""
+        """4.0 Home: what the league is waiting on. The viewer's own driver tasks are under Your tasks instead."""
         if not nxt:
             return []
         out = []
@@ -1991,7 +1991,9 @@ def register_routes(app):
             others = [p["driver"]["name"] for p in gate["players"] if not p["done"] and p["driver"]["name"] != me]
             if others:
                 out.append(f"{label} can't start until {', '.join(others)} {'is' if len(others) == 1 else 'are'} ready.")
-        if phase == "live" and not ctx["can_run"]:
+        if phase == "live" and ctx["can_run"]:   # the same thing the round page's "Waiting on" says
+            out.append(f"{label} is waiting for its results: a Scorekeeper or Race Master enters them.")
+        elif phase == "live":
             out.append(f"The results of {label} are being entered. You'll see them once the weekend is submitted.")
         elif phase == "upcoming" and raceweek.enabled(conn) and not ctx["can_run"] and not (gate and gate.get("blocking")):
             out.append(f"The paddock for {label} hasn't opened yet.")
@@ -2019,23 +2021,28 @@ def register_routes(app):
         chosen = {t["driver_id"]: t for t in teamlife.targets_for_event(conn, event_id)} if ctx["team_life"]["targets"] else {}
         weekend_drivers = [{"driver": r["driver"], "team": r["team"], "target": chosen.get(r["driver_id"])}
                            for r in rows if r["driver"]["is_player"]]
+        nxt = evs[idx + 1] if idx + 1 < len(evs) else None
+        # 4.0 Debrief: whether the league can go on to the next round (read only: nothing is issued from here)
+        next_gate = (gates.status(conn, nxt["id"], issue=False)
+                     if nxt and event["status"] == C.EVENT_COMPLETE and nxt["status"] == C.EVENT_NOT_RUN
+                     and not nxt.get("lights_at") else None)
         return page("weekend.html", ctx, event=event, rows=rows, ws=ws, weekend_drivers=weekend_drivers,
                     debrief=workspace.debrief(conn, ctx, event), circuit=circuits.lookup(event["name"], event["location"]),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
-                    entrants=_entrants(conn, event_id),
+                    entrants=_entrants(conn, event_id, rows),
                     gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
                     sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
                     distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
                     status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
-                    pace=_pace_panel(conn, ctx, event), hub=hub,
+                    pace=_pace_panel(conn, ctx, event, rows), hub=hub,
                     wx=_weather_panel(conn, ctx, event),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
                     gate=gate, reminded=gates.reminded(conn, event_id),
-                    wk=wk, my_target=my_target,
+                    wk=wk, my_target=my_target, next_gate=next_gate,
                     can_reset=ctx["is_master"] and not raceweek.reset_blocker(conn, event))
 
     def _sprint_min(conn):
@@ -2053,18 +2060,19 @@ def register_routes(app):
                 "empty": tracking.empty_text(conn, event, "weather"),
                 "wet": any(weather.is_wet(k) for k in recorded.values())}
 
-    def _pace_panel(conn, ctx, event):
+    def _pace_panel(conn, ctx, event, all_rows=None):
         """v2.5: the optional lap-time evidence for each player driver on an engine 3 round."""
         if not engine.round_v3(conn, event):
             return None
-        rows = [r for r in S.weekend_rows(conn, event["id"]) if r["driver"]["is_player"]]
+        all_rows = all_rows if all_rows is not None else S.weekend_rows(conn, event["id"])
+        rows = [r for r in all_rows if r["driver"]["is_player"]]
         sessions = ["gp"] + (["sprint"] if event["is_sprint"] else [])
         out = []
         for r in rows:
             for sess in sessions:
                 out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
         return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
-                "drivers": [r for r in S.weekend_rows(conn, event["id"]) if not r["driver"]["is_player"]],
+                "drivers": [r for r in all_rows if not r["driver"]["is_player"]],
                 "fmt": ai3.format_time, "legacy": not tracking.round_tracked(conn, event, "race_times"),
                 "required": ai3.pace_required(conn) and tracking.round_tracked(conn, event, "race_times"),
                 "missing": ai3.missing_pace(conn, event, rows) if event["status"] != C.EVENT_COMPLETE else []}
@@ -2095,11 +2103,11 @@ def register_routes(app):
                 wk.pop("pen")        # pre-race press wasn't part of this round's rules (nothing was answered)
         return wk
 
-    def _entrants(conn, event_id):
+    def _entrants(conn, event_id, rows=None):
         """The drivers in this round, for the screenshot importer to match against (never anyone else)."""
         return [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"],
                  "is_player": bool(r["driver"]["is_player"]), "color": r["driver"]["player_color"]}
-                for r in S.weekend_rows(conn, event_id)]
+                for r in (rows if rows is not None else S.weekend_rows(conn, event_id))]
 
     def _recs_off(conn, event=None):
         """A league can switch recommendations off; the difficulty used is still recorded each round."""
@@ -3005,8 +3013,12 @@ def register_routes(app):
             ai3.store(conn, event_id)
         g.audit_summary = f"saved pace data for {S.driver_map(conn)[driver_id]['name']} at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
         g.audit_link = f"weekend/{event_id}"
-        flash("Pace data saved. The AI recommendation uses it straight away.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#pace")
+        flash("Race times saved. The AI recommendation uses them straight away.", "success")
+        # 4.0: back to the session it was saved from (its stage and session are in the address it came from)
+        sess = "sprint" if request.form.get("session") == "sprint" else "gp"
+        default = url_for("weekend", token=ctx["token"], event_id=event_id) + \
+            ("?stage=sessions&session=s#pace-sprint" if sess == "sprint" else "?stage=sessions&session=r#pace")
+        return redirect(navigation.back(default, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/start", methods=["POST"])
     @career_page(ops_only=True)
@@ -4942,7 +4954,12 @@ def register_routes(app):
         g.audit_summary = (f"recorded the weather for {event_label(event, year)}: {', '.join(changed)}" if changed
                            else f"cleared the weather for {event_label(event, year)}")
         flash("Weather saved." if changed else "Weather cleared.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#weather")
+        # 4.0: one session's weather is saved from that session's section; go back there
+        only = request.form.get("wx_session")
+        anchor = "#weather-" + only if only in ("quali", "sprint") else "#weather"
+        key = {"quali": "q", "sprint": "s"}.get(only, "r")
+        default = url_for("weekend", token=ctx["token"], event_id=event_id) + f"?stage=sessions&session={key}{anchor}"
+        return redirect(navigation.back(default, ctx["token"], anchor=anchor))
 
     @app.route("/career/<token>/weekend/<int:event_id>/time", methods=["POST"])
     @career_page(master_only=True)
@@ -4967,14 +4984,16 @@ def register_routes(app):
             feed.notify(conn, None, f"R{event['round_number']} {event['name']} has been postponed", f"weekend/{event_id}",
                         ref=f"racetime:{event_id}", category="schedule")
             flash("Round marked as postponed.", "success")
-            return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+            return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-time",
+                                            ctx["token"], anchor="#race-time"))
         if when:
             event = S.get_event(conn, event_id)
             feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']} · "
                         f"{timefmt.race_at(when, ctx['timezone'])} {timefmt.zone_label(when, ctx['timezone'])}",
                         f"weekend/{event_id}", ref=f"racetime:{event_id}", category="schedule")
         flash("Race time saved." if when else "Race time cleared.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+        return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-time",
+                                        ctx["token"], anchor="#race-time"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/checkin", methods=["POST"])
     @career_page()
@@ -5041,7 +5060,8 @@ def register_routes(app):
             return redirect(url_for("predictions_page", token=ctx["token"]) + "#pick")
         if back == "dashboard":
             return redirect(url_for("dashboard", token=ctx["token"]) + "#race-night")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#race-night")
+        return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-night",
+                                        ctx["token"], anchor="#race-night"))
 
     @app.route("/career/<token>/predictions")
     @career_page()
