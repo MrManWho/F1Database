@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0-beta.18 · Two small fixes after the redesign (test site)
+_Released October 6, 2026_
+> The race time's Clear button works, and the league list can't fall behind a change.
+
+### Fixed
+- **Clear** next to a round's race time now clears it. Before, the time you'd set stayed put.
+- The list of your leagues (the league switcher, Your leagues, account export and account deletion) always reflects a change made a moment earlier, even on servers whose clocks only tick once a second.
+
+### Nothing changed in
+- Formulas, standings, career numbers, the AI recommendation policy, permissions and league data.
+
 ## 4.0.0-beta.17 · The 4.0 redesign (test site)
 _Released October 6, 2026_
 > A new look for the whole site in navy, white and orange, and a race weekend page with a clear place for every job.

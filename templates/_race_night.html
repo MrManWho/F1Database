@@ -15,7 +15,7 @@
     <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ ev.race_at|time_input }}"></label>
     <label class="check small"><input type="checkbox" name="postponed" value="1" {{ 'checked' if ev.postponed }}> Postponed</label>
     <button class="btn btn-sm">Save</button>
-    {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="race_at" value="">Clear</button>{% endif %}
+    {% if ev.race_at %}<button class="btn btn-sm btn-ghost" name="clear" value="1">Clear</button>{% endif %}
   </form>
   {% if hub.notify_preview is defined %}{% set np = hub.notify_preview %}
   <p class="muted small notify-preview">Saving a time {{ 'or postponing ' if not ev.postponed }}tells the league:

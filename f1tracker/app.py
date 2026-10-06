@@ -4967,7 +4967,8 @@ def register_routes(app):
         if not S.get_event(conn, event_id):
             abort(404)
         try:
-            when = timefmt.from_input(request.form.get("race_at"), ctx["timezone"])
+            # "Clear" is its own field: the filled time input is posted too, and would win over a blank race_at
+            when = timefmt.from_input("" if request.form.get("clear") else request.form.get("race_at"), ctx["timezone"])
         except ValueError:
             raise ValidationError("That race time isn't a valid date and time")
         community.set_race_at(conn, event_id, when)

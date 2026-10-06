@@ -2,6 +2,22 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.0.0-beta.18: league list cache and race time Clear
+
+- **League list cache** (`storage.list_careers`, added in beta.17). It was keyed only on the league file's and its
+  `-wal` file's modification time and size. On a filesystem with coarse timestamps, two writes in the same tick could
+  leave a summary stale until the next write. That would have mattered to account deletion and export, which pick
+  leagues by membership. Now `storage.session()` drops a league's kept summary after any write it commits
+  (`conn.total_changes`). A summary that was written to while it was being read isn't kept. Entries for deleted or
+  expired leagues are dropped when the list is next read. Writes from another process still show up through the
+  file stamp, as before.
+- **Race time Clear.** The Clear button posted `race_at=""` after the filled time input, and the route read the first
+  value, so nothing was cleared. The button now sends `clear=1`, and `race_time` treats that as an empty time. Old
+  forms that send only `race_at` work as before.
+- **Checked before pushing beta.17:** pre-4.0 leagues upgraded and rolled over with identical data on beta.16 and
+  beta.17. This covered three fictional 3.x leagues (planned end-of-season switch, mid-season switch, accepted and
+  pending Silly Season offers), with 0 differing rows across 52 tables, plus a browser run of the rollover.
+
 ## 4.0.0-beta.17: the 4.0 redesign
 
 - **What it is.** A new look and layout for the existing features. The feature-to-destination map, the navigation and

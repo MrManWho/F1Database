@@ -149,6 +149,13 @@ def session(token, create=False):
         conn.rollback()
         raise
     finally:
+        try:
+            if conn.total_changes:   # this process wrote to the league: its kept summary is out of date
+                key = str(career_path(token))
+                _WRITES[key] = _WRITES.get(key, 0) + 1
+                _SUMMARIES.pop(key, None)
+        except Exception:
+            pass
         conn.close()
 
 
@@ -266,7 +273,10 @@ def all_league_files():
 # 4.0: every page lists the viewer's leagues, which used to open every league file on the server each time.
 # A league's summary is now kept until its file (or its write-ahead log) changes, so an unchanged league is
 # never re-read; any write to it, from any process, changes the file's timestamp and size and refreshes it.
+# A write through session() also drops the kept summary at once, so two writes inside one timestamp tick
+# (a coarse-clock filesystem) can't leave it stale.
 _SUMMARIES = {}
+_WRITES = {}     # per league: writes made through session() in this process
 
 
 def _file_stamp(path):
@@ -294,19 +304,23 @@ def _copy_summary(info):
 
 def _summary_cached(path):
     stamp = _file_stamp(path)          # taken before reading, so a write during the read is never hidden
+    writes = _WRITES.get(str(path), 0)
     hit = _SUMMARIES.get(str(path))
     if stamp is not None and hit and hit[0] == stamp:
         return _copy_summary(hit[1])
     info = _summary(path)
-    if info is None or stamp is None:
-        _SUMMARIES.pop(str(path), None)
+    if info is None or stamp is None or _WRITES.get(str(path), 0) != writes:
+        _SUMMARIES.pop(str(path), None)    # missing, or written to while being read: don't keep it
         return info
     _SUMMARIES[str(path)] = (stamp, info)
     return _copy_summary(info)
 
 
 def list_careers():
-    items = [s for s in (_summary_cached(p) for p in careers_dir().glob(f"*{CAREER_EXT}")) if s]
+    paths = list(careers_dir().glob(f"*{CAREER_EXT}"))
+    for gone in set(_SUMMARIES) - {str(p) for p in paths}:   # deleted or expired leagues
+        _SUMMARIES.pop(gone, None)
+    items = [s for s in (_summary_cached(p) for p in paths) if s]
     items.sort(key=lambda c: c["last_opened"] or "", reverse=True)
     return items
 
