@@ -14,6 +14,10 @@
   const table = document.getElementById("entry-table");
   let current = (stages.find(function (s) { return !s.hidden; }) || stages[0]).dataset.stage;
   let session = table ? (table.dataset.sessionDefault || "r") : "r";
+  // 4.0.0-beta.13: a fix opened from Review & submit leads back to Review (kept in the address, so it survives a
+  // form that reloads the page) instead of on through the remaining sessions.
+  let fromReview = false;
+  try { fromReview = new URL(location.href).searchParams.get("from") === "review"; } catch (e) { /* old browser */ }
 
   function flush() {
     return window.F1Weekend && window.F1Weekend.flush ? window.F1Weekend.flush() : Promise.resolve(true);
@@ -23,6 +27,7 @@
       const u = new URL(location.href);
       u.searchParams.set("stage", current);
       if (current === "sessions" && session) u.searchParams.set("session", session); else u.searchParams.delete("session");
+      if (current === "sessions" && fromReview) u.searchParams.set("from", "review"); else u.searchParams.delete("from");
       u.searchParams.delete("submitted");
       history.replaceState(null, "", u.pathname + u.search + u.hash);
     } catch (e) { /* old browser: the stage just isn't kept in the address */ }
@@ -30,7 +35,10 @@
   function updateBar() {
     const i = ORDER.indexOf(current);
     if (back) back.hidden = i <= 0 && !(current === "sessions" && SESSION_ORDER.indexOf(session) > 0);
-    if (next) {
+    if (next && fromReview && current === "sessions") {
+      next.hidden = false;
+      next.innerHTML = (next.dataset.readonly === "1" ? "Back to Review" : "Save &amp; return to Review") + " →";
+    } else if (next) {
       const inSessions = current === "sessions" && SESSION_ORDER.indexOf(session) > -1 && SESSION_ORDER.indexOf(session) < SESSION_ORDER.length - 1;
       next.hidden = i >= ORDER.length - 1;
       const label = inSessions ? LABELS[SESSION_ORDER[SESSION_ORDER.indexOf(session) + 1]] : (ORDER[i + 1] ? document.querySelector('[data-stage-link="' + ORDER[i + 1] + '"] b').textContent : "");
@@ -41,6 +49,7 @@
     opts = opts || {};
     if (ORDER.indexOf(stage) < 0) return;
     current = stage;
+    if (stage !== "sessions") fromReview = false;
     stages.forEach(function (s) { s.hidden = s.dataset.stage !== stage; });
     document.querySelectorAll(".ws-step").forEach(function (a) {
       const on = a.dataset.stageLink === stage;
@@ -98,6 +107,7 @@
     if (fix) {
       e.preventDefault();
       const dlg = fix.closest("dialog"); if (dlg && dlg.open) dlg.close();
+      fromReview = true;
       goTo("sessions", fix.dataset.fixSession, fix.dataset.fixAnchor);
       return;
     }
@@ -119,6 +129,7 @@
   if (next) {
     next.addEventListener("click", function (e) {
       e.preventDefault();
+      if (fromReview && current === "sessions") { goTo("review"); return; }
       const si = SESSION_ORDER.indexOf(session);
       if (current === "sessions" && si > -1 && si < SESSION_ORDER.length - 1) {
         flush().then(function () { goSession(SESSION_ORDER[si + 1]); window.scrollTo({ top: 0 }); });
@@ -142,7 +153,7 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function fixButton(text) {
     const w = where(text);
-    return ' <a class="btn btn-sm btn-ghost" href="?stage=sessions&session=' + w[0] + "#" + w[1] + '" data-fix-session="' + w[0] + '" data-fix-anchor="' + w[1] + '">Fix</a>';
+    return ' <a class="btn btn-sm btn-ghost" href="?stage=sessions&session=' + w[0] + "&from=review#" + w[1] + '" data-fix-session="' + w[0] + '" data-fix-anchor="' + w[1] + '">Fix</a>';
   }
   window.F1Workspace = { fixButton: fixButton, show: show };
   const box = document.querySelector("[data-checklist]");

@@ -339,10 +339,10 @@
       <span class="pill {{ 'pill-hot' if ck.blocking else '' }}" data-check-count>{{ ck.blocking|length }} to fix · {{ ck.warnings|length }} warning{{ 's' if ck.warnings|length != 1 }}</span></div>
     <div data-check-body>
     <h3 class="mini-head">⛔ Must fix ({{ ck.blocking|length }})</h3>
-    {% if ck.blocking %}<ul class="check-list is-block">{% for b in ck.blocking %}<li><span>{{ b.text }}</span> <a class="btn btn-sm btn-ghost" href="?stage=sessions&amp;session={{ b.session }}#{{ b.anchor }}" data-fix-session="{{ b.session }}" data-fix-anchor="{{ b.anchor }}">Fix</a></li>{% endfor %}</ul>
+    {% if ck.blocking %}<ul class="check-list is-block">{% for b in ck.blocking %}<li><span>{{ b.text }}</span> <a class="btn btn-sm btn-ghost" href="?stage=sessions&amp;session={{ b.session }}&amp;from=review#{{ b.anchor }}" data-fix-session="{{ b.session }}" data-fix-anchor="{{ b.anchor }}">Fix</a></li>{% endfor %}</ul>
     {% else %}<p class="small">Nothing blocking. ✓</p>{% endif %}
     <h3 class="mini-head">⚠️ Warnings ({{ ck.warnings|length }})</h3>
-    {% if ck.warnings %}<ul class="check-list is-warn">{% for w in ck.warnings %}<li><span>{{ w.text }}</span> <a class="btn btn-sm btn-ghost" href="?stage=sessions&amp;session={{ w.session }}#{{ w.anchor }}" data-fix-session="{{ w.session }}" data-fix-anchor="{{ w.anchor }}">Fix</a></li>{% endfor %}</ul>
+    {% if ck.warnings %}<ul class="check-list is-warn">{% for w in ck.warnings %}<li><span>{{ w.text }}</span> <a class="btn btn-sm btn-ghost" href="?stage=sessions&amp;session={{ w.session }}&amp;from=review#{{ w.anchor }}" data-fix-session="{{ w.session }}" data-fix-anchor="{{ w.anchor }}">Fix</a></li>{% endfor %}</ul>
     {% else %}<p class="small">None. ✓</p>{% endif %}
     </div>
   </section>

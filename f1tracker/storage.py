@@ -69,8 +69,31 @@ def career_path(token):
     return careers_dir() / f"{token}{CAREER_EXT}"
 
 
+class LeagueConnection(sqlite3.Connection):
+    """A league's connection, with a store for results worked out from it during one request (memo.py)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.memo = {}
+        self.memo_changes = None
+
+    def forget(self):
+        self.memo.clear()
+        self.memo_changes = None
+
+    def execute(self, sql, *args):
+        # Undoing changes (a preview's ROLLBACK TO) doesn't lower total_changes, so remembered results are dropped.
+        if sql[:12].lstrip().upper().startswith("ROLLBACK"):
+            self.forget()
+        return super().execute(sql, *args)
+
+    def rollback(self):
+        self.forget()
+        return super().rollback()
+
+
 def _connect(path):
-    conn = sqlite3.connect(str(path), timeout=15)
+    conn = sqlite3.connect(str(path), timeout=15, factory=LeagueConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

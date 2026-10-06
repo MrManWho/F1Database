@@ -144,8 +144,21 @@ def prerace_pen(conn, event, driver_id):
             "facts": facts, "pre": True}
 
 
-def answer_prerace(conn, event_id, driver_id, question, choice):
-    """Answer a pre-race question. Only while the paddock is open (before lights out)."""
+def _repeat(conn, event_id, driver_id, question, choice):
+    """4.0.0-beta.13: the same answer arriving again (a double press, or a retry after a lost reply) is the answer
+    already saved, not a second one: its stored effect, never counted twice. A different answer is refused."""
+    row = conn.execute("SELECT answer, effect FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
+                       (event_id, driver_id, question)).fetchone()
+    if not row:
+        return None
+    if row["answer"] != choice:
+        raise S.ValidationError("You've already answered that one. Answers can't be changed once given")
+    return row["effect"]
+
+
+def answer_prerace(conn, event_id, driver_id, question, choice, with_repeat=False):
+    """Answer a pre-race question. Only while the paddock is open (before lights out). with_repeat: also return
+    whether this was the same answer arriving again (nothing new is saved then)."""
     from . import press, weekend
     event = S.get_event(conn, event_id)
     if not event or weekend.phase(event) != "paddock":
@@ -157,11 +170,15 @@ def answer_prerace(conn, event_id, driver_id, question, choice):
     if not q:
         raise S.ValidationError("That question wasn't asked")
     if q["answered"]:
-        raise S.ValidationError("You've already answered that one")
+        effect = _repeat(conn, event_id, driver_id, question, choice)
+        if effect is None:
+            raise S.ValidationError("You've already answered that one")
+        return (effect, True) if with_repeat else effect
     pick = next((a for a in press.PRE[question][1] if a[0] == choice), None)
     if not pick:
         raise S.ValidationError("Pick one of the answers")
-    return _record(conn, event, driver_id, question, choice, pick, q["text"], pen["facts"], "before")
+    effect = _record(conn, event, driver_id, question, choice, pick, q["text"], pen["facts"], "before")
+    return (effect, False) if with_repeat else effect
 
 
 def _record(conn, event, driver_id, question, choice, pick, asked, facts, when):
@@ -198,9 +215,18 @@ def press_pens(conn, season_id, driver_id):
     pens = []
     latest = press_pen(conn, season_id, driver_id)
     if press_stays_open(conn):
+        # 4.0.0-beta.13: a round is asked at most two post-race questions, so a round this driver has already given
+        # two answers for has nothing open. Those rounds are skipped without working out their questions (which
+        # needs the standings as they were at that round): every page used to do that for every past round.
+        done = {r["event_id"] for r in conn.execute(
+            "SELECT a.event_id FROM press_answers a JOIN events e ON e.id = a.event_id WHERE e.season_id = ? "
+            "AND a.driver_id = ? AND a.question NOT LIKE 'pre_%' GROUP BY a.event_id HAVING COUNT(*) >= 2",
+            (season_id, driver_id))}
         for e in conn.execute("SELECT * FROM events WHERE season_id = ? AND status = ? AND press_required = 1 "
                               "ORDER BY round_number", (season_id, C.EVENT_COMPLETE)).fetchall():
             if latest and e["id"] == latest["event"]["id"]:
+                continue
+            if e["id"] in done:
                 continue
             pen = _pen(conn, dict(e), driver_id)
             if pen and pen["open"]:
@@ -249,7 +275,7 @@ def press_history(conn, driver_id, limit=40):
     return out
 
 
-def answer(conn, event_id, driver_id, question, choice):
+def answer(conn, event_id, driver_id, question, choice, with_repeat=False):
     event = S.get_event(conn, event_id)
     if not event or event["status"] != C.EVENT_COMPLETE:
         raise S.ValidationError("That press pen isn't open")
@@ -261,13 +287,14 @@ def answer(conn, event_id, driver_id, question, choice):
     q = next((q for q in questions if q["key"] == question), None)
     if not q:
         raise S.ValidationError("That question wasn't asked")
-    if conn.execute("SELECT 1 FROM press_answers WHERE event_id = ? AND driver_id = ? AND question = ?",
-                    (event_id, driver_id, question)).fetchone():
-        raise S.ValidationError("You've already answered that one")
+    effect = _repeat(conn, event_id, driver_id, question, choice)
+    if effect is not None:
+        return (effect, True) if with_repeat else effect
     pick = next((a for a in QUESTIONS[question][1] if a[0] == choice), None)
     if not pick:
         raise S.ValidationError("Pick one of the answers")
-    return _record(conn, event, driver_id, question, choice, pick, q["text"], facts, "after")
+    effect = _record(conn, event, driver_id, question, choice, pick, q["text"], facts, "after")
+    return (effect, False) if with_repeat else effect
 
 
 # --------------------------------------------------------------------------- league settings

@@ -467,7 +467,8 @@ def contract_history(conn, driver_id):
 
 # --------------------------------------------------------------------------- incidents
 
-def report_incident(conn, event_id, username, reporter_driver_id, accused_id, description, session="weekend"):
+def report_incident(conn, event_id, username, reporter_driver_id, accused_id, description, session="weekend",
+                    with_repeat=False):
     event = S.get_event(conn, event_id)
     if not event or event["status"] == C.EVENT_NOT_RUN:
         raise ValidationError("You can report incidents once a race has results")
@@ -484,10 +485,15 @@ def report_incident(conn, event_id, username, reporter_driver_id, accused_id, de
         raise ValidationError("Say what happened (lap, corner, what they did)")
     if len(description) > 1000:
         raise ValidationError("Keep it under 1000 characters")
+    same = conn.execute("""SELECT id FROM incidents WHERE event_id = ? AND reporter = ? AND accused_driver_id = ?
+                           AND description = ? AND session = ?""",
+                        (event_id, username, accused_id, description, session)).fetchone()
+    if same:   # 4.0.0-beta.13: the same report sent twice (a double press or a retry) is filed once
+        return (same["id"], True) if with_repeat else same["id"]
     cur = conn.execute("""INSERT INTO incidents(event_id, reporter, reporter_driver_id, accused_driver_id, description,
                           status, created_at, session) VALUES(?,?,?,?,?, 'Open', ?, ?)""",
                        (event_id, username, reporter_driver_id, accused_id, description, now_iso(), session))
-    return cur.lastrowid
+    return (cur.lastrowid, False) if with_repeat else cur.lastrowid
 
 
 def rule_incident(conn, incident_id, ruling, note, username):

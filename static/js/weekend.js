@@ -219,7 +219,7 @@
   function forget() { store(RKEY, null); }
 
   function waitForConnection() {
-    setState("offline", "Offline — changes stored on this device");
+    setState("offline", "Saved on this device — waiting to sync", true);
     clearTimeout(retryTimer);
     retryTimer = setTimeout(function () { if (dirty && !correcting) save(false); }, 15000);
   }
@@ -276,7 +276,7 @@
       if (!res.ok) {
         dirty = true;
         lastError = res.error || "Save failed";
-        setState("error", "Couldn't save — " + lastError, true);
+        setState("error", "Couldn't save — " + lastError + ".", true);
         window.F1.toast(lastError, "error");
         return false;
       }

@@ -3,7 +3,7 @@
 import math
 import re
 
-from . import calc3, engine
+from . import calc3, engine, memo
 from . import constants as C
 from .storage import get_meta, now_iso, set_meta
 
@@ -333,14 +333,17 @@ def sync_not_run_results(conn, season_id):
     seats = driver_seats(conn, season_id)
     for event in _rows(conn, "SELECT id FROM events WHERE season_id = ? AND status = ?",
                        (season_id, C.EVENT_NOT_RUN)):
-        existing = {r["driver_id"] for r in _rows(conn, "SELECT driver_id FROM results WHERE event_id = ?",
-                                                  (event["id"],))}
-        for did in existing - set(seats):
+        existing = {r["driver_id"]: r["team_id"] for r in _rows(conn, "SELECT driver_id, team_id FROM results "
+                                                                       "WHERE event_id = ?", (event["id"],))}
+        for did in set(existing) - set(seats):
             conn.execute("DELETE FROM results WHERE event_id = ? AND driver_id = ?", (event["id"], did))
         for did, (team_id, _seat) in seats.items():
             if did in existing:
-                conn.execute("UPDATE results SET team_id = ? WHERE event_id = ? AND driver_id = ?",
-                             (team_id, event["id"], did))
+                # 4.0.0-beta.13: only rows whose team actually changed are written (every page that showed a
+                # round used to rewrite every upcoming round's lineup, 300+ writes per page view)
+                if existing[did] != team_id:
+                    conn.execute("UPDATE results SET team_id = ? WHERE event_id = ? AND driver_id = ?",
+                                 (team_id, event["id"], did))
             else:
                 conn.execute("INSERT INTO results(event_id, driver_id, team_id) VALUES(?,?,?)",
                              (event["id"], did, team_id))
@@ -425,6 +428,7 @@ def place_players(conn, season_id, targets):
 
 # --------------------------------------------------------------------------- standings
 
+@memo.per_connection(copier=memo.rows_copy)
 def driver_standings(conn, season_id, upto_round=None, completed_only=False):
     if engine.is_v3(conn, season_id):
         return calc3.driver_standings(conn, season_id, upto_round, completed_only)
@@ -1008,6 +1012,7 @@ def sweet_spot(history):
     return {"value": round(value, 1), "rounds": n, "seasons": seasons, "confidence": confidence}
 
 
+@memo.per_connection
 def difficulty_recommendation(conn, before=None):
     sid = current_season_id(conn)
     if sid and engine.is_v3(conn, sid):

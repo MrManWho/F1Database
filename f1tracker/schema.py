@@ -630,8 +630,9 @@ def migrate(conn):
                sensitive changes), protected by triggers so rows can't be edited or deleted. Created empty; the
                plain-language Activity Log (audit_log) is unchanged. Nothing existing changes.
     v22 -> v23 (4.0): ai_track_recs, the track-aware AI recommendation shown before each round (frozen at the first
-               submission; the AI actually used is kept separately). Created empty. Seasons already under way keep
-               the v3 tracker until they finish; new seasons use the track-aware model (meta ai_model:<season>).
+               submission; the AI actually used is kept separately). Created empty. New seasons use the track-aware
+               model (meta ai_model:<season>); since 4.0.0-beta.1 the season under way also switches to it the
+               first time the league opens (engine.ensure_latest). Completed rounds keep their stored recommendations.
     v23 -> v24 (4.0): pace_inputs.race_time and bench_race_time (a player's and their comparison AI driver's race
                times; the race gap is worked out from them). Existing rows keep the gap they were given.
     v24 -> v25 (4.0): incidents.session (qualifying / sprint / race; existing reports become "weekend"). Incident

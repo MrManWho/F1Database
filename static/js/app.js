@@ -40,7 +40,11 @@
     stack.appendChild(el);
     autoDismiss(el);
   }
-  function autoDismiss(el) { setTimeout(function () { el.remove(); }, 7000); }
+  // 4.0.0-beta.13: an error stays until it's dismissed, so the reason is never missed; confirmations fade.
+  function autoDismiss(el) {
+    if (el.classList.contains("toast-error")) { el.setAttribute("role", "alert"); return; }
+    setTimeout(function () { el.remove(); }, 7000);
+  }
 
   function postJSON(url, body) {
     return fetch(url, {

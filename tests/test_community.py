@@ -114,8 +114,11 @@ def test_comments_reactions_and_fan_vote(app, master_client):
     fire = next(r for r in res["reactions"] if r["emoji"] == "🔥")
     assert fire["count"] == 1 and fire["mine"] and fire["who"] == ["Ben"]
     ben.post(f"/career/{token}/react", data={"target": target, "emoji": "🔥", "csrf_token": "tok"})  # toggles off
-    assert ben.post(f"/career/{token}/react", data={"target": "event:999", "emoji": "🔥", "csrf_token": "tok"},
-                    headers={"X-Requested-With": "fetch"}).status_code == 302
+    # 4.0.0-beta.13: a refused reaction answers the page's script with the reason (it used to redirect, which the
+    # script couldn't read)
+    refused = ben.post(f"/career/{token}/react", data={"target": "event:999", "emoji": "🔥", "csrf_token": "tok"},
+                       headers={"X-Requested-With": "fetch"})
+    assert refused.status_code == 400 and refused.get_json()["ok"] is False and refused.get_json()["error"]
     with storage.session(token) as conn:
         assert conn.execute("SELECT COUNT(*) FROM reactions").fetchone()[0] == 0
         comment = conn.execute("SELECT id FROM comments").fetchone()[0]

@@ -466,6 +466,8 @@ def set_pledge(conn, season_id, driver_id, growth):
     if not rel:
         raise S.ValidationError("You don't have a race seat this season")
     t = targets_for(conn, season_id, driver_id, rel["team_id"], growth)
+    if rel["pledged"] and rel["growth"] == growth and all(rel[k] == t[k] for k in ("form_base", "form_target", "rep_target", "finish_base", "finish_target")):
+        return t   # 4.0.0-beta.13: the same pledge sent twice (a double press or a retry) changes nothing the second time
     conn.execute("""UPDATE team_relations SET growth = ?, form_base = ?, form_target = ?, rep_target = ?,
                     finish_base = ?, finish_target = ?, pledged = 1, updated_at = ? WHERE season_id = ? AND driver_id = ?""",
                  (growth, t["form_base"], t["form_target"], t["rep_target"], t["finish_base"], t["finish_target"],

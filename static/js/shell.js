@@ -258,3 +258,99 @@
   focusableScrollers();
   window.addEventListener("resize", function () { clearTimeout(focusableScrollers.t); focusableScrollers.t = setTimeout(focusableScrollers, 200); });
 })();
+
+/* 4.0.0-beta.13: every form that saves something.
+   - It says where it was sent from (return_to: this page, its stage and section), so the site can bring you back
+     to the same place. The site checks that address itself and ignores anything that isn't one of its own pages.
+   - A second press while the first is still on its way is ignored here; the site also refuses duplicates itself.
+   - What was typed is kept in this tab until the site answers. If it says the form wasn't saved, the page you come
+     back to puts the values back; once something saves, the copy is thrown away. Passwords are never kept. */
+(function () {
+  "use strict";
+  var KEY = "f1-last-form";
+  function actionPath(form, submitter) {
+    var raw = (submitter && submitter.getAttribute("formaction")) || form.getAttribute("action") || location.pathname;
+    try { return new URL(raw, location.href).pathname; } catch (e) { return raw; }
+  }
+  function remember(form, path) {
+    var fields = [];
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.disabled) return;
+      var type = (el.type || "").toLowerCase();
+      if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) > -1) return;
+      if (el.name === "csrf_token" || el.name === "return_to") return;
+      if (type === "checkbox" || type === "radio") fields.push([el.name, el.value, el.checked]);
+      else if (el.tagName === "SELECT" && el.multiple) fields.push([el.name, Array.prototype.filter.call(el.options, function (o) { return o.selected; }).map(function (o) { return o.value; })]);
+      else fields.push([el.name, el.value]);
+    });
+    try { sessionStorage.setItem(KEY, JSON.stringify({ action: path, at: Date.now(), fields: fields })); } catch (e) { /* private mode */ }
+  }
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (e.defaultPrevented || !form || !form.getAttribute || (form.getAttribute("method") || "").toLowerCase() !== "post") return;
+    if (form.target && form.target !== "_self") return;
+    if (form.dataset.f1Sending === "1") { e.preventDefault(); return; }
+    if (navigator.onLine === false) {
+      // Sending now would only show the browser's offline page and lose what was typed.
+      e.preventDefault();
+      if (window.F1 && window.F1.toast) window.F1.toast("You're offline, so that wasn't sent. What you entered is still here; send it again once you're back online.", "error");
+      return;
+    }
+    form.dataset.f1Sending = "1";
+    var btn = e.submitter;
+    if (btn) { btn.classList.add("is-sending"); btn.setAttribute("aria-busy", "true"); }
+    // a download or a page that doesn't change: allow sending again after a while
+    setTimeout(function () { delete form.dataset.f1Sending; if (btn) { btn.classList.remove("is-sending"); btn.removeAttribute("aria-busy"); } }, 8000);
+    if (!form.querySelector('input[name="return_to"]')) {
+      var back = document.createElement("input");
+      back.type = "hidden"; back.name = "return_to";
+      back.value = location.pathname + location.search + location.hash;
+      form.appendChild(back);
+    }
+    remember(form, actionPath(form, btn));
+  });
+  // Coming back to this page with the browser's Back button: its forms can be sent again.
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    document.querySelectorAll("form[data-f1-sending]").forEach(function (f) { delete f.dataset.f1Sending; });
+    document.querySelectorAll(".is-sending").forEach(function (b) { b.classList.remove("is-sending"); b.removeAttribute("aria-busy"); });
+  });
+  // The page after a form: put back what was typed when the site said it wasn't saved.
+  var failed = document.querySelector('meta[name="form-failed"]');
+  var saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch (e) { saved = null; }
+  if (/^\/login/.test(location.pathname)) return;    // the sign-in page: keep it for the page after signing in
+  try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ }
+  if (!failed || !saved || saved.action !== failed.content || Date.now() - saved.at > 30 * 60 * 1000) return;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", restore); else restore();
+  function restore() {
+  var forms = Array.prototype.filter.call(document.querySelectorAll("form"), function (f) {
+    return (f.getAttribute("method") || "").toLowerCase() === "post" && actionPath(f) === saved.action;
+  });
+  if (!forms.length) return;
+  forms.forEach(function (form) {
+    var seen = {};
+    saved.fields.forEach(function (f) {
+      var name = f[0], value = f[1];
+      var els = Array.prototype.filter.call(form.elements, function (el) { return el.name === name; });
+      if (!els.length) return;
+      var t = (els[0].type || "").toLowerCase();
+      if (t === "checkbox" || t === "radio") {
+        els.forEach(function (el) { if (el.value === value) el.checked = !!f[2]; });
+      } else if (els[0].tagName === "SELECT" && els[0].multiple && Array.isArray(value)) {
+        Array.prototype.forEach.call(els[0].options, function (o) { o.selected = value.indexOf(o.value) > -1; });
+      } else {
+        var i = seen[name] || 0; seen[name] = i + 1;
+        var el = els[Math.min(i, els.length - 1)];
+        if (el.type !== "hidden" && el.type !== "password" && el.type !== "file") el.value = value;
+      }
+    });
+    form.classList.add("form-restored");
+    var det = form.closest("details"); if (det) det.open = true;
+  });
+  var first = forms[0];
+  var stage = first.closest(".ws-stage");
+  if (stage && window.F1Workspace && window.F1Workspace.show) window.F1Workspace.show(stage.dataset.stage, { keepScroll: true });
+  setTimeout(function () { first.scrollIntoView({ block: "center" }); }, 60);
+  }
+})();

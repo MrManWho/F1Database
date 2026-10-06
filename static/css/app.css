@@ -1907,3 +1907,8 @@ body.rail .sidebar nav summary .label, body.rail .sidebar nav summary .chev { di
 .entry-table.only-q .driver-cell, .entry-table.only-s .driver-cell, .entry-table.only-r .driver-cell { min-width: 200px; }
 .entry-table.only-q .pos-input { width: 4.5rem; }
 .ws-bar .btn[data-ws-next] { gap: 0; }
+
+/* 4.0.0-beta.13: a form on its way, and a form whose values were put back after it wasn't saved */
+.is-sending { opacity: .7; cursor: progress; }
+.is-sending::after { content: " · Saving…"; }
+form.form-restored { outline: 2px solid var(--warn, #f5a524); outline-offset: 4px; border-radius: 6px; }

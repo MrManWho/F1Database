@@ -30,6 +30,7 @@ from pathlib import Path
 
 from . import constants as C
 from . import engine as E
+from . import memo
 from .storage import get_meta, now_iso, set_meta
 
 MODEL = "track-aware-1"
@@ -233,6 +234,7 @@ def _track_events(conn, before=None):
     return out
 
 
+@memo.per_connection(copier=lambda r: (r[0], list(r[1]), dict(r[2])))   # read-only for its one caller
 def learn(conn, before=None):
     """Replay every completed weekend: the league adjustment after each, with its evidence.
     Returns (adjustment, steps, per-player residuals by circuit)."""
@@ -390,14 +392,18 @@ def recommendation(conn, before=None):
     rec["band"] = S.difficulty_band(t["recommended"])
     if rec["current"] is not None:
         rec["direction"] = "up" if t["recommended"] > rec["current"] else "down" if t["recommended"] < rec["current"] else "hold"
-    parts = [f"F1Laps baseline for {t['circuit']} {t['baseline']:g}"]
+    rec["history_on"] = use_history(conn)
+    if stored and event.get("ai_difficulty") is not None:
+        rec["actual"] = event["ai_difficulty"]   # 4.0.0-beta.13: shown next to what was recommended
+    parts = [f"community starting reference for {t['circuit']} {t['baseline']:g} (F1Laps average)"]
     parts.append(f"league adjustment {t['league_adjustment']:+g}")
     if t["track_history"]:
         parts.append(f"track history {t['track_history']:+g}")
     rec["reason"] = f"AI {t['recommended']} for the whole weekend: " + ", ".join(parts) + "."
     if not t["weekends"]:
-        rec["evidence"] = ("No completed weekends yet, so this is the F1Laps average for this circuit. The league "
-                           "adjustment is learned from each completed round.")
+        rec["evidence"] = ("No completed weekends yet, so this is the community starting reference (the F1Laps "
+                           "average for this circuit): a starting point, not proof of what suits this league. The "
+                           "league adjustment is learned from each completed round.")
     elif t["last"]:
         l = t["last"]
         rec["evidence"] = (f"After R{l['round']} {l['name']} (AI {l['ai_used']} used): players "

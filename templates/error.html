@@ -6,8 +6,12 @@
   <div class="big-code">{{ code }}</div>
   <h1>Red flag</h1>
   {{ state({403: 'denied', 404: 'empty', 500: 'error'}.get(code, 'error'),
-           {403: "You can't open this page", 404: 'Not found', 413: 'Too large', 500: 'Something went wrong'}.get(code, 'Something went wrong'),
+           (heading if heading is defined and heading else {403: "You can't open this page", 404: 'Not found', 413: 'Too large', 500: 'Something went wrong'}.get(code, 'Something went wrong')),
            message) }}
-  <a class="btn btn-primary" href="{{ url_for('home') }}">Back to my leagues</a>
+  <div class="button-row">
+  {% if back is defined and back %}<a class="btn btn-primary" href="{{ back }}">Back to where you were</a>
+  <a class="btn btn-ghost" href="{{ url_for('home') }}">My leagues</a>
+  {% else %}<a class="btn btn-primary" href="{{ url_for('home') }}">Back to my leagues</a>{% endif %}
+  </div>
 </section>
 {% endblock %}

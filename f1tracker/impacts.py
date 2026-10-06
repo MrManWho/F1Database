@@ -190,7 +190,7 @@ def refresh(conn):
     set_meta(conn, "calc_snapshot_stale", "0")
 
 
-def on_open(conn, is_api=False):
+def on_open(conn, is_api=False, refresh_stale=True):
     """Called whenever a league is opened. Runs the update checks once per version, and keeps the numbers fresh.
     v2.4: when a version changes how things are worked out, the league is recalculated first (recalc.recalculate),
     everyone is told once when they next open the league (announce), and each player driver whose numbers moved
@@ -215,7 +215,14 @@ def on_open(conn, is_api=False):
                            " ".join(why for _t, why in notes), rows)
         set_meta(conn, "calc_version", str(C.CALC_VERSION))
         refresh(conn)
-    elif not is_api and get_meta(conn, "calc_snapshot_stale") != "0":
+    elif refresh_stale and not is_api:
+        refresh_if_stale(conn)
+
+
+def refresh_if_stale(conn):
+    """4.0.0-beta.13: keep the numbers fresh after something changed. The league's pages call this after the page
+    itself is worked out, so the standings it needs are usually already worked out (memo.py) and aren't repeated."""
+    if get_meta(conn, "calc_snapshot_stale") != "0":
         refresh(conn)
 
 
