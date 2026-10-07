@@ -208,6 +208,8 @@ FEATURES = {
     "checkin": ("Race-night check-in", "Members say whether they're in for the next race. Handy for bigger leagues.", False),
     "comments": ("Comments & reactions", "Comment and react on race weekends and news, and vote for the fans' Driver of the Day.", True),
     "predictions": ("Predictions game", "Pick pole, winner and fastest lap before each race and climb the predictions table.", True),
+    "telemetry": ("Telemetry import", "Results sent from the game's telemetry (F1 25) wait in each round's Import dialog to be "
+                  "checked and applied. The upload link is in League settings, Career & team.", False),
 }
 
 CHECKIN_CHOICES = {"in": "I'm in", "maybe": "Maybe", "out": "Can't make it"}

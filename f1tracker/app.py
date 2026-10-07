@@ -25,7 +25,7 @@ from . import (battle, circuits, delivery, demo, gates, league_profile, library,
 from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
                ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
-from . import navigation, tracking, workspace
+from . import navigation, telemetry, tracking, workspace
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -42,7 +42,10 @@ PUBLIC_ENDPOINTS = {"login", "setup", "static", "register", "register_verify", "
                     "reset_password", "login_code", "privacy_page", "terms_page", "public_page", "public_calendar", "public_calendar_ics", "public_standings", "public_round",
                     "public_driver", "public_team", "public_records", "public_news", "public_incidents", "service_worker", "web_manifest", "avatar", "unsubscribe",
                     "home", "directory", "report_league", "help_page", "changelog_page", "demo_start",
-                    "maintenance_page", "healthz"}
+                    "maintenance_page", "healthz", "telemetry_upload"}
+# Sent by a program on someone's PC rather than a page of this site, so there is no form token; the league's own
+# upload key in the address is the check instead (see telemetry_upload).
+CSRF_EXEMPT = {"telemetry_upload"}
 
 # What the Race Master's activity log calls each action (endpoints not listed are logged by name).
 AUDIT_LABELS = {
@@ -195,7 +198,7 @@ def register_hooks(app):
                 _remember_failed_form()
                 return redirect(url_for("login", next=navigation.back(navigation.fallback())))
             return redirect(url_for("login", next=request.full_path))
-        if request.method == "POST" and app.config.get("CSRF_ENABLED"):
+        if request.method == "POST" and app.config.get("CSRF_ENABLED") and endpoint not in CSRF_EXEMPT:
             sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
             if not hmac.compare_digest(sent, session.get("csrf", "")):
                 message = ("This page was open too long or you signed in again somewhere else, so that wasn't saved. "
@@ -665,7 +668,7 @@ def career_page(master_only=False, ops_only=False, read_only=False):
 # Demo guests can explore their own copy of the demo league but never change an account or reach anyone.
 DEMO_BLOCKED = {"accounts_page", "account_email", "account_self_password", "career_join", "invitation_answer",
                 "league_new_page", "career_new", "career_import", "push_subscribe", "push_test", "settings_save",
-                "member_invite", "discord_test", "restore_upload", "save_as", "export", "backup",
+                "member_invite", "discord_test", "telemetry_settings", "restore_upload", "save_as", "export", "backup",
                 "account_session_end", "account_sessions_end_others", "account_two_step", "account_export",
                 "account_delete_self", "league_leave", "ownership_transfer"}
 
@@ -2043,6 +2046,8 @@ def register_routes(app):
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
                     entrants=_entrants(conn, event_id, rows),
+                    telemetry_uploads=(telemetry.recent(conn) if ctx["features"].get("telemetry") and ctx["can_run"]
+                                       else None),
                     gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
                     sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
@@ -4439,6 +4444,69 @@ def register_routes(app):
         _load_league_role(token)
         return can_run()
 
+    # ---- Telemetry import (f1tracker/telemetry.py): uploads wait as drafts; nothing here touches results.
+    @app.route("/api/telemetry/<token>/<key>", methods=["POST"])
+    def telemetry_upload(token, key):
+        """One session's results from the game's telemetry, sent by a recorder with the league's upload link."""
+        who = f"{storage.sanitize_token(token)}:{request.remote_addr or ''}"   # server.py's ProxyFix sets the real address
+        if not ratelimit.allow("telemetry_upload", who[:120], 120, 3600):
+            return jsonify(ok=False, error="Too many uploads; try again later"), 429
+        if (request.content_length or 0) > telemetry.MAX_BYTES:
+            return jsonify(ok=False, error="Too large for one session's results"), 413
+        payload = request.get_json(silent=True)
+        try:
+            with storage.session(token) as conn:
+                if not telemetry.enabled(conn) or not telemetry.key_ok(conn, key):
+                    # the same answer either way, so the address can't be used to test keys or leagues
+                    return jsonify(ok=False, error="This upload link isn't active"), 403
+                upload_id = telemetry.store(conn, payload)
+        except CareerNotFound:
+            return jsonify(ok=False, error="This upload link isn't active"), 403
+        except ValidationError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, id=upload_id)
+
+    @app.route("/career/<token>/telemetry/<int:upload_id>")
+    @career_page(ops_only=True)
+    def telemetry_get(conn, ctx, upload_id):
+        if not ctx["features"].get("telemetry"):
+            abort(404)
+        data = telemetry.get(conn, upload_id)
+        if not data:
+            abort(404)
+        return jsonify(ok=True, upload=data, names=telemetry.names(conn))
+
+    @app.route("/career/<token>/telemetry/names")
+    @career_page(ops_only=True)
+    def telemetry_names(conn, ctx):
+        """Who was who in earlier imports, for a telemetry file opened from this computer."""
+        return jsonify(ok=True, names=telemetry.names(conn))
+
+    @app.route("/career/<token>/telemetry/applied", methods=["POST"])
+    @career_page(ops_only=True)
+    def telemetry_applied(conn, ctx):
+        data = request.get_json(silent=True) or {}
+        event = S.get_event(conn, request.args.get("event_id", type=int) or data.get("event_id") or 0)
+        if not event:
+            return jsonify(ok=False, error="Round not found"), 404
+        upload_id = data.get("upload_id") if isinstance(data.get("upload_id"), int) else None
+        telemetry.applied(conn, upload_id, event["id"], data.get("names") if isinstance(data.get("names"), dict) else {})
+        return jsonify(ok=True)
+
+    @app.route("/career/<token>/settings/telemetry", methods=["POST"])
+    @career_page(master_only=True)
+    def telemetry_settings(conn, ctx):
+        action = request.form.get("action")
+        if action == "new":
+            telemetry.new_key(conn)
+            g.audit_summary = "made a new telemetry upload link"
+            flash("New upload link made. Any earlier link stops working.", "success")
+        elif action == "off":
+            telemetry.revoke_key(conn)
+            g.audit_summary = "turned off the telemetry upload link"
+            flash("Upload link turned off.", "success")
+        return redirect(url_for("league_settings_section", token=ctx["token"], section="career") + "#telemetry")
+
     @app.route("/api/career/<token>/weekend/<int:event_id>", methods=["POST"])
     def api_weekend(token, event_id):
         if not _may_enter_results(token):
@@ -4899,7 +4967,9 @@ def register_routes(app):
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         prof = league_profile.profile(conn)
-        return dict(feats=feats, public_link=link, discord=discord.settings(conn),
+        tkey = telemetry.upload_key(conn)
+        tele_link = url_for("telemetry_upload", token=ctx["token"], key=tkey, _external=True) if tkey else None
+        return dict(feats=feats, public_link=link, discord=discord.settings(conn), telemetry_link=tele_link,
                     life=teamlife.settings(conn), rollover_actions=seats.ACTIONS, rollover_default=seats.carry_mode(conn),
                     zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
                     join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES, profile=prof,

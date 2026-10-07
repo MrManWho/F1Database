@@ -39,7 +39,8 @@ def _first_event(token):
 def test_features_are_chosen_at_setup_and_toggled_in_settings(app, master_client):
     token = _league(master_client, feature_comments="1")
     with storage.session(token) as conn:
-        assert community.features(conn) == {"checkin": False, "comments": True, "predictions": False, "public": False}
+        assert community.features(conn) == {"checkin": False, "comments": True, "predictions": False, "telemetry": False,
+                                            "public": False}
     ana = _member(app, master_client, token, "ana", "Ana Silva")
     assert ana.get(f"/career/{token}/settings").status_code == 403
     assert ana.get(f"/career/{token}/predictions").status_code == 404
@@ -50,7 +51,8 @@ def test_features_are_chosen_at_setup_and_toggled_in_settings(app, master_client
     master_client.post(f"/career/{token}/settings", data={"feature_checkin": "1", "feature_predictions": "1",
                                                           "csrf_token": "tok"})
     with storage.session(token) as conn:
-        assert community.features(conn) == {"checkin": True, "comments": False, "predictions": True, "public": False}
+        assert community.features(conn) == {"checkin": True, "comments": False, "predictions": True, "telemetry": False,
+                                            "public": False}
     assert ana.get(f"/career/{token}/predictions").status_code == 200
     ev = _first_event(token)
     res = ana.post(f"/career/{token}/comments", data={"target": f"event:{ev['id']}", "body": "hi", "csrf_token": "tok"})

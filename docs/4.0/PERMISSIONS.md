@@ -24,21 +24,21 @@ Site owner: Race Master of every league, plus the site pages below. A Spectator 
 
 ## Routes by access level
 
-### Race Master + Scorekeeper (8)
+### Race Master + Scorekeeper (11)
 
-`api_weekend`, `api_weekend_checklist`, `api_weekend_state`, `gate_remind`, `pace_save`, `paddock_open`, `race_start`, `readiness_page`
+`api_weekend`, `api_weekend_checklist`, `api_weekend_state`, `gate_remind`, `pace_save`, `paddock_open`, `race_start`, `readiness_page`, `telemetry_applied`, `telemetry_get`, `telemetry_names`
 
-### league Race Master (77)
+### league Race Master (78)
 
-`activity_log`, `announcement_action`, `announcements_preview`, `auto_backup_download`, `auto_backup_restore`, `backup`, `backups_page`, `calc_reminder_hide`, `calc_update_full`, `calc_update_future`, `calc_update_later`, `calc_update_page`, `calc_update_preview`, `calc_update_rollback`, `calendar_add`, `calendar_delete`, `calendar_save`, `contract_delete`, `delete`, `delivery_log_page`, `discord_test`, `dismissal_decide`, `export`, `gate_bypass`, `goals_reissue`, `grid_players`, `grid_save`, `incident_delete`, `incident_rule`, `league_settings`, `league_settings_section`, `market_close`, `market_delete`, `market_open`, `member_add`, `member_invite`, `member_invite_cancel`, `member_remove`, `member_update`, `members`, `members_add_player`, `members_link`, `members_no_account`, `members_request`, `members_settings`, `news_delete`, `notification_delete`, `offers_send`, `order_rule`, `ownership_transfer`, `paddock_admin`, `paddock_cars`, `paddock_driver`, `paddock_driver_delete`, `paddock_move_results`, `paddock_recalculate`, `paddock_team`, `public_rotate`, `race_time`, `recalculate_page`, `rename`, `request_pledge`, `restore_upload`, `save_as`, `save_now`, `season_new`, `season_rollover`, `season_switch`, `seat_resolve`, `target_excuse`, `targets_reset`, `team_admin`, `timezone_detect`, `ultimatum_teammate`, `weekend_reopen`, `weekend_reset`
+`activity_log`, `announcement_action`, `announcements_preview`, `auto_backup_download`, `auto_backup_restore`, `backup`, `backups_page`, `calc_reminder_hide`, `calc_update_full`, `calc_update_future`, `calc_update_later`, `calc_update_page`, `calc_update_preview`, `calc_update_rollback`, `calendar_add`, `calendar_delete`, `calendar_save`, `contract_delete`, `delete`, `delivery_log_page`, `discord_test`, `dismissal_decide`, `export`, `gate_bypass`, `goals_reissue`, `grid_players`, `grid_save`, `incident_delete`, `incident_rule`, `league_settings`, `league_settings_section`, `market_close`, `market_delete`, `market_open`, `member_add`, `member_invite`, `member_invite_cancel`, `member_remove`, `member_update`, `members`, `members_add_player`, `members_link`, `members_no_account`, `members_request`, `members_settings`, `news_delete`, `notification_delete`, `offers_send`, `order_rule`, `ownership_transfer`, `paddock_admin`, `paddock_cars`, `paddock_driver`, `paddock_driver_delete`, `paddock_move_results`, `paddock_recalculate`, `paddock_team`, `public_rotate`, `race_time`, `recalculate_page`, `rename`, `request_pledge`, `restore_upload`, `save_as`, `save_now`, `season_new`, `season_rollover`, `season_switch`, `seat_resolve`, `target_excuse`, `targets_reset`, `team_admin`, `telemetry_settings`, `timezone_detect`, `ultimatum_teammate`, `weekend_reopen`, `weekend_reset`
 
 ### league member (70)
 
 `announcements_page`, `api_notifications`, `api_search`, `calendar_ics`, `championship`, `checkin`, `comment_add`, `comment_delete`, `contracts_page`, `dashboard`, `driver_profile`, `drivers_page`, `fan_vote_route`, `garage`, `grid_page`, `impact_page`, `incident_report`, `incidents_page`, `league_leave`, `league_notice_seen`, `league_order`, `league_pin`, `legacy_tracking`, `market_approach`, `market_page`, `more_page`, `my_career`, `my_settings`, `news_page`, `news_read`, `news_unread`, `notifications_clear`, `notifications_read`, `notify_prefs`, `offer_accept`, `offer_counter`, `offer_decline`, `offers_page`, `pledge_page`, `pledge_save`, `prediction_save`, `predictions_page`, `prerace_answer`, `press_answer`, `press_page`, `profile_avatar`, `profile_save`, `race_summary`, `race_weekend`, `react`, `records`, `results_index`, `rivalry_page`, `season_review`, `seasons_page`, `standings_page`, `stats_page`, `target_ack`, `team_goal_choose`, `team_goals_page`, `team_interview`, `team_profile`, `team_standing`, `teams_page`, `upgrade_notice_ack`, `upgrade_notice_hide`, `view_mode`, `weekend`, `weekend_next`, `weekend_weather`
 
-### public (33)
+### public (34)
 
-`avatar`, `changelog_page`, `demo_start`, `directory`, `forgot`, `healthz`, `help_page`, `home`, `login`, `login_code`, `maintenance_page`, `privacy_page`, `public_calendar`, `public_calendar_ics`, `public_driver`, `public_incidents`, `public_news`, `public_page`, `public_records`, `public_round`, `public_standings`, `public_team`, `register`, `register_resend`, `register_verify`, `report_league`, `reset_password`, `service_worker`, `setup`, `terms_page`, `unsubscribe`, `web_manifest`
+`avatar`, `changelog_page`, `demo_start`, `directory`, `forgot`, `healthz`, `help_page`, `home`, `login`, `login_code`, `maintenance_page`, `privacy_page`, `public_calendar`, `public_calendar_ics`, `public_driver`, `public_incidents`, `public_news`, `public_page`, `public_records`, `public_round`, `public_standings`, `public_team`, `register`, `register_resend`, `register_verify`, `report_league`, `reset_password`, `service_worker`, `setup`, `telemetry_upload`, `terms_page`, `unsubscribe`, `web_manifest`
 
 ### signed in (own account) (20)
 

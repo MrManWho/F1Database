@@ -1091,6 +1091,9 @@ form.inline { display: inline; }
 .imp-privacy { border-left: 3px solid var(--green); padding: .4rem .7rem; background: var(--panel-2); border-radius: 6px; }
 .imp-drop { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; border: 1px dashed var(--line); border-radius: 10px; padding: .8rem; margin: .6rem 0; }
 .imp-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem; margin: .6rem 0; }
+.imp-tele-list { list-style: none; padding: 0; margin: .4rem 0 .6rem; display: grid; gap: .35rem; }
+.imp-tele-list li { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.imp-telemetry { border-bottom: 1px solid var(--line); padding-bottom: .4rem; margin-bottom: .6rem; }
 .imp-shot { border: 1px solid var(--line); border-radius: 10px; padding: .5rem; display: grid; gap: .4rem; min-width: 0; }
 .imp-shot-head { display: flex; gap: .5rem; align-items: center; }
 .imp-shot-head .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

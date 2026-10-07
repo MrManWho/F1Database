@@ -262,6 +262,8 @@
 
   // ---------------------------------------------------------------- preview
   function buildPreview() {
+    tele = null;
+    $("#imp-raw-head").textContent = "Recognised text";
     const all = shots.map(function (s) { return s.text || ""; }).join("\n");
     detected = M.detectSession(all);
     const chosen = $("#imp-session").value;
@@ -357,10 +359,96 @@
       .map(function (r) { return { driver_id: r.driver_id, position: r.status === "DNS" ? null : r.position, status: r.status || "Finished" }; });
     if (!window.F1Entry) return;
     const n = window.F1Entry.applyImport(session, chosen);
+    let extra = "";
+    if (tele) {
+      const fastest = session === "race" ? rows.find(function (r) { return r.fastest && r.include && r.driver_id; }) : null;
+      const ai = tele.data.session && tele.data.session.ai_difficulty;
+      const notes = window.F1Entry.applyExtras ? window.F1Entry.applyExtras({
+        fastest_lap: fastest ? fastest.driver_id : null, ai_difficulty: typeof ai === "number" ? ai : null }) : [];
+      if (notes.length) extra = " " + notes.join(" ");
+      rememberTelemetry(session);
+    }
     close();
     toast("Filled " + n + " " + { qualifying: "qualifying", sprint: "Sprint", race: "race" }[session] +
-      " result" + (n === 1 ? "" : "s") + " into the table. Check the highlighted boxes; nothing is submitted until you review and complete the weekend.", "success");
+      " result" + (n === 1 ? "" : "s") + " into the table." + extra + " Check the highlighted boxes; nothing is submitted until you review and complete the weekend.", "success");
   }
+
+  // ---------------------------------------------------------------- telemetry: results sent from the game
+  // The same preview and checks as a screenshot, but the rows come from the game's own final classification.
+  let tele = null;   // {upload_id, data}
+  const TELE_STATUS = { Finished: "Finished", Active: "Finished", DSQ: "DSQ", DNF: "DNF", Retired: "DNF",
+    "Not Classified": "DNF", Inactive: "DNS", Invalid: "DNS" };
+  function teleSession(sess) {
+    const id = sess.session_type_id;
+    if (id >= 5 && id <= 9) return "qualifying";
+    if (id === 16 || id === 17) return "race";
+    if (id === 15) return isSprintWeekend ? "sprint" : "race";   // on a Sprint weekend the Sprint is "Race", the GP "Race 2"
+    return null;
+  }
+  function teleKey(r) { return (r.name || "") + "|" + (r.team || ""); }
+  function sameTeam(a, b) {
+    const w = function (t) { return M.normName(t || "").split(" ").filter(function (x) { return x.length >= 3 && ["racing", "team", "f1"].indexOf(x) < 0; }); };
+    const x = w(a), y = w(b);
+    return x.some(function (t) { return y.indexOf(t) >= 0; });
+  }
+  function teleRow(r, i, known) {
+    const notes = [];
+    let driverId = null, state = "unmatched", score = 0;
+    const remembered = known[teleKey(r)];
+    if (remembered && byId[remembered]) {
+      driverId = remembered; state = "high"; score = 1; notes.push("Matched as in an earlier import");
+    } else if (r.name) {
+      const m = M.matchDriver(r.name, grid);
+      const sameTeamCands = (m.candidates || []).filter(function (c) { return byId[c.id] && sameTeam(byId[c.id].team, r.team); });
+      if (m.driver_id && (!r.team || sameTeam(byId[m.driver_id].team, r.team))) {
+        driverId = m.driver_id; state = m.state === "matched" ? "high" : "review"; score = m.score;
+      } else if (sameTeamCands.length === 1) {
+        driverId = sameTeamCands[0].id; state = "review"; score = sameTeamCands[0].score;
+      } else if (m.driver_id) {
+        driverId = m.driver_id; state = "review"; score = m.score;
+        notes.push("The game has them at " + r.team + "; check this is the right driver");
+      } else if (m.state === "ambiguous") {
+        notes.push("Could be " + m.candidates.map(function (c) { return c.name; }).join(" or "));
+      }
+    }
+    const status = TELE_STATUS[r.status] || "Finished";
+    if (r.reason && status !== "Finished") notes.push(r.reason);
+    if (r.penalty_s) notes.push("+" + r.penalty_s + "s in penalties (already in the position)");
+    if (r.fastest_lap && r.best_lap) notes.push("Fastest lap " + r.best_lap);
+    return { key: "t:" + i, source: null, raw: (r.position ? "P" + r.position + " " : "") + (r.name || "?") + (r.team ? " · " + r.team : ""),
+      teleKey: teleKey(r), driver_id: driverId, position: status === "DNS" ? null : (r.position || null), status: status,
+      confidence: Math.round(score * 100), state: state, notes: notes, candidates: [], include: true, fastest: !!r.fastest_lap };
+  }
+  function loadTelemetry(data, uploadId, known) {
+    if (!data || !Array.isArray(data.results) || !data.results.length) {
+      toast("That file has no results in it. Use the .json file the recorder saves for a session.", "error");
+      return;
+    }
+    tele = { upload_id: uploadId || null, data: data };
+    const sess = data.session || {};
+    const session = teleSession(sess);
+    detected = { session: session, confidence: session ? "high" : "none" };
+    $("#imp-session2").value = session && (session !== "sprint" || isSprintWeekend) ? session : "";
+    rows = data.results.map(function (r, i) { return teleRow(r, i, known || {}); });
+    const what = (sess.session_type || "Session") + (sess.track ? " at " + sess.track : "");
+    $("#imp-detected").textContent = session
+      ? what + ", from the game's telemetry" + (typeof sess.ai_difficulty === "number" ? " (AI " + sess.ai_difficulty + ")" : "") + "."
+      : what + ": only qualifying, Sprint and race sessions can be imported. Choose a session below to use it anyway.";
+    $("#imp-raw").textContent = data.results.map(function (r) {
+      return [r.position ? "P" + r.position : "–", r.name, r.team, r.status, r.best_lap, r.penalty_s ? "+" + r.penalty_s + "s" : ""].filter(Boolean).join("  ");
+    }).join("\n");
+    $("#imp-lowconf").hidden = true;
+    $("#imp-raw-head").textContent = "From the game";
+    renderRows();
+    showStep("review");
+  }
+  function rememberTelemetry(session) {
+    // Only names and driver ids, handed to static/js/telemetry_import.js; this file never sends anything.
+    const names = {};
+    rows.forEach(function (r) { if (r.include && r.driver_id && r.teleKey) names[r.teleKey] = r.driver_id; });
+    if (window.F1TelemetryHooks) window.F1TelemetryHooks.applied({ upload_id: tele.upload_id, session: session, names: names });
+  }
+  window.F1Import = { loadTelemetry: loadTelemetry };
 
   // ---------------------------------------------------------------- steps, open/close
   function showStep(step) {
@@ -379,7 +467,7 @@
   }
   function reset() {
     shots.forEach(function (s) { URL.revokeObjectURL(s.url); s.img = null; });
-    shots = []; rows = []; detected = null;
+    shots = []; rows = []; detected = null; tele = null;
     $("#imp-file").value = ""; $("#imp-raw").textContent = ""; $("#imp-rows").innerHTML = "";
     $("#imp-session").value = "auto"; $("#imp-ignore-detect").checked = false;
     renderShots(); showStep("files");

@@ -2,6 +2,28 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## Telemetry import (after 4.0.0)
+
+Off by default, per league. Results can come straight from F1 25's UDP telemetry instead of being typed in.
+
+- **Turning it on:** League settings → Career & team → Extras → **Telemetry import**. Then **Make an upload link**
+  under "Telemetry upload link". The link holds a private key for that league only; **Make a new link** replaces it
+  (the old one stops working at once) and **Turn the link off** removes it. The key is left out of exports and
+  downloaded backups, like the Discord webhook.
+- **Recording:** someone in the league runs a recorder on the PC the game sends telemetry to (the Paddock Legacy
+  telemetry recorder, or any tool that posts the same JSON; the format is described at the top of
+  `f1tracker/telemetry.py`). When the game shows a session's final classification, the recorder posts that session
+  to the link. Uploads don't need a sign-in; they're accepted only while the feature is on and the key matches,
+  are limited to 256 KB and 120 per hour per address, and the last 40 per league are kept.
+- **Importing:** on a round, **Import results** lists the sessions received. Opening one fills the usual import
+  preview (driver matching, checks, compare with what's entered); **Apply** fills the results table, the fastest lap
+  (Grand Prix only) and the AI level if none is entered yet. Nothing is saved or submitted until the normal save and
+  submit. A `.json` file saved by the recorder can be opened the same way without an upload link. Each applied
+  import remembers which game name is which driver, so the next one matches straight away.
+- Sessions: qualifying (any Q format) goes to Qualifying; on a Sprint weekend the game's "Race" is the Sprint and
+  "Race 2" the Grand Prix. Practice, Sprint Shootout and Time Trial aren't imported unless you choose a session.
+- Uploads are drafts in the league file (`telemetry_uploads`), not exported, and never change results by themselves.
+
 ## 4.0.0: launch
 
 The first public 4.0. Compared with beta.19, only launch tidying:

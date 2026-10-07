@@ -820,6 +820,27 @@
       });
       recalc(); schedule();
       return n;
+    },
+    // Telemetry import: the fastest lap and the AI level the game reported. An AI level already entered is kept.
+    applyExtras: function (extras) {
+      const notes = [];
+      if (readOnly || locked) return notes;
+      if (extras.fastest_lap) {
+        const tr = rows.find(function (r) { return r.dataset.driverId === String(extras.fastest_lap); });
+        const radio = tr && tr.querySelector('[data-field="fastest_lap"]');
+        if (radio && !radio.checked) { radio.checked = true; markEdited(radio); notes.push("Fastest lap set."); }
+      }
+      if (typeof extras.ai_difficulty === "number" && diffInput) {
+        if (diffInput.value === "") {
+          diffInput.value = extras.ai_difficulty;
+          diffInput.dispatchEvent(new Event("input", { bubbles: true }));
+          notes.push("AI difficulty set to " + extras.ai_difficulty + ".");
+        } else if (String(diffInput.value) !== String(extras.ai_difficulty)) {
+          notes.push("The game says AI " + extras.ai_difficulty + " but " + diffInput.value + " is entered, so that was kept.");
+        }
+      }
+      recalc(); schedule();
+      return notes;
     }
   };
 

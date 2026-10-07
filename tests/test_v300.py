@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from conftest import login, run_event
-from f1tracker import community, discord, storage, services as S
+from f1tracker import community, discord, storage, services as S, telemetry
 
 
 def _league(master_client, name="Three League"):
@@ -43,8 +43,9 @@ def test_downloaded_backups_hold_no_trace_of_any_secret(app, master_client, monk
     with storage.session(token) as conn:
         discord.save_settings(conn, new_hook, True, True)     # the old value is left behind in the live file
         key = community.public_key(conn)
+        upload_key = telemetry.new_key(conn)
         assert set(storage.SECRET_META) <= {r[0] for r in conn.execute("SELECT key FROM meta")}
-    values = [old_hook.split("/")[-1], new_hook.split("/")[-1], key]
+    values = [old_hook.split("/")[-1], new_hook.split("/")[-1], key, upload_key]
     current = master_client.get(f"/career/{token}/backup").get_data()
     assert current[:16] == b"SQLite format 3\x00" and not _secrets_leaked(current, values)
     auto = storage.auto_backup(token, "test", force=True)

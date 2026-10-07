@@ -275,7 +275,7 @@
     <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position" data-session-only="q">Qualifying</button>
     {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position" data-session-only="s">Sprint</button>{% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position" data-session-only="r">Race</button>
-    <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import screenshot</button>
+    <button type="button" class="btn btn-sm" data-dialog="import-dialog">{{ '📥 Import results' if telemetry_uploads is not none else '📷 Import screenshot' }}</button>
     <select id="copy-order" class="btn-sm" data-session-only="s r" aria-label="Copy one session's order into another">
       <option value="">Copy an order…</option>
       <option value="qualifying_position>race_position">Qualifying → Grand Prix</option>
@@ -896,12 +896,30 @@
 </dialog>
 <dialog id="import-dialog" class="dialog import-dialog" aria-labelledby="imp-title"
         data-entrants='{{ entrants|tojson }}' data-sprint="{{ 1 if event.is_sprint else 0 }}"
-        data-vendor="{{ url_for('static', filename='vendor/tesseract/') }}">
-  <div class="dialog-head"><h2 id="imp-title">Import from screenshot</h2><button class="icon-btn" data-imp-cancel aria-label="Close">✕</button></div>
-  <p class="imp-privacy small"><span aria-hidden="true">🔒</span> Your screenshot is processed locally in this browser and is not uploaded or sent to an AI provider.
+        data-vendor="{{ url_for('static', filename='vendor/tesseract/') }}"
+        {% if telemetry_uploads is not none %}data-tele-get="{{ url_for('telemetry_get', token=ctx.token, upload_id=0) }}"
+        data-tele-names="{{ url_for('telemetry_names', token=ctx.token) }}"
+        data-tele-applied="{{ url_for('telemetry_applied', token=ctx.token) }}" data-event-id="{{ event.id }}"{% endif %}>
+  <div class="dialog-head"><h2 id="imp-title">{{ 'Import results' if telemetry_uploads is not none else 'Import from screenshot' }}</h2><button class="icon-btn" data-imp-cancel aria-label="Close">✕</button></div>
+  <p class="imp-privacy small"><span aria-hidden="true">🔒</span> {{ 'Screenshots are' if telemetry_uploads is not none else 'Your screenshot is' }} processed locally in this browser and {{ 'are' if telemetry_uploads is not none else 'is' }} not uploaded or sent to an AI provider.
     It's free, needs no account, and nothing is kept after you close this window.</p>
 
   <section id="imp-step-files">
+    {% if telemetry_uploads is not none %}
+    <div class="imp-telemetry">
+      <h3 class="mini-head">From the game's telemetry</h3>
+      {% if telemetry_uploads %}
+      <ul class="imp-tele-list">
+        {% for u in telemetry_uploads %}
+        <li><button type="button" class="btn btn-sm" data-tele-id="{{ u.id }}">{{ u.track or 'Session' }} · {{ u.session_type or 'Results' }}</button>
+          <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · used for R{{ u.used_round }}{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="muted small">Nothing has been sent from the game yet. Sessions arrive here when the recorder sees the results screen.</p>{% endif %}
+      <label class="btn btn-sm btn-ghost">Open a telemetry file<input type="file" id="imp-tele-file" accept=".json,application/json" hidden></label>
+      <h3 class="mini-head">Or from a screenshot</h3>
+    </div>
+    {% endif %}
     <label>Which session?
       <select id="imp-session">
         <option value="auto">Detect from the screenshot</option>
@@ -947,7 +965,7 @@
       try cropping to the results table, or assign rows yourself below. Your current results haven't been touched.</p>
     <div class="table-wrap">
       <table class="data-table compact imp-table">
-        <thead><tr><th><abbr title="Include">Use</abbr></th><th>Shot</th><th>Recognised text</th><th>Driver</th><th>Pos</th><th>Status</th><th>Confidence</th><th>Notes</th></tr></thead>
+        <thead><tr><th><abbr title="Include">Use</abbr></th><th>Shot</th><th id="imp-raw-head">Recognised text</th><th>Driver</th><th>Pos</th><th>Status</th><th>Confidence</th><th>Notes</th></tr></thead>
         <tbody id="imp-rows"></tbody>
       </table>
     </div>
@@ -976,5 +994,6 @@
 <script src="{{ url_for('static', filename='js/workspace.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
 {% if ctx.can_run and (ctx.is_master or event.status != 'Complete') %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
-<script src="{{ url_for('static', filename='js/importer.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='js/importer.js') }}"></script>
+{% if telemetry_uploads is not none %}<script src="{{ url_for('static', filename='js/telemetry_import.js') }}"></script>{% endif %}{% endif %}
 <script src="{{ url_for('static', filename='js/share.js') }}"></script>{% endblock %}

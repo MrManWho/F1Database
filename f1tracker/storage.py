@@ -467,9 +467,9 @@ def integrity_check(token):
 
 
 # Never in a download: the Discord webhook (anyone holding it can post as the league) and the public-link key.
-SECRET_META = {"discord_webhook", "public_key"}
-# Not exported: delivery bookkeeping (who was emailed) and per-device read markers.
-EXPORT_SKIP = {"deliveries", "notification_reads"}
+SECRET_META = {"discord_webhook", "public_key", "telemetry_key"}
+# Not exported: delivery bookkeeping (who was emailed), per-device read markers and telemetry uploads (drafts).
+EXPORT_SKIP = {"deliveries", "notification_reads", "telemetry_uploads"}
 
 
 def export_json(token):

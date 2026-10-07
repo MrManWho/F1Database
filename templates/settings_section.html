@@ -148,6 +148,23 @@
   {{ season_note() }}
   {{ save() }}
 </form>
+<section class="card settings-section" id="telemetry">
+  <h2>Telemetry upload link</h2>
+  <p class="small">With <b>Telemetry import</b> on (Extras, above), anyone in this league running a telemetry recorder during a race
+    can send each session's results here. They wait in the round's <b>Import results</b> dialog until a Scorekeeper checks and
+    applies them. Nothing is saved to the results or submitted by itself.</p>
+  {% if not feats.telemetry %}<p class="muted small">Telemetry import is off, so the link below doesn't accept anything yet.</p>{% endif %}
+  {% if telemetry_link %}
+  <label>Upload link <small class="muted">(paste into the recorder's "League upload link". Keep it private: anyone with it can send results to check.)</small>
+    <input type="text" readonly value="{{ telemetry_link }}" onclick="this.select()" data-no-dirty></label>
+  {% else %}<p class="muted small">No upload link yet.</p>{% endif %}
+  <form method="post" action="{{ url_for('telemetry_settings', token=ctx.token) }}" class="button-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" name="action" value="new" class="btn btn-sm">{{ 'Make a new link' if telemetry_link else 'Make an upload link' }}</button>
+    {% if telemetry_link %}<button type="submit" name="action" value="off" class="btn btn-sm btn-ghost">Turn the link off</button>{% endif %}
+  </form>
+  {% if telemetry_link %}<p class="muted small">A new link replaces this one straight away.</p>{% endif %}
+</section>
 
 {% elif section == 'roles' %}
 <form method="post" action="{{ url_for('league_settings', token=ctx.token) }}" class="stack">
