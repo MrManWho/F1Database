@@ -15,6 +15,9 @@ def _b64(data):
 
 
 def available():
+    from . import testsite
+    if testsite.on():
+        return True         # 4.0 test site: alerts are captured as delivery previews, never sent
     try:
         import pywebpush  # noqa: F401
     except ImportError:
@@ -48,7 +51,8 @@ def vapid_keys():
 
 
 def public_key():
-    return vapid_keys()[1] if available() else None
+    from . import testsite
+    return vapid_keys()[1] if available() and not testsite.on() else None
 
 
 def subscribe(username, sub):
@@ -94,6 +98,11 @@ def send(usernames, title, body, url=None):
     from . import maintenance
     if maintenance.deliveries_paused():
         return 0            # v3.2: paused by the site owner (queued alerts wait in the outbox)
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture("push", {"names": sorted(set(usernames)), "title": title, "body": body})
+        return 0
     from pywebpush import WebPushException, webpush
     private, _ = vapid_keys()
     from . import mailer

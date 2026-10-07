@@ -12,7 +12,7 @@
   {% endfor %}
 </ol>
 
-<form method="post" action="{{ url_for('career_new') }}" class="wizard" id="wizard" novalidate>
+<form method="post" action="{{ url_for('career_new') }}" class="wizard" id="wizard" novalidate{% if draft %} data-draft='{{ draft|tojson|forceescape }}'{% endif %}>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="wizard" value="1">
 
@@ -193,6 +193,29 @@
     }).filter(Boolean);
     add("Invitations", invites.length ? invites.join(", ") : "None");
   }
-  show(0);
+  // 4.0: after a failed attempt, put back everything that was typed and open the step with the problem.
+  function restore(draft) {
+    var f = draft.fields || {};
+    var need = (f.player_name || []).length, rows = document.getElementById("player-rows");
+    while (rows.children.length < need) document.getElementById("add-player").click();
+    var inv = (f.invite_username || []).length, irows = document.getElementById("invite-rows");
+    while (irows.children.length < inv) document.getElementById("add-invite").click();
+    Object.keys(f).forEach(function (name) {
+      var values = f[name], els = form.querySelectorAll('[name="' + name + '"]');
+      els.forEach(function (el, i) {
+        if (el.type === "checkbox" || el.type === "radio") el.checked = values.indexOf(el.value) > -1;
+        else if (i < values.length) el.value = values[i];
+      });
+    });
+    form.querySelectorAll("input[type=checkbox]").forEach(function (el) {
+      if (el.name && !(el.name in f) && !el.disabled) el.checked = false;     // unticked boxes aren't sent
+    });
+    form.querySelectorAll("[data-who]").forEach(function (sel) { sel.dispatchEvent(new Event("change")); });
+    customToggle();
+    return Math.max(0, Math.min(steps.length - 1, draft.step || 0));
+  }
+  var start = 0;
+  if (form.dataset.draft) { try { start = restore(JSON.parse(form.dataset.draft)); } catch (e) { start = 0; } }
+  show(start);
 })();
 </script>{% endblock %}

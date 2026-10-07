@@ -1,4 +1,4 @@
-# Paddock Legacy 3.2.3
+# Paddock Legacy 4.0
 
 A companion website for F1 game career **leagues**. Any number of people can drive. Each player has their own
 login, garage, contract talks and relationship with their team, and the Race Master or a Scorekeeper enters the
@@ -6,10 +6,10 @@ results after every race.
 
 The game handles the racing, and Paddock Legacy remembers everything else, across as many seasons as you play:
 - every result, Sprint and championship, with the weather for each session;
-- race weekends, from the paddock opening to the chequered flag;
+- race weekends, from the paddock opening to the debrief, with race times for each session;
 - contracts, transfers, pledges and team goals;
 - Form, Reputation and how your team rates you;
-- a recommended AI difficulty for the next race.
+- a track-aware recommended AI difficulty for the next race.
 
 It's a small Flask + SQLite app. Host it as a website that updates itself (see **Hosting** below), or run it on
 your own PC.
@@ -89,16 +89,25 @@ closed. Leagues are private unless the Race Master makes them Public (a share li
 
 ### Race weekends
 
-1. **The paddock opens** an hour before the scheduled race time, or when a Scorekeeper or the Race Master opens it.
-2. **Before the race** each driver answers pre-race press and picks a **weekend target**: Safe, Standard or Stretch.
-3. **Lights out.** A Scorekeeper or the Race Master starts the race once everyone's ready. Only the Race Master can
-   start with someone outstanding, and must leave a note.
-4. **Chequered flag.** Results go in (typed, tapped in finishing order, or imported from screenshots with free
-   in-browser OCR that you check row by row), then **Review and submit** locks the round. After the race there's
-   post-race press and a race summary.
+Each round is one page with four steps, and it opens on the step you need:
+
+1. **Prepare.** The paddock opens an hour before the scheduled race time, or when a Scorekeeper or the Race Master
+   opens it. Each driver answers pre-race press, picks a **weekend target** (Safe, Standard or Stretch), checks in and
+   makes predictions.
+2. **Sessions.** Qualifying, the Sprint on Sprint weekends, then the Race, one at a time. Each session has its own
+   results (typed, tapped in finishing order, or imported from screenshots with free in-browser OCR that you check
+   row by row), race times, weather and incidents. **Save & continue** saves and moves on; it never submits.
+3. **Review & submit.** One list of anything that must be fixed, with a **Fix** button that goes straight to it, then a
+   single **Submit weekend** button. Pressing it twice still submits once.
+4. **Debrief.** The podium, your Form, Reputation and championship changes and why, post-race press, your weekend
+   target and the AI for the next round.
 
 Every player driver needs a linked login, or the Race Master marks them **No account**. Edits autosave and survive a
 dropped connection. The Race Master can **reset** the latest weekend as if it never happened.
+
+**Race times:** on a tracked round, each player who finished types their race time and their AI teammate's from the
+game's results screen (the site works out the gap), or ticks **Don't submit times**. The Race Master can switch this
+off in League settings → Race weekends.
 
 **Points:** Grand Prix 25-18-15-12-10-8-6-4-2-1 (reduced for shortened races), Sprint 8-7-6-5-4-3-2-1. There are no
 points for fastest lap. Ties are split by full countback. Each session's weather (dry, overcast, light rain, heavy
@@ -120,13 +129,23 @@ rain, changing) is recorded too, and never changes anyone's numbers.
 
 ### AI difficulty
 
-Enter the AI level you raced on and the tracker recommends the next one, on the game's 0–110 scale. It compares each
-player with their AI teammate and cars of similar speed (and lap times, if you enter them), learns from every round,
-and ignores DNFs, damage and other unrepresentative sessions. It never raises the level while someone is struggling.
+One AI level covers the whole weekend, on the game's 0–110 scale. Each round starts from the community average for
+that circuit in F1 26, then learns from your league: after each weekend it compares every player with their AI
+teammate and cars of similar speed. DNFs, damage and no-fault results never count as "too hard", and every
+recommendation shows its working and how confident it is. Each round keeps the recommendation made before it next to
+the AI actually used.
+
+### Earlier seasons
+
+A league that started on 3.x keeps its earlier seasons exactly as they were played. Anything those seasons never
+tracked (race times, incidents by session, the AI shown before each round) is marked "Not tracked under this
+season's rules" and never counts as missing. **League → What was tracked** lists when each feature began.
 
 ### Everything else
 
-* A **Control Room** with your next action and everything waiting for you.
+* **Home** with your next action and everything waiting for you.
+* A **League Readiness Check** for the Race Master: what needs attention before a weekend, a season end or a rollover,
+  and where to fix it.
 * Driver profiles, rivalries, statistics (including wet vs dry), season awards and the Hall of Records.
 * Paddock news, announcements, comments, predictions, race-night check-in and optional Discord posts.
 * Per-league notifications by email and phone alert. It installs as an app on phones and computers.
@@ -155,6 +174,10 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 .venv/bin/python launcher.py           # or: launcher.py --lan
 ```
 
+Use Python 3.11 (pinned in `.python-version` and `render.yaml`): newer versions add up decimals slightly differently
+and would shift career numbers. On Windows, `dev.bat` runs a private local copy with live reload; see
+[docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).
+
 Program code is in `f1tracker/`, pages in `templates/`, and CSS and JS in `static/`. The main modules:
 
 | Module | What it holds |
@@ -165,8 +188,9 @@ Program code is in `f1tracker/`, pages in `templates/`, and CSS and JS in `stati
 | `weekend`, `gates`, `press`, `weather` | Race weekends, round gates, the press room and weather |
 | `market`, `pitch`, `seats` | Offers, negotiations, team talks and seats |
 | `relations`, `teamgoals`, `teamlife`, `ultimatums` | Team relationships, goals, weekend targets, team orders and final warnings |
-| `ai3` | The AI difficulty tracker |
+| `ai3`, `ai_track` | The AI difficulty tracker |
 | `impacts` | Change notices |
 | `auth`, `security`, `ratelimit` | Accounts, two-step sign-in and rate limits |
 | `feed`, `notices`, `delivery`, `outbox`, `mailer`, `push`, `discord` | News, notifications and sending |
 | `maintenance`, `offsite` | Maintenance mode and the encrypted site backup |
+| `tracking`, `readiness` | Earlier seasons' rules and the League Readiness Check |

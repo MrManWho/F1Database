@@ -724,8 +724,9 @@ def test_weekend_completion_posts_news_notifications_and_backup(master_client):
         feed.mark_read(conn, "devon")
         assert feed.notifications_for(conn, "devon", players(conn)[0])[1] == 0
     assert any("after-round-1" in b["name"] for b in storage.list_auto_backups(token))
-    page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "wins the 2026 Australian GP" in page and "data-chart" in page
+    page = master_client.get(f"/career/{token}/news").get_data(as_text=True)     # 4.0: Home shows only the latest few
+    assert "wins the 2026 Australian GP" in page
+    assert "data-chart" in master_client.get(f"/career/{token}/drivers").get_data(as_text=True)
 
 
 def test_signing_is_announced_to_the_other_player(db, rng):
@@ -856,7 +857,7 @@ def test_race_steward_runs_races_but_cannot_see_private_negotiations(app, master
                        json={"results": [{"driver_id": ids[0], "race_position": 1}], "ai_difficulty": 88})
     assert res.get_json()["ok"]
     page = steward.get(f"/career/{token}/weekend/{event['id']}").get_data(as_text=True)
-    assert "Submit results" in page and "View only" not in page
+    assert "Submit weekend" in page and "View only" not in page   # 4.0 redesign: Review & submit
     # Scorekeepers only enter results: no admin pages, calendar or grid changes.
     assert steward.get(f"/career/{token}/paddock").status_code == 403
     assert steward.post(f"/career/{token}/calendar/add", data={"name": "X GP", "csrf_token": "tok"}).status_code == 403

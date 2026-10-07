@@ -8,6 +8,7 @@ was, so seasons played under it stay reproducible; engine.py decides which one a
 
 from . import constants as C
 from . import engine as E
+from . import memo
 
 
 def clamp(value, low, high):
@@ -191,11 +192,16 @@ def store_round_ranks(conn, event):
 
 def round_ranks(conn, event):
     """The ranks this round was (or will be) judged with: stored when it was completed, else worked out now."""
+    return _round_ranks(conn, event["id"], event["season_id"], event["round_number"])
+
+
+@memo.per_connection(copier=dict)
+def _round_ranks(conn, event_id, season_id, round_number):
     stored = {r["team_id"]: r["rank"] for r in conn.execute("SELECT team_id, rank FROM round_ranks WHERE event_id = ?",
-                                                           (event["id"],))}
+                                                           (event_id,))}
     if stored:
         return stored
-    return effective_ranks(conn, event["season_id"], event["round_number"])
+    return effective_ranks(conn, season_id, round_number)
 
 
 def expected_finish(rank, field=None, teams=None):
@@ -354,6 +360,7 @@ def countback_used(conn, season_id):
     return not E.mixed(conn, season_id) or E.rounds_after_cutoff(conn, season_id) > 0
 
 
+@memo.per_connection(copier=memo.rows_copy)
 def driver_standings(conn, season_id, upto_round=None, completed_only=False):
     """Same shape as services.driver_standings (engine 2), worked out with engine 3."""
     from . import services as S

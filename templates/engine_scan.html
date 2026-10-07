@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Calculation engine scan{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Site owner</div><h1>Calculation engine scan</h1></div></div>
+<section class="card">
+  <p><b>{{ scan.verdict }}</b></p>
+  <p class="muted small">Every league file on this site, read without changing anything.
+    Active seasons on Version 2: <b>{{ scan.v2_active|length }}</b> · finished seasons on Version 2: <b>{{ scan.v2_history|length }}</b> ·
+    leagues that haven't answered the Calculation Update: <b>{{ scan.pending_choice|length }}</b>.</p>
+</section>
+{% for lg in scan.leagues %}
+<section class="card">
+  <h2>{{ lg.name or "(no name)" }} <span class="muted small">{{ lg.id }}{% if lg.demo %} · demo{% endif %}</span></h2>
+  {% if lg.error %}<p class="muted">{{ lg.error }}</p>{% else %}
+  <p class="small">League default: Calculation Version {{ lg.engine }} · update choice: {{ lg.choice }}</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Season</th><th scope="col">Engine</th><th scope="col">Rounds</th><th scope="col">State</th></tr></thead>
+    <tbody>{% for s in lg.seasons %}<tr>
+      <td>{{ s.label }}</td>
+      <td>Version {{ s.engine }}{% if s.cutoff %} from round {{ s.cutoff + 1 }}{% endif %}</td>
+      <td>{{ s.done }} / {{ s.rounds }}</td>
+      <td>{% if s.active %}<span class="pill{% if s.engine < 3 %} pill-hot{% endif %}">Active</span>{% else %}Finished{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>{% endif %}
+</section>
+{% else %}
+<section class="card"><p class="muted">No leagues on this site yet.</p></section>
+{% endfor %}
+{% endblock %}

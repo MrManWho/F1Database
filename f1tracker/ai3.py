@@ -89,12 +89,21 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
         comp_q = parse_time(form.get("comp_quali_time"))
     except ValueError:
         raise ValueError("Qualifying times look like 1:23.456")
+    try:
+        race_time = parse_time(form.get("race_time"))
+        bench_time = parse_time(form.get("bench_race_time"))
+    except ValueError:
+        raise ValueError("Race times look like 1:32:45.123 (hours:minutes:seconds) or 92:45.123")
     gap_text = (form.get("race_gap") or "").strip().replace(",", ".")
     try:
         gap = float(gap_text) if gap_text else None
         laps = int(form.get("laps")) if (form.get("laps") or "").strip() else None
     except ValueError:
         raise ValueError("The race gap is seconds (e.g. 12.4, or -3 if you finished ahead) and laps a whole number")
+    if race_time is not None and bench_time is not None:
+        gap = round(race_time - bench_time, 3)       # 4.0: the site works the gap out (+ behind, - ahead)
+    elif (race_time is None) != (bench_time is None):
+        raise ValueError("Enter both race times (yours and theirs), or neither")
     if laps is not None and not 1 <= laps <= 200:
         raise ValueError("Completed laps must be between 1 and 200")
     if gap is not None and abs(gap) > 600:
@@ -105,16 +114,56 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
     rep = form.get("representative")
     rep = None if rep in (None, "", "auto") else int(rep == "1")
     conn.execute("""INSERT INTO pace_inputs(event_id, driver_id, session, quali_time, mate_quali_time, comp_driver_id,
-                    comp_quali_time, race_gap, gap_to, laps, representative, flags, untracked, updated_by, updated_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id, driver_id, session) DO UPDATE SET
+                    comp_quali_time, race_gap, gap_to, laps, representative, flags, untracked, updated_by, updated_at,
+                    race_time, bench_race_time)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id, driver_id, session) DO UPDATE SET
+                    race_time = excluded.race_time, bench_race_time = excluded.bench_race_time,
                     quali_time = excluded.quali_time, mate_quali_time = excluded.mate_quali_time,
                     comp_driver_id = excluded.comp_driver_id, comp_quali_time = excluded.comp_quali_time,
                     race_gap = excluded.race_gap, gap_to = excluded.gap_to, laps = excluded.laps,
                     representative = excluded.representative, flags = excluded.flags, untracked = excluded.untracked,
                     updated_by = excluded.updated_by, updated_at = excluded.updated_at""",
                  (event_id, driver_id, session, quali, mate_q, comp, comp_q, gap,
-                  (form.get("gap_to") or "teammate")[:20], laps, rep, flags, int(bool(form.get("untracked"))),
-                  username, now_iso()))
+                  ("comparison" if comp else "teammate"), laps, rep, flags, int(bool(form.get("untracked"))),
+                  username, now_iso(), race_time, bench_time))
+
+
+# --------------------------------------------------------------------------- 4.0: race times are required
+
+PACE_REQUIRED_DEFAULT = "1"
+
+
+def pace_required(conn):
+    row = conn.execute("SELECT value FROM meta WHERE key = 'pace_required'").fetchone()
+    return (row[0] if row else PACE_REQUIRED_DEFAULT) == "1"
+
+
+def missing_pace(conn, event, rows=None):
+    """Player sessions of a tracked round still missing race times: [(driver name, "Grand Prix"/"Sprint")].
+    A session counts as done with a race gap and laps, or when "Don't submit times" is ticked. Sessions a player
+    didn't finish aren't asked for (they can't be used as evidence anyway)."""
+    from . import services as S
+    if not pace_required(conn) or event["ai_difficulty"] is None or event["ai_untracked"] or not E.round_v3(conn, event):
+        return []
+    from . import tracking
+    if not tracking.round_tracked(conn, event, "race_times"):
+        return []       # a round played before the league's 4.0 update never asked for race times
+    rows = rows if rows is not None else S.weekend_rows(conn, event["id"])
+    sessions = [("gp", "result_status", "Grand Prix")]
+    if event["is_sprint"] and _sprints_tracked(conn):
+        sessions.append(("sprint", "sprint_status", "Sprint"))
+    out = []
+    for r in rows:
+        if not r["driver"]["is_player"]:
+            continue
+        for session, status_key, label in sessions:
+            if r[status_key] not in C.CLASSIFIED_STATUSES:
+                continue
+            p = pace_input(conn, event["id"], r["driver_id"], session)
+            if p and (p["untracked"] or (p["race_gap"] is not None and p["laps"])):
+                continue
+            out.append((r["driver"]["name"], label))
+    return out
 
 
 # --------------------------------------------------------------------------- scoring one session
@@ -277,7 +326,9 @@ def _limit(weekends):
 
 def recommendation(conn, before=None):
     """The engine 3 recommendation (same keys as services.difficulty_recommendation, plus the 2.5 detail)."""
-    from . import services as S
+    from . import ai_track, services as S
+    if ai_track.uses_track(conn, ai_track.season_for(conn, before)):
+        return ai_track.recommendation(conn, before)       # 4.0: seasons on the track-aware model
     hist = history(conn, before)
     rec = {"current": None, "recommended": None, "direction": None, "average": None, "sample": [], "players": [],
            "sweet_spot": None, "note": None, "history_rounds": len(hist), "engine": 3, "excluded": [], "used": [],
@@ -296,9 +347,9 @@ def recommendation(conn, before=None):
         if fz and not new_usable:
             rec.update(recommended=fz.get("recommended", current), direction=fz.get("direction", "hold"),
                        band=S.difficulty_band(fz.get("recommended", current)),
-                       reason=f"Kept from before the Calculation Update ({fz.get('recommended', current)}). The new "
-                              "tracker takes over from the next tracked round.", frozen=True)
-            rec["evidence"] = "Waiting for the first round under Calculation Version 3."
+                       reason=f"Kept from earlier this season ({fz.get('recommended', current)}). It updates again "
+                              "after the next tracked round.", frozen=True)
+            rec["evidence"] = "Waiting for the next tracked round."
             return rec
     sessions = []
     for h in hist:
@@ -523,6 +574,10 @@ def _evidence(rec, usable, weekends):
 
 def store(conn, event_id):
     """Remember the recommendation after this round (for reversal damping and change notices)."""
+    from . import ai_track
+    row = conn.execute("SELECT season_id FROM events WHERE id = ?", (event_id,)).fetchone()
+    if row and ai_track.uses_track(conn, row[0]):
+        return ai_track.store(conn, event_id)              # 4.0: seasons on the track-aware model
     rec = recommendation(conn)
     conn.execute("""INSERT INTO ai_recs(event_id, engine, current, recommended, direction, detail, created_at)
                     VALUES(?,?,?,?,?,?,?) ON CONFLICT(event_id) DO UPDATE SET engine = excluded.engine,

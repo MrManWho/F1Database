@@ -334,6 +334,42 @@ CREATE TABLE IF NOT EXISTS audit_log (
     link TEXT
 );
 
+-- v22 (4.0): the change record. One row per change made in the league: who, when, what, the target, and for
+-- sensitive changes the values before and after. Rows can't be edited or deleted (triggers below).
+CREATE TABLE IF NOT EXISTS audit_events (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    label TEXT NOT NULL,
+    target TEXT,
+    link TEXT,
+    before TEXT,
+    after TEXT
+);
+CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_events
+BEGIN SELECT RAISE(ABORT, 'The change record cannot be edited'); END;
+CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events
+BEGIN SELECT RAISE(ABORT, 'The change record cannot be deleted'); END;
+
+-- v23 (4.0): the track-aware AI recommendation shown for each round, frozen when the round is first submitted:
+-- the F1Laps snapshot and model versions, each part of the sum, the AI actually used, and the full explanation.
+CREATE TABLE IF NOT EXISTS ai_track_recs (
+    event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    season_id INTEGER NOT NULL,
+    circuit TEXT,
+    dataset_version TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    baseline REAL NOT NULL,
+    league_adjustment REAL NOT NULL,
+    track_history REAL NOT NULL,
+    recommended INTEGER NOT NULL,
+    ai_used INTEGER,
+    confidence REAL,
+    explanation TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS team_relations (
     season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
     driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
@@ -473,7 +509,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     ruling_note TEXT NOT NULL DEFAULT '',
     decided_by TEXT,
     created_at TEXT NOT NULL,
-    decided_at TEXT
+    decided_at TEXT,
+    session TEXT NOT NULL DEFAULT 'weekend'
 );
 
 CREATE TABLE IF NOT EXISTS team_notes (
@@ -528,8 +565,8 @@ def _assign_player_colors(conn):
 
 
 def _press_fix_once(conn):
-    """3.2.4/3.2.5: take back press answers given to questions a market window swapped in by mistake, with a change
-    notice for each driver affected (teamlife.press_fix_with_notices). Runs once per league."""
+    """3.2.4/3.2.5 (also in 4.0): take back press answers given to questions a market window swapped in by mistake,
+    with a change notice for each driver affected (teamlife.press_fix_with_notices). Runs once per league."""
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'press_answers'").fetchone() or \
             conn.execute("SELECT 1 FROM meta WHERE key = 'press_fix_notice'").fetchone():
         return
@@ -539,7 +576,7 @@ def _press_fix_once(conn):
         conn.execute("INSERT INTO meta(key, value) VALUES('press_fix_notice', '1')")
     except Exception:   # never stop a league opening over the repair; it's logged for the site owner
         import logging
-        logging.getLogger(__name__).exception("press repair failed")
+        logging.getLogger(__name__).exception("3.2.4 press repair failed")
 
 
 def migrate(conn):
@@ -591,6 +628,23 @@ def migrate(conn):
                for the AI tracker), ai_recs (the recommendation after each round); results.no_fault /
                points_override / sprint_points_override, events.gp_distance / sprint_distance / cancelled,
                drivers.career_status, team_orders.ruled_by / ruled_at / reason. Nothing existing changes.
+    v21 -> v22 (4.0): audit_events, the change record (actor, time, action, target and before/after values for
+               sensitive changes), protected by triggers so rows can't be edited or deleted. Created empty; the
+               plain-language Activity Log (audit_log) is unchanged. Nothing existing changes.
+    v22 -> v23 (4.0): ai_track_recs, the track-aware AI recommendation shown before each round (frozen at the first
+               submission; the AI actually used is kept separately). Created empty. New seasons use the track-aware
+               model (meta ai_model:<season>); since 4.0.0-beta.1 the season under way also switches to it the
+               first time the league opens (engine.ensure_latest). Completed rounds keep their stored recommendations.
+    v23 -> v24 (4.0): pace_inputs.race_time and bench_race_time (a player's and their comparison AI driver's race
+               times; the race gap is worked out from them). Existing rows keep the gap they were given.
+    v24 -> v25 (4.0): incidents.session (qualifying / sprint / race; existing reports become "weekend"). Incident
+               rulings are grouped into one stewards' story per round: the separate headlines older versions posted
+               for each ruling are folded into it once, when this version first opens the league.
+    v25 -> v26 (4.0): legacy-season tracking (tracking.py): tracking_migrations (the one-time 4.0 upgrade of a league
+               last written by 3.x: when, from which schema, where new tracking starts and who was a member),
+               season_tracking (per season and feature, the round tracking began, and whether the Race Master should
+               confirm it) and tracking_notice_acks (who pressed "Got it" on the upgrade notice). Read from the stored
+               records once; nothing existing changes and nothing is recalculated.
     v14 -> v15: events.revision (bumped on every save, for offline-edit conflict checks) and events.submitted_at
                (first submission; reopened rounds don't repeat headlines). League join modes (meta join_mode: requests / invite / closed; an old "open to join" league
                becomes "requests", a closed one "invite") and invitations for invite-only leagues.
@@ -604,7 +658,18 @@ def migrate(conn):
         if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
             _press_fix_once(conn)
             return
+    old_incidents = "incidents" in tables and "session" not in _columns(conn, "incidents")
+    from . import tracking
+    old_version = 1
+    if "meta" in tables:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        try:
+            old_version = int(row[0]) if row else 1
+        except (TypeError, ValueError):
+            old_version = 1
+    pre_40 = tracking.is_pre_40(tables, old_version)
     conn.executescript(SCHEMA)
+    tracking.ensure_tables(conn)
     if "sprint_status" not in _columns(conn, "results"):
         conn.execute("ALTER TABLE results ADD COLUMN sprint_status TEXT NOT NULL DEFAULT 'Not Run'")
         conn.execute(
@@ -707,6 +772,17 @@ def migrate(conn):
             conn.execute(f"ALTER TABLE events ADD COLUMN {col} {ddl}")
     if "position" not in _columns(conn, "team_goals"):
         conn.execute("ALTER TABLE team_goals ADD COLUMN position INTEGER")   # engine 3 finishing goals
+    pace_cols = _columns(conn, "pace_inputs")
+    for col in ("race_time", "bench_race_time"):
+        if col not in pace_cols:
+            # v24 (4.0): the two race times as typed; the gap is worked out from them
+            conn.execute(f"ALTER TABLE pace_inputs ADD COLUMN {col} REAL")
+    if "session" not in _columns(conn, "incidents"):
+        # v25 (4.0): which session an incident happened in; older reports belong to the weekend as a whole
+        conn.execute("ALTER TABLE incidents ADD COLUMN session TEXT NOT NULL DEFAULT 'weekend'")
+    if old_incidents:
+        from . import community
+        community.regroup_incident_news(conn)
     if "career_status" not in _columns(conn, "drivers"):
         conn.execute("ALTER TABLE drivers ADD COLUMN career_status TEXT")
     if "team_orders" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}:
@@ -720,6 +796,9 @@ def migrate(conn):
         conn.execute("INSERT INTO meta(key, value) VALUES('join_mode', ?)",
                      ("requests" if opened and opened[0] == "1" else "invite",))
     _press_fix_once(conn)
+    if pre_40:
+        # 4.0: a league last written by 3.x. Record what each season tracked and where new tracking begins (once).
+        tracking.record_upgrade(conn, old_version)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

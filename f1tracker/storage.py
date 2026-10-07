@@ -69,8 +69,31 @@ def career_path(token):
     return careers_dir() / f"{token}{CAREER_EXT}"
 
 
+class LeagueConnection(sqlite3.Connection):
+    """A league's connection, with a store for results worked out from it during one request (memo.py)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.memo = {}
+        self.memo_changes = None
+
+    def forget(self):
+        self.memo.clear()
+        self.memo_changes = None
+
+    def execute(self, sql, *args):
+        # Undoing changes (a preview's ROLLBACK TO) doesn't lower total_changes, so remembered results are dropped.
+        if sql[:12].lstrip().upper().startswith("ROLLBACK"):
+            self.forget()
+        return super().execute(sql, *args)
+
+    def rollback(self):
+        self.forget()
+        return super().rollback()
+
+
 def _connect(path):
-    conn = sqlite3.connect(str(path), timeout=15)
+    conn = sqlite3.connect(str(path), timeout=15, factory=LeagueConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -85,6 +108,9 @@ def open_db(token, create=False):
     if not create:
         _backup_before_upgrade(conn, token)
     migrate(conn)
+    if not create:
+        from . import engine
+        engine.ensure_latest(conn)
     conn.commit()
     return conn
 
@@ -123,6 +149,13 @@ def session(token, create=False):
         conn.rollback()
         raise
     finally:
+        try:
+            if conn.total_changes:   # this process wrote to the league: its kept summary is out of date
+                key = str(career_path(token))
+                _WRITES[key] = _WRITES.get(key, 0) + 1
+                _SUMMARIES.pop(key, None)
+        except Exception:
+            pass
         conn.close()
 
 
@@ -237,8 +270,57 @@ def all_league_files():
     return out
 
 
+# 4.0: every page lists the viewer's leagues, which used to open every league file on the server each time.
+# A league's summary is now kept until its file (or its write-ahead log) changes, so an unchanged league is
+# never re-read; any write to it, from any process, changes the file's timestamp and size and refreshes it.
+# A write through session() also drops the kept summary at once, so two writes inside one timestamp tick
+# (a coarse-clock filesystem) can't leave it stale.
+_SUMMARIES = {}
+_WRITES = {}     # per league: writes made through session() in this process
+
+
+def _file_stamp(path):
+    stamp = []
+    for p in (str(path), str(path) + "-wal"):
+        try:
+            st = os.stat(p)
+            stamp += [st.st_mtime_ns, st.st_size]
+        except OSError:
+            stamp += [None, None]
+    return tuple(stamp) if stamp[0] is not None else None
+
+
+def _copy_summary(info):
+    """A caller may change what it's given; the kept copy stays as read (one level of lists and dicts deep)."""
+    out = {}
+    for k, v in info.items():
+        if isinstance(v, dict):
+            v = {a: dict(b) if isinstance(b, dict) else b for a, b in v.items()}
+        elif isinstance(v, list):
+            v = list(v)
+        out[k] = v
+    return out
+
+
+def _summary_cached(path):
+    stamp = _file_stamp(path)          # taken before reading, so a write during the read is never hidden
+    writes = _WRITES.get(str(path), 0)
+    hit = _SUMMARIES.get(str(path))
+    if stamp is not None and hit and hit[0] == stamp:
+        return _copy_summary(hit[1])
+    info = _summary(path)
+    if info is None or stamp is None or _WRITES.get(str(path), 0) != writes:
+        _SUMMARIES.pop(str(path), None)    # missing, or written to while being read: don't keep it
+        return info
+    _SUMMARIES[str(path)] = (stamp, info)
+    return _copy_summary(info)
+
+
 def list_careers():
-    items = [s for s in (_summary(p) for p in careers_dir().glob(f"*{CAREER_EXT}")) if s]
+    paths = list(careers_dir().glob(f"*{CAREER_EXT}"))
+    for gone in set(_SUMMARIES) - {str(p) for p in paths}:   # deleted or expired leagues
+        _SUMMARIES.pop(gone, None)
+    items = [s for s in (_summary_cached(p) for p in paths) if s]
     items.sort(key=lambda c: c["last_opened"] or "", reverse=True)
     return items
 

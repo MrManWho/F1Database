@@ -159,7 +159,7 @@ def test_completed_round_actions_by_role(app, master_client):
     kim = _client(app, "kim")
     ev = _events(token)[0]
     open_page = kim.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
-    assert "Review &amp; complete weekend" in open_page
+    assert "Submit weekend" in open_page      # 4.0: in the workspace's Review & submit stage
     assert _post(kim, token, ev["id"], _full(token, ev["id"], mark_complete=True)).get_json()["complete"]
     rm = master_client.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert "✓ Weekend complete" in rm and "Save corrections" in rm and "Mark weekend complete" not in rm
@@ -583,7 +583,8 @@ def test_page_keeps_working_if_ocr_cannot_load(app, master_client, live_server, 
         page.wait_for_selector("#imp-step-failed:not([hidden])", timeout=30000)
         assert "enter the results in the table as usual" in page.locator("#imp-fail-msg").inner_text()
         page.locator("#imp-step-failed [data-imp-cancel]").click()
-        # Manual entry still works and saves.
+        # Manual entry still works and saves (4.0: the Race session's columns are shown from its session card).
+        page.click('.session-cards [data-session="r"]')
         box = page.locator('input[data-field="race_position"]').first
         box.fill("1"); page.wait_for_timeout(1800)
         assert "Saved" in page.locator("#save-state").inner_text()

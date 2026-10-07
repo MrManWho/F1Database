@@ -13,8 +13,8 @@ import time
 from functools import wraps
 from pathlib import Path
 
-from flask import (Flask, abort, flash, g, jsonify, make_response, redirect, render_template, request, send_file,
-                   session, url_for)
+from flask import (Flask, abort, current_app, flash, g, jsonify, make_response, redirect, render_template, request,
+                   send_file, session, url_for)
 
 import random
 
@@ -22,8 +22,10 @@ from . import (auth, community, discord, feed, insights, mailer, market, push, r
                services as S, storage, teamlife, timefmt)
 from . import (battle, circuits, delivery, demo, gates, league_profile, library, moderation, notices, onboarding,
                ratelimit, seats, security, teamgoals)
-from . import ai3, announcements, calc3, engine, impacts, maintenance, migration, offsite, outbox, stats, ultimatums
+from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
+               ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
+from . import navigation, tracking, workspace
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -63,12 +65,12 @@ AUDIT_LABELS = {
     "pledge_save": "Chose a growth pledge", "press_answer": "Answered the press", "race_time": "Set a race time", "profile_save": "Edited a driver profile",
     "profile_avatar": "Changed a driver photo", "comment_delete": "Deleted a comment",
     "target_ack": "Chose a weekend target", "gate_bypass": "Opened a round early", "paddock_open": "Opened the paddock", "weekend_reset": "Reset a round", "recalculate_page": "Recalculated everything",
-    "members_no_account": "Changed a driver's login requirement", "race_start": "Started the race",
+    "members_no_account": "Changed a driver's login requirement", "members_link": "Linked a login to a player driver", "race_start": "Started the race",
     "prerace_answer": "Answered pre-race press", "gate_remind": "Sent a round reminder",
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"view_mode", "league_notice_seen", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"readiness_page", "view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -100,6 +102,8 @@ def create_app(config=None):
 
     register_hooks(app)
     register_routes(app)
+    _version_static_files(app)
+    ops.install_error_log()     # 4.0: errors the site logs are kept for the site owner (Account -> Site errors)
     # v3.1.2: the one-time 2.1.3 login reset ran long ago and was removed, so no start-up can ever erase logins.
     if not app.config.get("TESTING"):
         try:   # v3.1.2: send anything a restart interrupted (emails, Discord posts, phone alerts)
@@ -122,7 +126,10 @@ JOIN_LIMIT = 5        # join requests an account can send per hour (across leagu
 
 def sign_in(username):
     """Start a signed-in session (registered, so it can be listed and ended from Account)."""
+    failed = session.get("_form_failed")      # a form that wasn't saved because the person was signed out
     session.clear()
+    if failed:
+        session["_form_failed"] = failed
     session["user"] = username
     session["sid"] = security.start_session(username, request.headers.get("User-Agent", ""))
 
@@ -131,6 +138,12 @@ def csrf_token():
     if "csrf" not in session:
         session["csrf"] = secrets.token_hex(16)
     return session["csrf"]
+
+
+def _remember_failed_form():
+    """4.0.0-beta.13: tell the next page that the form sent to this address wasn't saved, so the page can put back
+    what was typed (the values stay in the browser; only the form's address is kept here)."""
+    session["_form_failed"] = request.path
 
 
 def register_hooks(app):
@@ -172,16 +185,26 @@ def register_hooks(app):
             flash("That isn't available in the demo. Create a free account to use it.", "info")
             return redirect(url_for("dashboard", token=session.get("demo")) if session.get("demo") else url_for("home"))
         if not g.user and endpoint not in PUBLIC_ENDPOINTS:
-            if request.path.startswith("/api/"):
-                return jsonify(ok=False, error="Please log in again"), 401
+            if request.path.startswith("/api/") or (request.method == "POST" and wants_json()):
+                return jsonify(ok=False, error="You've been signed out. Sign in again; nothing was saved.",
+                               signed_out=True), 401
+            if request.method == "POST":
+                # 4.0.0-beta.13: a form sent after signing out comes back to the page it was sent from (never to a
+                # POST-only address, which can't be opened after signing in), and says that nothing was saved.
+                flash("You were signed out, so that wasn't saved. Sign in and try again.", "error")
+                _remember_failed_form()
+                return redirect(url_for("login", next=navigation.back(navigation.fallback())))
             return redirect(url_for("login", next=request.full_path))
         if request.method == "POST" and app.config.get("CSRF_ENABLED"):
             sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
             if not hmac.compare_digest(sent, session.get("csrf", "")):
-                if request.path.startswith("/api/"):
-                    return jsonify(ok=False, error="Session expired - refresh the page"), 400
-                flash("Your session expired. Please try again.", "error")
-                return redirect(request.referrer or url_for("home"))
+                message = ("This page was open too long or you signed in again somewhere else, so that wasn't saved. "
+                           "Nothing changed; please try again.")
+                if request.path.startswith("/api/") or wants_json():
+                    return jsonify(ok=False, error=message, expired=True), 400
+                flash(message, "error")
+                _remember_failed_form()
+                return redirect(navigation.back(navigation.fallback()))
         return None
 
     @app.after_request
@@ -205,6 +228,20 @@ def register_hooks(app):
             if request.path.endswith(".gz"):
                 response.headers.pop("Content-Encoding", None)
                 response.headers["Content-Type"] = "application/gzip"
+        return response
+
+    @app.before_request
+    def request_clock():
+        g.started = time.monotonic()
+
+    @app.after_request
+    def request_log(response):
+        """4.0: one structured line per request (method, endpoint, status, time). No paths, names or form values."""
+        if not app.config.get("TESTING") and request.endpoint != "static":
+            logging.getLogger("f1tracker.requests").info(
+                "request", extra={"method": request.method, "endpoint": request.endpoint or "-",
+                                  "status": response.status_code,
+                                  "ms": round((time.monotonic() - g.get("started", time.monotonic())) * 1000)})
         return response
 
     @app.after_request
@@ -262,9 +299,14 @@ def register_hooks(app):
                 app.logger.exception("maintenance state unavailable")
         return {"csrf_token": csrf_token, "user": g.get("user"), "APP_VERSION": C.APP_VERSION,
                 "APP_NAME": C.APP_NAME, "C": C, "push_key": key, "whats_new": _whats_new(),
+                "test_site": testsite.on(), "environment": ops.environment(),
+                "environment_label": ops.environment_label(),
                 "maintenance_owner": owner_view,
                 "site_closed": request.endpoint in ("login", "login_code") and maintenance.active(),
-                "maintenance_open_page": request.endpoint in maintenance.OPEN_ENDPOINTS}
+                "maintenance_open_page": request.endpoint in maintenance.OPEN_ENDPOINTS,
+                # 4.0.0-beta.13: the address of a form that just failed, so the page can put back what was typed
+                "form_failed": session.pop("_form_failed", None)
+                if request.method == "GET" and request.endpoint not in ("login", "login_code") else None}
 
     def _whats_new():
         """This version's highlights, once per account, on ordinary page views only."""
@@ -283,16 +325,58 @@ def register_hooks(app):
         return entry
 
     @app.errorhandler(403)
-    def forbidden(_e):
-        return render_template("error.html", code=403, message="That page belongs to the Race Master."), 403
+    def forbidden(e):
+        """4.0.0-beta.13: say why something isn't allowed, and for a form, go back to where it was sent from with
+        that reason instead of leaving the page (nothing was saved: the league's changes are rolled back)."""
+        from werkzeug.exceptions import Forbidden
+        token = (request.view_args or {}).get("token")
+        message = e.description if e.description and e.description != Forbidden.description else _forbidden_text()
+        back = navigation.back(None, token)
+        if request.method == "POST" and g.get("user"):
+            message = message.rstrip(".") + ". Nothing was changed."
+            if wants_json():
+                return jsonify(ok=False, error=message, forbidden=True), 403
+            return render_template("error.html", code=403, heading="That wasn't saved", message=message,
+                                   back=back), 403
+        return render_template("error.html", code=403, message=message,
+                               back=back if back and back.split("#")[0] != request.full_path.rstrip("?") else None), 403
 
     @app.errorhandler(404)
     def not_found(_e):
         return render_template("error.html", code=404, message="That league or page could not be found."), 404
 
+    @app.errorhandler(500)
+    def server_error(_e):
+        return render_template("error.html", code=500, message="Something went wrong on our side. It has been "
+                               "recorded for the site owner; please try again."), 500
+
     @app.errorhandler(413)
     def too_large(_e):
         return render_template("error.html", code=413, message="Uploads are limited to 100 MB."), 413
+
+
+def _forbidden_text():
+    """Why this account can't do that here, in the person's terms (never more than their own role)."""
+    ctx = g.get("ctx") or {}
+    role = g.get("league_role")
+    if g.get("user") is None:
+        return "Please sign in first."
+    if ctx.get("mode_lowered"):
+        return (f"You're viewing this league as {ctx.get('mode_label')}. Switch the view back to "
+                f"{VIEW_MODES.get((ctx.get('modes') or [('', '')])[0][0], 'your own role')} to do that")
+    if (request.view_args or {}).get("token") and not role:
+        return "You aren't a member of this league"
+    if role == "spectator":
+        return "Spectators can follow this league but can't change anything in it"
+    if role in ("member", "scorekeeper") and request.endpoint and \
+            getattr(current_app.view_functions.get(request.endpoint), "access", "") == "master":
+        return "Only the Race Master can do that"
+    if role == "member" and request.endpoint and \
+            getattr(current_app.view_functions.get(request.endpoint), "access", "") == "ops":
+        return "Only a Scorekeeper or the Race Master can do that"
+    if role and not ctx.get("my_driver") and (request.view_args or {}).get("token"):
+        return "That's for a league member who drives in it, and your account has no driver here"
+    return "Your account isn't allowed to do that here"
 
 
 def _discord_news(items):
@@ -307,6 +391,30 @@ def _discord_news(items):
                 discord.send_later(cfg["url"], messages)
         except Exception:
             pass
+
+
+def _version_static_files(app):
+    """4.0.0-beta.13: every stylesheet, script and icon address carries a fingerprint of the file (?v=<mtime>), so
+    browsers can keep it for a year instead of asking again on every page; a changed file gets a new address."""
+    stamps = {}
+
+    @app.url_defaults
+    def static_fingerprint(endpoint, values):
+        if endpoint == "static" and "filename" in values and "v" not in values:
+            name = values["filename"]
+            if name not in stamps or app.config.get("STATIC_FINGERPRINT_FRESH"):   # dev.py: edits show at once
+                path = os.path.join(app.static_folder, name)
+                # a folder address (the screenshot reader's vendor/tesseract/) gets file names appended in the
+                # browser, so it must stay bare: "?v=" there broke every OCR file address
+                stamps[name] = (format(int(os.stat(path).st_mtime), "x") if os.path.isfile(path) else None)
+            if stamps[name]:
+                values["v"] = stamps[name]
+
+    @app.after_request
+    def cache_fingerprinted(response):
+        if request.path.startswith("/static/") and request.args.get("v") and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 def wants_json():
@@ -381,7 +489,19 @@ def master_required(fn):
         if not (g.user and g.user["is_master"]):
             if "token" not in kwargs or _load_league_role(kwargs["token"]) != "race_master":
                 abort(403)
-        return fn(*args, **kwargs)
+        result = fn(*args, **kwargs)
+        if request.method == "POST" and ("token" not in kwargs or request.endpoint == "delete"):
+            # 4.0: the site change record (append-only). The target is a username or league ID, never a value.
+            target = request.form.get("username") or request.form.get("league_id") or \
+                ", ".join(f"{k} {v}" for k, v in kwargs.items()) or None
+            status = getattr(result, "status_code", 200)
+            flashed = [c for c, _m in session.get("_flashes", [])]
+            outcome = "refused" if status >= 400 or "error" in flashed else "done"
+            try:
+                audit_trail.record_site(g.user["username"], request.endpoint, target, outcome)
+            except Exception:
+                logging.getLogger(__name__).exception("site change record failed")
+        return result
     wrapper.access = "master"
     return wrapper
 
@@ -404,8 +524,11 @@ def _selected_season(conn, token):
     return sid
 
 
-def career_page(master_only=False, ops_only=False):
-    """Open the career, enforce access, and turn ValidationErrors into flashed messages."""
+def career_page(master_only=False, ops_only=False, read_only=False):
+    """Open the career, enforce access, and turn ValidationErrors into flashed messages. read_only (4.0, the League
+    Readiness Check): skip everything opening a page normally does to the league (closing settled transfer windows,
+    publishing due announcements, opening a due paddock, refreshing kept numbers, "last seen" times, the change
+    record), so viewing it changes nothing."""
     def deco(fn):
         @wraps(fn)
         def wrapper(token, *args, **kwargs):
@@ -415,6 +538,11 @@ def career_page(master_only=False, ops_only=False):
                 logging.getLogger(__name__).exception("automatic backup failed")
             try:
                 with storage.session(token) as conn:
+                    if request.method == "POST":
+                        # 4.0.0-beta.13: one change at a time per league. Taking the write lock before anything is
+                        # read means a double press, a retry or two people acting at once can't both pass a
+                        # "not done yet" check and save twice: the second waits, then sees the first.
+                        conn.execute("BEGIN IMMEDIATE")
                     g.league_role = roles.effective_role(conn, g.user)
                     if not g.league_role:
                         abort(403)
@@ -425,9 +553,10 @@ def career_page(master_only=False, ops_only=False):
                     if g.league_role == "spectator" and request.method == "POST" \
                             and request.endpoint not in SPECTATOR_POST_OK:
                         abort(403)  # spectators are strictly read-only, whatever endpoint is called
-                    roles.touch(conn, g.user["username"])
-                    # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
-                    market.close_settled_windows(conn)
+                    if not read_only:
+                        roles.touch(conn, g.user["username"])
+                        # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
+                        market.close_settled_windows(conn)
                     season_id = _selected_season(conn, token)
                     g.tz = storage.get_meta(conn, "timezone") or timefmt.DEFAULT_TZ
                     g.race_window = int(storage.get_meta(conn, "race_window") or timefmt.DEFAULT_RACE_WINDOW)
@@ -462,7 +591,7 @@ def career_page(master_only=False, ops_only=False):
                         conn, g.user["username"], mine["id"] if mine else None, master_view and not mine)
                     g.ctx["team_life"] = teamlife.settings(conn)
                     g.ctx["team_goals_on"] = teamgoals.enabled(conn)
-                    if not request.path.startswith("/api/"):
+                    if not request.path.startswith("/api/") and not read_only:
                         announcements.publish_due(conn)
                         raceweek.tick(conn, g.ctx["current_season_id"])   # v2.3: the paddock opens an hour before
                     g.ctx["race_weekends"] = raceweek.enabled(conn)
@@ -474,28 +603,37 @@ def career_page(master_only=False, ops_only=False):
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
-                        if mine and not request.path.startswith("/api/") else None
-                    storage.touch_opened(conn)
-                    impacts.on_open(conn, is_api=request.path.startswith("/api/"))
+                        if mine and not request.path.startswith("/api/") and not read_only else None
+                    if not read_only:
+                        storage.touch_opened(conn)
+                        impacts.on_open(conn, is_api=request.path.startswith("/api/"), refresh_stale=False)
                     g.ctx["league_notice"] = impacts.announcement_for(conn, g.user["username"]) \
                         if not request.path.startswith("/api/") else None
                     g.ctx["calc_reminder"] = migration.reminder(conn) \
                         if g.ctx["is_master"] and engine.choice(conn) == "later" \
                         and not session.get(f"calc_reminder_hidden_{token}") else None
                     g.ctx["calc_engine"] = engine.season_engine(conn, g.ctx["current_season_id"])
+                    _legacy_context(conn, g.ctx, token)
                     gate = _mandatory_gate(conn, g.ctx, master_only)
                     if gate is not None:
                         return gate
                     described = _describe_targets(conn, kwargs) if request.method == "POST" else ("", None)
+                    started = audit_trail.begin(conn, request.endpoint, kwargs) \
+                        if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not read_only else None
                     result = fn(conn, g.ctx, *args, **kwargs)
-                    if request.method == "POST":
+                    if request.method == "GET" and not request.path.startswith("/api/") and not read_only:
+                        impacts.refresh_if_stale(conn)   # after the page: reuses what the page worked out
+                    if request.method == "POST" and not read_only:
                         impacts.mark_stale(conn)   # numbers may have moved: take a fresh copy on the next page
-                    if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS:
+                    if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not g.get("repeat") \
+                            and not read_only:
                         label = AUDIT_LABELS.get(request.endpoint, request.endpoint.replace("_", " ").capitalize())
                         what, link = described
                         summary = g.get("audit_summary") or (label[:1].lower() + label[1:] + (": " + what if what else ""))
                         community.audit(conn, g.user["username"], label, what, summary=summary,
                                         link=g.get("audit_link") or link)
+                        audit_trail.record(conn, g.user["username"], request.endpoint, label, what,
+                                           g.get("audit_link") or link, started, kwargs)   # 4.0 change record
                     return result
             except CareerNotFound:
                 abort(404)
@@ -503,9 +641,21 @@ def career_page(master_only=False, ops_only=False):
                 feed.take_outbox()  # nothing was saved, so nothing to alert about
                 discord.take()
                 if request.method != "POST":
-                    raise
+                    # 4.0.0-beta.13: a page that can't be shown says why on the page the person came from (or the
+                    # league's Home), instead of an error page; never back to itself, which would loop.
+                    if request.endpoint == "dashboard":
+                        raise
+                    came = navigation.safe(request.referrer, token)
+                    flash(str(exc), "error")
+                    if came and came.split("#")[0] != request.full_path.rstrip("?"):
+                        return redirect(came)
+                    return redirect(url_for("dashboard", token=token))
+                if wants_json():
+                    return jsonify(ok=False, error=str(exc)), 400
+                # A form that didn't save goes back to where it was sent from, with the reason and what was typed.
                 flash(str(exc), "error")
-                return redirect(request.referrer or url_for("dashboard", token=token))
+                _remember_failed_form()
+                return redirect(navigation.back(navigation.fallback(token), token))
         # Declared access level, checked by the permission audit test: "master", "ops" (results) or "member".
         wrapper.access = "master" if master_only else "ops" if ops_only else "member"
         return wrapper
@@ -576,11 +726,11 @@ HELP_TOPICS = [("weekend", "The race weekend"), ("roles", "Roles and permissions
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
 SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
-                     "league_pin", "league_order", "league_leave"}
+                     "league_pin", "league_order", "league_leave", "upgrade_notice_ack", "upgrade_notice_hide"}
 
 
 IMPACT_EXEMPT = {"impact_page", "league_notice_seen", "api_notifications", "notifications_read", "notifications_clear", "help_page",
-                 "timezone_detect", "view_mode", "whats_new_ack"}
+                 "timezone_detect", "view_mode", "whats_new_ack", "upgrade_notice_ack", "upgrade_notice_hide"}
 
 
 # v2.4: League settings is a hub with one page per area. key: (title, what it covers)
@@ -625,6 +775,48 @@ def _mandatory_steps(conn, ctx, master_only=False):
     return steps
 
 
+# 4.0: pages that show a season's history, where the legacy-season banner explains (once) what that season tracked.
+LEGACY_BANNER_PAGES = {"dashboard", "standings_page", "stats_page", "results_index", "seasons_page", "weekend",
+                       "race_summary", "my_career", "driver_profile", "team_profile", "team_standing", "season_review"}
+LEGACY_ROUND_PAGES = {"weekend", "race_summary"}
+# The season under way after a mid-season upgrade shows the banner only where the earlier rounds are the subject.
+LEGACY_MIXED_PAGES = {"stats_page", "results_index", "seasons_page", "season_review"}
+
+
+def _legacy_context(conn, ctx, token):
+    """4.0: the legacy-season banner for this page, and this person's one-time upgrade notice (shown only once
+    nothing mandatory is waiting and no other pop-up is open, so notices never stack)."""
+    ctx["legacy"], ctx["upgrade_notice"] = None, None
+    if request.path.startswith("/api/") or request.method != "GET":
+        return
+    season = ctx["season"]
+    event = None
+    if request.endpoint == "season_review":
+        season = S.get_season(conn, (request.view_args or {}).get("season_id")) or season
+    elif request.endpoint in LEGACY_ROUND_PAGES:
+        # a round page belongs to the round's own season, whichever season is selected in the menu
+        event = S.get_event(conn, (request.view_args or {}).get("event_id"))
+        if event:
+            season = S.get_season(conn, event["season_id"]) or season
+    summary = tracking.season_summary(conn, season)
+    if summary and request.endpoint in LEGACY_BANNER_PAGES:
+        if season["id"] != ctx["current_season_id"] or request.endpoint in LEGACY_MIXED_PAGES:
+            ctx["legacy"] = summary
+        elif request.endpoint in LEGACY_ROUND_PAGES:
+            if event and any(f["from_round"] is None or event["round_number"] < f["from_round"]
+                             for f in summary["features"]):
+                ctx["legacy"] = summary
+    if request.endpoint in MANDATORY_ENDPOINTS or request.endpoint in IMPACT_EXEMPT or ctx.get("is_demo"):
+        return
+    notice = tracking.notice_for(conn, g.user["username"], site_owner=bool(g.user.get("is_master")))
+    if not notice or session.get(f"upgrade_hidden_{token}_{notice['migration']['id']}"):
+        return
+    if _mandatory_steps(conn, ctx):
+        return          # changes to agree to (and other required steps) come first; the notice follows after them
+    ctx["upgrade_notice"] = notice
+    ctx["league_notice"] = None       # the one-off league banner waits for the next page, so the two never stack
+
+
 def _mandatory_gate(conn, ctx, master_only=False):
     """One resolver for every "do this first" step, so they can never send people back and forth: the pages and
     actions of every open step are always reachable, and anything else goes to the first open step."""
@@ -638,9 +830,21 @@ def _mandatory_gate(conn, ctx, master_only=False):
         if endpoint == "pledge_page":
             return jsonify(ok=False, error="Choose your growth pledge first"), 409
         return None
+    # 4.0.0-beta.13: remember where they were going, so finishing the step brings them back there (not to Home)
+    resume = navigation.safe(request.full_path.rstrip("?"), ctx["token"]) if request.method == "GET" \
+        else navigation.back(None, ctx["token"])
+    if resume:
+        session[f"resume_{ctx['token']}"] = resume
     if request.method == "POST":
-        flash(message + " Nothing else was saved.", "error")
+        flash(message + " What you just sent wasn't saved; it's waiting for you to try again afterwards.", "error")
+        _remember_failed_form()
     return redirect(url_for(endpoint, token=ctx["token"]))
+
+
+def _resume(ctx, default):
+    """Where to go after finishing a "do this first" step: the page they were on their way to, else default."""
+    target = session.pop(f"resume_{ctx['token']}", None)
+    return navigation.safe(target, ctx["token"]) or default
 
 
 def _settings_changes(conn, before):
@@ -1021,13 +1225,86 @@ def register_routes(app):
                 flash("That league was already gone.", "error")
         return redirect(url_for("accounts_page") + "#leagues")
 
+    @app.route("/settings/import-site-backup", methods=["POST"])
+    @master_required
+    def import_site_backup():
+        """Test site only: load an encrypted site backup from the live site (replaces this site's data)."""
+        if not testsite.on():
+            abort(404)
+        upload = request.files.get("file")
+        if not upload or request.form.get("confirm") != "REPLACE":
+            flash("Choose the .plbk file and type REPLACE to confirm. Nothing was changed.", "error")
+            return redirect(url_for("accounts_page") + "#test-import")
+        try:
+            n = testsite.import_backup(upload.read(), request.form.get("passphrase") or "")
+        except offsite.BackupError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("accounts_page") + "#test-import")
+        session.clear()
+        flash(f"Loaded {n} league{'s' if n != 1 else ''} and every login from the backup. Sign in with your live "
+              "site username and password.", "success")
+        return redirect(url_for("login"))
+
+    @app.route("/settings/test-final-round", methods=["POST"])
+    @master_required
+    def seed_final_round_league():
+        """Test site only: a fictional league with only its last round left, to try the finale and the rollover."""
+        if not testsite.on():
+            abort(404)
+        token = testsite.seed_final_round(g.user["username"])
+        flash("Added a fictional league with 23 of 24 rounds played. You drive Player One. Enter the last round, "
+              "then start the new season from Seasons.", "success")
+        return redirect(url_for("dashboard", token=token))
+
+    @app.route("/healthz")
+    def healthz():
+        """4.0: for the host's health check and uptime monitors. No private information."""
+        ok, details = ops.health()
+        return jsonify(details), (200 if ok else 503)
+
+    @app.route("/settings/errors", methods=["GET", "POST"])
+    @master_required
+    def site_errors():
+        """4.0: what went wrong on the site recently (kind, place, scrubbed message, how often)."""
+        if request.method == "POST":
+            ops.clear_errors()
+            flash("The error list was cleared.", "success")
+            return redirect(url_for("site_errors"))
+        return render_template("site_errors.html", errors=ops.errors())
+
+    @app.route("/settings/delivery-preview", methods=["GET", "POST"])
+    @master_required
+    def delivery_preview():
+        """4.0 test site: every email, Discord post and phone alert the site would have sent."""
+        if not testsite.on():
+            abort(404)
+        if request.method == "POST":
+            ops.clear_previews()
+            flash("The delivery previews were cleared.", "success")
+            return redirect(url_for("delivery_preview"))
+        return render_template("delivery_preview.html", previews=ops.previews())
+
+    @app.route("/settings/change-record")
+    @master_required
+    def site_audit_page():
+        """4.0: every change the site owner made to the site (append-only)."""
+        names = {u["username"]: u["display_name"] for u in auth.list_users()}
+        return render_template("site_audit.html", events=audit_trail.site_events(), names=names)
+
+    @app.route("/settings/engine-scan")
+    @master_required
+    def engine_scan():
+        """4.0 Phase 0: which leagues and seasons still use Calculation Version 2 (read-only)."""
+        from . import phase0
+        return render_template("engine_scan.html", scan=phase0.scan())
+
     @app.route("/settings/offsite-snooze", methods=["POST"])
     @master_required
     def offsite_snooze():
         """v3.1.2: hide the Control Room backup reminder for a week."""
         offsite.snooze(7)
         flash("OK, we'll remind you again in a week.", "success")
-        return redirect(request.referrer or url_for("home"))
+        return redirect(navigation.back(url_for("home")))
 
     @app.route("/settings/offsite-backup", methods=["POST"])
     @master_required
@@ -1395,7 +1672,10 @@ def register_routes(app):
                 if drives:
                     if len(driver_name) < 2:
                         raise ValidationError("Choose a driver name")
-                    if conn.execute("SELECT 1 FROM drivers WHERE lower(name) = lower(?)", (driver_name,)).fetchone():
+                    taken = conn.execute("SELECT id, is_player FROM drivers WHERE lower(name) = lower(?)",
+                                         (driver_name,)).fetchone()
+                    if taken and not (taken["is_player"] and _free_player(conn, taken["id"])):
+                        # 4.0.0-beta.10: asking for a player driver nobody drives yet claims it; anything else is taken
                         raise ValidationError("There's already a driver with that name in this league")
                 if not ratelimit.allow("join-request", me, JOIN_LIMIT, 3600):
                     raise ValidationError("You've sent a lot of join requests. Try again in an hour.")
@@ -1486,7 +1766,8 @@ def register_routes(app):
         if not onboarding.may_create(g.user):
             flash("On this site only administrators can create leagues. Ask one, or join an existing league.", "info")
             return redirect(url_for("home"))
-        return render_template("new_league.html", presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
+        draft = session.pop("league_draft", None)       # what was typed before a failed attempt, if any
+        return render_template("new_league.html", draft=draft, presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
                                join_modes=storage.JOIN_MODES, visibility=league_profile.VISIBILITY,
                                default_year=2026, features=C.FEATURES, order_modes=C.TEAM_ORDER_MODES,
                                calendar=C.CALENDAR, teams=C.TEAMS)
@@ -1594,6 +1875,14 @@ def register_routes(app):
             except CareerNotFound:
                 pass
             flash(str(exc), "error")
+            if wizard:
+                # 4.0: keep what was typed so the setup page can put it back (never the CSRF token or passwords)
+                draft = {k: [v[:200] for v in request.form.getlist(k)][:40] for k in request.form
+                         if k not in ("csrf_token",) and "password" not in k}
+                msg = str(exc).lower()
+                session["league_draft"] = {"fields": draft,
+                                           "step": 1 if any(w in msg for w in ("login", "driver", "drive", "invite",
+                                                                              "username", "player")) else 0}
             return redirect(url_for("league_new_page") if wizard else url_for("home"))
         if invites_to_mail and request.form.get("send_invites"):
             for username, what in invites_to_mail:
@@ -1671,7 +1960,10 @@ def register_routes(app):
         before = (ctx["season"]["year"], nxt["round_number"]) if nxt else None
         gate = gates.status(conn, nxt["id"]) if nxt and sid == ctx["current_season_id"] else None
         my_target = _my_target(conn, ctx, nxt)
-        return page("dashboard.html", ctx, events=evs, next_event=nxt,
+        phase = raceweek.phase(nxt) if nxt else None
+        return page("dashboard.html", ctx, events=evs, next_event=nxt, phase=phase,
+                    rc=insights.race_control(conn, ctx, sid, nxt, gate),
+                    waiting=_waiting_for(conn, ctx, nxt, gate, phase) if sid == ctx["current_season_id"] else [],
                     completed=sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE),
                     drivers=insights.standings_with_changes(conn, sid, 8),
                     progress=insights.season_progress(conn, sid),
@@ -1693,6 +1985,25 @@ def register_routes(app):
                                                    manager=ctx.get("real", ctx)["is_master"]),
                     can_finish=bool(evs) and all(e["status"] == C.EVENT_COMPLETE for e in evs))
 
+    def _waiting_for(conn, ctx, nxt, gate, phase):
+        """4.0 Home: what the league is waiting on. The viewer's own driver tasks are under Your tasks instead."""
+        if not nxt:
+            return []
+        out = []
+        label = f"R{nxt['round_number']} {nxt['name']}"
+        me = ctx["my_driver"]["name"] if ctx["my_driver"] else None
+        if gate and gate.get("blocking"):
+            others = [p["driver"]["name"] for p in gate["players"] if not p["done"] and p["driver"]["name"] != me]
+            if others:
+                out.append(f"{label} can't start until {', '.join(others)} {'is' if len(others) == 1 else 'are'} ready.")
+        if phase == "live" and ctx["can_run"]:   # the same thing the round page's "Waiting on" says
+            out.append(f"{label} is waiting for its results: a Scorekeeper or Race Master enters them.")
+        elif phase == "live":
+            out.append(f"The results of {label} are being entered. You'll see them once the weekend is submitted.")
+        elif phase == "upcoming" and raceweek.enabled(conn) and not ctx["can_run"] and not (gate and gate.get("blocking")):
+            out.append(f"The paddock for {label} hasn't opened yet.")
+        return out
+
     @app.route("/career/<token>/weekend/<int:event_id>")
     @career_page()
     def weekend(conn, ctx, event_id):
@@ -1705,22 +2016,38 @@ def register_routes(app):
             session[f"season_{ctx['token']}"] = season["id"]
         evs = S.events(conn, season["id"])
         idx = next(i for i, e in enumerate(evs) if e["id"] == event_id)
-        return page("weekend.html", ctx, event=event, rows=S.weekend_rows(conn, event_id),
+        rows = S.weekend_rows(conn, event_id)
+        wk = _weekend_panel(conn, ctx, event)
+        gate = gates.status(conn, event_id)
+        my_target = _my_target(conn, ctx, event)
+        hub = _hub(conn, ctx, event, full=True)
+        ws = workspace.build(conn, ctx, event, rows, wk, gate, my_target, hub,
+                             requested=request.args.get("stage"), requested_session=request.args.get("session"))
+        chosen = {t["driver_id"]: t for t in teamlife.targets_for_event(conn, event_id)} if ctx["team_life"]["targets"] else {}
+        weekend_drivers = [{"driver": r["driver"], "team": r["team"], "target": chosen.get(r["driver_id"])}
+                           for r in rows if r["driver"]["is_player"]]
+        nxt = evs[idx + 1] if idx + 1 < len(evs) else None
+        # 4.0 Debrief: whether the league can go on to the next round (read only: nothing is issued from here)
+        next_gate = (gates.status(conn, nxt["id"], issue=False)
+                     if nxt and event["status"] == C.EVENT_COMPLETE and nxt["status"] == C.EVENT_NOT_RUN
+                     and not nxt.get("lights_at") else None)
+        return page("weekend.html", ctx, event=event, rows=rows, ws=ws, weekend_drivers=weekend_drivers,
+                    debrief=workspace.debrief(conn, ctx, event), circuit=circuits.lookup(event["name"], event["location"]),
                     prev_event=evs[idx - 1] if idx > 0 else None,
                     next_event=evs[idx + 1] if idx + 1 < len(evs) else None, index=idx + 1, total=len(evs),
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
-                    entrants=_entrants(conn, event_id),
+                    entrants=_entrants(conn, event_id, rows),
                     gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
                     sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
                     distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
                     status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
-                    pace=_pace_panel(conn, ctx, event), hub=_hub(conn, ctx, event, full=True),
+                    pace=_pace_panel(conn, ctx, event, rows), hub=hub,
                     wx=_weather_panel(conn, ctx, event),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
-                    gate=gates.status(conn, event_id), reminded=gates.reminded(conn, event_id),
-                    wk=_weekend_panel(conn, ctx, event), my_target=_my_target(conn, ctx, event),
+                    gate=gate, reminded=gates.reminded(conn, event_id),
+                    wk=wk, my_target=my_target, next_gate=next_gate,
                     can_reset=ctx["is_master"] and not raceweek.reset_blocker(conn, event))
 
     def _sprint_min(conn):
@@ -1735,21 +2062,25 @@ def register_routes(app):
         return {"recorded": recorded, "shown": weather.describe(recorded, event), "sessions": weather.sessions_for(event),
                 "session_labels": weather.SESSIONS, "conditions": weather.CONDITIONS,
                 "can_edit": ctx["can_run"] or ctx["is_master"],
+                "empty": tracking.empty_text(conn, event, "weather"),
                 "wet": any(weather.is_wet(k) for k in recorded.values())}
 
-    def _pace_panel(conn, ctx, event):
+    def _pace_panel(conn, ctx, event, all_rows=None):
         """v2.5: the optional lap-time evidence for each player driver on an engine 3 round."""
         if not engine.round_v3(conn, event):
             return None
-        rows = [r for r in S.weekend_rows(conn, event["id"]) if r["driver"]["is_player"]]
+        all_rows = all_rows if all_rows is not None else S.weekend_rows(conn, event["id"])
+        rows = [r for r in all_rows if r["driver"]["is_player"]]
         sessions = ["gp"] + (["sprint"] if event["is_sprint"] else [])
         out = []
         for r in rows:
             for sess in sessions:
                 out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
         return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
-                "drivers": [r for r in S.weekend_rows(conn, event["id"]) if not r["driver"]["is_player"]],
-                "fmt": ai3.format_time}
+                "drivers": [r for r in all_rows if not r["driver"]["is_player"]],
+                "fmt": ai3.format_time, "legacy": not tracking.round_tracked(conn, event, "race_times"),
+                "required": ai3.pace_required(conn) and tracking.round_tracked(conn, event, "race_times"),
+                "missing": ai3.missing_pace(conn, event, rows) if event["status"] != C.EVENT_COMPLETE else []}
 
     def _my_target(conn, ctx, event):
         """v2.4: this driver's target at a round: what they chose, or the three to choose from."""
@@ -1773,13 +2104,15 @@ def register_routes(app):
         me = ctx["my_driver"]
         if me and wk["phase"] in ("paddock", "live", "complete") and S.driver_seats(conn, event["season_id"]).get(me["id"]):
             wk["pen"] = teamlife.prerace_pen(conn, event, me["id"])
+            if not workspace._legacy_ok(conn, event, "prerace_press", wk["pen"]):
+                wk.pop("pen")        # pre-race press wasn't part of this round's rules (nothing was answered)
         return wk
 
-    def _entrants(conn, event_id):
+    def _entrants(conn, event_id, rows=None):
         """The drivers in this round, for the screenshot importer to match against (never anyone else)."""
         return [{"id": r["driver_id"], "name": r["driver"]["name"], "team": r["team"]["name"],
                  "is_player": bool(r["driver"]["is_player"]), "color": r["driver"]["player_color"]}
-                for r in S.weekend_rows(conn, event_id)]
+                for r in (rows if rows is not None else S.weekend_rows(conn, event_id))]
 
     def _recs_off(conn, event=None):
         """A league can switch recommendations off; the difficulty used is still recorded each round."""
@@ -1797,14 +2130,21 @@ def register_routes(app):
             rec["for_next"] = True
             if event["ai_difficulty"] is None:
                 rec["this_round"] = "This round was marked \"Don't track\", so it isn't part of the history."
+            shown = ai_track.frozen(conn, event["id"])
+            if shown:    # 4.0: the recommendation made before this round, kept as it was, and the AI actually used
+                used = f"AI {shown['ai_used']} was used" if shown["ai_used"] is not None else "the AI wasn't tracked"
+                rec["this_round"] = (f"Before this round the recommendation was AI {shown['recommended']} (F1Laps "
+                                     f"{shown['baseline']:g} for {shown['circuit']}, league {shown['league_adjustment']:+g}, "
+                                     f"track history {shown['track_history']:+g}; snapshot {shown['dataset_version']}); "
+                                     f"{used}.")
             return rec
         rec = S.difficulty_recommendation(conn, (season["year"], event["round_number"]))
         rec["for_next"] = False
         if event["ai_difficulty"] is not None:
             rec["this_round"] = (f"AI {event['ai_difficulty']} is recorded for this round. It counts toward the "
                                  "recommendation once the round is completed.")
-            if not rec["history_rounds"]:
-                rec["reason"] = rec["this_round"]
+            if not rec.get("history_rounds") and rec.get("engine") != "track":
+                rec["reason"] = rec["this_round"]      # (the track-aware one always has a reason: its baseline)
         return rec
 
     @app.route("/career/<token>/weekend/<int:event_id>/reopen", methods=["POST"])
@@ -1870,6 +2210,36 @@ def register_routes(app):
         if not nxt:
             abort(404)
         return redirect(url_for("weekend", token=ctx["token"], event_id=nxt["id"]))
+
+    # ------------------------------------------------------------------ 4.0 destinations
+    @app.route("/career/<token>/race-weekend")
+    @career_page()
+    def race_weekend(conn, ctx):
+        """Race Weekend: the workspace for the current round (the next one not yet complete, else the last)."""
+        sid = ctx["current_season_id"] or ctx["season"]["id"]
+        nxt = S.next_incomplete_event(conn, sid) or (S.events(conn, sid) or [None])[-1]
+        if not nxt:
+            flash("There are no rounds on the calendar yet.", "info")
+            return redirect(url_for("seasons_page", token=ctx["token"]))
+        args = {k: v for k, v in request.args.items() if k in ("stage", "session")}
+        return redirect(url_for("weekend", token=ctx["token"], event_id=nxt["id"], **args))
+
+    @app.route("/career/<token>/championship")
+    @career_page()
+    def championship(conn, ctx):
+        return redirect(url_for("standings_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/my-career")
+    @career_page()
+    def my_career(conn, ctx):
+        if not ctx["my_driver"]:
+            return redirect(url_for("more_page", token=ctx["token"]))
+        return redirect(url_for("garage", token=ctx["token"]))
+
+    @app.route("/career/<token>/more")
+    @career_page()
+    def more_page(conn, ctx):
+        return page("more.html", ctx)
 
     @app.route("/career/<token>/drivers")
     @career_page()
@@ -1958,7 +2328,10 @@ def register_routes(app):
         from . import weather
         return page("stats.html", ctx, rows=rows, sprint=stats.sprint_table(rows), chart=chart,
                     reliability=stats.teams_reliability(conn, sid), pairs=pairs, years=years, sos=sos,
-                    players_only=players_only, wet_dry=weather.driver_splits(conn, sid, players_only))
+                    players_only=players_only, wet_dry=weather.driver_splits(conn, sid, players_only),
+                    wet_cover=tracking.coverage(conn, sid, "weather", sum(
+                        1 for e_id, w in weather.for_season(conn, sid).items() if w.get("race") and
+                        (S.get_event(conn, e_id) or {}).get("status") == C.EVENT_COMPLETE)))
 
     @app.route("/api/career/<token>/search")
     @career_page()
@@ -2414,6 +2787,8 @@ def register_routes(app):
     @career_page(master_only=True)
     def calc_update_page(conn, ctx):
         """The Race Master's Calculation Update screen: choose, review what happened, roll back."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         sid = ctx["current_season_id"]
         done = [e for e in S.events(conn, sid) if e["status"] == C.EVENT_COMPLETE] if sid else []
         history = migration.migrations(conn)
@@ -2433,6 +2808,8 @@ def register_routes(app):
     @career_page(master_only=True)
     def calc_update_preview(conn, ctx):
         """Option A step 1: write a complete backup, then show exactly what a full recalculation would change."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2444,6 +2821,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/full", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_full(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2464,6 +2843,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/future", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_future(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         if engine.league_engine(conn) >= C.ENGINE_CURRENT:
             flash("This league already uses Calculation Version 3.", "info")
             return redirect(url_for("calc_update_page", token=ctx["token"]))
@@ -2480,6 +2861,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/later", methods=["POST"])
     @career_page(master_only=True)
     def calc_update_later(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         migration.decide_later(conn, g.user["username"])
         g.audit_summary = "chose to decide on the Calculation Update later (the league stays on Version 2)"
         flash("The league stays on Calculation Version 2 for now. You'll see a reminder until you choose.", "info")
@@ -2488,6 +2871,8 @@ def register_routes(app):
     @app.route("/career/<token>/calculation-update/reminder", methods=["POST"])
     @career_page(master_only=True)
     def calc_reminder_hide(conn, ctx):
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=ctx['token']))
         session[f"calc_reminder_hidden_{ctx['token']}"] = True
         return _back(ctx, "")
 
@@ -2496,6 +2881,8 @@ def register_routes(app):
     def calc_update_rollback(token, migration_id):
         """Put the league back exactly as it was before a Calculation Update, from that update's own backup. The state
         just before rolling back is saved too (storage.restore), so even the rollback can be undone."""
+        if engine.AUTO_LATEST:   # 4.0: always the latest calculations; nothing to choose or go back to
+            return redirect(url_for("dashboard", token=token))
         if request.form.get("confirm") != "1":
             flash("Tick the box to confirm the rollback.", "error")
             return redirect(url_for("calc_update_page", token=token))
@@ -2529,7 +2916,7 @@ def register_routes(app):
             impacts.acknowledge(conn, mine["id"], g.user["username"], ids)
             g.audit_summary = f"agreed to {len(ids)} change notice{'s' if len(ids) != 1 else ''} for {mine['name']}"
             flash("Thanks. You're all caught up.", "success")
-            return redirect(url_for("dashboard", token=ctx["token"]))
+            return redirect(_resume(ctx, url_for("dashboard", token=ctx["token"])))
         # v3.0.1: everyone sees only their own driver's notices here; other drivers' notices are a separate
         # Race Master section, and only while actually viewing as Race Master (not in Driver or Spectator view).
         others = []
@@ -2543,6 +2930,8 @@ def register_routes(app):
     @career_page()
     def press_page(conn, ctx):
         if not ctx["my_driver"]:
+            flash("Press questions are for the drivers in this league" + (
+                f". You're viewing it as {ctx['mode_label']}" if ctx.get("mode_lowered") else "") + ".", "info")
             return redirect(url_for("dashboard", token=ctx["token"]))
         return page("press.html", ctx, press_pens=teamlife.press_pens(conn, ctx["current_season_id"], ctx["my_driver"]["id"]),
                     history=teamlife.press_history(conn, ctx["my_driver"]["id"]))
@@ -2552,15 +2941,21 @@ def register_routes(app):
     def press_answer(conn, ctx, event_id):
         if not ctx["my_driver"]:
             abort(403)
-        effect = teamlife.answer(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
-                                 request.form.get("answer"))
+        effect, repeat = teamlife.answer(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
+                                         request.form.get("answer"), with_repeat=True)
+        g.repeat = repeat
         ev = S.get_event(conn, event_id)
         g.audit_summary = f"answered the Round {ev['round_number']} post-race press questions"
-        flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
-                                  if effect < 0 else "Nobody reads much into it."), "success")
+        nxt = S.next_incomplete_event(conn, ev["season_id"])
+        flash(("Already saved: you gave that answer a moment ago. " if repeat else "Answer saved. ")
+              + ("" if repeat else "The team liked that. " if effect > 0 else "The team won't love that. "
+                 if effect < 0 else "Nobody reads much into it. ")
+              + _next_step(conn, ctx, nxt["id"] if nxt else None, press_event=ev), "success")
+        # 4.0.0-beta.13: back to where it was answered: the standalone Press page, else this round's Debrief
         if request.form.get("back") == "press":
-            return redirect(url_for("press_page", token=ctx["token"]))
-        return redirect(url_for("dashboard", token=ctx["token"]) + "#press")
+            return redirect(url_for("press_page", token=ctx["token"]) + "#press")
+        debrief = url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=debrief#press"
+        return redirect(navigation.back(debrief, ctx["token"], prefer=request.form.get("next")))
 
     @app.route("/career/<token>/target/<int:event_id>/accept", methods=["POST"])
     @career_page()
@@ -2569,16 +2964,21 @@ def register_routes(app):
             abort(403)
         tier = request.form.get("tier")
         ev = S.get_event(conn, event_id)
-        if tier:   # v2.4: choose one of the three and lock it in
+        had = teamlife.target_for(conn, event_id, ctx["my_driver"]["id"]) if tier else None
+        if had and had.get("tier") == tier:   # 4.0.0-beta.13: the same choice sent twice (a retry) is already saved
+            g.repeat = True
+            flash(f"Already locked in: {had['label']}. " + (_next_step(conn, ctx, event_id) or ""), "success")
+        elif tier:   # v2.4: choose one of the three and lock it in
             t = teamlife.choose_target(conn, event_id, ctx["my_driver"]["id"], tier)
             g.audit_summary = (f"chose the {C.TARGET_TIERS[tier]['label']} weekend target for Round {ev['round_number']} "
                                f"({t['label']})")
-            flash(f"Locked in: {t['label']}. Good luck out there.", "success")
+            flash(f"Locked in: {t['label']}. " + (_next_step(conn, ctx, event_id) or "Good luck out there."), "success")
         else:      # a target set before 2.4
             t = teamlife.acknowledge(conn, event_id, ctx["my_driver"]["id"])
             g.audit_summary = f"accepted their Round {ev['round_number']} weekend target ({t['label']})"
-            flash("Target accepted. Good luck out there.", "success")
-        return _back(ctx, "#target")
+            flash("Target accepted. " + (_next_step(conn, ctx, event_id) or "Good luck out there."), "success")
+        return _back(ctx, "#target", default=url_for("weekend", token=ctx["token"], event_id=event_id)
+                     + "?stage=prepare#target")
 
     @app.route("/career/<token>/weekend/<int:event_id>/paddock", methods=["POST"])
     @career_page(ops_only=True)
@@ -2618,8 +3018,12 @@ def register_routes(app):
             ai3.store(conn, event_id)
         g.audit_summary = f"saved pace data for {S.driver_map(conn)[driver_id]['name']} at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
         g.audit_link = f"weekend/{event_id}"
-        flash("Pace data saved. The AI recommendation uses it straight away.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#pace")
+        flash("Race times saved. The AI recommendation uses them straight away.", "success")
+        # 4.0: back to the session it was saved from (its stage and session are in the address it came from)
+        sess = "sprint" if request.form.get("session") == "sprint" else "gp"
+        default = url_for("weekend", token=ctx["token"], event_id=event_id) + \
+            ("?stage=sessions&session=s#pace-sprint" if sess == "sprint" else "?stage=sessions&session=r#pace")
+        return redirect(navigation.back(default, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/start", methods=["POST"])
     @career_page(ops_only=True)
@@ -2669,13 +3073,18 @@ def register_routes(app):
     def prerace_answer(conn, ctx, event_id):
         if not ctx["my_driver"]:
             abort(403)
-        effect = teamlife.answer_prerace(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
-                                         request.form.get("answer"))
+        effect, repeat = teamlife.answer_prerace(conn, event_id, ctx["my_driver"]["id"], request.form.get("question"),
+                                                 request.form.get("answer"), with_repeat=True)
+        g.repeat = repeat
         ev = S.get_event(conn, event_id)
         g.audit_summary = f"answered the Round {ev['round_number']} pre-race press questions"
-        flash("Answer given. " + ("The team liked that." if effect > 0 else "The team won't love that."
-                                  if effect < 0 else "Nobody reads much into it."), "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#paddock")
+        flash(("Already saved: you gave that answer a moment ago. " if repeat else "Answer saved. ")
+              + ("" if repeat else "The team liked that. " if effect > 0 else "The team won't love that. "
+                 if effect < 0 else "Nobody reads much into it. ")
+              + _next_step(conn, ctx, event_id), "success")
+        # 4.0.0-beta.13: back to this round's Prepare stage (pre-race press is only asked there)
+        prepare = url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#prerace"
+        return redirect(navigation.back(prepare, ctx["token"], anchor="#prerace"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/open-early", methods=["POST"])
     @career_page(master_only=True)
@@ -2711,6 +3120,29 @@ def register_routes(app):
         flash(f"{name}'s target is now {t['status'].lower()}.", "success")
         return _admin_back(url_for("weekend", token=ctx["token"], event_id=event_id) + "#targets")
 
+    def _next_step(conn, ctx, event_id, press_event=None):
+        """4.0.0-beta.13: after a race-weekend task, what's next for this driver, or who the round is waiting on."""
+        me = ctx.get("real", ctx).get("my_driver") or ctx.get("my_driver")
+        if not me or not event_id:
+            return ""
+        gate = gates.status(conn, event_id, issue=False)
+        if not gate.get("active"):
+            return ""
+        label = f"R{gate['event']['round_number']}"
+        mine = next((p for p in gate["players"] if p["driver"]["id"] == me["id"]), None)
+        if mine and not mine["done"]:
+            left = [i for i in mine["checks"] if not i["done"]]
+            words = {"press": "answer your R{} post-race press".format(
+                         (gate.get("press_event") or press_event or {}).get("round_number", "")),
+                     "prerace": f"answer your {label} pre-race press", "target": f"choose your {label} weekend target"}
+            first = left[0]
+            more = f" ({first['open']} question{'s' if first.get('open') != 1 else ''} left)" if first.get("open") else ""
+            return f"Next: {words[first['kind']]}{more}."
+        waiting = [p["driver"]["name"] for p in gate["players"] if not p["done"]]
+        if gate.get("bypass") or not gate.get("blocking"):
+            return f"You're ready for {label}, and so is everyone else."
+        return f"You're ready for {label}. It's waiting on {', '.join(waiting)}."
+
     def _admin_back(default):
         """Race Master tools post back to Team management when that's where they were used (v2.4)."""
         if request.form.get("back") == "admin":
@@ -2721,7 +3153,79 @@ def register_routes(app):
     @career_page()
     def league_notice_seen(conn, ctx):
         impacts.dismiss_announcement(conn, g.user["username"])
-        return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"]))
+
+    @app.route("/career/<token>/upgrade-notice", methods=["POST"])
+    @career_page()
+    def upgrade_notice_ack(conn, ctx):
+        """4.0: "Got it" on the upgrade notice, stored for this person, this league and this migration only."""
+        tracking.acknowledge(conn, g.user["username"], _form_int("migration_id"), site_owner=bool(g.user.get("is_master")))
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"],
+                                        prefer=request.form.get("next")))
+
+    @app.route("/career/<token>/upgrade-notice/later", methods=["POST"])
+    @career_page()
+    def upgrade_notice_hide(conn, ctx):
+        """4.0: "Not now" hides the notice for this browser session only. Nothing is acknowledged, so it comes back
+        the next time this league is opened."""
+        mid = _form_int("migration_id")
+        if mid:
+            session[f"upgrade_hidden_{ctx['token']}_{mid}"] = True
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"],
+                                        prefer=request.form.get("next")))
+
+    @app.route("/career/<token>/legacy-tracking", methods=["GET", "POST"])
+    @career_page()
+    def legacy_tracking(conn, ctx):
+        """4.0: what each season tracked, where the league's 4.0 tracking began, and (Race Master) confirming the
+        start of a feature that was first recorded part-way through a season. Only the tracking record changes."""
+        if request.method == "POST":
+            if not ctx["is_master"]:
+                abort(403)
+            raw = request.form.get("from_round", "")
+            try:
+                tracking.set_start(conn, _form_int("season_id"), request.form.get("feature", ""),
+                                   None if raw in ("", "none") else int(raw), g.user["username"])
+                flash("Saved. Only the tracking record changed; no result or number did.", "success")
+            except (ValidationError, ValueError) as exc:
+                flash(str(exc), "error")
+            return redirect(url_for("legacy_tracking", token=ctx["token"]))
+        mig = tracking.migration(conn)
+        return page("legacy_tracking.html", ctx, migration=mig, rows=tracking.all_rows(conn),
+                    review=tracking.review_items(conn), features=tracking.FEATURES,
+                    acks=tracking.acknowledged(conn, mig["id"]) if mig and ctx["is_master"] else [],
+                    seasons={s["id"]: s for s in ctx["seasons"]})
+
+    @app.route("/career/<token>/readiness", methods=["GET", "POST"])
+    @career_page(ops_only=True, read_only=True)
+    def readiness_page(conn, ctx):
+        """4.0: the League Readiness Check. Read-only: checks run on a private copy of the league (readiness.py), and
+        opening or running it changes nothing in the league. The quick checks run on every visit; the full-history
+        checks run when the Race Master asks and are kept (outside the league file) until the league changes.
+        Scorekeepers see only the weekend findings they can act on; the server filters, not the page."""
+        from . import readiness
+        full = request.method == "POST"          # GET runs the quick checks; the full-history check is a POST
+        if full and not ctx["real"]["is_master"]:
+            abort(403)
+        conn.commit()                    # nothing of this request's is pending, so others can save while we check
+        report = readiness.run(conn, history=full)
+        if full and report["fingerprint"]:
+            readiness.save_history(ctx["token"], report, g.user["username"])
+        if request.method == "POST":
+            flash("Full check done. Nothing in the league was changed." if not report["failed"]
+                  else report["failed"], "success" if not report["failed"] else "error")
+            return redirect(url_for("readiness_page", token=ctx["token"]))
+        v = readiness.view(report, readiness.load_history(ctx["token"]), ctx["is_master"])
+        latest = storage.list_auto_backups(ctx["token"])[:1] if ctx["is_master"] else []
+        return page("readiness.html", ctx, v=v, report=report, severities=readiness.SEVERITIES,
+                    categories=readiness.CATEGORIES, targets=readiness.TARGETS,
+                    transition=readiness.transition_view(v, conn) if ctx["is_master"] else None,
+                    coverage=readiness.COVERAGE_NOTE, latest_backup=latest[0] if latest else None,
+                    app_version=C.APP_VERSION, site_owner=maintenance.is_owner(g.user))
 
     @app.route("/career/<token>/team-management")
     @career_page(master_only=True)
@@ -2845,13 +3349,19 @@ def register_routes(app):
         if not (ctx["my_driver"] or ctx["is_master"]):
             abort(403)
         mine = ctx["my_driver"]["id"] if ctx["my_driver"] else None
-        iid = community.report_incident(conn, event_id, g.user["username"], mine, _form_int("accused_id"),
-                                        request.form.get("description"))
-        who = next(i for i in community.incidents(conn, event_id=event_id) if i["id"] == iid)
-        feed.notify(conn, who["accused_driver_id"], f"You've been reported for an incident at R{who['round_number']} "
-                    f"{who['event_name']}. The Race Master will rule on it.", "incidents")
-        flash("Incident reported. The Race Master will review it.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#incidents")
+        iid, repeat = community.report_incident(conn, event_id, g.user["username"], mine, _form_int("accused_id"),
+                                                request.form.get("description"), request.form.get("session") or "weekend",
+                                                with_repeat=True)
+        if repeat:
+            g.repeat = True
+            flash("Already reported: that report reached the Race Master a moment ago.", "success")
+        else:
+            who = next(i for i in community.incidents(conn, event_id=event_id) if i["id"] == iid)
+            feed.notify(conn, who["accused_driver_id"], f"You've been reported for an incident at R{who['round_number']} "
+                        f"{who['event_name']}. The Race Master will rule on it.", "incidents")
+            flash("Incident reported. The Race Master will review it.", "success")
+        return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=sessions#incidents",
+                                        ctx["token"], prefer=request.form.get("next")))
 
     @app.route("/career/<token>/incidents")
     @career_page()
@@ -2864,14 +3374,17 @@ def register_routes(app):
         community.rule_incident(conn, incident_id, request.form.get("ruling"), request.form.get("note"),
                                 g.user["username"])
         flash("Ruling published.", "success")
-        return redirect(request.referrer or url_for("incidents_page", token=ctx["token"]))
+        return redirect(navigation.back(url_for("incidents_page", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/incidents/<int:incident_id>/delete", methods=["POST"])
     @career_page(master_only=True)
     def incident_delete(conn, ctx, incident_id):
+        row = conn.execute("SELECT event_id FROM incidents WHERE id = ?", (incident_id,)).fetchone()
         conn.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
+        if row and S.get_event(conn, row["event_id"]):
+            community.refresh_stewards_story(conn, S.get_event(conn, row["event_id"]))
         flash("Report deleted.", "success")
-        return redirect(request.referrer or url_for("incidents_page", token=ctx["token"]))
+        return redirect(navigation.back(url_for("incidents_page", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/autobackup/<name>/restore", methods=["POST"])
     @master_required
@@ -2936,7 +3449,7 @@ def register_routes(app):
         g.audit_link = "team-standing"
         flash(f"Pledge locked in: average P{t['finish_target']:.1f} or better this season "
               f"(the car's expected finish is P{t['finish_base']:.1f}).", "success")
-        return redirect(url_for("team_standing", token=ctx["token"]))
+        return redirect(_resume(ctx, url_for("team_standing", token=ctx["token"])))
 
     @app.route("/career/<token>/team-standing/<int:driver_id>/request-pledge", methods=["POST"])
     @career_page(master_only=True)
@@ -3195,7 +3708,7 @@ def register_routes(app):
             flash(f"{o['label']} goal set: {o['text']}.", "success")
             mine = ctx.get("real", ctx).get("my_driver")
             if mine and any(d["id"] == mine["id"] for d in teamgoals.player_teams(conn, sid).get(team_id, [])):
-                return redirect(url_for("dashboard", token=ctx["token"]))
+                return redirect(_resume(ctx, url_for("dashboard", token=ctx["token"])))
         return _admin_back(url_for("team_goals_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market")
@@ -3244,21 +3757,25 @@ def register_routes(app):
     def news_delete(conn, ctx, news_id):
         feed.delete_news(conn, news_id)
         flash("Headline deleted.", "success")
-        return redirect(request.referrer or url_for("news_page", token=ctx["token"]))
+        return redirect(navigation.back(url_for("news_page", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/notifications/<int:notification_id>/delete", methods=["POST"])
     @career_page(master_only=True)
     def notification_delete(conn, ctx, notification_id):
         feed.delete_notification(conn, notification_id)
         flash("Notification deleted.", "success")
-        return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/offers/<int:offer_id>/accept", methods=["POST"])
     @career_page()
     def offer_accept(conn, ctx, offer_id):
         offer = _offer_for_user(conn, ctx, offer_id)
-        market.accept_offer(conn, offer_id)
         team = S.team_map(conn)[offer["team_id"]]
+        if offer["status"] == C.OFFER_ACCEPTED:   # 4.0.0-beta.13: sent twice (a retry): already signed, nothing more
+            g.repeat = True
+            flash(f"Already signed: you're with {team['name']} for {offer['target_year']}.", "success")
+            return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
+        market.accept_offer(conn, offer_id)
         flash(f"Signed with {team['name']} for {offer['target_year']}!", "success")
         return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
 
@@ -3266,6 +3783,10 @@ def register_routes(app):
     @career_page()
     def offer_decline(conn, ctx, offer_id):
         offer = _offer_for_user(conn, ctx, offer_id)
+        if offer["status"] == C.OFFER_DECLINED:
+            g.repeat = True
+            flash("Already declined.", "success")
+            return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
         market.decline_offer(conn, offer_id)
         flash("Offer declined.", "success")
         return redirect(url_for("offers_page", token=ctx["token"], driver=offer["driver_id"]))
@@ -3656,6 +4177,51 @@ def register_routes(app):
             market.offers_for_player(conn, did)
         return name
 
+    def _free_player(conn, driver_id):
+        """A player driver no league member drives yet."""
+        return not conn.execute("SELECT 1 FROM career_members WHERE driver_id = ?", (driver_id,)).fetchone()
+
+    def _free_player_named(conn, name):
+        name = " ".join((name or "").split())
+        row = conn.execute("SELECT id FROM drivers WHERE is_player = 1 AND lower(name) = lower(?)", (name,)).fetchone()
+        return row["id"] if row and _free_player(conn, row["id"]) else None
+
+    def _link_login(conn, username, driver_id, scorekeeper=False):
+        """4.0.0-beta.10: give an existing player driver to a login, adding them to the league if they aren't in it.
+        A Race Master or Scorekeeper keeps their role; a Spectator becomes a Member (spectators can't drive)."""
+        user = auth.get_user(username) if username else None
+        if not user:
+            raise ValidationError(f"There's no login called {username}. They can sign up first." if username
+                                  else "Enter their username")
+        held = conn.execute("SELECT driver_id FROM career_members WHERE username = ? AND driver_id IS NOT NULL",
+                            (user["username"],)).fetchone()
+        if held and held["driver_id"] != driver_id:
+            raise ValidationError(f"{user['username']} already drives {S.driver_map(conn)[held['driver_id']]['name']} "
+                                  "in this league. Change their driver in the members table instead.")
+        current = roles.effective_role(conn, user)
+        role = current if current in ("race_master", "scorekeeper") else ("scorekeeper" if scorekeeper else "member")
+        roles.set_member(conn, user["username"], role, driver_id)
+        raceweek.set_no_account(conn, driver_id, False)
+        return S.driver_map(conn)[driver_id]["name"]
+
+    @app.route("/career/<token>/members/link/<int:driver_id>", methods=["POST"])
+    @career_page(master_only=True)
+    def members_link(conn, ctx, driver_id):
+        """4.0.0-beta.10: link a login to a player driver straight from "Player drivers without a login"."""
+        driver = S.driver_map(conn).get(driver_id)
+        if not driver or not driver["is_player"]:
+            abort(404)
+        username = auth.normalise(request.form.get("username"))
+        name = _link_login(conn, username, driver_id)
+        user = auth.get_user(username)
+        g.audit_summary = f"linked {user['display_name']} to {name}"
+        g.audit_link = "members"
+        if user["username"] != g.user["username"]:
+            feed.notify(conn, None, f"You now drive {name} in {ctx['career_name']}", "dashboard", category="roles",
+                        username=user["username"])
+        flash(f"{user['display_name']} now drives {name}.", "success")
+        return redirect(url_for("members", token=ctx["token"]))
+
     @app.route("/career/<token>/members/no-account/<int:driver_id>", methods=["POST"])
     @career_page(master_only=True)
     def members_no_account(conn, ctx, driver_id):
@@ -3696,8 +4262,12 @@ def register_routes(app):
                 raise ValidationError("That login no longer exists")
             keeper = role in ("driver_scorekeeper", "scorekeeper")
             if role in ("driver", "driver_scorekeeper"):
-                name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
-                                   bool(request.form.get("send_offers")), scorekeeper=keeper)
+                existing = _driver_from_form() or _free_player_named(conn, request.form.get("driver_name") or req["driver_name"])
+                if existing:   # 4.0.0-beta.10: they take over a player driver already in the league
+                    name = _link_login(conn, req["username"], existing, scorekeeper=keeper)
+                else:
+                    name = _add_player(conn, ctx, req["username"], request.form.get("driver_name") or req["driver_name"],
+                                       bool(request.form.get("send_offers")), scorekeeper=keeper)
                 what = f"as {name}" + (" (and Scorekeeper)" if keeper else "")
             else:
                 roles.set_member(conn, req["username"], "scorekeeper" if keeper else "spectator", None)
@@ -3850,12 +4420,19 @@ def register_routes(app):
             return jsonify(ok=False, error="Invalid request"), 400
         try:
             with storage.session(token) as conn:
+                # 4.0: take the write lock before reading, so two submissions arriving together are handled one
+                # after the other and the second sees the first (the post-race steps can only run once).
+                if not conn.in_transaction:
+                    conn.execute("BEGIN IMMEDIATE")
                 before = S.get_event(conn, event_id)
                 if not before:
                     return jsonify(ok=False, error="Event not found"), 404
                 if before["status"] == C.EVENT_COMPLETE and not is_master():
-                    return jsonify(ok=False, locked=True, error="This weekend has been submitted. Only the Race Master "
-                                   "can reopen or change it now."), 403
+                    # A repeated "Submit weekend" (double tap, a retry after a lost reply) lands here: it's already
+                    # done, nothing reruns, and the page can simply move on to the Debrief.
+                    return jsonify(ok=False, locked=True, already_submitted=bool(payload.get("mark_complete")),
+                                   error="This weekend has been submitted. Only the Race Master can reopen or change "
+                                   "it now."), 403
                 blocked = raceweek.results_blocked(conn, before)
                 if blocked:
                     return jsonify(ok=False, gated=True, not_started=True, error=blocked), 423
@@ -4050,8 +4627,8 @@ def register_routes(app):
         session[f"mode_{ctx['token']}"] = wanted
         flash(f"Now showing {ctx['career_name']} as {VIEW_MODES[wanted]}." +
               (" Your real permissions are unchanged." if wanted != ctx["modes"][0][0] else ""), "success")
-        nxt = request.form.get("next") or ""
-        return redirect(nxt if nxt.startswith(f"/career/{ctx['token']}/") else url_for("dashboard", token=ctx["token"]))
+        nxt = navigation.safe(request.form.get("next"), ctx["token"])
+        return redirect(nxt if nxt and nxt.startswith(f"/career/{ctx['token']}/") else url_for("dashboard", token=ctx["token"]))
 
     @app.route("/career/<token>/pin", methods=["POST"])
     @career_page()
@@ -4175,8 +4752,13 @@ def register_routes(app):
         if not ctx["features"][feature]:
             raise ValidationError("The Race Master has switched that off for this league")
 
-    def _back(ctx, anchor=""):
-        return redirect((request.referrer or url_for("dashboard", token=ctx["token"])).split("#")[0] + anchor)
+    def _back(ctx, anchor="", default=None):
+        """4.0.0-beta.13: back to the page (and stage) the form was sent from, checked by navigation.safe, with the
+        given #section; without one, the page that fits the action (the round for a race-weekend action)."""
+        fallback = default or navigation.fallback(ctx["token"])
+        if anchor and "#" not in fallback:
+            fallback += anchor
+        return redirect(navigation.back(fallback, ctx["token"], anchor=anchor or None))
 
     @app.route("/career/<token>/settings", methods=["GET", "POST"])
     @career_page(master_only=True)
@@ -4204,7 +4786,9 @@ def register_routes(app):
                 storage.set_meta(conn, "career_name", name)
             if "team_life" in request.form and mine("weekends"):
                 storage.set_meta(conn, "difficulty_recs", "1" if request.form.get("difficulty_recs") else "0")
+                storage.set_meta(conn, "ai_track_history", "1" if request.form.get("ai_track_history") else "0")
                 storage.set_meta(conn, "difficulty_sprints", "1" if request.form.get("difficulty_sprints") else "0")
+                storage.set_meta(conn, "pace_required", "1" if request.form.get("pace_required") else "0")
                 smd = (request.form.get("sprint_min_distance") or "").strip()
                 if smd.isdigit() and 0 <= int(smd) <= 100:
                     storage.set_meta(conn, "sprint_min_distance", smd)
@@ -4295,6 +4879,9 @@ def register_routes(app):
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",
+                    pace_required=ai3.pace_required(conn),
+                    ai_track_history=storage.get_meta(conn, "ai_track_history", "1") == "1",
+                    ai_track_on=ai_track.uses_track(conn, ctx["current_season_id"]), ai_snapshot=ai_track.snapshot(),
                     difficulty_mode=S.difficulty_mode(conn), sprint_min=_sprint_min(conn),
                     calc_label=engine.label(conn, ctx["current_season_id"]),
                     calc_engine=engine.season_engine(conn, ctx["current_season_id"]),
@@ -4351,7 +4938,10 @@ def register_routes(app):
                         r["link"] = r.get("link") or link
         names = {u["username"]: u["display_name"] for u in auth.list_users()}
         people = sorted({r["username"] for r in community.audit_entries(conn, 2000)})
-        return page("activity.html", ctx, rows=rows, names=names, people=people, who=who)
+        record = audit_trail.events(conn, 200)
+        if who:
+            record = [r for r in record if r["actor"] == who]
+        return page("activity.html", ctx, rows=rows, names=names, people=people, who=who, record=record)
 
     @app.route("/career/<token>/weekend/<int:event_id>/weather", methods=["POST"])
     @career_page()
@@ -4369,7 +4959,12 @@ def register_routes(app):
         g.audit_summary = (f"recorded the weather for {event_label(event, year)}: {', '.join(changed)}" if changed
                            else f"cleared the weather for {event_label(event, year)}")
         flash("Weather saved." if changed else "Weather cleared.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#weather")
+        # 4.0: one session's weather is saved from that session's section; go back there
+        only = request.form.get("wx_session")
+        anchor = "#weather-" + only if only in ("quali", "sprint") else "#weather"
+        key = {"quali": "q", "sprint": "s"}.get(only, "r")
+        default = url_for("weekend", token=ctx["token"], event_id=event_id) + f"?stage=sessions&session={key}{anchor}"
+        return redirect(navigation.back(default, ctx["token"], anchor=anchor))
 
     @app.route("/career/<token>/weekend/<int:event_id>/time", methods=["POST"])
     @career_page(master_only=True)
@@ -4377,7 +4972,8 @@ def register_routes(app):
         if not S.get_event(conn, event_id):
             abort(404)
         try:
-            when = timefmt.from_input(request.form.get("race_at"), ctx["timezone"])
+            # "Clear" is its own field: the filled time input is posted too, and would win over a blank race_at
+            when = timefmt.from_input("" if request.form.get("clear") else request.form.get("race_at"), ctx["timezone"])
         except ValueError:
             raise ValidationError("That race time isn't a valid date and time")
         community.set_race_at(conn, event_id, when)
@@ -4394,14 +4990,16 @@ def register_routes(app):
             feed.notify(conn, None, f"R{event['round_number']} {event['name']} has been postponed", f"weekend/{event_id}",
                         ref=f"racetime:{event_id}", category="schedule")
             flash("Round marked as postponed.", "success")
-            return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+            return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-time",
+                                            ctx["token"], anchor="#race-time"))
         if when:
             event = S.get_event(conn, event_id)
             feed.notify(conn, None, f"Race night set: R{event['round_number']} {event['name']} · "
                         f"{timefmt.race_at(when, ctx['timezone'])} {timefmt.zone_label(when, ctx['timezone'])}",
                         f"weekend/{event_id}", ref=f"racetime:{event_id}", category="schedule")
         flash("Race time saved." if when else "Race time cleared.", "success")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+        return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-time",
+                                        ctx["token"], anchor="#race-time"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/checkin", methods=["POST"])
     @career_page()
@@ -4468,7 +5066,8 @@ def register_routes(app):
             return redirect(url_for("predictions_page", token=ctx["token"]) + "#pick")
         if back == "dashboard":
             return redirect(url_for("dashboard", token=ctx["token"]) + "#race-night")
-        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id) + "#race-night")
+        return redirect(navigation.back(url_for("weekend", token=ctx["token"], event_id=event_id) + "?stage=prepare#race-night",
+                                        ctx["token"], anchor="#race-night"))
 
     @app.route("/career/<token>/predictions")
     @career_page()
@@ -4690,16 +5289,31 @@ def register_routes(app):
             if request.headers.get("X-Requested-With") == "fetch":
                 return jsonify(ok=False, error="Tick the box to agree to the changes"), 400
             flash("Tick the box to agree to the changes.", "error")
-            return redirect(request.referrer or url_for("home"))
+            return redirect(navigation.back(url_for("home")))
         whatsnew.acknowledge(g.user["username"], C.APP_VERSION)
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify(ok=True)
-        return redirect(request.referrer or url_for("home"))
+        return redirect(navigation.back(url_for("home")))
 
     @app.route("/changelog")
     def changelog_page():
         from . import changelog
         return render_template("changelog.html", versions=changelog.versions(_base_dir()))
+
+    @app.route("/design")
+    @master_required
+    def design_page():
+        """4.0: the design system: tokens, components and every state a component can be in."""
+        return render_template("design.html")
+
+    @app.route("/account/preferences", methods=["POST"])
+    def account_preferences():
+        """4.0: theme and density are saved to the account, so they follow the person to every device."""
+        try:
+            auth.set_preferences(g.user["username"], request.form.get("theme"), request.form.get("density"))
+        except AuthError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True)
 
     # ---------------------------------------------------------------- v3.2: maintenance mode
     @app.route("/maintenance")
@@ -4707,11 +5321,6 @@ def register_routes(app):
         if maintenance.active():
             return maintenance_response()
         return redirect(url_for("home"))
-
-    @app.route("/healthz")
-    def healthz():
-        """For the host's health check and uptime monitors: up, version and whether maintenance is on."""
-        return no_store(jsonify(ok=True, version=C.APP_VERSION, maintenance=maintenance.active()))
 
     @app.route("/settings/system", methods=["GET", "POST"])
     @owner_required
@@ -4788,7 +5397,7 @@ def register_routes(app):
     @career_page(master_only=True)
     def save_now(conn, ctx):
         flash("League saved.", "success")
-        return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/rename", methods=["POST"])
     @career_page(master_only=True)
@@ -4798,7 +5407,7 @@ def register_routes(app):
             raise ValidationError("League name cannot be blank")
         storage.set_meta(conn, "career_name", name)
         flash("League renamed.", "success")
-        return redirect(request.referrer or url_for("dashboard", token=ctx["token"]))
+        return redirect(navigation.back(url_for("dashboard", token=ctx["token"]), ctx["token"]))
 
     @app.route("/career/<token>/copy", methods=["POST"])
     @master_required
@@ -4847,3 +5456,21 @@ def register_routes(app):
             abort(404)
         return send_file(io.BytesIO(data.encode("utf-8")), as_attachment=True,
                          download_name=f"career-{storage.sanitize_token(token)}.json", mimetype="application/json")
+
+    # 4.0: every route declares who may use it (checked by the permission tests and listed in the inventory).
+    # League pages declare it through career_page / master_required; these are the rest.
+    for endpoint, access in ROUTE_ACCESS.items():
+        app.view_functions[endpoint].access = access
+
+
+# "self": any signed-in person, acting only on their own account (or answering their own invitation, asking to join,
+# or creating a league where the site allows it). "ops": the Race Master or a Scorekeeper of that league (the
+# results API, which checks it inside). Public routes are PUBLIC_ENDPOINTS.
+ROUTE_ACCESS = {
+    **{e: "self" for e in ("accounts_page", "account_email", "account_export", "account_self_password",
+                           "account_session_end", "account_sessions_end_others", "account_two_step",
+                           "account_delete_self", "account_preferences", "career_join", "career_new",
+                           "invitation_answer", "league_new_page", "logout", "must_change_password", "push_subscribe",
+                           "push_test", "push_unsubscribe", "whats_new_ack", "design_page")},
+    **{e: "ops" for e in ("api_weekend", "api_weekend_state", "api_weekend_checklist")},
+}

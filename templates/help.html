@@ -11,7 +11,7 @@
   <label class="help-jump"><span class="sr-only">Jump to a topic</span><select id="help-jump">
     <option value="">Jump to a topic…</option>
     <optgroup label="Getting started"><option value="roles">Who can do what</option><option value="scorekeeper">Scorekeepers</option><option value="race-master">Race Masters</option><option value="drivers">Player drivers</option><option value="joining">Joining a league</option><option value="my-settings">My settings</option><option value="modes">View modes</option><option value="updates">Updates and change notices</option></optgroup>
-    <optgroup label="Race weekends"><option value="calc-v3">Calculation Version 3</option><option value="weekend">The race weekend (and resetting one)</option><option value="results">Entering results</option><option value="statuses">Result statuses</option><option value="scoring">Scoring</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="gates">Round gates</option><option value="difficulty">AI difficulty</option><option value="press">Press</option><option value="weather">Weather</option><option value="incidents">Incidents</option></optgroup>
+    <optgroup label="Race weekends"><option value="calculations">How the numbers are worked out</option><option value="weekend">The race weekend (and resetting one)</option><option value="results">Entering results</option><option value="statuses">Result statuses</option><option value="scoring">Scoring</option><option value="sprints">Sprint weekends</option><option value="race-times">Race times</option><option value="gates">Round gates</option><option value="difficulty">AI difficulty</option><option value="press">Press</option><option value="weather">Weather</option><option value="incidents">Incidents</option></optgroup>
     <optgroup label="Your driver"><option value="form">Form</option><option value="reputation">Reputation</option><option value="racecraft">Racecraft</option><option value="driver-value">Driver Value</option><option value="car">Car strength</option><option value="statistics">Statistics</option><option value="rivalry">Rivalries</option><option value="battle">Teammate battle</option></optgroup>
     <optgroup label="Contracts and your team"><option value="market">Transfer market</option><option value="talks">Talking to teams</option><option value="pledges">Growth pledges</option><option value="contracts">Contracts and seats</option><option value="relationship">Team relationship</option><option value="dismissals">Final warnings and mid-season dismissals</option><option value="goals">Season goals</option><option value="targets">Weekend targets</option><option value="team-goals">Team goals (Safe, Competitive, Ambitious)</option><option value="orders">Team orders</option></optgroup>
     <optgroup label="League extras"><option value="extras">League features</option><option value="announcements">Announcements</option><option value="notifications">Notifications</option><option value="comments">Comments and reactions</option><option value="predictions">Predictions</option><option value="public">Public results</option><option value="visibility">Public visibility</option><option value="discord">Discord</option></optgroup>
@@ -19,7 +19,7 @@
   </select></label>
   <nav class="help-toc-groups">
     <div class="help-group"><h3>Getting started</h3><a href="#roles" data-topic="roles">Who can do what</a><a href="#scorekeeper" data-topic="scorekeeper">Scorekeepers</a><a href="#race-master" data-topic="race-master">Race Masters</a><a href="#drivers" data-topic="drivers">Player drivers</a><a href="#joining" data-topic="joining">Joining a league</a><a href="#my-settings" data-topic="my-settings">My settings</a><a href="#modes" data-topic="modes">View modes</a><a href="#updates" data-topic="updates">Updates and change notices</a></div>
-    <div class="help-group"><h3>Race weekends</h3><a href="#calc-v3" data-topic="calc-v3">Calculation Version 3</a><a href="#weekend" data-topic="weekend">The race weekend</a><a href="#results" data-topic="results">Entering results</a><a href="#statuses" data-topic="statuses">Result statuses</a><a href="#scoring" data-topic="scoring">Scoring</a><a href="#sprints" data-topic="sprints">Sprint weekends</a><a href="#race-times" data-topic="race-times">Race times</a><a href="#gates" data-topic="gates">Round gates</a><a href="#difficulty" data-topic="difficulty">AI difficulty</a><a href="#press" data-topic="press">Press</a><a href="#weather" data-topic="weather">Weather</a><a href="#incidents" data-topic="incidents">Incidents</a></div>
+    <div class="help-group"><h3>Race weekends</h3><a href="#calculations" data-topic="calculations">How the numbers are worked out</a><a href="#weekend" data-topic="weekend">The race weekend</a><a href="#results" data-topic="results">Entering results</a><a href="#statuses" data-topic="statuses">Result statuses</a><a href="#scoring" data-topic="scoring">Scoring</a><a href="#sprints" data-topic="sprints">Sprint weekends</a><a href="#race-times" data-topic="race-times">Race times</a><a href="#gates" data-topic="gates">Round gates</a><a href="#difficulty" data-topic="difficulty">AI difficulty</a><a href="#press" data-topic="press">Press</a><a href="#weather" data-topic="weather">Weather</a><a href="#incidents" data-topic="incidents">Incidents</a></div>
     <div class="help-group"><h3>Your driver</h3><a href="#form" data-topic="form">Form</a><a href="#reputation" data-topic="reputation">Reputation</a><a href="#racecraft" data-topic="racecraft">Racecraft</a><a href="#driver-value" data-topic="driver-value">Driver Value</a><a href="#car" data-topic="car">Car strength</a><a href="#statistics" data-topic="statistics">Statistics</a><a href="#rivalry" data-topic="rivalry">Rivalries</a><a href="#battle" data-topic="battle">Teammate battle</a></div>
     <div class="help-group"><h3>Contracts and your team</h3><a href="#market" data-topic="market">Transfer market</a><a href="#talks" data-topic="talks">Talking to teams</a><a href="#pledges" data-topic="pledges">Growth pledges</a><a href="#contracts" data-topic="contracts">Contracts and seats</a><a href="#relationship" data-topic="relationship">Team relationship</a><a href="#dismissals" data-topic="dismissals">Final warnings and mid-season dismissals</a><a href="#goals" data-topic="goals">Season goals</a><a href="#targets" data-topic="targets">Weekend targets</a><a href="#team-goals" data-topic="team-goals">Team goals (Safe, Competitive, Ambitious)</a><a href="#orders" data-topic="orders">Team orders</a></div>
     <div class="help-group"><h3>League extras</h3><a href="#extras" data-topic="extras">League features</a><a href="#announcements" data-topic="announcements">Announcements</a><a href="#notifications" data-topic="notifications">Notifications</a><a href="#comments" data-topic="comments">Comments and reactions</a><a href="#predictions" data-topic="predictions">Predictions</a><a href="#public" data-topic="public">Public results</a><a href="#visibility" data-topic="visibility">Public visibility</a><a href="#discord" data-topic="discord">Discord</a></div>
@@ -135,27 +135,24 @@
 </section>
 <section class="card help" id="difficulty">
   <h2>AI difficulty</h2>
-  <p><b>Calculation Version 3:</b> each session is compared first with your AI teammate, then with AI cars one place either side in car strength, then two places either side, then (with less confidence) the car's expected finish. The recommendation shows which one was used for each player. Add lap times under <em>Pace &amp; conditions</em> on the round page and it also compares qualifying time and race pace per lap. Finishing last right behind your teammate is "about right"; being 30 seconds behind them brings the AI down. Damaged, penalised or mechanically failed sessions are left out; wet, safety-car or strategy-distorted ones count less; a Sprint counts half. It can move after every usable weekend (up to 3 after one weekend, 4 after two or three, 6 after that; up to 5 at once after a clean session more than 0.45 s a lap off), and one opposite result can only reverse it by one level. Each player gets their own sweet spot.</p>
-  <p><b>Version 2 leagues:</b> Enter the AI level (0–110) you raced on each weekend. After every completed round the recommendation looks at recent tracked rounds, at any level, with the latest counting most. Each player driver's result is read two ways:</p>
+  <p><b>Track-aware recommendation (new seasons):</b> one AI level for the whole weekend (qualifying, the Sprint and the race), worked out as <b>F1Laps track baseline + learned league adjustment + track history</b>. No Time Trials or personal baseline needed.</p>
   <ul>
-    <li><b>Against the car</b>: where that car usually finishes, the points that finish is worth, and their AI teammate. Finishing where your car should is "about right".</li>
-    <li><b>Against the whole grid</b>: the same, measured from the middle of the grid, whatever the car. Finishing near the back always reads as struggling.</li>
+    <li><b>F1Laps track baseline</b>: the average AI players use at that circuit in F1 26 (for example Monaco 80, Canada 84, Las Vegas 76), from a snapshot kept on this site. It changes from track to track without any limit.</li>
+    <li><b>Learned league adjustment</b>: starts at 0 and is learned from each completed weekend. Every player driver is judged on their own (against their AI teammate, or AI cars of similar speed, or where the car should finish), then combined: if everyone agrees it moves further; mixed evidence moves it a little or not at all. It moves at most 2 after one weekend, 3 after two weekends in a row pointing the same way and 4 after three or more.</li>
+    <li><b>Track history</b>: once your league has raced a circuit a few times, part of the baseline is replaced by how your players actually got on there (no influence before the first visit, at most ±3). The Race Master can switch this off.</li>
+    <li>A DNF, DNS, DSQ, a major incident or a no-fault result never counts as "the AI is too hard"; wet or disrupted races count less; finishing ahead of your teammate is never a bad sign.</li>
+    <li>If the drivers' own levels are more than six apart, it says so: no single AI setting can suit everyone.</li>
+    <li>The recommendation shown before each round is saved as it was, next to the AI you actually used, and is never recalculated later. A new F1Laps snapshot only affects future rounds.</li>
   </ul>
-  <p>By default a round counts <b>half of each</b>, so a slow car is taken into account but being at the back still brings the level down, leaving room for a breakout season. The Race Master can switch to car only or whole grid only (League settings → Race weekends).</p>
-  <ul>
-    <li><b>Everyone too good</b> or <b>everyone struggling</b>: it moves several levels. One clear round is enough to move it.</li>
-    <li><b>Mixed</b> (one struggling, another fine): it moves half as far, toward the one who's struggling.</li>
-    <li><b>Never up while someone is struggling</b> or near the back of the grid (about P16 or worse): it holds instead.</li>
-    <li>Never more than {{ C.DIFF_MAX_STEP }} at once.</li>
-  </ul>
+  <p><b>Race times:</b> on the round page, under <em>Sessions</em> in each race session's <em>Race times</em> section, type your race time and your AI teammate's (or a driver you pick) from the game's results screen, plus the laps you completed; the site works out the gap. On a tracked round these are needed before the round can be submitted, unless you tick <em>Don't submit times</em> for that session (a DNF or DNS never needs them). The Race Master can switch the requirement off.</p>
   <p>Each recommendation shows the game's level band: {% for lo, hi, name in C.DIFF_BANDS %}<b>{{ name }}</b> {{ lo }}–{{ hi }}{{ ', ' if not loop.last else '' }}{% endfor %}. Most players are comfortable in the low 80s.
     A one-line summary underneath says which rounds were used, which weren't and why, and whether Sprint points counted.</p>
   <p>DNFs and rounds marked <em>Don't track</em> don't count. Sprint points count unless the league turns that off. It's a suggestion: the Race Master picks the level.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
-<section class="card help" id="calc-v3">
-  <h2>Calculation Version 3</h2>
-  <p>Leagues created from Paddock Legacy 2.5 use <b>Calculation Version 3</b>. Older leagues keep Version 2 until their Race Master chooses (League settings → Data &amp; tools → Calculation Update): recalculate the current season, use Version 3 from the next round, or decide later. Seasons already played keep the version they were played under.</p>
+<section class="card help" id="calculations">
+  <h2>How the numbers are worked out</h2>
+  <p>Every league uses the same calculations. Seasons already played keep the numbers they finished with.</p>
   <ul>
     <li><b>Standings</b>: ties are split by countback (most wins, then most P2s, and so on, then qualifying), never by name. A <b>classified retirement</b> keeps its position's points; a shortened race uses the reduced points scale.</li>
     <li><b>Form</b> uses your six most recent races (recent ones count most), so a long calendar doesn't inflate it. <b>Reputation</b> moves toward how you're performing (Form, results against your car, and beating your teammate), so a good season raises it and a bad one can lower it.</li>
@@ -164,7 +161,7 @@
     <li><b>Transfer market</b>: your current team's opinion helps but never guarantees a deal; an experienced driver can end a window unsigned and come back as a free agent (only a driver within reach of a team's bar gets a conditional emergency offer).</li>
     <li><b>Contract messages</b>: the first two reasons you lead with count, not every theme you mention; a message that lists everything lands at under half its value.</li>
   </ul>
-  <p>Every formula is in the calculation guide your Race Master has (docs/CALCULATION_V3.md).</p>
+  <p>Every formula is in the calculation guide your Race Master has.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="weekend">
@@ -181,10 +178,10 @@
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="press">
-  <h2>Press <span class="calc-badge" title="Values for Calculation Version 3; Version 2 values are noted">Version 3</span></h2>
+  <h2>Press</h2>
   <p><b>Before the race</b> (while the paddock is open) the press ask two questions picked from your situation: your last result, the battle with your teammate, your weekend target, a Sprint weekend, a points drought, the title fight, a rival close by in the standings, the transfer window and more.
     <b>After the race</b> they ask about what happened: a win or podium, places gained or lost from qualifying, pole, the fastest lap, Driver of the Day, the Sprint, a retirement (or another one), first points or a drought, your teammate and your target.</p>
-  <p>What you say gets back to your team and some answers make headlines. <b>Version 3:</b> an answer counts at half its value, good answers add at most +{{ '%g'|format(C.V3_PRESS_POSITIVE_CAP) }} across the last six weekends (bad ones count in full), some questions have no answer the team prefers, and all extras together stay within ±{{ '%g'|format(C.V3_EXTRA_CAP) }}. <b>Version 2 leagues:</b> answers count in full, capped at ±{{ '%.0f'|format(C.RELATION_EXTRA_CAP) }} with other extras. Your <em>Press</em> page shows what each answer actually counted for.
+  <p>What you say gets back to your team and some answers make headlines. An answer counts at half its value, good answers add at most +{{ '%g'|format(C.V3_PRESS_POSITIVE_CAP) }} across the last six weekends (bad ones count in full), some questions have no answer the team prefers, and all extras together stay within ±{{ '%g'|format(C.V3_EXTRA_CAP) }}. Your <em>Press</em> page shows what each answer actually counted for.
     Open questions and everything you've said are on the <em>Press</em> page. With round gates on, pre-race answers are needed before lights out and post-race answers before the next race starts.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
@@ -192,7 +189,7 @@
   <h2>Weather</h2>
   <p>A Scorekeeper or the Race Master records the conditions of each session as they were in the game: qualifying, the Sprint and the race. The choices are dry, overcast, light rain, heavy rain or changing. Use the <em>Weather</em> card on the round page's Results tab.
     The weather shows on the round page, the calendar, the results list and the race summary, and <em>Statistics → In the wet</em> compares each driver's wet and dry races.</p>
-  <p>Weather is a record only. It doesn't change points, Form, Reputation, team relationships or the AI recommendation. If rain made someone's session unrepresentative, the Race Master can still tick <em>Wet or changing conditions</em> for that player under <a href="#difficulty">Pace &amp; conditions</a>. Resetting a weekend clears its weather.</p>
+  <p>Weather is a record only. It doesn't change points, Form, Reputation, team relationships or the AI recommendation. If rain made someone's session unrepresentative, the Race Master can still tick <em>Wet or changing conditions</em> for that player in the session's <a href="#race-times">Race times</a> section. Resetting a weekend clears its weather.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="incidents">
@@ -209,8 +206,8 @@
 <section class="card help" id="reputation">
   <h2>Reputation</h2>
   <p>Your <b>long-term name</b> in the paddock, locked at the end of each season and carried forward. Rookies start on {{ '%.0f'|format(C.ROOKIE_REPUTATION) }}.
-    <b>Version 3:</b> it moves a quarter of the way per full season toward how you're actually performing (Form, results against your car and your teammate), so it can fall as well as rise and one bad year doesn't end a career. <b>Version 2 leagues:</b> it builds slowly from points, wins, podiums, poles, Form and racecraft.
-    Kept pledges and met <a href="#team-goals">team goals</a> change next season's starting Reputation (Version 3: at most ±{{ '%g'|format(C.V3_ROLLOVER_CAP) }} in total).</p>
+    It moves a quarter of the way per full season toward how you're actually performing (Form, results against your car and your teammate), so it can fall as well as rise and one bad year doesn't end a career.
+    Kept pledges and met <a href="#team-goals">team goals</a> change next season's starting Reputation (at most ±{{ '%g'|format(C.V3_ROLLOVER_CAP) }} in total).</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="racecraft">
@@ -257,7 +254,7 @@
   <ul>
     <li><b>Windows</b>: the Rookie Draft when a league starts with rookies, Silly Season at half-distance, or whenever the Race Master opens one. A window closes by itself once every offer is answered and every player driver is signed (or has no approaches left); the Race Master can also close it sooner.</li>
     <li><b>Offers are negotiations</b>: counter with a different status, length or pledge. Each counter uses up the team's patience (greedy asks twice as fast); then comes a final offer, and pushing past it ends talks.</li>
-    <li><b>Approach teams</b> yourself, up to {{ C.APPROACHES_PER_WINDOW }} per window, with a message or an <a href="#talks">interview</a>. <b>Version 3:</b> an experienced driver can finish a window unsigned; only a driver within {{ '%g'|format(C.V3_EMERGENCY_MARGIN) }} of a team's bar gets a conditional emergency offer. <b>Version 2 leagues:</b> if you run out of options, the weakest team with a free seat offers a last-chance deal.</li>
+    <li><b>Approach teams</b> yourself, up to {{ C.APPROACHES_PER_WINDOW }} per window, with a message or an <a href="#talks">interview</a>. An experienced driver can finish a window unsigned; only a driver within {{ '%g'|format(C.V3_EMERGENCY_MARGIN) }} of a team's bar gets a conditional emergency offer.</li>
     <li>While your contract covers next season, other teams won't talk to you unless your team releases you.</li>
   </ul>
   <p>Everything is on <em>Contracts &amp; offers</em>.</p>
@@ -265,7 +262,7 @@
 </section>
 <section class="card help" id="talks">
   <h2>Talking to teams</h2>
-  <p>Teams read what you write. They notice what you're offering (commitment, development, results, being a team player, respect, your record) and how you say it: arrogance, blaming the car or team and shouting all count against you. Each team wants something different, based on where its car is plus one thing it cares about most, so it pays to learn what each team likes. They tell you what they took from your message. <b>Version 3:</b> only the first two reasons you lead with count, and a message that lists more than three themes lands at under half its value, so write to one team, not to all of them.</p>
+  <p>Teams read what you write. They notice what you're offering (commitment, development, results, being a team player, respect, your record) and how you say it: arrogance, blaming the car or team and shouting all count against you. Each team wants something different, based on where its car is plus one thing it cares about most, so it pays to learn what each team likes. They tell you what they took from your message. only the first two reasons you lead with count, and a message that lists more than three themes lands at under half its value, so write to one team, not to all of them.</p>
   <p>An <b>interview</b> is four questions and a goal you set with the team, which they check against your last season (a goal your results don't back up looks like a bluff). It uses one approach and can matter a little more than a message.</p>
   <p>A good message or interview can win over a team that's on the fence, or keep them talking longer in a negotiation. It can't make a team sign someone far below their bar, and top teams still won't sign rookies. Everything is worked out on the site itself: no AI service reads your messages.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
@@ -273,13 +270,13 @@
 <section class="card help" id="pledges">
   <h2>Growth pledges</h2>
   <p>There's no money in contracts. Instead you <b>pledge how well you'll drive</b>: an average finish measured against where your car should finish, so it's equally hard in any car.</p>
-  <table class="data-table compact"><thead><tr><th>Pledge</th><th class="num">Closes</th><th class="num">Fastest car</th><th class="num">Midfield (4th)</th><th class="num">Slowest car</th><th class="num">Reward if kept (V3)</th><th class="num">V2</th><th></th></tr></thead><tbody>
+  <table class="data-table compact"><thead><tr><th>Pledge</th><th class="num">Closes</th><th class="num">Fastest car</th><th class="num">Midfield (4th)</th><th class="num">Slowest car</th><th class="num">Reward if kept</th><th></th></tr></thead><tbody>
     {% for g in C.GROWTH_LEVELS %}<tr><td><b>{{ g.name }}</b></td><td class="num">{{ (g.share * 100)|round|int }}%</td>
       {% for rank in [1, 4, 11] %}{% set e = 2 * rank - 0.5 %}<td class="num">P{{ '%.1f'|format(e - g.share * (e - 1)) }}</td>{% endfor %}
-      <td class="num">{{ '%+g'|format(C.V3_PLEDGE_REWARD[loop.index0]) }} Rep</td><td class="num muted">+{{ g.reward }}</td><td class="muted small">{{ g.blurb }}</td></tr>{% endfor %}
+      <td class="num">{{ '%+g'|format(C.V3_PLEDGE_REWARD[loop.index0]) }} Rep</td><td class="muted small">{{ g.blurb }}</td></tr>{% endfor %}
   </tbody></table>
   <p>A DNF or DSQ counts as last place, and from round 5 your worst weekend is dropped. Better status and longer deals need a bigger pledge. Every seated driver must have one; after three rounds the targets are re-set to the car's real pace.
-    <b>Version 3:</b> a missed pledge costs Reputation (Steady 0, Solid −0.5, Strong −1, Breakout −1.5), and Steady is neutral either way because it only asks for what the car should do. A pledge made before 3.0 keeps the reward it was made under.</p>
+    a missed pledge costs Reputation (Steady 0, Solid −0.5, Strong −1, Breakout −1.5), and Steady is neutral either way because it only asks for what the car should do.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="contracts">
@@ -288,9 +285,9 @@
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="relationship">
-  <h2>Team relationship <span class="calc-badge" title="Values for Calculation Version 3; Version 2 values are noted">Version 3</span></h2>
+  <h2>Team relationship</h2>
   <p>Your team rates you out of 100 after every race: <b>Delighted, Happy, Concerned, Unhappy</b> or <b>Seat at risk</b>, from your average finish against your <a href="#pledges">pledge</a>, your teammate head-to-head and your <a href="#goals">season goals</a>, plus small extras from press answers, weekend targets and team orders. Early results count for less.
-    <b>Version 3:</b> the score is 60 plus how far you're ahead of or behind expectations, so meeting them keeps you near 60; extras only count from the last six weekends, within ±{{ '%g'|format(C.V3_EXTRA_CAP) }}, and good press adds at most +{{ '%g'|format(C.V3_PRESS_POSITIVE_CAP) }} of that. Off-track choices can't make up for results that are well below your pledge.</p>
+    the score is 60 plus how far you're ahead of or behind expectations, so meeting them keeps you near 60; extras only count from the last six weekends, within ±{{ '%g'|format(C.V3_EXTRA_CAP) }}, and good press adds at most +{{ '%g'|format(C.V3_PRESS_POSITIVE_CAP) }} of that. Off-track choices can't make up for results that are well below your pledge.</p>
   <p>Fall behind and you get a quiet word, then a formal warning, then "Seat at risk". Still at risk when Silly Season opens or the season ends and you're <b>released</b>. It's all on <em>Relationships</em>.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
@@ -307,22 +304,22 @@
 </section>
 <section class="card help" id="goals">
   <h2>Season goals</h2>
-  <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers) beating your teammate. <b>Version 3:</b> a goal met adds {{ '%+g'|format(C.V3_GOAL_EFFECT['Met']) }} to the relationship, on track {{ '%g'|format(C.V3_GOAL_EFFECT['On track']) }}, behind {{ '%g'|format(C.V3_GOAL_EFFECT['Behind']) }}. <b>Version 2 leagues:</b> each goal on track adds {{ '%.0f'|format(C.GOAL_WEIGHT) }} and each one behind takes {{ '%.0f'|format(C.GOAL_WEIGHT) }} away. A Race Master can re-issue season goals for one driver or everyone (Team management); any change to your numbers is shown to you first.</p>
+  <p>Alongside your pledge the team sets goals pitched at the car: points in a number of races, a championship position, and (for No. 1 and Equal Status drivers) beating your teammate. A goal met adds {{ '%+g'|format(C.V3_GOAL_EFFECT['Met']) }} to the relationship, on track {{ '%g'|format(C.V3_GOAL_EFFECT['On track']) }}, behind {{ '%g'|format(C.V3_GOAL_EFFECT['Behind']) }}. A Race Master can re-issue season goals for one driver or everyone (Team management); any change to your numbers is shown to you first.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="targets">
-  <h2>Weekend targets <span class="calc-badge" title="Values for Calculation Version 3; Version 2 values are noted">Version 3</span></h2>
+  <h2>Weekend targets</h2>
   <p>Before each race your team offers you <b>three targets</b>, pitched at your car, your recent results and your role, and you choose one and lock it in (on the round page or the Control Room). You can't change it afterwards.</p>
   <ul>
-    {% for key, t in C.TARGET_TIERS.items() %}{% set v3t = C.V3_TARGET_TIERS[key] %}<li><b>{{ t.label }}</b>: {{ t.blurb }} Hit it: {{ '%+g'|format(v3t[0]) }} team relationship; miss it: {{ '%+g'|format(v3t[1]) }} <span class="muted small">(Version 2 leagues: {{ '%+g'|format(t.hit) }} / {{ '%+g'|format(t.miss) }})</span>.</li>{% endfor %}
+    {% for key, t in C.TARGET_TIERS.items() %}{% set v3t = C.V3_TARGET_TIERS[key] %}<li><b>{{ t.label }}</b>: {{ t.blurb }} Hit it: {{ '%+g'|format(v3t[0]) }} team relationship; miss it: {{ '%+g'|format(v3t[1]) }}.</li>{% endfor %}
   </ul>
-  <p>The values shown when you choose are the ones that count; targets offered before 3.0 keep theirs. For example <i>Finish P12 or better</i>, <i>Finish P9 or better</i> or <i>Finish ahead of your teammate</i>. If you haven't chosen by lights out (or you don't have a login) you race for the Standard one.
+  <p>The values shown when you choose are the ones that count. For example <i>Finish P12 or better</i>, <i>Finish P9 or better</i> or <i>Finish ahead of your teammate</i>. If you haven't chosen by lights out (or you don't have a login) you race for the Standard one.
     It's void if you don't take part. A DNF or DSQ counts as a miss unless the Race Master rules it wasn't your fault. The Race Master can let you choose again or offer new targets before the race, or remove a target on any round (removing one after the race undoes its effect, and you'll see a change notice).</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="team-goals">
-  <h2>Team goals (Safe, Competitive, Ambitious) <span class="calc-badge" title="Values for Calculation Version 3; Version 2 values are noted">Version 3</span></h2>
-  <p>When the league turns them on, each team with a player driver picks one Constructors' goal before round 1. <b>Version 3:</b> <b>Safe</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['safe'][0]) }} Reputation if met, nothing if missed), <b>Competitive</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['competitive'][0]) }} / {{ '%g'|format(C.V3_TEAM_GOALS['competitive'][1]) }}) or <b>Ambitious</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['ambitious'][0]) }} / {{ '%g'|format(C.V3_TEAM_GOALS['ambitious'][1]) }}); with the pledge, at most ±{{ '%g'|format(C.V3_ROLLOVER_CAP) }} in total. A goal chosen before 3.0 keeps its terms. <b>Version 2 leagues:</b> Safe +1 / 0, Competitive +3 / −1, Ambitious +6 / −3.
+  <h2>Team goals (Safe, Competitive, Ambitious)</h2>
+  <p>When the league turns them on, each team with a player driver picks one Constructors' goal before round 1. <b>Safe</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['safe'][0]) }} Reputation if met, nothing if missed), <b>Competitive</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['competitive'][0]) }} / {{ '%g'|format(C.V3_TEAM_GOALS['competitive'][1]) }}) or <b>Ambitious</b> ({{ '%+g'|format(C.V3_TEAM_GOALS['ambitious'][0]) }} / {{ '%g'|format(C.V3_TEAM_GOALS['ambitious'][1]) }}); with the pledge, at most ±{{ '%g'|format(C.V3_ROLLOVER_CAP) }} in total.
     Targets come from car strength, last season's Constructors' position and scoring, the lineup, the number of rounds and Sprint weekends.
     A goal chosen after the season has started counts the points already scored and only predicts the rounds left, using how the team has actually been scoring (it counts more with every round). Safe always needs more than you have now, and each level asks for clearly more than the one below. Met means finishing at or above the target position <em>or</em> scoring the target points; teams level on points count as the lower place.
     Choices lock when round 1 is submitted; a Race Master can re-push the targets or reset a team's goal so they choose again (Team management).
@@ -330,8 +327,8 @@
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
 <section class="card help" id="orders">
-  <h2>Team orders <span class="calc-badge" title="Values for Calculation Version 3; Version 2 values are noted">Version 3</span></h2>
-  <p>Off unless the Race Master turns them on in League settings → Career &amp; team. When <b>On</b>, a No. 2 driver can be told before a race to let their teammate through. <b>Version 3:</b> the finishing order proves nothing on its own; the Race Master rules whether the order was followed ({{ '%+g'|format(C.V3_ORDER_OBEYED) }} relationship) or ignored ({{ '%+g'|format(C.V3_ORDER_IGNORED) }} and a headline). <b>Version 2 leagues:</b> finish ahead and you ignored it ({{ '%+.0f'|format(C.TEAM_ORDER_IGNORED) }}), finish behind and you followed it ({{ '%+.0f'|format(C.TEAM_ORDER_OBEYED) }}). <b>Advisory</b> shows orders with no effect.</p>
+  <h2>Team orders</h2>
+  <p>Off unless the Race Master turns them on in League settings → Career &amp; team. When <b>On</b>, a No. 2 driver can be told before a race to let their teammate through. The finishing order proves nothing on its own; the Race Master rules whether the order was followed ({{ '%+g'|format(C.V3_ORDER_OBEYED) }} relationship) or ignored ({{ '%+g'|format(C.V3_ORDER_IGNORED) }} and a headline). <b>Advisory</b> shows orders with no effect.</p>
   <p>Turning them <b>Off</b> removes every team order, including past ones, and undoes any effect they had; each driver affected sees a <a href="#updates">change notice</a>.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>
 </section>
@@ -388,7 +385,7 @@
 <section class="card help" id="accounts">
   <h2>Accounts and the site owner</h2>
   <p>Everyone creates their own account from <b>Sign up</b> on the login page, then joins leagues by invitation or by asking. There's no list of accounts anywhere on the site.</p>
-  <p>The <b>site owner</b> is the one account that runs the site. It's made on first start with a setup code from the host's settings (on Render: your service → Environment → <code>F1_TRACKER_SETUP_CODE</code>). The owner is Race Master of every league, controls site settings, and is the only one who can help someone who's lost their account: look it up by exact username or email (every account using that email is listed), then unlock it after too many wrong passwords, set a new password (which also unlocks it; the person then chooses their own password the next time they sign in), turn off two-step sign-in, sign it out everywhere or delete it.</p>
+  <p>The <b>site owner</b> is the one account that runs the site. It's created when the site is first set up. The owner is Race Master of every league, controls site settings, and is the only one who can help someone who's lost their account: look it up by exact username or email (every account using that email is listed), then unlock it after too many wrong passwords, set a new password (which also unlocks it; the person then chooses their own password the next time they sign in), turn off two-step sign-in, sign it out everywhere or delete it.</p>
   <p>New passwords need at least 8 characters and can't be a common password. Length matters more than symbols; a password manager is fine.</p>
   <p>Forgot your password? Use <b>Forgot password?</b> on the login page if your account has an email; otherwise ask the site owner.</p>
   <a class="back-top small" href="#top">Back to top ↑</a>

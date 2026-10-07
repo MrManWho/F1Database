@@ -17,6 +17,22 @@
   <button role="tab" id="tab-teams" aria-controls="panel-teams" aria-selected="false" class="tab" data-tab="teams" tabindex="-1">Constructors</button>
 </div>
 
+{# 4.0: the top three as a podium, then the full table #}
+{% set top3 = drivers|selectattr('has_results')|list %}
+{% if top3|length >= 3 %}
+<div class="standings-podium" aria-label="Top three">
+  {% for d in top3[:3] %}
+  <a class="sp-card p{{ loop.index }} {{ 'is-player' if d.driver.is_player }}" href="{{ url_for('driver_profile', token=ctx.token, driver_id=d.driver.id) }}"
+     style="--team: {{ d.team.color if d.team else '#777' }};{% if d.driver.player_color %} --player: {{ d.driver.player_color }};{% endif %}">
+    <span class="sp-pos">P{{ d.position }}</span>
+    <span class="sp-name">{{ d.driver.name }}</span>
+    <span class="sp-team">{{ d.team.name if d.team else 'No seat' }}</span>
+    <span class="sp-pts"><b>{{ d.points }}</b> pts{% if loop.index > 1 %} · −{{ top3[0].points - d.points }}{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <section class="card table-card" id="panel-drivers" role="tabpanel" aria-labelledby="tab-drivers">
   <div class="table-tools">
     <label class="sr-only" for="st-search">Search drivers</label>

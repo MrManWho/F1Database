@@ -140,7 +140,9 @@ def test_press_pen_answers_move_the_relationship(app, master_client):
     assert [q["key"] for q in pen["questions"]] == ["credit", "beat_mate"]
     ana = _client(app, "ana")
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Press pen" in dash and "Who deserves the credit?" in dash
+    assert "Answer your R1 post-race press" in dash          # 4.0: a task on Home, answered in the Debrief
+    debrief = ana.get(f"/career/{token}/weekend/{evs[0]['id']}?stage=debrief").get_data(as_text=True)
+    assert "Press pen" in debrief and "Who deserves the credit?" in debrief
     ana.post(f"/career/{token}/press/{evs[0]['id']}", data={"question": "credit", "answer": "me", "csrf_token": "tok"})
     ana.post(f"/career/{token}/press/{evs[0]['id']}", data={"question": "credit", "answer": "team", "csrf_token": "tok"})
     with storage.session(token) as conn:
@@ -209,7 +211,8 @@ def test_incident_reports_and_rulings(app, master_client):
                        data={"ruling": "warning", "note": "Avoidable contact", "csrf_token": "tok"})
     with storage.session(token) as conn:
         assert community.incidents(conn)[0]["ruling"] == "warning"
-        assert any("Ben Okafor given a warning" in n["headline"] for n in feed.latest(conn, 5))
+        assert any("1 warning" in n["headline"] and "Ben Okafor: Warning" in n["body"]   # 4.0: one stewards' story
+                       for n in feed.latest(conn, 5))
     page = ana.get(f"/career/{token}/rivalry?a={a}&b={b}").get_data(as_text=True)
     assert "Incidents between them" in page and "Avoidable contact" in page
     assert "Incidents" in ana.get(f"/career/{token}/incidents").get_data(as_text=True)

@@ -1,24 +1,33 @@
-{# v3.1: each session's weather, recorded by a Scorekeeper or the Race Master. Needs: ctx, event, wx. #}
-{% if wx and (wx.shown or wx.can_edit) %}
-<section class="card weather-card" id="weather" aria-labelledby="weather-title">
-  <div class="card-head"><h2 id="weather-title">Weather</h2><span class="muted small">A record only: it doesn't change points or ratings</span></div>
-  {% if wx.shown %}
-  <ul class="weather-list">{% for w in wx.shown %}
+{# v3.1: each session's weather, recorded by a Scorekeeper or the Race Master. Needs: ctx, event, wx.
+   4.0 workspace: wx_only (quali / sprint / race) shows one session inside that session's section; the form still
+   sends the other sessions' recorded values, so saving one session never clears another. #}
+{% set only_ = wx_only if wx_only is defined else none %}
+{% set bare_ = bare is defined and bare %}
+{% set shown_ = wx.shown|selectattr('session', 'equalto', only_)|list if only_ else wx.shown %}
+{% if wx and (shown_ or wx.can_edit or (only_ and wx.shown)) %}
+<section class="{{ 'ws-inner' if bare_ else 'card' }} weather-card" id="{{ 'weather' if not only_ or only_ == 'race' else 'weather-' ~ only_ }}" {% if not bare_ %}aria-labelledby="weather-title"{% endif %}>
+  {% if not bare_ %}<div class="card-head"><h2 id="weather-title">Weather</h2><span class="muted small">A record only: it doesn't change points or ratings</span></div>{% endif %}
+  {% if shown_ %}
+  <ul class="weather-list">{% for w in shown_ %}
     <li class="weather-chip {{ 'is-wet' if w.wet }}"><span aria-hidden="true">{{ w.icon }}</span> <b>{{ w.session_label }}</b> {{ w.text }}</li>{% endfor %}</ul>
-  {% elif not wx.can_edit %}<p class="muted small">No weather recorded for this round.</p>{% endif %}
+  {% elif not wx.can_edit %}<p class="muted small">{{ wx.empty or 'Not recorded' }}.</p>{% endif %}
   {% if wx.can_edit %}
   <form method="post" action="{{ url_for('weekend_weather', token=ctx.token, event_id=event.id) }}" class="weather-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if only_ %}<input type="hidden" name="wx_session" value="{{ only_ }}">{% endif %}
     <div class="form-grid">
       {% for s in wx.sessions %}
-      <label>{{ wx.session_labels[s] }}
+      {% if not only_ or s == only_ %}
+      <label>{{ 'Conditions' if only_ else wx.session_labels[s] }}
         <select name="weather_{{ s }}">
           <option value="">Not recorded</option>
           {% for key, c in wx.conditions.items() %}<option value="{{ key }}" {{ 'selected' if wx.recorded.get(s) == key }}>{{ c[1] }} {{ c[0] }}</option>{% endfor %}
         </select></label>
+      {% elif wx.recorded.get(s) %}<input type="hidden" name="weather_{{ s }}" value="{{ wx.recorded.get(s) }}">{% endif %}
       {% endfor %}
     </div>
-    <button class="btn btn-sm">Save weather</button>
+    <div class="button-row tight"><button class="btn btn-sm">Save weather</button>
+      {% if bare_ %}<span class="muted small">A record of what happened: it doesn't change points or ratings.</span>{% endif %}</div>
   </form>
   {% endif %}
 </section>

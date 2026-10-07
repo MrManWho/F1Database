@@ -21,6 +21,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "whatsnew: show the real What's New popup (hidden in other tests)")
     config.addinivalue_line("markers", "weekends: run with race weekends at their real default (on)")
     config.addinivalue_line("markers", "engine3: new leagues use the real default calculation engine (3)")
+    config.addinivalue_line("markers", "trackai: new seasons use the real default AI model (4.0 track-aware)")
+    config.addinivalue_line("markers", "pacerequired: race times are required on tracked rounds (the 4.0 default)")
+    config.addinivalue_line("markers", "latest: leagues move to the latest calculations when opened (the 4.0 default)")
 
 
 @pytest.fixture(autouse=True)
@@ -55,6 +58,33 @@ def calc_engine_default(request, monkeypatch):
     from f1tracker import constants
     if not request.node.get_closest_marker("engine3"):
         monkeypatch.setattr(constants, "NEW_LEAGUE_ENGINE", constants.ENGINE_LEGACY)
+
+
+@pytest.fixture(autouse=True)
+def latest_engine_default(request, monkeypatch):
+    """4.0 moves every league to the latest calculations when it's opened. Tests written before 4.0 check engine 2
+    leagues and the Calculation Update, so it's off for them; mark @pytest.mark.latest for the real default."""
+    from f1tracker import engine
+    if not request.node.get_closest_marker("latest"):
+        monkeypatch.setattr(engine, "AUTO_LATEST", False)
+
+
+@pytest.fixture(autouse=True)
+def ai_model_default(request, monkeypatch):
+    """Tests written before 4.0 check the v3 AI tracker: their new seasons stay on it. Mark @pytest.mark.trackai for
+    the real default (the track-aware recommendation)."""
+    from f1tracker import ai_track
+    if not request.node.get_closest_marker("trackai"):
+        monkeypatch.setattr(ai_track, "NEW_SEASON_MODEL", "v3")
+
+
+@pytest.fixture(autouse=True)
+def pace_required_default(request, monkeypatch):
+    """Tests written before 4.0.0-alpha.3 submit tracked rounds without race times. Mark @pytest.mark.pacerequired for
+    the real default (race times required on tracked rounds)."""
+    from f1tracker import ai3
+    if not request.node.get_closest_marker("pacerequired"):
+        monkeypatch.setattr(ai3, "PACE_REQUIRED_DEFAULT", "0")
 
 
 @pytest.fixture

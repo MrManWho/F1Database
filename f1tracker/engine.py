@@ -122,9 +122,42 @@ def set_league(conn, engine, choice_value):
                      (key, value))
 
 
+# 4.0: every league runs on the latest calculations; there is no choice and no older version to go back to.
+AUTO_LATEST = True
+
+
+def ensure_latest(conn):
+    """4.0: a league still on engine 2 (a backup from before 2.5 loaded into 4.0) moves to the latest calculations
+    the first time it's opened. Everything already calculated is kept exactly as it was and the latest rules apply
+    from the next round (the non-destructive "future" path, so no one's numbers change on the day). Completed
+    seasons keep the numbers they were played with. Cheap when there's nothing to do (one meta read)."""
+    if not AUTO_LATEST:
+        return False
+    changed = False
+    if league_engine(conn) < C.ENGINE_CURRENT:
+        if not conn.execute("SELECT 1 FROM seasons LIMIT 1").fetchone():
+            set_league(conn, C.ENGINE_CURRENT, "new")
+        else:
+            from . import migration
+            migration.apply_future(conn, "Paddock Legacy 4.0")
+        changed = True
+    # The AI recommendation is the latest one too (the track-aware model) for the season under way. It's advice
+    # only: nothing already calculated depends on it.
+    sid = _meta(conn, "current_season_id")
+    if sid:
+        from . import ai_track
+        if ai_track.season_model(conn, int(sid)) != ai_track.MODEL:
+            conn.execute("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (ai_track._key(int(sid)), ai_track.MODEL))
+            changed = True
+    return changed
+
+
 def label(conn, season_id):
     """What the league shows: "Calculation Version 3", with the cutoff for a mixed season."""
     engine = season_engine(conn, season_id)
+    if AUTO_LATEST:
+        return "Latest calculations"     # 4.0: one set of calculations; no versions are shown
     text = f"Calculation Version {engine}"
     cut = cutoff(conn, season_id)
     if engine >= C.ENGINE_CURRENT and cut:

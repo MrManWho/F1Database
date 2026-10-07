@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}More{% endblock %}
+{% block content %}
+{% set t = ctx.token %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>More</h1>
+  <p class="page-purpose">Everything else in the league, in one place.</p></div></div>
+<div class="more-grid">
+  <section class="card"><h2>Paddock</h2><ul>
+    <li><a href="{{ url_for('news_page', token=t) }}">News</a></li>
+    <li><a href="{{ url_for('announcements_page', token=t) }}">Announcements</a></li>
+    <li><a href="{{ url_for('incidents_page', token=t) }}">Incidents &amp; stewards' decisions</a></li>
+    {% if ctx.features.predictions %}<li><a href="{{ url_for('predictions_page', token=t) }}">Predictions standings</a></li>{% endif %}
+    <li><a href="{{ url_for('contracts_page', token=t) }}">Transfers</a></li>
+    {% if ctx.team_goals_on %}<li><a href="{{ url_for('team_goals_page', token=t) }}">Team goals</a></li>{% endif %}
+  </ul></section>
+  <section class="card"><h2>Championship</h2><ul>
+    <li><a href="{{ url_for('standings_page', token=t) }}">Standings</a></li>
+    <li><a href="{{ url_for('seasons_page', token=t) }}">Calendar &amp; seasons</a></li>
+    <li><a href="{{ url_for('results_index', token=t) }}">Results</a></li>
+    <li><a href="{{ url_for('stats_page', token=t) }}">Statistics</a></li>
+    <li><a href="{{ url_for('records', token=t) }}">Records</a></li>
+  </ul></section>
+  {% if ctx.my_driver %}
+  <section class="card"><h2>Career</h2><ul>
+    <li><a href="{{ url_for('garage', token=t) }}">My Garage</a></li>
+    <li><a href="{{ url_for('team_standing', token=t) }}">Relationships</a></li>
+    <li><a href="{{ url_for('offers_page', token=t) }}">Contracts &amp; offers</a></li>
+    <li><a href="{{ url_for('press_page', token=t) }}">Press history</a></li>
+  </ul></section>
+  {% endif %}
+  <section class="card"><h2>You</h2><ul>
+    <li><a href="{{ url_for('my_settings', token=t) }}">My settings &amp; notifications</a></li>
+    <li><a href="{{ url_for('home') }}">All my leagues</a></li>
+    <li><a href="{{ url_for('help_page') }}">Help</a></li>
+  </ul></section>
+</div>
+{% endblock %}

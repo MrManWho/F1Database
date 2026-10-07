@@ -1,0 +1,24 @@
+{# 4.0: the secondary tabs inside Championship, Career and More. Needs: ctx, ep, t. #}
+{% set mine_profile = ep == 'driver_profile' and ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id %}
+{% set champ = [('standings_page', 'Standings', url_for('standings_page', token=t)), ('seasons_page', 'Calendar', url_for('seasons_page', token=t)),
+                ('results_index', 'Results', url_for('results_index', token=t)), ('stats_page', 'Statistics', url_for('stats_page', token=t)),
+                ('drivers_page', 'Drivers', url_for('drivers_page', token=t)), ('teams_page', 'Teams', url_for('teams_page', token=t)),
+                ('rivalry_page', 'Rivalries', url_for('rivalry_page', token=t)), ('records', 'Records', url_for('records', token=t))] %}
+{% set champ_alias = {'team_profile': 'teams_page', 'driver_profile': 'drivers_page', 'season_review': 'seasons_page', 'season_rollover': 'seasons_page', 'race_summary': 'results_index'} %}
+{% set career = [] %}
+{% if ctx.my_driver %}{% set career = [('garage', 'My Garage', url_for('garage', token=t)), ('team_standing', 'Relationships', url_for('team_standing', token=t)),
+                ('offers_page', 'Contracts & offers', url_for('offers_page', token=t)), ('driver_profile', 'Progression', url_for('driver_profile', token=t, driver_id=ctx.my_driver.id)),
+                ('press_page', 'Press', url_for('press_page', token=t))] + ([('team_goals_page', 'Team goals', url_for('team_goals_page', token=t))] if ctx.team_goals_on else []) %}{% endif %}
+{% set more = [('news_page', 'News', url_for('news_page', token=t)), ('announcements_page', 'Announcements', url_for('announcements_page', token=t)),
+               ('incidents_page', 'Incidents', url_for('incidents_page', token=t))] + ([('predictions_page', 'Predictions', url_for('predictions_page', token=t))] if ctx.features.predictions else [])
+               + [('contracts_page', 'Transfers', url_for('contracts_page', token=t))] + ([('team_goals_page', 'Team goals', url_for('team_goals_page', token=t))] if ctx.team_goals_on and not ctx.my_driver else [])
+               + [('more_page', 'Everything else', url_for('more_page', token=t))] %}
+{% set tabs, here, label = none, ep, '' %}
+{% if ctx.my_driver and (ep in career|map(attribute=0)|list) and (ep != 'driver_profile' or mine_profile) %}{% set tabs, label = career, 'Career' %}
+{% elif ep in champ|map(attribute=0)|list or ep in champ_alias %}{% set tabs, label, here = champ, 'Championship', champ_alias.get(ep, ep) %}
+{% elif ep in more|map(attribute=0)|list %}{% set tabs, label = more, 'More' %}{% endif %}
+{% if tabs %}
+<nav class="nav-sub-strip" aria-label="{{ label }}">
+  {% for key, name, href in tabs %}<a href="{{ href }}" {% if key == here %}aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
+</nav>
+{% endif %}

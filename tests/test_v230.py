@@ -69,7 +69,8 @@ def test_a_full_race_weekend_through_the_website(app, master_client):
         assert r.status_code == 423 and "hasn't started" in r.get_json()["error"]
     page = kim.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert "Open the paddock" in page and "Opens at lights out" in page
-    assert "Open the paddock" not in ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
+    # 4.0 redesign: a driver sees who the round waits on ("Open the paddock"), but never the button itself
+    assert f"/weekend/{ev['id']}/paddock\"" not in ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
     assert ana.post(f"/career/{token}/weekend/{ev['id']}/paddock", data={"csrf_token": "tok"}).status_code == 403
     # A Scorekeeper opens the paddock: everyone's told, pre-race press appears.
     kim.post(f"/career/{token}/weekend/{ev['id']}/paddock", data={"csrf_token": "tok"})

@@ -178,6 +178,46 @@
   </form>
 </section>
 
+<section class="card" id="site-ops">
+  <h2>Site health</h2>
+  <p class="muted small">This copy of the site: <b>{{ environment_label }}</b> · v{{ APP_VERSION }}.</p>
+  <div class="button-row">
+    <a class="btn btn-ghost" href="{{ url_for('site_errors') }}">Site errors</a>
+    <a class="btn btn-ghost" href="{{ url_for('site_audit_page') }}">Site change record</a>
+    {% if test_site %}<a class="btn btn-ghost" href="{{ url_for('delivery_preview') }}">Delivery preview</a>{% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('design_page') }}">Design system</a>
+    <a class="btn btn-ghost" href="{{ url_for('healthz') }}">Health check</a>
+  </div>
+</section>
+
+{% if test_site %}
+<section class="card" id="test-import">
+  <h2>Load the live site's leagues (test site only)</h2>
+  <p class="muted small">Upload an encrypted backup downloaded from the live site (Account → Settings there) to try new features on a copy of your real leagues and logins.
+    <b>It replaces everything on this test site.</b> Afterwards, sign in with your live username and password. Nothing is ever sent from here and nothing goes back to the live site.
+    On a free plan the test site forgets this when it restarts, so load it again whenever you need it.</p>
+  <form method="post" action="{{ url_for('import_site_backup') }}" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Backup file (.plbk)<input type="file" name="file" accept=".plbk" required></label>
+    <div class="grid-2">
+      <label>Its passphrase<input name="passphrase" type="password" required autocomplete="off"></label>
+      <label>Type REPLACE to confirm<input name="confirm" required autocomplete="off"></label>
+    </div>
+    <div><button class="btn btn-danger">Load backup</button></div>
+  </form>
+</section>
+{% endif %}
+{% if test_site %}
+<section class="card" id="test-final-round">
+  <h2>Try a season finale (test site only)</h2>
+  <p class="muted small">Adds a fictional league whose season has every round played except the last, with you as Race Master driving Player One.
+    Enter the last round, then start the new season to try the rollover. Add as many as you like; delete them from Leagues.</p>
+  <form method="post" action="{{ url_for('seed_final_round_league') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn">Add a league with one round left</button>
+  </form>
+</section>
+{% endif %}
 <section class="card" id="offsite">
   <h2>Encrypted backup to keep somewhere else</h2>
   <p class="muted small">The automatic backups are stored on the same disk as the site, so they can't help if the disk or the hosting account is lost.

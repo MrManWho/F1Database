@@ -1,14 +1,37 @@
 {# v2.5: optional lap-time evidence for the AI tracker. Needs: ctx, event, pace. #}
+{# 4.0 workspace: pace_only (gp / sprint) shows one session's entries, one tab per player, inside that session's
+   section (bare: no card or heading of its own). #}
+{% set only_ = pace_only if pace_only is defined else none %}
+{% set bare_ = bare is defined and bare %}
 {% if pace %}
-<section class="card pace-card" id="pace" aria-labelledby="pace-title">
-  <div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">(optional, for the AI recommendation)</small></h2></div>
-  <p class="muted small">Lap times make the AI recommendation much sharper: it compares you with your AI teammate (or cars of similar speed), not just finishing positions.
-    Leave anything blank you don't have. Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+{% set entries_ = pace.entries|selectattr('session', 'equalto', only_)|list if only_ else pace.entries %}
+{% set label_ = {'gp': 'Grand Prix', 'sprint': 'Sprint'} %}
+{% set missing_ = pace.missing|selectattr(1, 'equalto', label_[only_])|list if only_ else pace.missing %}
+{% if entries_ %}
+<section class="{{ 'ws-inner' if bare_ else 'card' }} pace-card" id="{{ 'pace' if not only_ or only_ == 'gp' else 'pace-' ~ only_ }}" {% if not bare_ %}aria-labelledby="pace-title"{% endif %}>
+  {% if not bare_ %}<div class="card-head"><h2 id="pace-title">⏱ Pace &amp; conditions <small class="muted">({{ 'not required for this round' if pace.legacy else 'required on tracked rounds' if pace.required else 'optional' }}, for the AI recommendation)</small></h2></div>{% endif %}
+  {% if pace.legacy %}<p class="muted small">Race times: Not tracked under this season's rules. Anything entered for this round is kept and still used.</p>{% endif %}
+  <p class="muted small">Copy the times from the game's results screen: yours and your AI teammate's (or a driver you pick to compare with). The site works out the gap, which sharpens the AI recommendation.
+    {% if pace.required %}<b>Each player who finished needs race times and laps before the weekend can be submitted</b>, unless <em>Don't submit times</em> is ticked for them.{% else %}Leave anything blank you don't have.{% endif %}
+    Flag anything that made the session unrepresentative and it's left out or counts less.</p>
+  {% if missing_ %}<div class="banner banner-warn" role="status"><b>Still needed before submitting:</b> race times for {% for n, s in missing_ %}{{ n }}{{ ' (' ~ s ~ ')' if not only_ }}{{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}
   {% if wx and wx.wet %}<p class="small">🌧️ This round's weather is recorded as wet or changing. If it made a player's session unrepresentative, tick <em>Wet or changing conditions</em> for them below. Nothing is ticked for you.</p>{% endif %}
-  {% for item in pace.entries %}{% set r = item.row %}{% set p = item.input %}
+  {% if bare_ and entries_|length > 1 %}
+  <div class="pace-tabs" role="tablist" aria-label="Player">
+    {% for item in entries_ %}{% set p = item.input %}{% set miss_ = (item.row.driver.name, label_[item.session]) in pace.missing %}
+    <button type="button" role="tab" class="pace-tab {{ 'is-on' if loop.first }}" id="pt-{{ item.session }}-{{ item.row.driver_id }}" aria-controls="pp-{{ item.session }}-{{ item.row.driver_id }}" aria-selected="{{ 'true' if loop.first else 'false' }}" {% if item.row.driver.player_color %}style="--player: {{ item.row.driver.player_color }}"{% endif %}>
+      {{ item.row.driver.name }}{% if miss_ %} <span class="pill pill-hot">Needed</span>{% elif p and (p.untracked or p.race_gap is not none) %} <span class="pill pill-ok">✓ Saved</span>{% endif %}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% for item in entries_ %}{% set r = item.row %}{% set p = item.input %}
+  {% if bare_ %}<div class="pace-panel" role="{{ 'tabpanel' if entries_|length > 1 else 'group' }}" id="pp-{{ item.session }}-{{ r.driver_id }}" {% if entries_|length > 1 %}aria-labelledby="pt-{{ item.session }}-{{ r.driver_id }}"{% endif %} {{ 'hidden' if not loop.first }}>
+  <h3 class="pace-who">{{ r.driver.name }}'s timing{% if p %} <span class="muted small">· {% if p.untracked %}times not submitted{% elif p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% endif %}</span>{% endif %}</h3>
+  {% else %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
-      {% if p %}<span class="muted small">· {% if p.untracked %}not tracked{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· nothing entered</span>{% endif %}</summary>
+      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% elif pace.required %}race times missing{% elif pace.legacy and p.race_gap is none %}race times not tracked{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· {{ "race times not tracked under this season's rules" if pace.legacy else 'nothing entered' }}</span>{% endif %}</summary>
+  {% endif %}
     {% if pace.can_edit %}
     <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -20,12 +43,18 @@
         <label>Or compare with <select name="comp_driver_id"><option value="">—</option>{% for d in pace.drivers %}<option value="{{ d.driver_id }}" {{ 'selected' if p and p.comp_driver_id == d.driver_id }}>{{ d.driver.name }} ({{ d.team.name }})</option>{% endfor %}</select></label>
         <label>Their qualifying time <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.300" inputmode="decimal"></label>
         {% endif %}
-        <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+        <label>Your race time <input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
+        <label>{{ "AI teammate's" if item.session == 'sprint' else "Their" }} race time <small class="muted">({{ 'AI teammate' if item.session == 'sprint' else 'AI teammate, or the driver picked above' }})</small>
+          <input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
         <label>Laps you completed <input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}"></label>
+        <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
+        <details class="small"><summary>Or type the gap yourself</summary>
+          <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+          <span class="muted">Only used when the two race times are blank (for example if one of you was lapped).</span></details>
       </div>
       <fieldset class="flag-grid"><legend class="small">Anything unusual?</legend>
         {% for key, f in pace.flags.items() %}<label class="check small"><input type="checkbox" name="flag_{{ key }}" value="1" {{ 'checked' if p and key in p.flag_list }}> {{ f[0] }}</label>{% endfor %}
-        <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Do not track this session</label>
+        <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Don't submit times for this session (it won't count toward the AI recommendation)</label>
       </fieldset>
       {% if ctx.is_master %}
       <label class="small">Representative? <select name="representative">
@@ -33,10 +62,40 @@
         <option value="1" {{ 'selected' if p and p.representative == 1 }}>Yes: it still shows the level is too hard/easy (counts at half weight)</option>
         <option value="0" {{ 'selected' if p and p.representative == 0 }}>No: leave it out</option></select></label>
       {% endif %}
-      <div><button class="btn btn-sm btn-primary">Save pace data</button></div>
+      <div><button class="btn btn-sm btn-primary">Save {{ r.driver.name }}'s times</button></div>
     </form>
     {% endif %}
-  </details>
+  {% if bare_ %}</div>{% else %}</details>{% endif %}
   {% endfor %}
 </section>
+{% endif %}
+<script>
+/* 4.0: show the gap as the two race times are typed (the site works it out the same way when saved) */
+(function () {
+  if (window.__paceGap) return; window.__paceGap = true;
+  /* player tabs inside a session's Race times section */
+  document.querySelectorAll(".pace-tabs").forEach(function (bar) {
+    bar.addEventListener("click", function (e) {
+      const tab = e.target.closest("[role=tab]"); if (!tab) return;
+      bar.querySelectorAll("[role=tab]").forEach(function (t) {
+        const on = t === tab; t.classList.toggle("is-on", on); t.setAttribute("aria-selected", on ? "true" : "false");
+        const panel = document.getElementById(t.getAttribute("aria-controls")); if (panel) panel.hidden = !on;
+      });
+    });
+  });
+  function secs(v) { v = (v || "").trim().replace(",", "."); if (!v) return null; var t = 0, parts = v.split(":");
+    for (var i = 0; i < parts.length; i++) { var n = parseFloat(parts[i]); if (isNaN(n)) return null; t = t * 60 + n; } return t; }
+  document.querySelectorAll(".pace-form").forEach(function (f) {
+    var a = f.querySelector("[data-race-time]"), b = f.querySelector("[data-bench-time]"), out = f.querySelector("[data-gap-preview]"),
+        laps = f.querySelector("[name=laps]");
+    if (!a || !b || !out) return;
+    function show() { var x = secs(a.value), y = secs(b.value);
+      if (x === null || y === null) { out.textContent = ""; return; }
+      var gap = x - y, l = parseInt(laps.value, 10);
+      out.textContent = "Gap: " + (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s (" + (gap >= 0 ? "behind" : "ahead") + ")" +
+        (l > 0 ? ", " + (gap >= 0 ? "+" : "") + (gap / l).toFixed(2) + " s a lap" : ""); }
+    [a, b, laps].forEach(function (el) { el.addEventListener("input", show); }); show();
+  });
+})();
+</script>
 {% endif %}

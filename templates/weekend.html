@@ -1,108 +1,264 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_dot, difficulty, reaction_bar, comment_thread with context %}
+{% from "_macros.html" import team_dot, difficulty, reaction_bar, comment_thread, target_state, race_clock, driver_link, delta with context %}
 {% block title %}R{{ event.round_number }} {{ event.name }}{% endblock %}
 {% block content %}
+{% from "_icons.html" import icon %}
+{# 4.0 Race Weekend workspace: Prepare · Sessions · Review & submit · Debrief, worked out from the saved round (workspace.py).
+   Left: the weekend's steps with the sessions inside Sessions. Middle: the current step, one labelled section per kind of
+   input (required ones open, finished ones folded). Right: what's saved and who still needs to act. Bottom: Save & continue. #}
 {% set locked = event.status == 'Complete' and ctx.can_run and not ctx.is_master %}
 {% set gated = gate and gate.blocking %}
 {% set not_started = wk and wk.on and wk.phase in ('upcoming', 'paddock') %}
 {% set ro = not ctx.can_run or locked or gated or not_started %}
-{% set stage = wk.phase if wk and wk.on else ('complete' if event.status == 'Complete' else 'live' if event.status == 'In Progress' else 'upcoming') %}
-{% set default_tab = 'results' if stage == 'complete' or (ctx.can_run and (stage == 'live' or not (wk and wk.on))) else 'weekend' %}
-<header class="round-hero stage-{{ stage }}">
-  <div class="round-badge" aria-hidden="true"><small>Round</small><b>{{ event.round_number }}</b></div>
-  <div class="round-title">
-    <div class="kicker">{{ ctx.season.year }} · round {{ index }} of {{ total }}</div>
-    <h1>{{ event.name }}</h1>
-    <div class="hero-meta">
-      <span>{{ event.location }}</span>
-      {% if event.is_sprint %}<span class="pill pill-sprint">Sprint weekend</span>{% endif %}
-      {% for w in (wx.shown if wx else []) %}<span class="pill weather-pill {{ 'is-wet' if w.wet }}" title="{{ w.session_label }}: {{ w.text }}"><span aria-hidden="true">{{ w.icon }}</span> {{ w.session_label }}<span class="sr-only">: {{ w.text }}</span></span>{% endfor %}
-      <span class="status-badge status-{{ event.status|lower|replace(' ', '-') }}" id="event-status">{{ wk.label if wk and wk.on else event.status }}</span>
-    </div>
+{% set phase_key = wk.phase if wk and wk.on else ('complete' if event.status == 'Complete' else 'live' if event.status == 'In Progress' else 'upcoming') %}
+{% set state_text = {'done': 'Complete', 'current': 'In progress', 'upcoming': 'Up next', 'attention': 'Needs attention', 'optional': 'Optional', 'locked': 'Closed', 'info': 'For information'} %}
+{% set wk_url = url_for('weekend', token=ctx.token, event_id=event.id) %}
+{% set wx_key = {'q': 'quali', 's': 'sprint', 'r': 'race'} %}
+{% set staff = 'Scorekeeper or Race Master' %}
+
+{# One labelled section of a step: a status mark, its title, whether it's required, who does it, and a one-line state.
+   Required sections that still need something open by themselves; finished and optional ones fold away. #}
+{% macro sec(id, title, state, summary='', tag='', who='', open=false, only='', extra='', edit=false) -%}
+<details class="ws-sec st-{{ state }} {{ extra }}" id="{{ id }}" {{ 'open' if open }} {% if only %}data-session-only="{{ only }}" data-session-strict{% endif %}>
+  <summary class="ws-sec-head">
+    <span class="st-ico is-{{ state }}" aria-hidden="true">{% if state == 'done' %}{{ icon('check') }}{% elif state == 'attention' %}!{% elif state in ('optional', 'info') %}i{% elif state == 'locked' %}{{ icon('lock') }}{% endif %}</span>
+    <span class="ws-sec-title"><b>{{ title }}</b>{% if tag %}<span class="pill {{ 'pill-hot' if tag in ('Needs input', 'Required') and state != 'done' else 'pill-ok' if state == 'done' else '' }}">{{ tag }}</span>{% endif %}
+      <span class="sr-only">{{ state_text.get(state, '') }}.</span>{% if summary %}<small class="ws-sec-sum">{{ summary }}</small>{% endif %}</span>
+    {% if who %}<span class="ws-sec-who">{{ who }}</span>{% endif %}
+    <span class="ws-sec-act" aria-hidden="true"><span class="when-closed">{{ 'Edit' if state == 'done' and edit else 'View' if state in ('done', 'locked') else 'Open' }}</span>{{ icon('chev-down') }}</span>
+  </summary>
+  <div class="ws-sec-body">{{ caller() }}</div>
+</details>
+{%- endmacro %}
+
+<header class="ws-head stage-{{ phase_key }}">
+  <div class="round-badge ws-round" aria-label="Round {{ event.round_number }} of {{ total }}">{% if circuit and circuit.flag %}<span class="ws-flag" role="img" aria-label="{{ circuit.code }}">{{ circuit.flag }}</span>{% else %}<b>{{ '%02d'|format(event.round_number) }}</b>{% endif %}</div>
+  <div class="ws-title">
+    <div class="ws-kicker"><span>Round {{ '%02d'|format(event.round_number) }}</span> / Race weekend{% if event.is_sprint %} · <span class="pill pill-sprint">Sprint weekend</span>{% endif %}</div>
+    <div class="ws-name"><h1>{{ event.name }}</h1>
+      <span class="status-badge status-{{ (wk.label if wk and wk.on else event.status)|lower|replace(' ', '-') }}" id="event-status">{{ wk.label if wk and wk.on else event.status }}</span></div>
+    <div class="ws-where"><span>{{ circuit.circuit if circuit and circuit.circuit else event.location }}</span>{% if event.location and circuit and circuit.circuit and event.location not in circuit.circuit %}<span>{{ event.location }}</span>{% endif %}<span>Season {{ ctx.season.year }} · round {{ index }} of {{ total }}</span></div>
   </div>
+  <div class="ws-hero" aria-hidden="true">{% if circuit and circuit.path %}<svg viewBox="0 0 100 60"><path d="{{ circuit.path }}"/></svg>{% endif %}</div>
   <nav class="round-nav" aria-label="Rounds">
-    {% if prev_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}" title="{{ prev_event.name }}">← R{{ prev_event.round_number }}</a>{% endif %}
-    {% if next_event %}<a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}" title="{{ next_event.name }}">R{{ next_event.round_number }} →</a>{% endif %}
-    {% if event.status == 'Complete' %}<a class="btn btn-sm" href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">📋 Race summary</a>{% endif %}
-    {% if ctx.is_master and can_reset %}<a class="btn btn-sm btn-ghost danger-text" href="{{ url_for('weekend_reset', token=ctx.token, event_id=event.id) }}">↺ Reset weekend</a>{% endif %}
+    {% if prev_event %}<a class="btn btn-sm" href="{{ url_for('weekend', token=ctx.token, event_id=prev_event.id) }}" title="{{ prev_event.name }}">← R{{ prev_event.round_number }}</a>{% endif %}
+    {% if next_event %}<a class="btn btn-sm" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}" title="{{ next_event.name }}">R{{ next_event.round_number }} →</a>{% endif %}
   </nav>
 </header>
-<div class="round-tabs" role="tablist" aria-label="This round">
-  <button type="button" role="tab" data-tab="weekend" aria-selected="{{ 'true' if default_tab == 'weekend' else 'false' }}">🏁 Weekend</button>
-  <button type="button" role="tab" data-tab="results" aria-selected="{{ 'true' if default_tab == 'results' else 'false' }}">📊 Results</button>
-  {% if event.status != 'Not Run' or hub.comments is defined %}<button type="button" role="tab" data-tab="talk" aria-selected="false">💬 Incidents &amp; chat</button>{% endif %}
-</div>
 
 {% if event.status == 'Complete' and not ctx.is_master %}
-<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Submitted and locked.</b> This round's results are final.
-  Only the Race Master can reopen or correct it{% if ctx.can_run %}, so contact them if something needs fixing{% endif %}.</div>
+<div class="banner banner-lock ws-lock" role="note">{{ icon('lock') }} <span><b>Submitted and locked.</b> This round's results are final.
+  Only the Race Master can reopen or correct it{% if ctx.can_run %}, so contact them if something needs fixing{% endif %}.</span></div>
 {% elif event.status == 'Complete' and ctx.is_master %}
-<div class="banner banner-lock" role="note"><span aria-hidden="true">🔒</span> <b>Weekend complete.</b> Scorekeepers can't edit this round.
-  You can correct it here: edits are held until you press <b>Save corrections</b>. Or reopen it so a Scorekeeper can.
-  <form method="post" action="{{ url_for('weekend_reopen', token=ctx.token, event_id=event.id) }}" class="inline"
-        onsubmit="return confirm('Reopen this round? Scorekeepers will be able to edit it until it is submitted again.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form></div>
+<div class="banner banner-lock ws-lock" role="note">{{ icon('lock') }} <span><b>Weekend complete.</b> Scorekeepers can't edit this round.
+  You can correct it under Sessions: edits are held until you press <b>Save corrections</b>. Or reopen it (Race Master tools, below) so a Scorekeeper can.</span></div>
 {% endif %}
 
-<div class="round-panel" data-panel="weekend" role="tabpanel">
-{% include "_paddock.html" with context %}
-{% if my_target %}{% set mt = my_target %}{% include "_target_choice.html" with context %}{% endif %}
-{% if not (wk and wk.on) %}{% set full = True %}{% include "_gate.html" with context %}{% endif %}
-{% include "_race_night.html" with context %}
+<div class="ws-layout" data-stage-now="{{ ws.stage }}">
+{# ============================================================== steps (left rail) #}
+<nav class="ws-rail" aria-label="This weekend">
+  <div class="ws-rail-title">This weekend</div>
+  <ol class="ws-steps">
+  {% for st in ws.stages %}
+    <li class="ws-steps-item st-{{ st.state }}">
+      <a href="{{ wk_url }}?stage={{ st.key }}" class="ws-step st-{{ st.state }} {{ 'is-on' if st.on }}" data-stage-link="{{ st.key }}" {% if st.on %}aria-current="step"{% endif %}>
+        <span class="st-ico is-{{ st.state }}" aria-hidden="true">{% if st.state == 'done' %}{{ icon('check') }}{% elif st.state == 'attention' %}!{% else %}{{ st.number }}{% endif %}</span>
+        <span class="ws-step-text"><b>{{ st.label }}</b><small>{{ state_text[st.state] }}</small></span></a>
+      {% if st.key == 'sessions' %}
+      <div class="session-cards session-tabs ws-rail-sessions" role="group" aria-label="Sessions">
+        {% for s in ws.sessions %}<a href="{{ wk_url }}?stage=sessions&amp;session={{ s.key }}" class="session-card st-{{ s.state }} {{ 'is-on' if s.active }}" data-session="{{ s.key }}" {% if s.active %}aria-current="true"{% endif %}><span class="sc-dot" aria-hidden="true">{% if s.state == 'done' %}{{ icon('check') }}{% endif %}</span><span class="sc-label">{{ s.label }}</span><span class="sc-state">{% if s.state == 'done' %}Saved{% elif s.entered %}{{ s.entered }}/{{ s.total }}{% else %}Not started{% endif %}</span></a>{% endfor %}
+      </div>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+  <a class="ws-rail-link" href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">{{ icon('list') }} View all round details <span aria-hidden="true">→</span></a>
+</nav>
 
-</div>
+<div class="ws-main">
 
-<div class="round-panel" data-panel="results" role="tabpanel">
-{% include "_weather.html" with context %}
-<section class="card diff-strip">
-  {{ difficulty(rec, compact=True) }}
-  <div class="diff-input">
-    {% if ro %}
-    <div class="ro-value"><small>AI difficulty used</small><strong>{{ event.ai_difficulty if event.ai_difficulty is not none else ("Not tracked" if event.ai_untracked else "Not entered yet") }}</strong></div>
-    {% else %}
-    <label>AI difficulty used
-      <input type="number" id="ai-difficulty" min="{{ C.MIN_DIFFICULTY }}" max="{{ C.MAX_DIFFICULTY }}" step="1"
-             value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked">
-    </label>
-    <div class="button-row tight">
-      {% if rec.recommended is not none and not rec.for_next %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
-      <button type="button" class="btn btn-sm btn-ghost" id="no-track" aria-pressed="{{ 'true' if event.ai_untracked and event.ai_difficulty is none else 'false' }}">Don't track this round</button>
-      <span class="small muted" id="untracked-note" {{ 'hidden' if not (event.ai_untracked and event.ai_difficulty is none) }}>✓ Marked "Don't track"</span>
+{# ============================================================== 1 PREPARE #}
+<section class="ws-stage" data-stage="prepare" id="stage-prepare" aria-labelledby="stage-prepare-title" {{ 'hidden' if ws.stage != 'prepare' }}>
+  <div class="ws-stage-head"><h2 class="ws-stage-title" id="stage-prepare-title">Prepare</h2>
+    <p class="ws-stage-sub">{% if ws.complete %}Everything before lights out, as it was done.{% else %}Your jobs before lights out, required ones first. Optional extras are folded underneath.{% endif %}</p></div>
+
+  {# ---- the short checklist: you, the league, and who it's waiting on #}
+  {% set mine = ws.tasks|selectattr('stage', 'equalto', 'prepare')|list + ws.tasks|selectattr('key', 'equalto', 'press')|list %}
+  {% set lg_ = ws.readiness.league %}
+  {% if mine or lg_ %}
+  <section class="card ws-tasks" aria-labelledby="my-tasks-title">
+    <div class="card-head"><h2 id="my-tasks-title">{{ 'Your tasks' if mine else 'League readiness' }}</h2>
+      {% if mine %}<span class="muted small">{{ mine|selectattr('done')|list|length }} of {{ mine|length }} done</span>{% endif %}</div>
+    {% if mine %}
+    <ul class="task-list">
+      {% for t in mine %}
+      <li class="task {{ 'is-done' if t.done else ('is-closed' if t.closed else 'is-open') }}">
+        <span class="st-ico {{ 'is-locked' if t.closed else ('is-done' if t.done else ('is-attention' if t.required else 'is-optional')) }}" aria-hidden="true">{% if t.closed %}{{ icon('lock') }}{% elif t.done %}{{ icon('check') }}{% elif t.required %}!{% else %}i{% endif %}</span>
+        <span class="task-text">{{ t.text }}{% if t.closed %} <span class="muted small">(closed at lights out)</span>{% endif %}<span class="sr-only">: {{ 'closed' if t.closed else 'done' if t.done else 'to do' }}</span></span>
+        <span class="pill {{ '' if t.closed else ('pill-ok' if t.done else ('pill-hot' if t.required else '')) }}">{{ 'Closed' if t.closed else ('Done' if t.done else ('Required' if t.required else 'Optional')) }}</span>
+        {% if not t.done and not t.closed %}
+          {% if t.event_id %}<a class="btn btn-sm" href="{{ url_for('weekend', token=ctx.token, event_id=t.event_id) }}?stage=debrief#press">Answer →</a>
+          {% else %}<a class="btn btn-sm" href="#{{ t.anchor }}" data-open-details>Do it →</a>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <ul class="ready-lines">
+      {% if ws.readiness.personal.has_tasks %}
+      <li class="{{ 'is-ok' if ws.readiness.personal.ready else 'is-todo' }}">{% if ws.readiness.personal.ready %}<b>✓ Your preparation is complete.</b>{% else %}<b>! Your required tasks still need doing</b> before the race can start.{% endif %}</li>
+      {% elif mine %}<li class="is-ok">Nothing here is required of you this round.</li>{% endif %}
+      {% if lg_ %}
+        {% if not lg_.waiting %}<li class="is-ok"><b>✓ The league is ready.</b> {{ lg_.ready }} of {{ lg_.total }} players have done their part{{ ' (opened early by the Race Master)' if lg_.bypass }}.</li>
+        {% else %}
+          {% for p in gate.players if not p.done %}<li class="is-wait"><b>⏳ Waiting on {{ p.driver.name }}:</b> {{ p.checks|rejectattr('done')|map(attribute='label')|join(', ')|lower }}.</li>{% endfor %}
+          {% if lg_.bypass %}<li class="is-ok">Opened early by the Race Master.</li>{% endif %}
+        {% endif %}
+      {% elif wk and wk.on and wk.phase == 'upcoming' %}<li class="is-wait">The paddock hasn't opened yet{% if wk.opens_at %}: it opens by itself at {{ wk.opens_at|stamp }}{% endif %}.</li>{% endif %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ---- weekend target #}
+  {% if my_target %}{% set mt = my_target %}
+  {% set t_req = ctx.team_life.gates and ctx.team_life.gate_targets %}
+  {% set t_state = 'done' if mt.chosen else ('locked' if not mt.open else ('attention' if t_req else 'current')) %}
+  {% call sec('sec-target', 'Weekend target', t_state,
+      summary=(mt.chosen.label if mt.chosen else ('Closed at lights out' if not mt.open else 'Choose Safe, Standard or Stretch and lock it in')),
+      tag=('Locked in' if mt.chosen and mt.chosen.tier else 'Required' if t_req else 'Optional'), who='You', open=(not mt.chosen and mt.open), edit=mt.open) %}
+    {% set bare = True %}{% include "_target_choice.html" with context %}
+  {% endcall %}
+  {% endif %}
+
+  {# ---- pre-race interview #}
+  {% if wk and wk.on and ctx.my_driver and not ctx.is_spectator %}{% set pen_ = wk.pen if wk.pen and wk.pen.questions else none %}
+  {% set p_req = ctx.team_life.gates and ctx.team_life.gate_press %}
+  {% set p_open = pen_ and wk.phase == 'paddock' and pen_.open %}
+  {% set p_state = 'done' if (pen_ and not pen_.open) else ('attention' if p_open and p_req else 'current' if p_open else 'upcoming' if wk.phase == 'upcoming' else 'locked') %}
+  {% call sec('sec-interview', 'Pre-race press', p_state,
+      summary=(pen_.open ~ ' question' ~ ('s' if pen_.open != 1 else '') ~ ' waiting: answer before lights out' if p_open else 'Answered' if pen_ and not pen_.open else 'Opens with the paddock: the media ask two questions' if wk.phase == 'upcoming' else 'Pre-race press closed at lights out'),
+      tag=('Required' if p_req else 'Optional'), who='You', open=p_open) %}
+    {% if pen_ %}{% set pen = pen_ %}
+    <div class="press-pen prerace" id="prerace">
+      {% if wk.phase == 'paddock' %}<p class="muted small">What you say gets back to your team and some answers make headlines. {% if p_req %}Answer both before lights out.{% else %}Closes at lights out.{% endif %}</p>{% endif %}
+      <div class="press-grid">
+      {% for q in pen.questions %}
+        {% if wk.phase == 'paddock' or q.answered %}
+        <form method="post" action="{{ url_for('prerace_answer', token=ctx.token, event_id=event.id) }}" class="press-q">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="question" value="{{ q.key }}">
+          <p class="press-question">“{{ q.text }}”</p>
+          {% for a in q.answers %}{% if wk.phase == 'paddock' or q.answered == a.key %}
+          <button class="btn btn-sm press-answer {{ 'chosen' if q.answered == a.key }}" name="answer" value="{{ a.key }}" {{ 'disabled' if q.answered or wk.phase != 'paddock' }}>{{ a.text }}</button>
+          {% endif %}{% endfor %}
+        </form>
+        {% endif %}
+      {% endfor %}
+      </div>
     </div>
-    {% endif %}
-  </div>
-  {% if v3_round %}
-  <div class="distance-input">
-    {% if ro %}
-    <div class="ro-value"><small>Grand Prix distance</small><strong>{{ C.GP_DISTANCES[event.gp_distance or 'full'][0] }}</strong></div>
-    {% if event.is_sprint %}<div class="ro-value"><small>Sprint distance</small><strong>{{ event.sprint_distance }}%</strong></div>{% endif %}
-    {% else %}
-    <label>Grand Prix distance
-      <select id="gp-distance" data-no-dirty-reload>{% for key, d in C.GP_DISTANCES.items() %}<option value="{{ key }}" {{ 'selected' if (event.gp_distance or 'full') == key }}>{{ d[0] }}</option>{% endfor %}</select>
-    </label>
-    {% if event.is_sprint %}<label>Sprint distance completed (%)
-      <input type="number" id="sprint-distance" min="0" max="100" step="1" value="{{ event.sprint_distance }}">
-    </label>{% endif %}
-    <p class="muted small">A shortened race uses the reduced points scale; "Manual points" lets you type each driver's points. Sprint points need at least the league's minimum distance.</p>
-    {% endif %}
-  </div>
+    {% else %}<p class="muted small" id="prerace">{% if wk.phase == 'upcoming' %}The media ask two questions once the paddock opens. You answer them here before lights out.{% else %}There's no pre-race interview to answer for this round.{% endif %}</p>{% endif %}
+  {% endcall %}
+  {% endif %}
+
+  {# ---- last round's post-race press, when the round can't start without it #}
+  {% for t in ws.tasks if t.key == 'press' and not t.done %}
+  {% call sec('sec-lastpress', 'Last round\'s press', 'attention', summary=t.text, tag='Required', who='You', open=true) %}
+    <p class="small">The race can't start until it's answered. It's in that round's Debrief.</p>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('weekend', token=ctx.token, event_id=t.event_id) }}?stage=debrief#press">Answer the press →</a>
+  {% endcall %}
+  {% endfor %}
+
+  {# ---- paddock and lights out (the race weekend's own clock) #}
+  {% if wk and wk.on %}
+  {% set pk_state = 'done' if wk.phase in ('live', 'complete') else ('current' if wk.phase == 'paddock' or ctx.can_run else 'upcoming') %}
+  {% call sec('sec-paddock', 'Paddock & lights out', pk_state,
+      summary=(wk.label ~ (' · ' ~ (gate.players|length - gate.waiting) ~ ' of ' ~ gate.players|length ~ ' ready' if gate and gate.active and gate.players else '')),
+      tag=('Race control' if ctx.can_run else ''), who=staff, open=(wk.phase in ('upcoming', 'paddock') and (ctx.can_run or wk.phase == 'paddock')), edit=ctx.can_run) %}
+    {% set bare = True %}{% set skip_pen = True %}{% include "_paddock.html" with context %}
+  {% endcall %}
+  {% elif gate and (gate.active or gate.bypass or gate.future) %}
+  {% call sec('sec-gate', 'Round checklist', 'done' if not gate.blocking else 'attention', summary=('Ready to start' if not gate.blocking else 'Waiting on players'), who='Every player', open=gate.blocking) %}
+    {% set full = True %}{% include "_gate.html" with context %}
+  {% endcall %}
+  {% endif %}
+
+  {# ---- the AI level for this race: the number, why, and the evidence folded away #}
+  {% if rec and not ws.complete %}
+  {% call sec('sec-ai-rec', 'AI difficulty for this race', 'info',
+      summary=('Recommended AI ' ~ rec.recommended if rec.recommended is not none and not rec.for_next else 'No recommendation yet' if not rec.disabled else 'Recommendations are off in this league'),
+      tag='For information', who='') %}
+    {{ difficulty(rec, compact=True) }}
+    <p class="muted small">The Scorekeeper records the AI actually used under Sessions → Race.</p>
+  {% endcall %}
+  {% endif %}
+
+  {# ---- optional: check-in, predictions, the other drivers' targets #}
+  {% if not ws.complete and hub %}
+  {% set rn_bits = [] %}
+  {% if hub.checkins is defined %}{% set _ = rn_bits.append('checked in' if hub.my_checkin else 'not checked in') %}{% endif %}
+  {% if hub.picks_locked is defined and not hub.picks_locked and not ctx.is_spectator %}{% set _ = rn_bits.append('picks in' if hub.my_picks else 'no picks yet') %}{% endif %}
+  {% call sec('sec-racenight', 'Race night', 'optional', summary=('Check-in, predictions and everyone\'s targets' ~ (' · you: ' ~ rn_bits|join(', ') if rn_bits and ctx.my_driver else '')), tag='Optional', who='Everyone') %}
+    {% set bare = True %}{% set hide_time = True %}{% set full = True %}{% include "_race_night.html" with context %}
+  {% endcall %}
+  {% endif %}
+
+  {# ---- Race Master: when the race is #}
+  {% if ctx.is_master and not ws.complete and hub %}
+  {% call sec('sec-racetime', 'Race time', 'done' if event.race_at else 'optional', summary=(event.race_at|race_time if event.race_at else 'Not scheduled: set one so the paddock opens by itself an hour before'), tag=('Postponed' if event.postponed else ''), who='Race Master', edit=true) %}
+  <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=event.id) }}" class="inline-form race-time-form" id="race-time">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ event.race_at|time_input }}"></label>
+    <label class="check small"><input type="checkbox" name="postponed" value="1" {{ 'checked' if event.postponed }}> Postponed</label>
+    <button class="btn btn-sm">Save</button>
+    {% if event.race_at %}<button class="btn btn-sm btn-ghost" name="clear" value="1">Clear</button>{% endif %}
+  </form>
+  {% if hub.notify_preview is defined %}{% set np = hub.notify_preview %}
+  <p class="muted small notify-preview">Saving a time {{ 'or postponing ' if not event.postponed }}tells the league:
+    {{ np.members }} member{{ 's' if np.members != 1 }} see it in the app, {{ np.push }} get a phone alert and {{ np.email }} an email,
+    each according to their own notification settings for this league.</p>
+  {% endif %}
+  {% endcall %}
   {% endif %}
 </section>
+
+{# ============================================================== 2 SESSIONS #}
+<section class="ws-stage" data-stage="sessions" id="stage-sessions" aria-labelledby="stage-sessions-title" {{ 'hidden' if ws.stage != 'sessions' }}>
+  {% set sess_blurb = {'q': 'The grid order from qualifying, then anything that happened in the session.',
+                       's': 'The Sprint classification, its distance and race times, then anything that happened.',
+                       'r': 'The Grand Prix classification, the AI level you raced at and race times, then anything that happened.'} %}
+  <div class="ws-stage-head"><h2 class="ws-stage-title" id="stage-sessions-title"><span data-session-title>{{ (ws.sessions|selectattr('active')|first).label }}</span></h2>
+    <p class="ws-stage-sub">{% for s in ws.sessions %}<span data-session-only="{{ s.key }}" data-session-strict {{ 'hidden' if not s.active }}>{{ sess_blurb[s.key] }}</span>{% endfor %}<span data-session-only="all" data-session-strict hidden>Every session's columns at once, for checking the whole grid.</span></p></div>
+  {% if not ws.results_open %}
+  <p class="banner banner-info small" role="note">{{ icon('info') }} <span>Results go in after lights out{% if ctx.can_run %}: open the paddock and start the race under <a href="{{ wk_url }}?stage=prepare" data-stage-link="prepare">Prepare</a>{% endif %}. Until then this shows the grid.</span></p>
+  {% elif ws.gated %}
+  <p class="banner banner-warn small" role="note">{{ icon('alert') }} <span>Waiting for players before results can go in. See <a href="{{ wk_url }}?stage=prepare" data-stage-link="prepare">Prepare</a>.</span></p>
+  {% endif %}
 
 {% macro pos(v) %}{{ 'P' ~ v if v else '—' }}{% endmacro %}
 {% macro status_text(st) %}{% if st in ('DNF', 'DNS', 'DSQ') %}<span class="status-pill st-{{ st|lower }}">{{ C.STATUS_LABELS[st] if v3_round else st }}</span>{% elif st == 'Classified' %}<span class="status-pill st-classified">Classified retirement</span>{% elif st == 'Finished' %}<span class="muted">Finished</span>{% else %}<span class="muted">—</span>{% endif %}{% endmacro %}
 
-<section class="card table-card">
-  <div class="card-head">
-    <h2>Results</h2>
-    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Opens at lights out' if not_started and ctx.can_run else 'Waiting for players' if gated else 'View only') }}</span>
-    {% else %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>{% endif %}
-  </div>
-  <div class="session-tabs" role="group" aria-label="Show session">
-    <button type="button" class="tab is-on" data-session="all" aria-pressed="true">All sessions</button>
-    <button type="button" class="tab" data-session="q" aria-pressed="false">Qualifying</button>
-    {% if event.is_sprint %}<button type="button" class="tab" data-session="s" aria-pressed="false">Sprint</button>{% endif %}
-    <button type="button" class="tab" data-session="r" aria-pressed="false">Grand Prix</button>
+  {# ---- Classification: one table for the weekend, showing the chosen session's columns. Its heading follows the
+     session; a saved session folds away (while the round is still being entered) and opens again with Edit. #}
+  {% set editing = not ro and event.status != 'Complete' %}
+  {% set act_s = ws.sessions|selectattr('active')|first %}
+  <details class="ws-sec ws-sec-class st-{{ act_s.state }}" id="sec-classification" {{ 'open' if not (editing and act_s.done) }}
+           data-done-sessions="{{ ws.sessions|selectattr('done')|map(attribute='key')|join(' ') if editing else '' }}">
+    <summary class="ws-sec-head">
+      {% for s in ws.sessions %}<span class="st-ico is-{{ s.state }}" data-session-only="{{ s.key }}" data-session-strict aria-hidden="true" {{ 'hidden' if not s.active }}>{% if s.state == 'done' %}{{ icon('check') }}{% endif %}</span>{% endfor %}
+      <span class="st-ico is-info" data-session-only="all" data-session-strict aria-hidden="true" hidden>{{ icon('list') }}</span>
+      <span class="ws-sec-title"><b>Classification</b>
+        {% for s in ws.sessions %}{% set tg = 'Saved' if s.state == 'done' else ('Needs input' if editing and ws.results_open and not ws.gated else '') %}
+        <span data-session-only="{{ s.key }}" data-session-strict {{ 'hidden' if not s.active }}>{% if tg %}<span class="pill {{ 'pill-ok' if s.state == 'done' else 'pill-hot' }}" data-class-pill>{{ tg }}</span>{% endif %}
+          <span class="sr-only">{{ state_text.get(s.state, '') }}.</span>
+          <small class="ws-sec-sum" data-class-sum="{{ s.key }}" data-total="{{ s.total }}">{% if s.state == 'done' and s.total %}{{ s.total }} drivers saved{% elif s.entered %}{{ s.entered }} of {{ s.total }} entered{% elif not ws.results_open %}Goes in after lights out{% else %}Not started{% endif %}</small></span>{% endfor %}
+        <span data-session-only="all" data-session-strict hidden><small class="ws-sec-sum">{% for s in ws.sessions %}{{ s.label }} {{ s.entered }}/{{ s.total }}{{ ' · ' if not loop.last }}{% endfor %}</small></span>
+      </span>
+      <span class="ws-sec-who">{{ staff }}</span>
+      <span class="ws-sec-act" aria-hidden="true"><span class="when-closed">{{ 'Edit' if not ro else 'View' }}</span>{{ icon('chev-down') }}</span>
+    </summary>
+    <div class="ws-sec-body">
+<div class="table-card" id="results-card">
+  <div class="entry-head">
+    {% if ro %}<span class="view-only-badge">{{ 'Spectator · view only' if ctx.is_spectator else ('Opens at lights out' if not_started and ctx.can_run else 'Waiting for players' if gated else 'View only') }}</span>{% endif %}
     <label class="entry-search"><span class="sr-only">Find a driver</span><input type="search" id="entry-search" placeholder="Find a driver" data-no-dirty></label>
   </div>
   <div class="entry-tools">
@@ -116,11 +272,11 @@
     {% if not ro %}
     <span class="tools-sep"></span>
     <span class="muted small">Quick order:</span>
-    <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position">Qualifying</button>
-    {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position">Sprint</button>{% endif %}
-    <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position">Race</button>
-    <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import from screenshot</button>
-    <select id="copy-order" class="btn-sm" aria-label="Copy one session's order into another">
+    <button type="button" class="btn btn-sm btn-ghost" data-tap="qualifying_position" data-session-only="q">Qualifying</button>
+    {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position" data-session-only="s">Sprint</button>{% endif %}
+    <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position" data-session-only="r">Race</button>
+    <button type="button" class="btn btn-sm" data-dialog="import-dialog">📷 Import screenshot</button>
+    <select id="copy-order" class="btn-sm" data-session-only="s r" aria-label="Copy one session's order into another">
       <option value="">Copy an order…</option>
       <option value="qualifying_position>race_position">Qualifying → Grand Prix</option>
       {% if event.is_sprint %}<option value="qualifying_position>sprint_position">Qualifying → Sprint</option>
@@ -136,6 +292,7 @@
     </select>
     <button type="button" class="btn btn-sm btn-ghost" data-dialog="keys-dialog" title="Keyboard shortcuts">⌨ Shortcuts</button>
     {% endif %}
+    <button type="button" class="btn btn-sm btn-ghost session-all" data-session="all" aria-pressed="false" title="Show every session's columns at once">Whole grid</button>
   </div>
   {% if not ro %}
   <div class="tap-banner" id="tap-banner" hidden>
@@ -154,20 +311,22 @@
          data-revision="{{ event.revision }}" data-untracked="{{ 1 if event.ai_untracked and event.ai_difficulty is none else 0 }}" data-complete="{{ 1 if event.status == 'Complete' else 0 }}"
          data-state-url="{{ url_for('api_weekend_state', token=ctx.token, event_id=event.id) }}"
          data-checklist-url="{{ url_for('api_weekend_checklist', token=ctx.token, event_id=event.id) }}"
-         data-summary-url="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}"
+         data-summary-url="{{ url_for('weekend', token=ctx.token, event_id=event.id) }}?stage=debrief&submitted=1"
+         data-session-default="{{ ws.active_session }}"
          data-scope="{{ user.username }}|{{ ctx.token }}|{{ event.season_id }}|{{ event.id }}"
          data-max="{{ [rows|length, C.MAX_POSITION]|max }}"
          data-gp='{{ gp_points|tojson }}' data-sprint-points='{{ sprint_points|tojson }}'
          {% if v3_round %}data-distances='{{ distance_tables|tojson }}' data-sprint-full='{{ C.SPRINT_POINTS|tojson }}' data-sprint-min="{{ sprint_min }}"{% endif %}>
     <thead>
       <tr class="group-row">
-        <th rowspan="2" class="sticky-col">Driver</th>
+        <th class="sticky-col grp-driver"><span class="sr-only">Driver</span></th>
         <th class="grp grp-q">Qualifying</th>
         {% if event.is_sprint %}<th colspan="3" class="grp grp-s">Sprint</th>{% endif %}
         <th colspan="3" class="grp grp-r">Grand Prix</th>
         <th colspan="{{ 4 if ro else 5 }}" class="grp grp-b">Bonuses &amp; notes</th>
       </tr>
       <tr>
+        <th class="sticky-col">Driver</th>
         <th class="grp-q"><abbr title="Qualifying position">Pos</abbr></th>
         {% if event.is_sprint %}<th class="grp-s"><abbr title="Sprint finishing position">Pos</abbr></th><th class="grp-s">Status</th><th class="grp-s num"><abbr title="Sprint points">Pts</abbr></th>{% endif %}
         <th class="grp-r"><abbr title="Grand Prix finishing position">Pos</abbr></th><th class="grp-r">Status</th><th class="grp-r num"><abbr title="Grand Prix points">Pts</abbr></th>
@@ -227,84 +386,479 @@
   </div>
   <p class="muted small filter-empty" hidden>No drivers match this filter.</p>
   <div class="entry-foot">
-    {% if ro %}
-    <div class="grow"><small class="muted">Weekend notes</small><p class="note-text">{{ event.notes or 'No notes for this weekend.' }}</p></div>
-    {% else %}
-    <label class="grow">Weekend notes
-      <textarea id="event-notes" maxlength="4000" rows="3">{{ event.notes }}</textarea>
-    </label>
+    {% if not ro %}
     <div class="button-row">
       <button type="button" class="btn btn-ghost" id="clear-awards">Clear awards</button>
-      {% if event.status != 'Complete' %}<button type="button" class="btn btn-primary" id="mark-complete">Review &amp; complete weekend</button>
+      {% if event.status != 'Complete' %}<a class="btn btn-ghost" href="?stage=review" data-stage-link="review">Go to Review &amp; submit →</a>
       {% else %}<button type="button" class="btn btn-primary" id="save-corrections" disabled aria-describedby="corrections-hint">✓ Weekend complete</button>
       <span class="muted small" id="corrections-hint">Edit any value to correct this round.</span>{% endif %}
     </div>
     {% endif %}
   </div>
+</div>
+    </div>
+  </details>
+
+  {# ---- Race: the AI level raced at (required) and, on engine 3 rounds, the race distance #}
+  {% set ai_done = event.ai_difficulty is not none or event.ai_untracked %}
+  {% set ai_state = 'done' if ai_done else ('attention' if editing and ws.results_open and ws.all_entered else 'current' if editing and ws.results_open else 'upcoming') %}
+  {% call sec('sec-ai', 'AI difficulty' ~ (' & race distance' if v3_round else ''), ai_state,
+      summary=(('AI ' ~ event.ai_difficulty ~ ' used' if event.ai_difficulty is not none else 'Not tracked this round' if event.ai_untracked else ('Recommended ' ~ rec.recommended ~ ': enter the level you raced at' if rec and rec.recommended is not none and not rec.for_next else 'Enter the level you raced at'))
+               ~ (' · ' ~ C.GP_DISTANCES[event.gp_distance or 'full'][0] if v3_round else '')),
+      tag=('Saved' if ai_done else 'Required'), who=staff, open=(not ai_done and editing and ws.results_open), only='r', edit=not ro) %}
+  <div class="ws-inner diff-strip" id="ai-used">
+    {{ difficulty(rec, compact=True) }}
+    <div class="diff-input">
+      {% if ro %}
+      <div class="ro-value"><small>AI difficulty used</small><strong>{{ event.ai_difficulty if event.ai_difficulty is not none else ("Not tracked" if event.ai_untracked else "Not entered yet") }}</strong></div>
+      {% else %}
+      <label>AI difficulty used
+        <input type="number" id="ai-difficulty" min="{{ C.MIN_DIFFICULTY }}" max="{{ C.MAX_DIFFICULTY }}" step="1"
+               value="{{ event.ai_difficulty if event.ai_difficulty is not none }}" placeholder="Not tracked"></label>
+      <div class="button-row tight">
+        {% if rec.recommended is not none and not rec.for_next %}<button type="button" class="btn btn-sm btn-ghost" id="use-rec" data-value="{{ rec.recommended }}">Use {{ rec.recommended }}</button>{% endif %}
+        <button type="button" class="btn btn-sm btn-ghost" id="no-track" aria-pressed="{{ 'true' if event.ai_untracked and event.ai_difficulty is none else 'false' }}">Don't track this round</button>
+        <span class="small muted" id="untracked-note" {{ 'hidden' if not (event.ai_untracked and event.ai_difficulty is none) }}>✓ Marked "Don't track"</span>
+      </div>
+      {% endif %}
+    </div>
+    {% if v3_round %}
+    <div class="distance-input">
+      {% if ro %}
+      <div class="ro-value"><small>Grand Prix distance</small><strong>{{ C.GP_DISTANCES[event.gp_distance or 'full'][0] }}</strong></div>
+      {% else %}
+      <label>Grand Prix distance
+        <select id="gp-distance" data-no-dirty-reload>{% for key, d in C.GP_DISTANCES.items() %}<option value="{{ key }}" {{ 'selected' if (event.gp_distance or 'full') == key }}>{{ d[0] }}</option>{% endfor %}</select></label>
+      <p class="muted small">A shortened race uses the reduced points scale. "Manual points" lets you type each driver's points in the table.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endcall %}
+
+  {# ---- Sprint: how much of the Sprint was run (engine 3 rounds) #}
+  {% if v3_round and event.is_sprint %}
+  {% set sd_set = event.sprint_distance is not none and ws.results_open %}
+  {% call sec('sec-sprint-distance', 'Sprint distance', 'done' if sd_set else 'optional' if ws.results_open else 'upcoming',
+      summary=(event.sprint_distance|string ~ '% completed' if sd_set else 'Full distance unless you say otherwise'),
+      tag='Saved' if sd_set else 'Optional', who=staff, only='s', edit=not ro) %}
+  <div class="ws-inner distance-input">
+    {% if ro %}<div class="ro-value"><small>Sprint distance</small><strong>{{ event.sprint_distance }}%</strong></div>
+    {% else %}
+    <label>Sprint distance completed (%)
+      <input type="number" id="sprint-distance" min="0" max="100" step="1" value="{{ event.sprint_distance }}"></label>
+    <p class="muted small">Sprint points need at least the league's minimum distance ({{ sprint_min }}%).</p>
+    {% endif %}
+  </div>
+  {% endcall %}
+  {% endif %}
+
+  {# ---- Race times against the AI, one section per race session, one tab per player #}
+  {% if pace and pace.entries %}
+  {% for pk, sk, lbl in [('sprint', 's', 'Sprint'), ('gp', 'r', 'Grand Prix')] if pace.entries|selectattr('session', 'equalto', pk)|list %}
+  {% set p_all = pace.entries|selectattr('session', 'equalto', pk)|list %}
+  {% set p_miss = pace.missing|selectattr(1, 'equalto', lbl)|list %}
+  {% set p_have = p_all|selectattr('input')|list %}
+  {# Saved: every player has times. Complete: nobody who finished still needs them (a DNF never does). #}
+  {% if pace.legacy and not p_have %}{% set pt_state, pt_tag = 'locked', 'Not tracked' %}
+  {% elif p_miss and ws.results_open and editing %}{% set pt_state, pt_tag = 'attention', 'Needs input' %}
+  {% elif p_have|length == p_all|length %}{% set pt_state, pt_tag = 'done', 'Saved' %}
+  {% elif pace.required and (ws.all_entered or ws.complete) and not p_miss %}{% set pt_state, pt_tag = 'done', 'Complete' %}
+  {% elif pace.required %}{% set pt_state, pt_tag = ('current' if ws.results_open else 'upcoming'), 'Required' %}
+  {% else %}{% set pt_state, pt_tag = 'optional', 'Optional' %}{% endif %}
+  {% call sec('sec-pace' if pk == 'gp' else 'sec-pace-sprint', 'Race times', pt_state,
+      summary=('Not tracked under this season\'s rules' if pace.legacy and not p_have else ('Needed for ' ~ p_miss|map('first')|join(', ') if p_miss
+               else 'Saved for ' ~ p_have|map(attribute='row.driver.name')|join(', ') if p_have else 'Each player\'s race time and their AI teammate\'s, from the game\'s results screen')),
+      tag=pt_tag, who=staff, open=(pt_state == 'attention'), only=sk, edit=pace.can_edit) %}
+    {% set bare = True %}{% set pace_only = pk %}{% include "_pace.html" with context %}
+  {% endcall %}
+  {% endfor %}
+  {% endif %}
+
+  {# ---- Weather: what each session was actually like, recorded once it has run (no forecast before the race) #}
+  {% if wx and ws.results_open %}
+  {% for s in ws.sessions %}{% set wk_ = wx_key[s.key] %}{% set rec_ = wx.recorded.get(wk_) %}
+  {% if wx.can_edit or rec_ %}
+  {% set shown1 = wx.shown|selectattr('session', 'equalto', wk_)|first %}
+  {% call sec('sec-weather' ~ ('' if s.key == 'r' else '-' ~ wk_), 'Weather', 'done' if rec_ else 'optional',
+      summary=(shown1.icon ~ ' ' ~ shown1.text if shown1 else 'Record the conditions once the session has run'),
+      tag=('Recorded' if rec_ else 'Optional'), who=staff, only=s.key, edit=wx.can_edit) %}
+    {% set bare = True %}{% set wx_only = wk_ %}{% include "_weather.html" with context %}
+  {% endcall %}
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  {# ---- Incidents & penalties, each with the session it happened in (reports open once the round has results) #}
+  {% if ws.results_open %}
+  {% for s in ws.sessions %}
+  {% set these = incidents|selectattr('session', 'equalto', s.incident_session)|list %}
+  {% set open_n = these|selectattr('status', 'equalto', 'Open')|list|length %}
+  {% call sec('sec-incidents' ~ ('' if s.key == 'r' else '-' ~ s.key), 'Incidents & penalties', 'current' if open_n else ('done' if these else 'optional'),
+      summary=((these|length ~ ' reported' ~ (' · ' ~ open_n ~ ' waiting for a ruling' if open_n else '')) if these else 'None reported in ' ~ s.label),
+      tag=(open_n ~ ' under review' if open_n else 'Optional'), who='Drivers report · Race Master rules', only=s.key) %}
+  <div class="ws-inner" id="{{ 'incidents' if s.key == 'r' else 'incidents-' ~ s.key }}">
+    {% if these %}{% with rows = these %}{% include "_incident_list.html" %}{% endwith %}
+    {% else %}<p class="muted small">No incidents recorded in {{ s.label }}.</p>{% endif %}
+    {% if s.key == 'r' %}{% set weekend_wide = incidents|selectattr('session', 'equalto', 'weekend')|list %}
+    {% if weekend_wide %}<details class="small"><summary>{{ weekend_wide|length }} report{{ 's' if weekend_wide|length != 1 }} not tied to a session</summary>
+      {% with rows = weekend_wide %}{% include "_incident_list.html" %}{% endwith %}</details>{% endif %}{% endif %}
+    <div class="button-row tight">
+      {% if event.status == 'Not Run' %}<span class="small">Reports open once the first results are saved.</span>
+      {% elif ctx.my_driver or ctx.is_master %}<button type="button" class="btn btn-sm" data-dialog="incident-dialog" data-incident-session="{{ s.incident_session }}">Report an incident in {{ s.label }}</button>{% endif %}
+      <span class="muted small">Rulings are the stewards' record. They don't change the results above, so nothing is counted twice.</span>
+    </div>
+  </div>
+  {% endcall %}
+  {% endfor %}
+  {% endif %}
+
+  {# ---- Race: the weekend's notes (a warning, never required) #}
+  {% call sec('sec-notes', 'Weekend notes', 'done' if event.notes else 'optional',
+      summary=((event.notes|truncate(70)) if event.notes else 'Anything worth remembering about this round'),
+      tag=('Saved' if event.notes else 'Optional'), who=staff, only='r', edit=not ro) %}
+  <div class="ws-inner">
+    {% if ro %}<p class="note-text">{{ event.notes or 'No notes for this weekend.' }}</p>
+    {% else %}<label>Weekend notes<textarea id="event-notes" maxlength="4000" rows="3">{{ event.notes }}</textarea></label>
+    <p class="muted small">Saved with the results as you type.</p>{% endif %}
+  </div>
+  {% endcall %}
 </section>
-{% include "_pace.html" with context %}
-{% if share %}
-<section class="card share-strip">
-  <div><b>Share this result</b> <span class="muted small">A picture of the podium{{ ' and your weekend' if share.me }} for your group chat.</span></div>
-  <button type="button" class="btn btn-sm" id="share-card" data-card='{{ share|tojson }}'>📸 Make result card</button>
+
+{# ============================================================== 3 REVIEW & SUBMIT #}
+<section class="ws-stage" data-stage="review" id="stage-review" aria-labelledby="stage-review-title" {{ 'hidden' if ws.stage != 'review' }}>
+  <div class="ws-stage-head"><h2 class="ws-stage-title" id="stage-review-title">Review &amp; submit</h2>
+    <p class="ws-stage-sub">Everything on one screen: what must be fixed, what's worth a look, and what will be submitted. Fix takes you to the exact place and brings you back here.</p></div>
+  {% if ws.complete %}
+  <section class="card ws-done-card">
+    <span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span>
+    <div><b>Weekend submitted</b>{% if event.submitted_at %} <span class="muted">{{ event.submitted_at|stamp }}</span>{% endif %}
+      <p class="small muted">Standings, records and the championship are up to date.</p></div>
+    <a class="btn btn-sm" href="{{ wk_url }}?stage=debrief" data-stage-link="debrief">Go to the Debrief →</a>
+  </section>
+  {% elif ws.check %}{% set ck = ws.check %}{% set sm = ck.summary %}
+  {# optional details nobody has to enter, listed so they're a choice rather than a surprise #}
+  {% set optional_left = [] %}
+  {% if wx and wx.can_edit %}{% for s in ws.sessions if not wx.recorded.get(wx_key[s.key]) %}{% set _ = optional_left.append({'text': s.label ~ ' weather not recorded', 'session': s.key, 'anchor': 'sec-weather' ~ ('' if s.key == 'r' else '-' ~ wx_key[s.key])}) %}{% endfor %}{% endif %}
+  {% if pace and pace.entries and not pace.required and not pace.legacy %}{% for item in pace.entries if not item.input %}{% set _ = optional_left.append({'text': 'Race times not entered for ' ~ item.row.driver.name ~ (' (Sprint)' if item.session == 'sprint' else ''), 'session': 's' if item.session == 'sprint' else 'r', 'anchor': 'pace-sprint' if item.session == 'sprint' else 'pace'}) %}{% endfor %}{% endif %}
+  <section class="card ws-checklist" id="review-checks" data-checklist aria-live="polite">
+    <div class="card-head"><h2>Before you submit</h2>
+      <span class="pill {{ 'pill-hot' if ck.blocking else 'pill-ok' }}" data-check-count>{{ ck.blocking|length }} to fix · {{ ck.warnings|length }} warning{{ 's' if ck.warnings|length != 1 }}</span></div>
+    <div data-check-body>
+      <h3 class="mini-head check-head is-block"><span class="st-ico {{ 'is-attention' if ck.blocking else 'is-done' }}" aria-hidden="true">{% if ck.blocking %}!{% else %}{{ icon('check') }}{% endif %}</span> Must fix ({{ ck.blocking|length }})</h3>
+      {% if ck.blocking %}<ul class="check-list is-block">{% for b in ck.blocking %}<li><span>{{ b.text }}</span> <a class="btn btn-sm" href="{{ wk_url }}?stage=sessions&amp;session={{ b.session }}&amp;from=review#{{ b.anchor }}" data-fix-session="{{ b.session }}" data-fix-anchor="{{ b.anchor }}">Fix<span class="sr-only">: {{ b.text }}</span></a></li>{% endfor %}</ul>
+      {% else %}<p class="small check-none">Nothing blocking.</p>{% endif %}
+      <h3 class="mini-head check-head is-warn"><span class="st-ico {{ 'is-warn' if ck.warnings else 'is-done' }}" aria-hidden="true">{% if ck.warnings %}!{% else %}{{ icon('check') }}{% endif %}</span> Warnings ({{ ck.warnings|length }})</h3>
+      {% if ck.warnings %}<ul class="check-list is-warn">{% for w in ck.warnings %}<li><span>{{ w.text }}</span> <a class="btn btn-sm btn-ghost" href="{{ wk_url }}?stage=sessions&amp;session={{ w.session }}&amp;from=review#{{ w.anchor }}" data-fix-session="{{ w.session }}" data-fix-anchor="{{ w.anchor }}">Fix<span class="sr-only">: {{ w.text }}</span></a></li>{% endfor %}</ul>
+      {% else %}<p class="small check-none">None.</p>{% endif %}
+    </div>
+    <div data-check-optional>
+      <h3 class="mini-head check-head is-optional"><span class="st-ico is-optional" aria-hidden="true">i</span> Optional, not entered ({{ optional_left|length }})</h3>
+      {% if optional_left %}<ul class="check-list is-optional">{% for o in optional_left %}<li><span>{{ o.text }}</span> <a class="btn btn-sm btn-ghost" href="{{ wk_url }}?stage=sessions&amp;session={{ o.session }}&amp;from=review#{{ o.anchor }}" data-fix-session="{{ o.session }}" data-fix-anchor="{{ o.anchor }}">Add<span class="sr-only">: {{ o.text }}</span></a></li>{% endfor %}</ul>
+      {% else %}<p class="small check-none">Nothing left out.</p>{% endif %}
+    </div>
+  </section>
+
+  <section class="card ws-summary-card">
+    <div class="card-head"><h2>What will be submitted</h2><span class="muted small">{{ 'Sprint weekend' if sm.sprint else 'Standard weekend' }}</span></div>
+    <dl class="submit-summary">
+      <div><dt>Pole</dt><dd>{{ sm.pole or '—' }}</dd></div>
+      {% if sm.sprint %}<div><dt>Sprint winner</dt><dd>{{ sm.sprint_winner or '—' }}</dd></div>{% endif %}
+      <div><dt>Grand Prix winner</dt><dd>{{ sm.winner or '—' }}</dd></div>
+      <div><dt>Podium</dt><dd>{{ sm.podium|join(', ') or '—' }}</dd></div>
+      <div><dt>DNF / DNS / DSQ</dt><dd>{{ sm.out.DNF|join(', ') or '—' }} / {{ sm.out.DNS|join(', ') or '—' }} / {{ sm.out.DSQ|join(', ') or '—' }}</dd></div>
+      <div><dt>Fastest Lap</dt><dd>{{ sm.fastest_lap or '—' }}</dd></div>
+      <div><dt>Driver of the Day</dt><dd>{{ sm.dotd or '—' }}</dd></div>
+      <div><dt>AI used</dt><dd>{{ sm.ai_difficulty if sm.ai_difficulty is not none else 'Not tracked' }}</dd></div>
+    </dl>
+    {% if sm.players %}<h3 class="mini-head">Player results</h3>
+    <table class="data-table compact review-players"><thead><tr><th>Driver</th><th>Quali</th>{% if sm.sprint %}<th>Sprint</th>{% endif %}<th>Race</th><th class="num">Points</th></tr></thead>
+      <tbody>{% for p in sm.players %}<tr class="player-row"><td><b>{{ p.name }}</b></td><td>{{ 'P' ~ p.quali if p.quali else '—' }}</td>{% if sm.sprint %}<td>{{ p.sprint or '—' }}</td>{% endif %}<td>{{ p.race }}</td><td class="num">{{ p.points }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    <h3 class="mini-head">Incidents &amp; penalties · {{ incidents|length }} recorded</h3>
+    {% if incidents %}
+    <ul class="plain-list small incident-summary">{% for i in incidents %}<li>{{ i.session_label }} · <b>{{ i.accused.name if i.accused else 'Unknown' }}</b>: {{ i.ruling_label if i.status != 'Open' else 'Under review' }}</li>{% endfor %}</ul>
+    <p class="muted small">Rulings are recorded as the stewards' decision and appear as one story in the news. They don't change these results.</p>
+    {% else %}<p class="muted small">None recorded.</p>{% endif %}
+  </section>
+
+  <section class="card ws-submit" id="submit-panel">
+    <div class="ws-submit-text">
+      <b>Submit weekend</b>
+      <p class="small muted">{{ 'Submitting locks this round for Scorekeepers; only you can correct or reopen it.' if ctx.is_master else 'After submitting, only the Race Master can change these results.' }}
+        Submitting calculates the standings, ratings and the championship. It only ever happens once, even if pressed twice.</p>
+      <p class="small" id="submit-warn-note" {{ 'hidden' if not ck.warnings or ck.blocking }}>Submitting accepts the warning{{ 's' if ck.warnings|length != 1 }} listed above.</p>
+      <p class="form-error small" id="submit-error" role="alert" hidden></p>
+    </div>
+    <button type="button" class="btn btn-primary btn-go" id="mark-complete" data-blocked="{{ 1 if ck.blocking else 0 }}">Submit weekend</button>
+  </section>
+  {% elif ctx.can_run %}
+  <section class="card"><p class="muted">Review opens once results can go in (after lights out).</p></section>
+  {% else %}
+  <section class="card">
+    <p><b>Waiting for the results.</b> A Scorekeeper or the Race Master enters the sessions and submits the weekend.</p>
+    <ul class="status-lines">{% for s in ws.sessions %}<li><span class="st-ico is-{{ s.state }}" aria-hidden="true">{% if s.done %}{{ icon('check') }}{% endif %}</span> {{ s.label }}: {% if s.done %}entered{% elif s.entered %}{{ s.entered }} of {{ s.total }} entered{% else %}not entered yet{% endif %}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
 </section>
-<dialog id="share-dialog" class="dialog share-dialog">
-  <div class="dialog-head"><h2>Result card</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
-  <canvas id="share-canvas" width="1080" height="1080"></canvas>
-  <div class="button-row"><button type="button" class="btn btn-primary" id="share-go">Share</button>
-    <a class="btn btn-ghost" id="share-download" download="result.png">Download</a></div>
-</dialog>
+
+{# ============================================================== 4 DEBRIEF #}
+<section class="ws-stage" data-stage="debrief" id="stage-debrief" aria-labelledby="stage-debrief-title" {{ 'hidden' if ws.stage != 'debrief' }}>
+  <div class="ws-stage-head"><h2 class="ws-stage-title" id="stage-debrief-title">Debrief</h2>
+    <p class="ws-stage-sub">How the weekend went and what changed. Everything here was worked out when the weekend was submitted: opening it changes nothing.</p></div>
+  {% if debrief %}{% set s = debrief.summary %}
+  {% if request.args.get('submitted') %}<div class="banner banner-ok" role="status">{{ icon('check') }} <span><b>Results submitted.</b> Standings, records and the championship have been recalculated.</span></div>{% endif %}
+
+  {# three different things, never run together: the weekend is in, your own jobs are done, the league can go on #}
+  {% set post_left = ws.tasks|selectattr('stage', 'equalto', 'debrief')|rejectattr('done')|list %}
+  <ul class="ws-status-strip" aria-label="Where things stand">
+    <li class="is-ok"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span>
+      <span><b>Weekend submitted</b><small>{{ event.submitted_at|stamp if event.submitted_at else 'Results are final' }}</small></span></li>
+    {% if ctx.my_driver and not ctx.is_spectator %}
+    <li class="{{ 'is-ok' if not post_left else 'is-todo' }}"><span class="st-ico {{ 'is-done' if not post_left else 'is-attention' }}" aria-hidden="true">{% if not post_left %}{{ icon('check') }}{% else %}!{% endif %}</span>
+      <span><b>{{ 'Your post-race tasks are complete' if not post_left else 'Your post-race tasks: ' ~ post_left|length ~ ' to do' }}</b>
+        <small>{% if post_left %}{% for t in post_left %}<a href="#{{ t.anchor }}" data-open-details>{{ t.text }}</a>{{ ', ' if not loop.last }}{% endfor %}{% else %}Nothing else is asked of you for this round{% endif %}</small></span></li>
+    {% endif %}
+    {% if not next_event %}
+    <li class="is-ok"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span>
+      <span><b>That was the last round of the season</b><small><a href="{{ url_for('season_review', token=ctx.token, season_id=event.season_id) }}">Season review</a>{% if ctx.is_master %} · <a href="{{ url_for('seasons_page', token=ctx.token) }}">Seasons &amp; next season</a>{% endif %}</small></span></li>
+    {% elif next_gate and next_gate.active and next_gate.blocking %}
+    <li class="is-wait"><span class="st-ico is-current" aria-hidden="true"></span>
+      <span><b>League not ready for R{{ next_event.round_number }} yet</b>
+        <small>{% for p in next_gate.players if not p.done %}Waiting on {{ p.driver.name }}: {{ p.checks|rejectattr('done')|map(attribute='label')|join(', ')|lower }}{{ '; ' if not loop.last }}{% endfor %}</small></span></li>
+    {% elif next_event.status != 'Not Run' or next_event.lights_at %}
+    <li class="is-ok"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span>
+      <span><b>The league has moved on</b><small><a href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">R{{ next_event.round_number }} {{ next_event.name }}</a> is {{ 'complete' if next_event.status == 'Complete' else 'under way' }}</small></span></li>
+    {% else %}
+    <li class="is-ok"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span>
+      <span><b>League ready for the next round</b><small>R{{ next_event.round_number }} {{ next_event.name }}{% if next_event.race_at %} · {{ next_event.race_at|race_time }}{% endif %}</small></span></li>
+    {% endif %}
+  </ul>
+
+  <section class="card summary-hero">
+    <div class="podium">
+      {% for r in s.podium %}
+      <div class="podium-step p{{ loop.index }} {{ 'player-row' if r.driver.is_player }}" style="--team: {{ r.team.color }};{% if r.driver.is_player %} --player: {{ r.driver.player_color or 'var(--orange)' }};{% endif %}">
+        <span class="podium-pos">P{{ loop.index }}</span><b>{{ driver_link(ctx, r.driver) }}</b><span class="muted small">{{ team_dot(r.team) }}{{ r.team.name }}</span></div>
+      {% else %}<p class="muted">No classified finishers were recorded.</p>{% endfor %}
+    </div>
+    <dl class="summary-facts">
+      <div><dt>Pole</dt><dd>{% if s.pole %}{{ driver_link(ctx, s.pole.driver) }}{% else %}—{% endif %}</dd></div>
+      {% if event.is_sprint %}<div><dt>Sprint winner</dt><dd>{% if s.sprint_winner %}{{ driver_link(ctx, s.sprint_winner.driver) }}{% else %}—{% endif %}</dd></div>{% endif %}
+      <div><dt><abbr title="Fastest lap">FL</abbr></dt><dd>{% if s.fastest %}{{ driver_link(ctx, s.fastest.driver) }}{% else %}—{% endif %}</dd></div>
+      <div><dt><abbr title="Driver of the Day">DOTD</abbr></dt><dd>{% if s.dotd %}{{ driver_link(ctx, s.dotd.driver) }}{% else %}—{% endif %}</dd></div>
+      <div><dt>AI used</dt><dd>{{ event.ai_difficulty if event.ai_difficulty is not none else 'Not tracked' }}</dd></div>
+    </dl>
+  </section>
+
+  {% if debrief.mine %}{% set h = debrief.mine %}
+  <section class="card ws-mine" id="my-weekend">
+    <div class="card-head"><h2>Your weekend</h2><span class="muted small">{{ h.team.name }}</span></div>
+    <div class="ws-stat-row">
+      <div><small>Qualifying</small><b>{{ h.quali }}</b></div>
+      {% if event.is_sprint %}<div><small>Sprint</small><b>{{ h.sprint }}</b></div>{% endif %}
+      <div><small>Race</small><b>{{ h.race }}</b></div>
+      <div><small>Points</small><b>{{ h.points }}</b></div>
+      <div><small>Championship</small><b>{{ 'P' ~ h.wdc if h.wdc else '—' }}</b> {% if h.wdc_change is not none %}{{ delta(h.wdc_change, 0) }}{% endif %}</div>
+      <div><small>Form</small><b>{{ h.form if h.form is not none else '—' }}</b> {% if h.form_change is not none %}{{ delta(h.form_change) }}{% endif %}</div>
+      <div><small>Reputation</small><b>{{ h.rep if h.rep is not none else '—' }}</b> {% if h.rep_change is not none %}{{ delta(h.rep_change) }}{% endif %}</div>
+    </div>
+    {% if my_target and my_target.chosen %}{% set mt = my_target %}
+    <div class="ws-target-line" id="target-outcome">
+      <span class="muted small">Weekend target</span>
+      {% if mt.chosen.tier %}<span class="pill tier-{{ mt.chosen.tier }}">{{ C.TARGET_TIERS[mt.chosen.tier].label }}</span>{% endif %}
+      <span class="target-text">{{ mt.chosen.label }}</span> {{ target_state(mt.chosen) }}
+    </div>
+    {% endif %}
+    <details class="small ws-why"><summary>Why did this change?</summary>
+      <ul class="plain-list">
+        <li><b>Form</b> follows your six most recent races, recent ones counting most, judged against the car you drive.</li>
+        <li><b>Reputation</b> moves slowly toward how you're performing: Form, results against your car and against your teammate.</li>
+        <li><b>Championship</b> is your position in the Drivers' standings after this round.</li>
+        {% if my_target and my_target.chosen %}<li><b>Weekend target</b>: hitting it or missing it moved your team relationship by the amount shown when you chose it.</li>{% endif %}
+        <li>Changes are since {{ 'the start of the season' if s.first_round else 'the previous completed round' }}. Only your own numbers are shown here.</li>
+      </ul>
+      <a href="{{ url_for('driver_profile', token=ctx.token, driver_id=h.driver.id) }}">See your progression →</a></details>
+  </section>
+  {% elif my_target and my_target.chosen %}{% set mt = my_target %}
+  <section class="card" id="target-outcome">
+    <div class="card-head"><h2>Weekend target</h2>{{ target_state(mt.chosen) }}</div>
+    <p class="target-text">{% if mt.chosen.tier %}<span class="pill tier-{{ mt.chosen.tier }}">{{ C.TARGET_TIERS[mt.chosen.tier].label }}</span> {% endif %}{{ mt.chosen.label }}</p>
+  </section>
+  {% endif %}
+
+  {% if debrief.pen and debrief.pen.questions %}{% set press_pens = [debrief.pen] %}{% set press_next = wk_url ~ '?stage=debrief#press' %}
+  <div id="press-wrap">{% include "_press_pens.html" with context %}</div>
+  {% if not debrief.pen.open %}<p class="muted small">✓ You've answered this round's press. <a href="{{ url_for('press_page', token=ctx.token) }}">Your press history →</a></p>{% endif %}
+  {% endif %}
+
+  {# the round page's full race story (fan vote, picks, battles); its podium is already shown above #}
+  {% set full = True %}{% set hide_podium = True %}{% include "_race_night.html" with context %}
+
+  <div class="grid-2">
+    <section class="card">
+      <h2>Championship after R{{ event.round_number }}</h2>
+      <ol class="mini-table">{% for w in s.wdc %}<li><span class="pos">P{{ w.row.position }}</span><span class="grow">{{ driver_link(ctx, w.row.driver) }}</span><b>{{ w.row.points }}</b>{% if w.change is not none %}{{ delta(w.change, 0) }}{% endif %}</li>{% endfor %}</ol>
+      <a class="small" href="{{ url_for('standings_page', token=ctx.token) }}">Full standings →</a>
+    </section>
+    <section class="card">
+      <h2>AI for the next round</h2>
+      {% if rec.recommended is not none %}<p><span class="big-num">{{ rec.recommended }}</span>
+        {% if rec.direction == 'up' %}<span class="diff-move up">▲ Raise</span>{% elif rec.direction == 'down' %}<span class="diff-move down">▼ Lower</span>{% else %}<span class="muted small">Hold</span>{% endif %}</p>{% endif %}
+      <p class="muted small">{{ rec.reason }}</p>
+      {% if rec.this_round %}<details class="small"><summary>Why?</summary><p class="muted">{{ rec.this_round }}</p></details>{% endif %}
+      {% if next_event %}<p><a class="btn btn-primary" href="{{ url_for('weekend', token=ctx.token, event_id=next_event.id) }}">Next: R{{ next_event.round_number }} {{ next_event.name }} →</a></p>{% endif %}
+    </section>
+  </div>
+  <p class="small ws-more-links"><a href="{{ url_for('race_summary', token=ctx.token, event_id=event.id) }}">{{ icon('list') }} Full race summary</a>
+    <a href="{{ url_for('press_page', token=ctx.token) }}">Press history</a>
+    <a href="{{ url_for('results_index', token=ctx.token) }}">All results</a></p>
+  {% if share %}
+  <section class="card share-strip">
+    <div><b>Share this result</b> <span class="muted small">A picture of the podium{{ ' and your weekend' if share.me }} for your group chat.</span></div>
+    <button type="button" class="btn btn-sm" id="share-card" data-card='{{ share|tojson }}'>📸 Make result card</button>
+  </section>
+  <dialog id="share-dialog" class="dialog share-dialog">
+    <div class="dialog-head"><h2>Result card</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+    <canvas id="share-canvas" width="1080" height="1080"></canvas>
+    <div class="button-row"><button type="button" class="btn btn-primary" id="share-go">Share</button>
+      <a class="btn btn-ghost" id="share-download" download="result.png">Download</a></div>
+  </dialog>
+  {% endif %}
+  {% else %}
+  <section class="card ws-empty"><span class="st-ico is-upcoming" aria-hidden="true">4</span>
+    <p class="muted">The Debrief opens once this round's results are submitted: the summary, your post-race press, your target and what changed.</p></section>
+  {% endif %}
+</section>
+
+{% if hub.comments is defined %}
+<details class="ws-sec ws-chat" id="comments">
+  <summary class="ws-sec-head"><span class="st-ico is-info" aria-hidden="true">{{ icon('chat') }}</span>
+    <span class="ws-sec-title"><b>Paddock chat</b><small class="ws-sec-sum">{{ hub.comments|length }} comment{{ 's' if hub.comments|length != 1 }}</small></span>
+    <span class="ws-sec-who">Everyone</span><span class="ws-sec-act" aria-hidden="true"><span class="when-closed">Open</span>{{ icon('chev-down') }}</span></summary>
+  <div class="ws-sec-body">
+  {{ reaction_bar(ctx, hub.target, hub.reacts) }}
+  {{ comment_thread(ctx, hub.target, hub.comments, 'the paddock chat') }}
+  </div>
+</details>
 {% endif %}
 
+{% if ctx.is_master %}
+<details class="ws-sec rm-strip" id="rm-tools">
+  <summary class="ws-sec-head"><span class="st-ico is-info" aria-hidden="true">{{ icon('lock') }}</span>
+    <span class="ws-sec-title"><b>Race Master tools</b><small class="ws-sec-sum">Reopen, reset, team orders and targets</small></span>
+    <span class="ws-sec-who">Race Master</span><span class="ws-sec-act" aria-hidden="true"><span class="when-closed">Open</span>{{ icon('chev-down') }}</span></summary>
+  <div class="ws-sec-body">
+  <div class="button-row">
+    {% if event.status == 'Complete' %}
+    <form method="post" action="{{ url_for('weekend_reopen', token=ctx.token, event_id=event.id) }}" class="inline"
+          onsubmit="return confirm('Reopen this round? Scorekeepers will be able to edit it until it is submitted again.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Reopen round</button></form>
+    {% endif %}
+    {% if can_reset %}<a class="btn btn-sm btn-ghost danger-text" href="{{ url_for('weekend_reset', token=ctx.token, event_id=event.id) }}">↺ Reset weekend</a>{% endif %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('team_admin', token=ctx.token) }}#orders">Rule on team orders</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('team_admin', token=ctx.token) }}#targets">Weekend targets &amp; excuses</a>
+  </div>
+  <p class="muted small">Opening a round early is under Prepare, in Paddock &amp; lights out. Every action here asks first and is kept in the Activity Log.</p>
+  </div>
+</details>
+{% endif %}
+</div>{# /ws-main #}
+
+{# ============================================================== right: what's saved and who still needs to act #}
+<aside class="ws-side" aria-label="Weekend overview">
+  <section class="card ws-overview">
+    <h2>Weekend overview</h2>
+    <dl class="ov-rows">
+      <div><dt>{{ icon('gauge') }} AI {{ 'used' if event.ai_difficulty is not none else 'difficulty' }}</dt>
+        <dd class="ov-big">{% if event.ai_difficulty is not none %}{{ event.ai_difficulty }}{% elif event.ai_untracked %}<small>Not tracked</small>{% elif rec and rec.recommended is not none and not rec.for_next %}<small>{{ rec.recommended }} recommended</small>{% else %}—{% endif %}</dd></div>
+      <div><dt>{{ icon('flag') }} Format</dt><dd>{{ 'Sprint weekend' if event.is_sprint else 'Standard weekend' }}</dd></div>
+      <div class="ov-race"><dt>{{ icon('clock') }} Race</dt><dd>{% if event.race_at or event.postponed or not ws.complete %}{{ race_clock(event) }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</dd></div>
+    </dl>
+    <h3 class="mini-head">Sessions</h3>
+    <ul class="status-lines ov-sessions">
+      {% for s in ws.sessions %}<li><span class="st-ico is-{{ s.state }}" aria-hidden="true">{% if s.state == 'done' %}{{ icon('check') }}{% endif %}</span><span class="grow">{{ s.label }}</span>
+        <span class="ov-state" data-ov-session="{{ s.key }}">{% if s.state == 'done' %}Saved{% elif s.entered %}{{ s.entered }}/{{ s.total }} entered{% elif not ws.results_open %}After lights out{% else %}Not started{% endif %}</span></li>{% endfor %}
+      <li><span class="st-ico is-{{ ws.stages[2].state }}" aria-hidden="true">{% if ws.complete %}{{ icon('check') }}{% elif ws.stages[2].state == 'attention' %}!{% endif %}</span><span class="grow">Submission</span>
+        <span class="ov-state">{% if ws.complete %}Submitted{% elif ws.check and ws.check.blocking and ws.all_entered %}{{ ws.check.blocking|length }} to fix{% elif ws.all_entered %}Ready to review{% else %}Not yet{% endif %}</span></li>
+    </ul>
+  </section>
+
+  {# who the round is waiting on, by name and job #}
+  {% set waits = [] %}
+  {% if not ws.complete %}
+    {% if gate and gate.active and not (wk and wk.on and wk.phase in ('live', 'complete')) %}{% for p in gate.players if not p.done %}{% set _ = waits.append({'who': p.driver.name, 'what': p.checks|rejectattr('done')|map(attribute='label')|join(', ')}) %}{% endfor %}{% endif %}
+    {% if pace and pace.missing and ws.results_open %}{% for n, sl in pace.missing %}{% set _ = waits.append({'who': n, 'what': 'race times (' ~ sl ~ ')'}) %}{% endfor %}{% endif %}
+    {% if ws.results_open and not ws.gated %}
+      {% set up = ws.sessions|rejectattr('done')|first %}
+      {% if up %}{% set _ = waits.append({'who': staff, 'what': 'enter ' ~ up.label ~ ' results'}) %}
+      {% elif not ws.complete %}{% set _ = waits.append({'who': staff, 'what': 'review and submit the weekend'}) %}{% endif %}
+    {% elif wk and wk.on and wk.phase == 'paddock' and not ws.gated %}{% set _ = waits.append({'who': staff, 'what': 'start the race (lights out)'}) %}
+    {% elif wk and wk.on and wk.phase == 'upcoming' %}{% set _ = waits.append({'who': staff, 'what': 'open the paddock' ~ (' (or it opens by itself ' ~ wk.opens_at|stamp ~ ')' if wk.opens_at else '')}) %}{% endif %}
+  {% else %}
+    {% if ctx.my_driver and not ctx.is_spectator %}{% for t in ws.tasks if t.stage == 'debrief' and not t.done %}{% set _ = waits.append({'who': 'You', 'what': t.text}) %}{% endfor %}{% endif %}
+    {% if next_gate and next_gate.active %}{% for p in next_gate.players if not p.done %}{% set _ = waits.append({'who': p.driver.name, 'what': p.checks|rejectattr('done')|map(attribute='label')|join(', ')}) %}{% endfor %}{% endif %}
+  {% endif %}
+  <section class="card ws-waiting" aria-labelledby="waiting-title">
+    <h2 id="waiting-title">Waiting on</h2>
+    {% if waits %}
+    <ul class="wait-list">{% for w in waits %}<li><span class="av-dot" aria-hidden="true">{{ w.who[:1] }}</span><span><b>{{ w.who }}</b><small>{{ w.what[:1]|upper ~ w.what[1:] }}</small></span></li>{% endfor %}</ul>
+    {% else %}<p class="small"><span class="st-ico is-done" aria-hidden="true">{{ icon('check') }}</span> Nobody. {{ 'Everything for this round is in.' if ws.complete else 'Nothing is outstanding right now.' }}</p>{% endif %}
+  </section>
+
+  {% if my_target %}
+  <a class="btn btn-outline btn-block" href="{{ wk_url }}?stage={{ 'debrief' if ws.complete and my_target.chosen else 'prepare' }}#{{ 'target-outcome' if ws.complete and my_target.chosen else 'target' }}" data-open-details>{{ icon('target') }} View weekend target</a>
+  {% endif %}
+
+  {% if weekend_drivers %}
+  <section class="card ws-glance">
+    <h2>Drivers this weekend</h2>
+    <ul class="glance-rows glance-drivers">
+      {% for d in weekend_drivers %}
+      <li><span class="driver-dot" {% if d.driver.player_color %}style="--player: {{ d.driver.player_color }}"{% endif %} aria-hidden="true">{{ d.driver.name[:1] }}</span>
+        <span class="g-label"><b>{{ d.driver.name }}</b><small>{{ d.team.name if d.team else 'No seat' }}</small></span>
+        <span class="tier-tag {{ 'is-set' if d.target and d.target.tier }}">{% if d.target and d.target.tier %}{{ C.TARGET_TIERS[d.target.tier].label }} target{% elif ctx.team_life.targets %}No target yet{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if ws.readiness.league %}{% set lg_ = ws.readiness.league %}<p class="small muted">{{ lg_.ready }} of {{ lg_.total }} ready{% if lg_.bypass %} · opened early{% endif %}</p>{% endif %}
+  </section>
+  {% endif %}
+</aside>
+</div>{# /ws-layout #}
+
+{# ============================================================== bottom: save state and one way on #}
+<div class="ws-bar" role="region" aria-label="Save and move on">
+  <a class="btn btn-ghost ws-back" href="{{ wk_url }}?stage={{ ws.prev_stage or ws.stage }}" data-ws-back {{ 'hidden' if not ws.prev_stage }}>{{ icon('arrow-left') }} <span class="ws-back-text">Back</span></a>
+  {% if not ro %}<div class="save-state" id="save-state" data-state="saved" role="status" aria-live="polite">✓ Saved</div>
+  {% else %}<div class="small muted ws-bar-note">{{ 'Spectator · view only' if ctx.is_spectator else ('Submitted' if ws.complete else 'View only') }}</div>{% endif %}
+  <div class="ws-next-wrap">
+    <a class="btn btn-primary ws-next" href="{{ wk_url }}?stage={{ ws.next_stage or ws.stage }}" data-ws-next data-readonly="{{ 1 if ro else 0 }}" data-complete="{{ 1 if ws.complete else 0 }}" {{ 'hidden' if not ws.next_stage }}><span data-ws-next-label>{{ 'Save & continue' if not ro else 'Next' }}</span> {{ icon('arrow-right') }}</a>
+    <small class="ws-next-line" data-ws-next-line>{% if ws.next_stage %}Next: {{ (ws.stages|selectattr('key', 'equalto', ws.next_stage)|first).label }}{% endif %}</small>
+  </div>
 </div>
 
-<div class="round-panel" data-panel="talk" role="tabpanel">
-{% if event.status != 'Not Run' %}
-<section class="card" id="incidents">
-  <div class="card-head"><h2>Incidents</h2>
-    {% if ctx.my_driver or ctx.is_master %}<button type="button" class="btn btn-sm" data-dialog="incident-dialog">Report an incident</button>{% endif %}</div>
-  {% with rows = incidents %}{% include "_incident_list.html" %}{% endwith %}
-</section>
-{% if ctx.my_driver or ctx.is_master %}
+{% if event.status != 'Not Run' and (ctx.my_driver or ctx.is_master) %}
 <dialog id="incident-dialog" class="dialog">
   <div class="dialog-head"><h2>Report an incident</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('incident_report', token=ctx.token, event_id=event.id) }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ wk_url }}?stage=sessions" data-incident-next>
+    <label>Session
+      <select name="session" id="incident-session">
+        {% for s in ws.sessions %}<option value="{{ s.incident_session }}" {{ 'selected' if s.active }}>{{ s.label }}</option>{% endfor %}
+      </select></label>
     <label>Who was involved?
       <select name="accused_id" required><option value="">Pick a driver…</option>
         {% for r in rows|sort(attribute='driver.name') if not ctx.my_driver or r.driver_id != ctx.my_driver.id %}<option value="{{ r.driver_id }}">{{ r.driver.name }}</option>{% endfor %}
       </select></label>
     <label>What happened?<textarea name="description" rows="3" maxlength="1000" required placeholder="Lap 12, Turn 1: divebombed and took me out"></textarea></label>
-    <p class="muted small">The Race Master reviews every report and rules on it. Rulings show up in the news.</p>
+    <p class="muted small">The Race Master reviews every report and rules on it. The round's rulings appear together as one stewards' story in the news.</p>
     <button class="btn btn-primary">Send report</button>
   </form>
 </dialog>
 {% endif %}
-{% endif %}
-
-{% if hub.comments is defined %}
-<section class="card" id="comments">
-  <div class="card-head"><h2>Paddock chat</h2><span class="muted small">{{ hub.comments|length }} comment{{ 's' if hub.comments|length != 1 }}</span></div>
-  {{ reaction_bar(ctx, hub.target, hub.reacts) }}
-  {{ comment_thread(ctx, hub.target, hub.comments, 'the paddock chat') }}
-</section>
-{% endif %}
-</div>
 {% if not ro %}
 {% if not ro %}
 <div class="banner recovery-banner" id="recovery-banner" role="status" aria-live="polite" hidden></div>
-<dialog id="submit-dialog" class="dialog submit-dialog" aria-labelledby="submit-title">
-  <div class="dialog-head"><h2 id="submit-title">Review before {{ 'completing' if ctx.is_master else 'submitting' }}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
-  <div id="submit-body" aria-live="polite"><p class="muted">Checking the results…</p></div>
-  <div class="submit-confirm">
-    <label class="check" id="accept-warnings-row" hidden><input type="checkbox" id="accept-warnings"> I've read the warnings and want to submit anyway</label>
-    <label class="check"><input type="checkbox" id="confirm-submit"> These results are correct. {% if not ctx.is_master %}After submitting, only the Race Master can change them.{% endif %}</label>
-    <div class="button-row">
-      <button type="button" class="btn btn-ghost" data-close>Keep editing</button>
-      <button type="button" class="btn btn-primary" id="submit-go" disabled>{{ 'Complete round' if ctx.is_master else 'Submit results' }}</button>
-    </div>
-  </div>
-</dialog>
 <dialog id="corrections-dialog" class="dialog" aria-labelledby="corrections-title">
   <div class="dialog-head"><h2 id="corrections-title">Save corrections to a completed round?</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <p>These changes are saved straight away and the round stays complete and locked for Scorekeepers.</p>
@@ -418,24 +972,8 @@
 </dialog>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script>
-(function () {   // v2.4: round tabs. Without JavaScript every panel simply shows.
-  var tabs = document.querySelectorAll(".round-tabs [data-tab]"), panels = document.querySelectorAll(".round-panel");
-  if (!tabs.length) return;
-  function show(name, focus) {
-    tabs.forEach(function (t) { t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"); });
-    panels.forEach(function (p) { p.hidden = p.dataset.panel !== name; });
-    try { sessionStorage.setItem("round-tab-{{ event.id }}", name); } catch (e) {}
-    if (focus) window.scrollTo({ top: document.querySelector(".round-tabs").offsetTop - 70 });
-  }
-  tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab, true); }); });
-  var start = document.querySelector('.round-tabs [aria-selected="true"]').dataset.tab, target = location.hash && document.querySelector(location.hash);
-  if (target && target.closest(".round-panel")) start = target.closest(".round-panel").dataset.panel;
-  else { try { start = sessionStorage.getItem("round-tab-{{ event.id }}") || start; } catch (e) {} }
-  show(start, false);
-  if (target) target.scrollIntoView();
-})();
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workspace.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weekend.js') }}"></script>
 {% if ctx.can_run and (ctx.is_master or event.status != 'Complete') %}<script src="{{ url_for('static', filename='js/ocr_match.js') }}"></script>
 <script src="{{ url_for('static', filename='js/importer.js') }}"></script>{% endif %}

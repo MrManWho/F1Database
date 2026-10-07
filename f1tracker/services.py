@@ -3,7 +3,7 @@
 import math
 import re
 
-from . import calc3, engine
+from . import calc3, engine, memo
 from . import constants as C
 from .storage import get_meta, now_iso, set_meta
 
@@ -97,6 +97,8 @@ def seed_career(conn, token, name, year, player_names=None):
     # v2.5: a new league starts on the current calculation engine; there's nothing to migrate.
     set_meta(conn, "calc_engine", str(C.NEW_LEAGUE_ENGINE))
     set_meta(conn, "calc_choice", "new")
+    from . import ai_track
+    ai_track.start_season(conn, season_id)      # 4.0: the track-aware AI recommendation from round 1
     sync_not_run_results(conn, season_id)
     return season_id
 
@@ -331,14 +333,17 @@ def sync_not_run_results(conn, season_id):
     seats = driver_seats(conn, season_id)
     for event in _rows(conn, "SELECT id FROM events WHERE season_id = ? AND status = ?",
                        (season_id, C.EVENT_NOT_RUN)):
-        existing = {r["driver_id"] for r in _rows(conn, "SELECT driver_id FROM results WHERE event_id = ?",
-                                                  (event["id"],))}
-        for did in existing - set(seats):
+        existing = {r["driver_id"]: r["team_id"] for r in _rows(conn, "SELECT driver_id, team_id FROM results "
+                                                                       "WHERE event_id = ?", (event["id"],))}
+        for did in set(existing) - set(seats):
             conn.execute("DELETE FROM results WHERE event_id = ? AND driver_id = ?", (event["id"], did))
         for did, (team_id, _seat) in seats.items():
             if did in existing:
-                conn.execute("UPDATE results SET team_id = ? WHERE event_id = ? AND driver_id = ?",
-                             (team_id, event["id"], did))
+                # 4.0.0-beta.13: only rows whose team actually changed are written (every page that showed a
+                # round used to rewrite every upcoming round's lineup, 300+ writes per page view)
+                if existing[did] != team_id:
+                    conn.execute("UPDATE results SET team_id = ? WHERE event_id = ? AND driver_id = ?",
+                                 (team_id, event["id"], did))
             else:
                 conn.execute("INSERT INTO results(event_id, driver_id, team_id) VALUES(?,?,?)",
                              (event["id"], did, team_id))
@@ -423,6 +428,7 @@ def place_players(conn, season_id, targets):
 
 # --------------------------------------------------------------------------- standings
 
+@memo.per_connection(copier=memo.rows_copy)
 def driver_standings(conn, season_id, upto_round=None, completed_only=False):
     if engine.is_v3(conn, season_id):
         return calc3.driver_standings(conn, season_id, upto_round, completed_only)
@@ -822,6 +828,11 @@ def submission_check(conn, event_id):
         warnings.append("No Driver of the Day selected")
     if event["ai_difficulty"] is None and not event["ai_untracked"]:
         blocking.append("Enter the AI difficulty used, or press \"Don't track this round\"")
+    from . import ai3
+    pace_missing = ai3.missing_pace(conn, event, rows)
+    if pace_missing:   # 4.0: race times against the AI are required on a tracked round
+        blocking.append("Race times missing for " + ", ".join(f"{n} ({s})" for n, s in pace_missing)
+                        + ": enter them under Sessions, Race times on the round page, or tick \"Don't submit times\"")
     elif event["ai_difficulty"] is None:
         warnings.append("AI difficulty deliberately not tracked for this round (the recommender will skip it)")
     # Positions within a session must run 1, 2, 3… with no holes (a classified gap can't happen).
@@ -1001,6 +1012,7 @@ def sweet_spot(history):
     return {"value": round(value, 1), "rounds": n, "seasons": seasons, "confidence": confidence}
 
 
+@memo.per_connection
 def difficulty_recommendation(conn, before=None):
     sid = current_season_id(conn)
     if sid and engine.is_v3(conn, sid):
@@ -1236,6 +1248,8 @@ def create_next_season(conn, source_id, year):
         conn.execute("INSERT INTO events(season_id, round_number, name, location, is_sprint) VALUES(?,?,?,?,?)",
                      (new_id, e["round_number"], e["name"], e["location"], e["is_sprint"]))
     set_meta(conn, "current_season_id", new_id)
+    from . import ai_track
+    ai_track.start_season(conn, new_id)         # 4.0: a new season starts on the track-aware AI recommendation
     sync_not_run_results(conn, new_id)
     return new_id
 

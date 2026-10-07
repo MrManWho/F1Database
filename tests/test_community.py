@@ -89,7 +89,8 @@ def test_race_night_time_checkins_and_countdown(app, master_client):
     assert "Who&#39;s racing?" in page or "Who's racing?" in page
     assert 'data-countdown="2030-03-02T01:00+00:00"' in page and "Fri, Mar 1 at 8:00 PM EST</time>" in page and "Lights out" in page
     dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "Fri, Mar 1 at 8:00 PM EST" in dash and "Scheduled" in dash and "Who" in dash   # more than a week away
+    assert "Fri, Mar 1 at 8:00 PM EST" in dash and "Scheduled" in dash   # more than a week away
+    assert "Who" in page       # 4.0: check-ins live in the Race Weekend workspace (Prepare), not on Home
     # Once the race is done, check-ins close.
     with storage.session(token) as conn:
         run_event(conn, S.get_event(conn, ev["id"]))
@@ -113,8 +114,11 @@ def test_comments_reactions_and_fan_vote(app, master_client):
     fire = next(r for r in res["reactions"] if r["emoji"] == "🔥")
     assert fire["count"] == 1 and fire["mine"] and fire["who"] == ["Ben"]
     ben.post(f"/career/{token}/react", data={"target": target, "emoji": "🔥", "csrf_token": "tok"})  # toggles off
-    assert ben.post(f"/career/{token}/react", data={"target": "event:999", "emoji": "🔥", "csrf_token": "tok"},
-                    headers={"X-Requested-With": "fetch"}).status_code == 302
+    # 4.0.0-beta.13: a refused reaction answers the page's script with the reason (it used to redirect, which the
+    # script couldn't read)
+    refused = ben.post(f"/career/{token}/react", data={"target": "event:999", "emoji": "🔥", "csrf_token": "tok"},
+                       headers={"X-Requested-With": "fetch"})
+    assert refused.status_code == 400 and refused.get_json()["ok"] is False and refused.get_json()["error"]
     with storage.session(token) as conn:
         assert conn.execute("SELECT COUNT(*) FROM reactions").fetchone()[0] == 0
         comment = conn.execute("SELECT id FROM comments").fetchone()[0]

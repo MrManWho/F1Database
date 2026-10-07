@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}What each season tracked{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>What each season tracked</h1>
+  <p class="page-purpose">Earlier seasons are shown under the rules they were played with. Anything that wasn't tracked then is hidden or marked "Not tracked under this season's rules", and never counts as missing, incomplete or zero. Anything that was recorded is always shown.</p></div></div>
+
+{% if not migration %}
+<section class="card"><p>This league was created on Paddock Legacy 4.0, so every season tracks everything 4.0 offers.</p></section>
+{% else %}
+<section class="card" aria-labelledby="mig-title">
+  <div class="card-head"><h2 id="mig-title">The 4.0 update</h2><small class="muted">{{ migration.migrated_at|stamp }}</small></div>
+  <ul class="plain-list">
+    <li>Upgraded from an earlier version of Paddock Legacy (league file format {{ migration.from_schema }}).</li>
+    <li>New tracking begins {% if migration.start_year is none %}with the first season{% elif migration.start_round > 1 %}at Round {{ migration.start_round }} of the {{ migration.start_year }} season{% else %}with the {{ migration.start_year }} season{% endif %}. You do not need to re-enter earlier seasons.</li>
+    <li>Results, standings, Form, Reputation, relationships, contracts, offers and the next season's grid were kept exactly as they were. Recording what was tracked never recalculates anything.</li>
+  </ul>
+  {% if ctx.is_master %}<p class="muted small">Upgrade notice: {{ acks|length }} {{ 'person has' if acks|length == 1 else 'people have' }} pressed "Got it"{% if acks %} ({{ acks|map(attribute='username')|join(', ') }}){% endif %}. It goes to the {{ migration.audience|length }} member{{ 's' if migration.audience|length != 1 }} of the league at the update and the site owner.</p>{% endif %}
+</section>
+
+{% if review %}
+<section class="card banner-warn" aria-labelledby="review-title">
+  <div class="card-head"><h2 id="review-title">To confirm</h2></div>
+  <p class="small">These were first recorded part-way through a season. Until confirmed, the rounds before the first record count as not tracked, so nothing is penalised.{% if not ctx.is_master %} Your Race Master can confirm when tracking really began.{% endif %}</p>
+  <ul class="plain-list small">{% for r in review %}<li><b>{{ r.year }}</b> · {{ features[r.feature][0] }}: {{ r.detail }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="card table-card" aria-labelledby="by-season-title">
+  <h2 id="by-season-title">By season</h2>
+  <div class="table-wrap">
+  <table class="data-table compact legacy-table">
+    <caption class="sr-only">When each feature was tracked, by season</caption>
+    <thead><tr><th scope="col">Season</th><th scope="col">Feature</th><th scope="col">Tracked</th><th scope="col">How we know</th>{% if ctx.is_master %}<th scope="col">Change</th>{% endif %}</tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td>{{ r.year }}</td>
+      <td>{{ r.label_feature }}</td>
+      <td class="{{ 'not-tracked' if r.from_round is none }}">{% if r.from_round is none %}Not tracked under this season's rules{% elif r.from_round == 1 %}Whole season{% else %}From Round {{ r.from_round }}{% endif %}{% if r.review %} <span class="pill">to confirm</span>{% endif %}</td>
+      <td class="small muted">{{ r.detail }}</td>
+      {% if ctx.is_master %}<td>{% if r.how == 'records' %}
+        <form method="post" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="season_id" value="{{ r.season_id }}"><input type="hidden" name="feature" value="{{ r.feature }}">
+          <label class="sr-only" for="fr-{{ r.season_id }}-{{ r.feature }}">Tracked from</label>
+          <select id="fr-{{ r.season_id }}-{{ r.feature }}" name="from_round">
+            <option value="none" {{ 'selected' if r.from_round is none }}>Not tracked</option>
+            {% for n in range(1, (r.rounds or 1) + 1) %}<option value="{{ n }}" {{ 'selected' if r.from_round == n }}>From round {{ n }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-sm">{{ 'Confirm' if r.review else 'Save' }}</button>
+        </form>{% else %}<span class="muted small">Set by the 4.0 update</span>{% endif %}</td>{% endif %}
+    </tr>{% else %}<tr><td colspan="5" class="muted">Every season tracked everything.</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="muted small">Seasons not listed track everything. Race times, incidents by session and the stored AI recommendation are new in 4.0; weather, weekend targets and press were read from what each season actually recorded.</p>
+</section>
+{% endif %}
+{% endblock %}

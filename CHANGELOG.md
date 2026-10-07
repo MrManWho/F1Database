@@ -3,6 +3,32 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.0 · Paddock Legacy 4.0
+_Released October 7, 2026_
+> A brand-new look and a race weekend page with a clear place for every job. Your results, standings, contracts and
+> career history all come with you, exactly as they were.
+
+### Highlights
+- **A new look everywhere.** Navy, white and orange, with clearer type, cards and tables on every page. Light is the default; dark is in My settings → Theme.
+- **Simpler menus.** Every league has Home, Race Weekend, Championship, Career and More, with the Race Master's tools in their own Manage League area. Old links still work.
+- **Home starts with one next action,** then the current weekend, your tasks, what the league is waiting on, the last race, the championship and your career.
+- **Each race weekend is one page with four steps:** Prepare, Sessions, Review & submit and Debrief. It opens on the step you need, and each session (Qualifying, Sprint, Race) has its own results, race times, weather and incidents.
+- **Save & continue never submits.** The bar at the bottom says whether your changes are saved, even when the connection drops. Review & submit lists anything that must be fixed with a **Fix** button, and pressing **Submit weekend** twice still submits once.
+- **Just type the two race times.** Enter your race time and your AI teammate's straight from the game's results screen and the site works out the gap. Each player who finished a tracked round enters their times, or ticks "Don't submit times".
+- **A track-aware AI recommendation.** Each round starts from what players really use at that circuit in F1 26, then learns from how your league races. It's fair to bad luck (DNFs and incidents never count as "too hard") and explains every step.
+- **One stewards' story per race** instead of a headline for every incident, and incidents now belong to the session they happened in.
+- **Your earlier seasons are kept under their own rules.** Things the old site never tracked are marked "Not tracked under this season's rules" and never count as missing. The first time you open your league, a short note explains where the new tracking begins.
+- **League Readiness Check** (Manage League): one page that tells the Race Master what needs attention before submitting a weekend, closing a season or starting the next one, and where to fix it.
+- **Link a login to any player driver** from Members & roles, and asking to join as a driver who's already on the grid hands you that driver.
+- **Forms bring you back to where you were,** say plainly when something didn't save and keep what you typed. Pages open two to four times faster.
+
+### Fixed
+- Older rounds no longer ask their press questions again, and Silly Season closes by itself once every deal is done (the 3.2.4–3.2.6 fixes, included).
+- Creating a league keeps everything you typed if it fails, and opens at the step with the problem.
+
+### Nothing changed in
+- Your results, standings, Form, Reputation, relationships, contracts or offers. Your league is backed up automatically the first time 4.0 opens it.
+
 ## 3.2.6 · Silly Season closes by itself
 _Released October 6, 2026_
 > A fix for transfer windows that stayed open after every deal was done.
@@ -578,7 +604,7 @@ _Released September 24, 2026_
 
 ## 1.5 · The big feature update
 - **Accounts:** login lockout after repeated wrong passwords, and self sign-up.
-- **Results:** screenshot import of classifications (with Claude), and quick tap-to-order entry that also works on phones.
+- **Results:** screenshot import of classifications, and quick tap-to-order entry that also works on phones.
 - **Stats:** rivalry page and charts.
 - **Paddock:** team development (car ratings that change each winter), season review awards, paddock news, the notification bell, Paddock Admin for drivers and teams, and adding/removing calendar rounds.
 - **Automatic backups.**

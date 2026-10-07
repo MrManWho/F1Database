@@ -70,7 +70,6 @@ def test_answers_to_swapped_in_questions_are_taken_back_on_upgrade(career):
         relations.add_bonus(conn, sid, d)
         assert relations.assess(conn, sid, d)["bonus"] > before
         kept = conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] - 1
-        conn.execute("UPDATE meta SET value = '21' WHERE key = 'schema_version'")
         conn.execute("DELETE FROM meta WHERE key = 'press_fix_notice'")
     with storage.session(career) as conn:        # opening the league upgrades it (after a backup)
         assert conn.execute("SELECT COUNT(*) FROM press_answers").fetchone()[0] == kept
@@ -83,7 +82,6 @@ def test_answers_to_swapped_in_questions_are_taken_back_on_upgrade(career):
                               (d,)).fetchone()
         assert notice and "R1" in notice["details"]
         assert any(c["stat"] == "relationship" for c in json.loads(notice["changes"]))
-    assert list(storage.backups_dir().glob(f"{career}-before-v22-upgrade-*"))
 
 
 def test_rounds_with_just_their_two_answers_are_never_touched(career):

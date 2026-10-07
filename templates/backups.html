@@ -77,7 +77,7 @@
     </form>
     <form method="post" action="{{ url_for('save_as', token=ctx.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Make an independent copy (for testing)<input name="name" value="{{ ctx.career_name }} (copy)" maxlength="80" required></label>
+      <label>Make an independent copy (to try changes safely)<input name="name" value="{{ ctx.career_name }} (copy)" maxlength="80" required></label>
       <div><button class="btn btn-sm btn-ghost">Save as a new league</button></div>
     </form>
   </section>

@@ -105,7 +105,8 @@
         <select name="role" data-join-role>
           {% for key, label in C.LEAGUE_ROLES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
         </select></label>
-      <label data-driver-field>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last"></label>
+      <label data-driver-field>Your driver name<input name="driver_name" required maxlength="60" placeholder="First Last">
+        <small class="muted">Already in this league as a player driver? Type that driver's name to take it over.</small></label>
       <label>Message (optional)<input name="message" maxlength="300" placeholder="Say hi to the Race Master"></label>
       {{ notify_choice(notify_presets, 'If you\'re approved, notify me about') }}
       <button class="btn btn-primary btn-sm">Ask to join</button>

@@ -1,19 +1,310 @@
-# Paddock Legacy 3.0: admin guide
+# Paddock Legacy 4.0: admin guide
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
-## 3.2.6: transfer windows close by themselves
+## 4.0.0: launch
 
-- **The bug:** nothing closed a market window except the Race Master's *Close window* button (Market administration) or the season rollover, so a Silly Season with every deal done stayed open, with its banner and "open" market status, indefinitely.
-- **The fix:** `market.close_if_settled` closes a window when no offer in it is Pending and every active player driver has an Accepted offer in it, a contract covering its target year, or no approach left (or no team left to approach). It runs after each signing and decline, and `market.close_settled_windows` runs on every league page load, which also closes windows left open before 3.2.6 and catches talks that collapse or approaches that are turned down. Closing posts a paddock headline and one notification (dedupe `window:<id>:closed`). No schema change.
+The first public 4.0. Compared with beta.19, only launch tidying:
+- **What's New** has one 4.0.0 entry for everyone instead of the 21 test-site builds (those are kept in
+  `docs/4.0/BETA_CHANGELOG.md`), and the 3.2.4–3.2.6 entries from the live site are back in the list.
+- **Visitor-facing wording:** Help no longer names the hosting setup code, the Readiness check's last card is
+  "Version and backups" (no deployment notes), the Calculation Update page says Version 3 throughout, and a few
+  leftover version labels are gone ("Before v1.16" now reads "Not recorded").
+- **Design system page** (`/design`) is for site Race Masters only. It was reachable by any signed-in account.
+- **Legacy banner** shows on a round from an older season even while the new season is selected.
+- **Readiness check** says "at the start of a season, before Round 1" right after a rollover, not "mid-season (0 of 24)".
+
+Test-site-only things stay off on the live site by themselves: the TEST SITE banner, live backup import, Try a season
+finale and Delivery preview all need `F1_TRACKER_TEST_SITE=1`, the environment badge is hidden on Render
+(production), and live reload only exists in `dev.py`.
+
+### Switch day
+1. Account → Settings → turn **maintenance** on, then take a backup (Backups & data, and the encrypted site backup).
+2. Merge `release-4.0` into the live branch (`git merge --no-ff -X theirs origin/release-4.0`); `git diff
+   origin/release-4.0` should be empty. Push, and Render deploys.
+3. Open each league once: it backs itself up (`before-v26-upgrade`) and upgrades on first open.
+4. Turn maintenance off. Everyone sees What's New for 4.0.0, then their league's one-time upgrade note.
+5. Rollback if needed: redeploy 3.2.6 (commit `12e99b7`). It opens 4.0 data, and the pre-upgrade backups are in
+   `backups/`.
+
+### Shutting down the 4.0 test site
+On render.com, open the test service (the one with `F1_TRACKER_TEST_SITE=1`) → **Settings** → **Suspend Web
+Service** to pause it, or **Delete Web Service** to remove it. It has no disk, so nothing is kept either way. The
+`release-4.0` branch can stay for the next round of testing.
+
+## 4.0.0-beta.19: local development
+
+- **`dev.py` / `dev.bat`** (docs/LOCAL_DEV.md) run the Flask dev server on 127.0.0.1:5050 with `F1_TRACKER_DATA_DIR`
+  = `.devdata/`, `F1_TRACKER_ENV=local` and `F1_TRACKER_TEST_SITE=1` (so every send becomes a delivery preview,
+  including an imported outbox). It refuses to start on Python other than 3.11, with `RENDER`, `SMTP_*` or
+  `F1_TRACKER_BACKUP_PASSPHRASE` set, or with a data folder outside the project (the desktop app's
+  `%LOCALAPPDATA%\F1UniverseTracker` and `/data` by name). `dev.bat seed|finale LOGIN` reuse `testsite.seed()` and
+  `seed_final_round()`. `reset` renames `.devdata`, and never deletes it.
+- **Live reload** is development only: a `/__dev/events` stream (answered before the site's own request hooks) and a
+  small injected script. `create_app` accepts `STATIC_FINGERPRINT_FRESH`, which recomputes the `?v=` fingerprint on
+  every page so edited CSS/JS gets a new address. Nothing in `server.py`, `render.yaml` or `launcher.py` changed.
+- **CLAUDE.md** and **.claude/settings.json** are for Claude Code on a local PC. Push, merge, rebase, reset and clean
+  always ask first. `/ship-4-0` (.claude/skills/ship-4-0) releases the next 4.0 beta the
+  usual way: version, CHANGELOG, admin guide, tests, then a confirmed push to `release-4.0` (never the live branch).
+
+## 4.0.0-beta.18: league list cache and race time Clear
+
+- **League list cache** (`storage.list_careers`, added in beta.17). It was keyed only on the league file's and its
+  `-wal` file's modification time and size. On a filesystem with coarse timestamps, two writes in the same tick could
+  leave a summary stale until the next write. That would have mattered to account deletion and export, which pick
+  leagues by membership. Now `storage.session()` drops a league's kept summary after any write it commits
+  (`conn.total_changes`). A summary that was written to while it was being read isn't kept. Entries for deleted or
+  expired leagues are dropped when the list is next read. Writes from another process still show up through the
+  file stamp, as before.
+- **Race time Clear.** The Clear button posted `race_at=""` after the filled time input, and the route read the first
+  value, so nothing was cleared. The button now sends `clear=1`, and `race_time` treats that as an empty time. Old
+  forms that send only `race_at` work as before.
+- **Checked before pushing beta.17:** pre-4.0 leagues upgraded and rolled over with identical data on beta.16 and
+  beta.17. This covered three fictional 3.x leagues (planned end-of-season switch, mid-season switch, accepted and
+  pending Silly Season offers), with 0 differing rows across 52 tables, plus a browser run of the rollover.
+
+## 4.0.0-beta.17: the 4.0 redesign
+
+- **What it is.** A new look and layout for the existing features. The feature-to-destination map, the navigation and
+  the round page's layout are in `docs/4.0/REDESIGN_MAP.md`. No route, schema, formula or permission changed.
+- **Styles.** `static/css/pl.css` is the design system: tokens for both themes, the app bar, buttons, pills and
+  links. `static/css/pl-pages.css` holds page layouts (round page, Home, Championship, pages outside a league). Both
+  load after `app.css`. `race.css`, `race-pages.css`, `fonts-rc.css` and the Saira and IBM Plex fonts were deleted;
+  Barlow is served from `static/fonts` (OFL licence alongside). A base rule written as `.x, html[data-theme] .x`
+  outranks a plain `.x.is-on` or `.x:hover`, so its state rules carry the same `html[data-theme]` prefix.
+- **League colour.** `base.html` now puts the league's accent on `<body>` as `--league` / `--on-league` instead of
+  `--accent`. `--accent` (and the old `--red`) is the site orange everywhere, so older `app.css` rules that used them
+  turn orange rather than red or the league's colour. The league badge (`.league-mark`) still gets the league's
+  colour inline. Where `app.css` used red to mean a problem (Readiness blockers, missed targets, danger banners),
+  `pl.css` keeps it on the red `--bad` tokens.
+- **Round page.** `templates/weekend.html` is built from one `sec()` macro: a `<details class="ws-sec">` with a state,
+  a Required/Optional tag, who it's for and a summary. Sections that belong to one session carry
+  `data-session-only="q|s|r"` plus `data-session-strict`. `static/js/workspace.js` switches steps and sessions and
+  renders the Review checklist. `static/js/weekend.js` saves the table and submits. Submitting first re-reads the
+  checklist; a warning the user hasn't seen yet stops it once. The server's own once-only guard is unchanged.
+- **Debrief readiness** (`app.weekend`). `next_gate` is the next round's gate status, read with `issue=False`, so
+  opening the Debrief never issues targets or press. It's only read while that round hasn't started.
+- **League list cache** (`storage.list_careers`). Each league's summary is kept, keyed by the league file's and its
+  `-wal` file's modification time and size. Any write to a league, from any process, changes the key and the summary
+  is read again. Callers get their own copy. Speed, repeat loads of each page on the same server (median ms), base
+  beta.16 vs beta.17:
+  - one league: about the same (Home 52.7 → 52.4, round 48.8 → 44.1, Standings 30.6 → 32.9);
+  - 33 leagues: Home 92.0 → 49.5, round 93.1 → 49.0, Standings 61.7 → 33.0, Statistics 91.8 → 37.4, News 52.8 → 18.8.
+  - The first visit to the round page downloads about 100 KB more (the fonts, now actually used, and the new CSS).
+    It's all cached for a year after that.
+- **Home's lists.** `insights.pending_actions` now counts a weekend target as done once it has a tier (chosen, or
+  locked in as Standard at lights out), the same rule as the round gate (`gates.py`). Only a pre-2.4 target without a
+  tier still asks to be accepted. Home's Waiting for also names results still to enter while a round is live, for
+  Race Masters as well.
+- **Theme default.** A browser with no saved theme gets light (it was dark). Saved choices are kept.
+- **Static fingerprint and folders.** `_version_static_files` only adds `?v=` to files. Since beta.13 it also stamped
+  the screenshot reader's folder address (`vendor/tesseract/`), so every file the reader added to it 404'd and
+  screenshot import always failed.
+- **Tests updated for the new page:** "Submit weekend", "Race times" and "Must fix" replace the old dialog and card
+  wording. `test_v230` now checks a driver has no paddock button (its form action), since Waiting on names the
+  "Open the paddock" job for everyone. The permission checks are unchanged.
+
+## 4.0.0-beta.16: failed pop-up forms
+
+- `shell.js` form restore: when the restored form sits in a closed `<dialog>`, it calls `showModal()` and repeats the
+  flashed error inside the form as `p.form-error` (the dialog covers the toast). `.form-error` is `#b3261e` in the light
+  theme. New test: each saved weekend step names the next one and who the round waits on. No schema change.
+
+## 4.0.0-beta.15: League Readiness Check
+
+- **Where.** `GET/POST /career/<league>/readiness` (`readiness_page`, access `ops`), linked from Manage League. GET runs
+  the quick checks. POST (Race Master only, 403 otherwise) also runs the full-history checks and keeps that result in
+  `<data dir>/readiness/<league>.json`, outside the league file. The page uses `career_page(read_only=True)`, which
+  skips everything opening a page normally does to a league: `roles.touch`, closing settled windows, publishing
+  announcements, the paddock tick, `touch_opened`, `impacts.on_open`/`refresh_if_stale`, `gates.my_todo` (it can offer
+  targets), the change record and `mark_stale`. A test compares every table before and after a visit and a run.
+- **How checks stay read-only.** `readiness.run` copies the league into memory with SQLite's backup API (one consistent
+  snapshot) and runs every check on the copy. Reused helpers that write as a side effect (`weekend_rows` syncing the
+  entry list, `teamlife._bank_since`, `recalc.preview`'s savepoint) only touch the copy. Anything they queue for
+  notifications or Discord is dropped.
+- **Fingerprint and staleness.** `readiness.fingerprint` hashes every league table except activity
+  (notifications, news, logs, chat, check-ins, predictions), `career_members.last_active` and volatile meta keys. A kept
+  full check whose fingerprint differs from the live league shows as out of date and counts as *Not checked*. The
+  fingerprint is taken again after checking, so a save that lands mid-check marks everything out of date.
+- **Checks** (26, in `readiness.CHECKS`, each with what it verifies, shown under *What each check verifies*):
+  - Members and drivers: logins (`weekend.unlinked_players`), assignments (duplicate logins, AI or deleted drivers,
+    `PRAGMA foreign_key_check`), seats (`seats.season_states`; free agents and released drivers are valid outcomes).
+  - Race weekends: weekend start (`weekend.results_blocked`, `gates.status(issue=False)`), results
+    (`S.submission_check`), timing (`ai3.missing_pace`, legacy-aware), weather (optional), saved-but-unsubmitted rounds,
+    player tasks (pledges, team goals, press that no gate requires), incidents (never blocking), submitted rounds of
+    this season (quick) and earlier seasons (full).
+  - Career and contracts: rounds left, dismissals awaiting a decision, pending offers (counts only, never terms),
+    transfer windows (never closed by the checker), and `seats.rollover_review` for next season (team conflicts are
+    blocking because `season_new` refuses them). Season-end processing for earlier seasons is a full check.
+  - Migration and tracking: file format and 4.0 tables, the Calculation Update and `calc_version`, the tracking record
+    compared with `tracking._plan`, review items, pending change notices, upgrade-notice acknowledgements (optional),
+    and historical records (full).
+  - Derived: standings are live; `recalc.preview(history=False)` for the season under way under its own rules; stored
+    Reputation carried between seasons compared without re-running any formula (full).
+- **Severity.** *Blocking* only when an existing rule refuses an action, and it names that action. *Warning* needs
+  attention. *Optional* never changes a status. Target statuses, worst first: Check failed, Blocked, Not checked, Needs
+  attention, Ready (plus Not applicable, for example no round left to submit). A check that raises is *Check failed*
+  with only the exception type, never its message.
+- **Permissions.** Each check has an audience. Scorekeepers get `ops` checks only (race weekends) and only the weekend
+  target. Findings carry names and counts, never press answers or offer terms.
+- **Speed.** Quick checks took about 0.04 s, and the full check about 0.1 s, on a two-season test league.
+
+## 4.0.0-beta.14: Python version pinned
+- `.python-version` (3.11) fixes the Python version Render uses, on the test site and, after the switch merge, on the
+  live site. The live site already runs 3.11 (its build installs `cp311` packages).
+- Why: Python 3.12 changed how `sum()` adds floating-point numbers. The calculations are tuned on 3.11; on 3.12/3.13
+  the golden-season tests fail (Driver Value ±0.5, car-adjusted rating ±2.6, AI recommendation ±3, one car-rank swap).
+- Don't remove or raise it without re-running `tests/test_v400_phase0.py` and `tests/test_v400_phase1.py` on the new
+  version and treating any difference as a calculation change (approval and change notices).
+
+## 4.0.0-beta.13: reliability and speed
+
+- **Where forms go back to** (`f1tracker/navigation.py`). `shell.js` adds a hidden `return_to` (path, query and
+  #fragment) to every POST form. `navigation.back(default, token, anchor, prefer)` uses, in order: a destination the
+  route chose, `return_to`, an older `next` field, then the Referer, but only after `navigation.safe` has matched it to
+  a GET page of this site (never `/api/`, `/static/`, sign-in or sign-out pages, other hosts, or another league's
+  pages). Otherwise each route has its own fallback (the round's stage, the standalone page), never the site Home.
+- **Failures.** A CSRF failure or signed-out POST flashes why and returns to the page (signed out: sign in with `next`).
+  `fetch` callers get JSON (`400 {expired: true}` / `401`). A failed form stores `session["_form_failed"]`; the next page
+  prints `<meta name="form-failed">` and `shell.js` restores the typed values from `sessionStorage` (never passwords).
+  POST 403s now render an explanation and a back link (status stays 403). GET pages that raise `ValidationError` flash it
+  and return to the referring page.
+- **Once-only writes.** Every league POST starts with `BEGIN IMMEDIATE`, so concurrent requests run one at a time. A
+  repeated identical press answer, target choice, pledge, offer accept/decline or incident report returns "Already …"
+  without writing, notifying or adding an Activity Log entry (`g.repeat`). A different answer to an answered question is
+  still refused.
+- **Speed** (measured with the test client on a 3-season, 72-round league; repeat-load server time and SQL statements):
+  League Home 295 ms / 7,334 → 101 ms / 1,804; Home after a save 418 / 9,188 → 119 / 2,041; Race Weekend 171 / 5,071 →
+  77 / 1,693; Debrief 179 / 3,664 → 91 / 1,557; Career 196 / 3,562 → 102 / 1,140; Standings 64 / 1,102 → 41 / 383;
+  historical Home 168 / 2,828 → 85 / 1,411. Causes fixed: `services.sync_not_run_results` rewrote every upcoming
+  lineup (300+ UPDATEs) on each page; standings, round ranks, the AI tracker replay and the difficulty recommendation
+  were recomputed many times per request (now remembered per connection by `f1tracker/memo.py`, dropped automatically on
+  any write or `ROLLBACK`); `teamlife.press_pens` rebuilt questions for every past round; the change-notice snapshot was
+  refreshed before the page instead of after. Static files carry `?v=<mtime>` and are cached for a year.
+- **AI tracker policy (needs a decision).** The 4.0.0-alpha.2 notes say a season under way keeps the tracker it started
+  with; 4.0.0-beta.1 says the season under way switches to the track-aware recommendation when the league first opens
+  on 4.0. The code does the beta.1 thing (`engine.ensure_latest`); the schema notes were corrected to match. Stored
+  recommendations for finished rounds are never recalculated.
+- **Python version matters for calculations.** `test_golden_season_matches_exactly[3]` and
+  `test_no_career_numbers_changed` pass on Python 3.11 (what the live site runs) and fail on 3.12+, whose `sum()`
+  adds floats with extra precision (e.g. two teams with exactly equal results at round 7 swap car rank; AI
+  recommendations move by up to 3). Run the tests, and the site, on 3.11.
+
+## 4.0.0-beta.12: legacy seasons and the upgrade notice
+
+- **What counts as an upgrade.** `schema.migrate` calls `tracking.record_upgrade` once when it opens a league file with league data but no `audit_events` table (or a schema below 22). Live 3.2.4–3.2.6 files say schema 22 too, which is why the table is the test and not the number. It covers both ways in: opening a copied live file and *Import a league*. New 4.0 leagues and the test-site leagues earlier betas already opened get no record and no notice. Re-import a fresh live copy to try it.
+- **Tables (format 26).**
+  - `tracking_migrations`: one row per kind (`4.0`), with from_schema, migrated_at, start_year/start_round and the audience (usernames in the league at the upgrade).
+  - `season_tracking`: per season and feature, `from_round` (NULL = not tracked that season), `review`, `source` (`upgrade` / `records` / `owner`) and a detail line.
+  - `tracking_notice_acks`: (migration_id, username, acked_at).
+  - A season with no rows is fully tracked.
+- **Where tracking starts.** 4.0 features (race times, incidents by session, the stored pre-round AI recommendation) start at the first round of the season under way with no results entered. A round already in progress finishes under the old rules. If every round is played, they start at round 1 of the next season.
+- **3.x features are read from the data.** Weather, weekend targets, pre-race press and post-race press come from what each season actually holds: stored entries, targets offered, `press_required`, the paddock opened. Release dates are never used.
+  - First used at round 1: tracked all season.
+  - First used later: tracked from that round and flagged `review`.
+  - Never used: not tracked that season.
+- **Owner review.** `GET/POST /career/<league>/legacy-tracking` shows the record to every member. The Race Master can confirm or change the start round of a 3.x feature. They can't move a start past a round that has data, and can't move 4.0 starts. Only the record changes.
+- **Display rules.**
+  - `tracking.round_tracked` / `empty_text` decide "Not recorded" against "Not tracked under this season's rules".
+  - `ai3.missing_pace` never asks for race times on an untracked round.
+  - Press pens and tasks are hidden on rounds where press wasn't tracked and nothing was answered.
+  - `tracking.coverage` gives the "Based on N eligible rounds · Tracked since …" line.
+  - Stored values always show.
+- **The notice.**
+  - Who sees it: members of the league at the upgrade, plus the site owner.
+  - When: after any mandatory step (change notices, pledge, team goal) and never on the same page as the site-wide What's New pop-up. The one-off league banner waits a page.
+  - *Got it* (`POST /career/<league>/upgrade-notice`) is stored in the league file per username and migration. *Not now* or Esc (`POST …/upgrade-notice/later`) only sets a flag in that browser session.
+  - The calculation line is chosen from `calc_migrations` made since the upgrade:
+    - `full`: a separate recalculation sentence, pointing to Changes to your driver.
+    - `future`: "latest calculations from round N; everything before is unchanged".
+    - Otherwise: "No results, standings or career outcomes were recalculated."
+- **Nothing is recalculated.** Recording tracking never touches `season_calc`, results or career numbers. Calculation changes still go through `engine` / `migration` and the change notices.
+
+## 4.0.0-beta.11: a league one round from the end (test site)
+
+- **Account → Settings → Try a season finale** (site owner, test site only, `POST /settings/test-final-round`) runs
+  `testsite.seed_final_round(username)`: the golden-fixture league (`golden.play(..., rounds=-1)`, same seed, two player
+  drivers at Williams and Haas) with every round but the last played and submitted, named "Final Round Test
+  (fictional)". The signed-in owner is linked as Race Master driving Player One. The last round uses the site's
+  normal defaults (round gates and race weekends as for any new league).
+- Command line: `python -m f1tracker.testsite final-round [login]`. Both refuse to run without `F1_TRACKER_TEST_SITE=1`.
+- The free test service forgets its data on restart; click the button again to get a fresh one.
+
+## 4.0.0-beta.10: linking a login to an existing player driver
+
+- **The bug:** a player driver that already existed (created with the league, added without a username, or loaded from a backup) could only get a login from the members table, and only once that person was already a league member. A join request naming that driver was refused as a duplicate name, and approving a request always created a new driver.
+- **The fix:** `POST /career/<league>/members/link/<driver_id>` (Race Master only, audited as "Linked a login to a player driver") links a username to a player driver nobody drives, adding them as Member if needed, keeping a Race Master or Scorekeeper role, and clearing that driver's *No account* tick. `career_join` accepts the name of a player driver nobody drives; `members_request` approval links the chosen (or same-named) free player driver instead of calling `add_player_driver`. F1 drivers and driven player drivers are still refused. No schema change.
+
+## 4.0.0-beta.9 / 3.2.6: transfer windows close by themselves
+
+- **The bug:** nothing closed a market window except the Race Master's *Close window* button (Market administration) or the season rollover, so a Silly Season with every deal done stayed open indefinitely.
+- **The fix:** `market.close_if_settled` closes a window when no offer in it is Pending and every active player driver has an Accepted offer in it, a contract covering its target year, or no approach left (or no team left to approach). It runs after each signing and decline, and `market.close_settled_windows` runs on every league page load, which also closes windows left open before this version. Closing posts a paddock headline and one notification (dedupe `window:<id>:closed`). No schema change.
 - A driver who still has approaches left keeps the window open; close it by hand if they're done.
 
-## 3.2.4: press questions and Silly Season
+## New in 4.0.0-beta.1: the UI overhaul (test site)
 
-- **The bug:** the post-race question about the transfer market was chosen by checking whether a market window was open *now*, not when the round was raced. When Silly Season opened, older rounds could swap their second question. With round gates on, those rounds came back as waiting for answers, and answering again counted toward the team relationship a second time.
-- **The fix:** whether a round asks about the market now depends only on whether a window was open when the round was first submitted (including the Silly Season that submission opened). It never changes afterwards.
-- **The clean-up (schema 22):** the first time each league opens on 3.2.4, a backup is taken (`<league>-before-v22-upgrade-*`). Each round asks a driver exactly two post-race questions, so any third answer at a round that was given after a market window opened is removed, together with its paddock headline. The first two answers always stay, even if a results correction later changed the questions. The relationship extras are worked out again from what remains, and each affected driver gets a notification naming the round. If the clean-up fails, the league still opens and the error is logged.
-- **3.2.5:** the clean-up now also writes a change notice (key `press-fix-3.2.4`) to each affected driver's Changes page, with before and after numbers. Leagues already cleaned up by 3.2.4 get the notice from the 3.2.4 notification (round only, as the numbers were already changed). It runs once per league (meta `press_fix_notice`).
+- **Navigation.** Home, Race Weekend, Championship, Career (drivers only) and More; Manage League is separate and shows
+  only for Race Masters (Scorekeepers get "Results entry"). New addresses: `/career/<league>/race-weekend` (the current
+  round's workspace; `?stage=prepare|sessions|review|debrief` and `&session=q|s|r` open a step directly),
+  `/championship` (→ Standings), `/my-career` (→ Garage, or More without a driver) and `/more`. Every old address
+  still works; `/weekend/<id>` is now the workspace.
+- **Where the workspace opens** is worked out from the saved round (`f1tracker/workspace.py`), never from the last
+  page someone visited: Prepare before lights out, Sessions once results can go in (at the first session that isn't
+  complete), Review when every session is entered (Scorekeepers and the Race Master), Debrief once submitted.
+- **Race Master tools** on the workspace (reopen, reset, team orders, targets and excuses) are in a separate
+  "Race Master tools" strip at the bottom. Opening a round early stays next to the ready board in Prepare.
+- **Double submit.** Result saves take the database write lock before reading the round, so two submissions arriving
+  together run one after the other; the post-race steps (headlines, emails, relationship changes) run once. A
+  Scorekeeper's repeated submit gets `already_submitted` and the page simply moves to the Debrief.
+- **Incidents.** `incidents.session` (qualifying / sprint / race / weekend). Rulings update one news item per round
+  (`news.ref = stewards:<event id>`) instead of posting a headline each; Discord gets one post when the story first
+  appears. Deleting reports updates or removes the story. On the first open under format 25, older one-per-ruling
+  headlines are folded into the round's story.
+- **Latest calculations only.** `engine.ensure_latest` runs when a league is opened: a league still on engine 2 is moved
+  with the non-destructive "from the next round" path (completed rounds keep their numbers; a Calculation Update
+  record is written with the actor "Paddock Legacy 4.0"), and the current season uses the track-aware AI model. The
+  Calculation Update pages now redirect to Home, and the engine scan is no longer linked from System controls (the
+  command `python -m f1tracker.phase0 scan` still works). The engine 2 code stays for the history it calculated.
+
+## New in 4.0.0-alpha.2: the track-aware AI recommendation
+
+- **Model:** `f1tracker/ai_track.py` (`track-aware-1`). New leagues and each new season use it (meta
+  `ai_model:<season id>`); seasons already under way keep the v3 tracker until they finish.
+- **Baselines:** `f1tracker/data/ai_baselines/<version>.json` holds the F1Laps F1 26 averages per circuit with game,
+  source, source date, dataset and model versions. The site never contacts F1Laps.
+- **Updating the baselines** when F1 26 gets meaningful AI changes: copy the current file to a new name (for example
+  `f1laps-f126-2027-03-01.json`), change the values, `source_date` and `dataset_version`, then set
+  `CURRENT_SNAPSHOT` in `ai_track.py` to the new name. Keep old files: rounds already played name the snapshot they
+  used. Only future rounds change.
+- **Stored per round** (schema 23, `ai_track_recs`): the recommendation shown before the round (baseline, league
+  adjustment, track history, final, confidence, full explanation, snapshot and model versions), frozen at the first
+  submission, and the AI actually used. A correction updates only the AI used.
+- **Circuits not in the snapshot** (a custom round) use the average of all circuits and say so.
+- **League setting:** Race weekends → "Use each circuit's history in this league" (on by default).
+
+## New in 4.0.0-alpha.1 (test site only, Phase 1)
+
+- **Environment badge.** `F1_TRACKER_ENV` = local / test / staging / production names each copy of the site. Without
+  it: the test site (`F1_TRACKER_TEST_SITE=1`) is *test*, a site on Render is *production*, anything else *local*. A
+  badge next to the version shows every name except production.
+- **Health check:** `GET /healthz` (public) returns JSON: ok, version, environment, schema and two checks (accounts
+  database, writable data folder); HTTP 503 if either fails. Point Render's health check path at it.
+- **Structured logs.** `server.py` logs JSON lines (time, level, logger, message, and per request: method, endpoint,
+  status, ms). Messages are scrubbed of email addresses, links and long tokens. No paths, names or form values.
+- **Site errors** (Account → Settings → Site health): errors grouped by kind and place, with a count; the newest 200.
+  Scrubbed the same way. Clear it when you've looked.
+- **Delivery preview** (test site): nothing is ever sent; each email, Discord post and phone alert is saved instead
+  (addresses masked, newest 300). An imported live backup has its SMTP password removed and every league's Discord
+  webhook replaced with a placeholder.
+- **Change record.** League files move to schema 22: `audit_events` (actor, time, action, target, before/after for
+  members and roles, league settings and rounds), protected by triggers so rows can't be edited or deleted. Race
+  Masters see it under Activity log → Change record. Site-owner actions go to `site_audit` in accounts.db (Account →
+  Settings → Site change record). Secrets are recorded only as "set" / "not set"; passwords never.
+- **Every route declares its access** (`public`, `self`, `member`, `ops`, `master`); tests call every site route
+  anonymously, as an ordinary member and as the owner, and every league route as each role.
+- **Theme and density** are stored on the account (`users.theme`, `users.density`).
+- **Rollback:** the schema 22 change only adds a table and two triggers. A v3 build opens a schema 22 file normally
+  (it ignores the extra table); the pre-upgrade backup is in `backups/` as usual.
 
 ## New in 3.2: maintenance mode
 

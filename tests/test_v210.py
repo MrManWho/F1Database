@@ -42,7 +42,7 @@ def test_contracts_offers_press_and_progression_have_their_own_pages(app, master
         S.place_players(conn, S.current_season_id(conn), {a: (1, 1)})
     pledge_all(token)
     ana = _client(app, "ana")
-    dash = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    dash = ana.get(f"/career/{token}/garage").get_data(as_text=True)      # 4.0: Career's own tabs
     assert f'href="/career/{token}/offers"' in dash and f'href="/career/{token}/press"' in dash
     offers = ana.get(f"/career/{token}/offers").get_data(as_text=True)
     assert "Negotiations" in offers and "Your trend" not in offers
@@ -538,7 +538,7 @@ def test_drivers_can_pick_from_the_control_room_and_the_predictions_page(app, ma
     from f1tracker import community
     token, a, evs = _predictions_league(master_client)
     ana = _client(app, "ana")
-    for path in ("dashboard", "predictions"):
+    for path in (f"weekend/{evs[0]['id']}", "predictions"):      # 4.0: picks are made in the workspace (Prepare)
         page = ana.get(f"/career/{token}/{path}").get_data(as_text=True)
         assert 'class="pick-form"' in page, path
     res = ana.post(f"/career/{token}/weekend/{evs[0]['id']}/predict",

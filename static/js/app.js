@@ -40,7 +40,11 @@
     stack.appendChild(el);
     autoDismiss(el);
   }
-  function autoDismiss(el) { setTimeout(function () { el.remove(); }, 7000); }
+  // 4.0.0-beta.13: an error stays until it's dismissed, so the reason is never missed; confirmations fade.
+  function autoDismiss(el) {
+    if (el.classList.contains("toast-error")) { el.setAttribute("role", "alert"); return; }
+    setTimeout(function () { el.remove(); }, 7000);
+  }
 
   function postJSON(url, body) {
     return fetch(url, {
@@ -254,12 +258,16 @@
     var field = scope && scope.querySelector("[data-driver-field]");
     if (!field) return;
     var input = field.querySelector("input");
+    var pick = field.querySelector("select[name=driver_id]");   // 4.0.0-beta.10: a player driver already in the league
     function sync() {
       var drives = sel.value === "driver" || sel.value === "driver_scorekeeper";
+      var existing = drives && pick && pick.value;
       field.style.opacity = drives ? "" : "0.4";
-      if (input) { input.required = drives; input.disabled = !drives; }
+      if (pick) pick.disabled = !drives;
+      if (input) { input.required = drives && !existing; input.disabled = !drives; input.hidden = !!existing; }
     }
     sel.addEventListener("change", sync);
+    if (pick) pick.addEventListener("change", sync);
     sync();
   });
 })();
@@ -354,12 +362,22 @@
       function () { document.execCommand && document.execCommand("copy"); });
   });
 
+  // 4.0: theme and density are saved to the account too, so they follow you to every device.
+  function savePreference(name, value) {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var body = new FormData();
+    body.append(name, value);
+    fetch("/account/preferences", { method: "POST", body: body, credentials: "same-origin",
+                                     headers: { "X-CSRF-Token": meta ? meta.content : "" } }).catch(function () {});
+  }
+
   // Theme
   var pick = document.getElementById("theme-pick");
   if (pick) {
-    try { pick.value = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
+    try { pick.value = localStorage.getItem("f1-theme") || "light"; } catch (e) {}
     pick.addEventListener("change", function () {
       try { localStorage.setItem("f1-theme", pick.value); } catch (e) {}
+      savePreference("theme", pick.value);
       var t = pick.value;
       if (t === "auto") t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", t);
@@ -372,6 +390,7 @@
     try { dens.value = localStorage.getItem("f1-density") || "comfortable"; } catch (e) {}
     dens.addEventListener("change", function () {
       try { localStorage.setItem("f1-density", dens.value); } catch (e) {}
+      savePreference("density", dens.value);
       document.body.classList.toggle("compact", dens.value === "compact");
     });
   }

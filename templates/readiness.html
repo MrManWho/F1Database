@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}League Readiness Check{% endblock %}
+{% block content %}
+{% macro finding(f, base) -%}
+<li class="rd-finding rd-sev-{{ f.severity }}" data-severity="{{ f.severity }}" data-category="{{ f.category }}" data-season="{{ f.season or '' }}">
+  <div class="rd-f-head"><span class="pill rd-pill-{{ f.severity }}">{{ severities[f.severity][0] }}</span> <b>{{ f.title }}</b>{% if f.count > 1 %} <span class="pill">×{{ f.count }}</span>{% endif %}</div>
+  {% if f.subject %}<div class="small muted">{{ f.subject }}{% if f.season %} · {{ f.season }}{% endif %}</div>{% elif f.season %}<div class="small muted">{{ f.season }}</div>{% endif %}
+  {% if f.detail %}<div class="small">{{ f.detail }}</div>{% endif %}
+  {% if f['items'] and f['items']|length > 1 %}<ul class="small rd-items">{% for i in f['items'][:12] %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+  <div class="small rd-meta">
+    {% if f.why %}<span><b>Why it matters:</b> {{ f.why }}</span>{% endif %}
+    {% if f.who %}<span><b>Who can resolve it:</b> {{ f.who }}</span>{% endif %}
+    <span><b>Blocks:</b> {% if f.blocks %}{% for b in f.blocks %}{{ {'weekend': 'Submit weekend', 'season_close': 'Close the season', 'next_season': 'Start the next season', 'transition': 'The 4.0 transition'}[b] }}{{ ', ' if not loop.last }}{% endfor %}{% else %}Nothing{% endif %}</span>
+  </div>
+  {% if f.link %}<a class="btn btn-sm" href="{{ base ~ f.link }}">{{ f.link_label }}</a>{% endif %}
+</li>
+{%- endmacro %}
+{% set t = ctx.token %}
+{% set base = url_for('dashboard', token=t).rsplit('/', 1)[0] ~ '/' %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · Manage League</div><h1>League Readiness Check</h1>
+  <p class="page-purpose">What needs attention in this league, and where to fix it. Checking only reads the league: it never recalculates, submits, closes, sends or repairs anything.</p></div></div>
+
+<section class="card rd-summary" aria-labelledby="rd-sum-title">
+  <h2 id="rd-sum-title" class="sr-only">Summary</h2>
+  <div class="rd-sum-grid">
+    <div>
+      <div class="muted small">League</div><div class="rd-big">{{ ctx.career_name }}</div>
+      <div class="muted small">Season {{ ctx.season.year if ctx.season else '–' }}{% if report.year and ctx.season and report.year != ctx.season.year %} selected · checks use the season under way ({{ report.year }}){% endif %}{% if report.next %} · next: {{ report.next.label }}{% endif %}</div>
+    </div>
+    <div>
+      <div class="muted small">Overall</div>
+      <div class="rd-status rd-{{ v.overall_tone }}" data-status="{{ v.overall }}">{{ v.overall_label }}</div>
+    </div>
+    <div class="rd-counts" role="group" aria-label="Findings">
+      <span><b>{{ v.counts.blocking }}</b> blocking</span>
+      <span><b>{{ v.counts.warning }}</b> warning{{ 's' if v.counts.warning != 1 }}</span>
+      <span><b>{{ v.counts.optional }}</b> optional</span>
+    </div>
+    <div class="small">
+      <div>Last checked <b>{{ v.checked_at|stamp }}</b></div>
+      {% if ctx.is_master %}<div class="muted">Full check: {% if v.history_at %}{{ v.history_at|stamp }}{% else %}not run yet{% endif %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="rd-actions">
+    <a class="btn" href="{{ url_for('readiness_page', token=t) }}">Run check again</a>
+    {% if ctx.real.is_master %}
+    <form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary">Run full check</button></form>
+    <span class="muted small">The full check also reads every earlier season. It's kept until the league changes.</span>
+    {% endif %}
+  </div>
+  {% if v.failed %}<div class="banner banner-danger" role="alert"><b>Check failed.</b> {{ v.failed }} Nothing is shown as ready.</div>{% endif %}
+  {% if v.changed_during %}<div class="banner banner-warn" role="status"><b>Changes since last check: run again.</b> Something was saved in the league while it was being checked, so these results may already be out of date.</div>{% endif %}
+  {% if v.stale_history %}<div class="banner banner-warn" role="status"><b>Changes since last check: run again.</b> The league has changed since the full check{% if v.history_at %} ({{ v.history_at|stamp }}){% endif %}, so its results are shown as out of date and don't count towards readiness.</div>{% endif %}
+  <p class="muted small rd-note">{{ coverage }}{% if v.hidden %} Checks outside your role ({{ v.hidden }}) are only shown to the Race Master.{% endif %}</p>
+</section>
+
+<section class="card" aria-labelledby="rd-targets-title">
+  <div class="card-head"><h2 id="rd-targets-title">What "ready" means here</h2></div>
+  <ul class="rd-targets">
+    {% for key, tg in v.targets.items() %}
+    <li class="rd-target">
+      <span class="rd-status rd-{{ tg.tone }}" data-target="{{ key }}" data-status="{{ tg.status }}">{{ tg.status_label }}</span>
+      <div><b>{{ tg.label }}</b><div class="muted small">{{ tg.means }}</div>
+        {% if tg.status != 'ready' %}<div class="small rd-why">{{ tg.why|truncate(220) }}</div>{% endif %}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% if transition %}
+<section class="card" aria-labelledby="rd-trans-title">
+  <div class="card-head"><h2 id="rd-trans-title">4.0 transition</h2><span class="muted small">Moving {{ transition.when }}</span></div>
+  <p class="small muted">{{ transition.how }} A league can move to 4.0 mid-season or between seasons; it doesn't have to finish its season first.</p>
+  <ul class="rd-checklist">
+    {% for l in transition.lines %}
+    <li><span class="rd-status rd-{{ l.tone }} rd-sm">{{ l.state }}</span> <b>{{ l.label }}</b> <span class="small">{{ l.text }}</span>{% if l.link %} <a class="small" href="{{ base ~ l.link }}">Open</a>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if v.blockers %}
+  <p class="small"><b>Outstanding blockers:</b> {% for f in v.blockers %}<a href="{{ base ~ f.link }}">{{ f.title }}</a>{{ '; ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+</section>
+
+<section class="card" aria-labelledby="rd-site-title">
+  <div class="card-head"><h2 id="rd-site-title">Version and backups</h2></div>
+  <ul class="plain-list small">
+    <li>Running Paddock Legacy {{ app_version }}.</li>
+    <li>{% if latest_backup %}Latest automatic backup of this league: {{ latest_backup.when|stamp }} ({{ latest_backup.size_kb }} KB). Restoring it hasn't been tested by this check.{% else %}No automatic backup of this league was found.{% endif %} <a href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a></li>
+    {% if site_owner %}<li><a href="{{ url_for('site_errors') }}">Site errors</a> · <a href="{{ url_for('system_controls') }}">System controls</a></li>{% endif %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card" aria-labelledby="rd-find-title">
+  <div class="card-head"><h2 id="rd-find-title">Findings</h2><span class="muted small" id="rd-shown" aria-live="polite"></span></div>
+  {% if v.findings %}
+  <div class="rd-filters" role="group" aria-label="Filter findings">
+    <div class="chip-row" role="group" aria-label="Severity">
+      <button type="button" class="chip is-on" data-sev="all" aria-pressed="true">All</button>
+      <button type="button" class="chip" data-sev="blocking" aria-pressed="false">Blocking</button>
+      <button type="button" class="chip" data-sev="warning" aria-pressed="false">Warnings</button>
+      <button type="button" class="chip" data-sev="optional" aria-pressed="false">Optional</button>
+    </div>
+    <label class="small">Category <select id="rd-cat"><option value="">All</option>{% for k, label in categories.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+    {% if v.seasons %}<label class="small">Season <select id="rd-season"><option value="">All</option>{% for y in v.seasons %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select></label>{% endif %}
+  </div>
+  {% for key, label in categories.items() %}
+    {% set fs = v.findings|selectattr('category', 'equalto', key)|list %}
+    {% if fs %}
+    <h3 class="rd-cat-title" data-cat-title="{{ key }}">{{ label }}</h3>
+    <ul class="rd-findings">
+      {% for f in fs if f.severity == 'blocking' %}{{ finding(f, base) }}{% endfor %}
+      {% for f in fs if f.severity == 'warning' %}{{ finding(f, base) }}{% endfor %}
+      {% for f in fs if f.severity == 'optional' %}{{ finding(f, base) }}{% endfor %}
+    </ul>
+    {% endif %}
+  {% endfor %}
+  {% else %}
+  <p>{% if v.failed %}No findings could be produced because the check failed.{% else %}No findings in the checks that ran.{% endif %}</p>
+  {% endif %}
+
+  {% if v.stale_findings %}
+  <details class="rd-details"><summary>From the last full check, out of date ({{ v.stale_findings|length }})</summary>
+    <p class="small muted">The league has changed since. Run the full check again to see what still applies.</p>
+    <ul class="rd-findings rd-stale">{% for f in v.stale_findings %}{{ finding(f, base) }}{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+
+{% set not_checked = v.checks|selectattr('state', 'equalto', 'not_checked')|list %}
+{% set failed = v.checks|selectattr('state', 'equalto', 'failed')|list %}
+<section class="card" aria-labelledby="rd-done-title">
+  <h2 id="rd-done-title">Checks</h2>
+  {% if failed %}<ul class="plain-list small">{% for c in failed %}<li><span class="rd-status rd-bad rd-sm">Check failed</span> <b>{{ c.title }}</b>: {{ c.error }}</li>{% endfor %}</ul>{% endif %}
+  {% if not_checked %}
+  <details class="rd-details"><summary>Not checked yet ({{ not_checked|length }})</summary>
+    <ul class="plain-list small">{% for c in not_checked %}<li><b>{{ c.title }}</b> <span class="muted">({{ 'full check' if c.scope == 'history' else 'quick check' }})</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  <details class="rd-details"><summary>Passed or not applicable ({{ v.passed|length }})</summary>
+    <ul class="plain-list small">
+      {% for c in v.passed %}<li><span class="rd-status rd-{{ 'good' if c.state == 'passed' else 'muted' }} rd-sm">{{ 'Passed' if c.state == 'passed' else 'Not applicable' }}</span> <b>{{ c.title }}</b>{% if c.stale %} <span class="pill">out of date</span>{% endif %}{% for n in c.notes %}<div class="muted">{{ n }}</div>{% endfor %}</li>{% endfor %}
+    </ul>
+  </details>
+  <details class="rd-details"><summary>What each check verifies</summary>
+    <dl class="small rd-verifies">{% for c in v.checks %}<dt>{{ c.title }} <span class="muted">· {{ categories[c.category] }} · {{ 'full check' if c.scope == 'history' else 'every visit' }}</span></dt><dd>{{ c.verifies }}</dd>{% endfor %}</dl>
+    <p class="small muted">Severity: {% for k, (label, text) in severities.items() %}<b>{{ label }}</b>: {{ text }} {% endfor %}Information a season never tracked is "Not applicable": never missing, incomplete or zero.</p>
+  </details>
+</section>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var sev = "all", list = document.querySelectorAll(".rd-findings:not(.rd-stale) .rd-finding");
+  var cat = document.getElementById("rd-cat"), season = document.getElementById("rd-season"), shown = document.getElementById("rd-shown");
+  function apply() {
+    var c = cat ? cat.value : "", s = season ? season.value : "", n = 0, cats = {};
+    list.forEach(function (li) {
+      var ok = (sev === "all" || li.dataset.severity === sev) && (!c || li.dataset.category === c) && (!s || li.dataset.season === s);
+      li.hidden = !ok; if (ok) { n++; cats[li.dataset.category] = true; }
+    });
+    document.querySelectorAll("[data-cat-title]").forEach(function (h) { h.hidden = !cats[h.dataset.catTitle]; });
+    if (shown) shown.textContent = n + " of " + list.length + " shown";
+  }
+  document.querySelectorAll(".rd-filters [data-sev]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      sev = b.dataset.sev;
+      document.querySelectorAll(".rd-filters [data-sev]").forEach(function (o) { o.classList.toggle("is-on", o === b); o.setAttribute("aria-pressed", o === b); });
+      apply();
+    });
+  });
+  if (cat) cat.addEventListener("change", apply);
+  if (season) season.addEventListener("change", apply);
+  apply();
+})();
+</script>
+{% endblock %}

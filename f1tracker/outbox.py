@@ -34,7 +34,13 @@ def _table(conn):
 
 
 def enqueue(kind, payload, background=True):
-    """Save a message and start sending it. kind: email / discord / push. Returns the row id."""
+    """Save a message and start sending it. kind: email / discord / push. Returns the row id.
+    4.0 test site: nothing is queued or sent; the message is saved as a delivery preview instead."""
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture(kind, payload)
+        return None
     now = time.time()
     with auth.accounts() as conn:
         _table(conn)
@@ -67,6 +73,9 @@ def _claim(oid):
 
 
 def _send(kind, p):
+    from . import testsite
+    if testsite.on():
+        return              # the 4.0 test site never sends anything (imported rows are just dropped)
     if kind == "email":
         from . import mailer
         mailer.send(p["to"], p["subject"], p["text"], p.get("html"))

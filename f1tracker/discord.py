@@ -38,6 +38,11 @@ def post(url, content):
     from . import maintenance
     if maintenance.deliveries_paused():
         return False        # v3.2: paused by the site owner (queued posts wait in the outbox)
+    from . import testsite
+    if testsite.on():
+        from . import ops
+        ops.capture("discord", {"message": content})
+        return True
     body = json.dumps({"content": content[:1990], "allowed_mentions": {"parse": []}}).encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": "application/json", "User-Agent": "PaddockLegacy"})
@@ -48,7 +53,7 @@ def post(url, content):
 def send_later(url, messages):
     """v3.1.2: each post goes through the outbox (one row per message, so a retry never repeats one that was sent)."""
     if not url or not messages:
-        return
+        return              # (on the 4.0 test site the outbox captures each post as a preview)
     from . import outbox
     for m in messages:
         try:

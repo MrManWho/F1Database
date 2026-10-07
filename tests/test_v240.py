@@ -68,7 +68,7 @@ def test_choosing_locks_in_and_counts_its_own_reward(app, master_client):
     ana, ben = _client(app, "ana"), _client(app, "ben")
     with storage.session(token) as conn:
         ev = S.events(conn, S.current_season_id(conn))[0]
-    page = ana.get(f"/career/{token}/dashboard").get_data(as_text=True)
+    page = ana.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)     # 4.0: chosen in Prepare
     assert "Lock in Safe" in page and "Lock in Stretch" in page
     ana.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "stretch"})
     ana.post(f"/career/{token}/target/{ev['id']}/accept", data={"csrf_token": "tok", "tier": "safe"})   # can't change
@@ -287,7 +287,7 @@ def test_round_page_is_its_own_round(app, master_client):
         ev = S.events(conn, S.current_season_id(conn))[0]
         run_event(conn, ev)
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
-    assert 'class="round-badge"' in page and 'data-tab="results"' in page and "Reset weekend" in page
+    assert 'class="round-badge ws-round"' in page and 'data-stage-link="sessions"' in page and "Reset weekend" in page  # 4.0 workspace
     assert "Reset weekend" not in _client(app, "kim").get(f"/career/{token}/weekend/{ev['id']}").get_data(as_text=True)
 
 
