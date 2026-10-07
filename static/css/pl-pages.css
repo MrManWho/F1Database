@@ -71,6 +71,8 @@
 .ws-step-text small { font-size: .76rem; color: var(--on-navy-sub); }
 .ws-step.st-attention .ws-step-text small { color: #ffb08d; }
 .ws-rail-sessions { display: flex; flex-direction: column; gap: .1rem; margin: .15rem 0 .3rem 1.42rem; padding: .1rem 0 .1rem .9rem; border-left: 2px solid var(--navy-line); }
+/* the sessions list stays folded under Sessions until that step is open */
+.ws-layout:not([data-stage-now="sessions"]) .ws-rail-sessions { display: none; }
 .ws-rail .session-card, html[data-theme] .ws-rail .session-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .55rem; min-height: 0; padding: .4rem .5rem;
   border-radius: 6px; border: 0; background: none; color: var(--on-navy-sub); box-shadow: none; text-decoration: none !important; font-size: .9rem; cursor: pointer; }
 .ws-rail .session-card:hover, html[data-theme] .ws-rail .session-card:hover { background: var(--navy-2); color: var(--on-navy); }
