@@ -248,6 +248,13 @@ CREATE TABLE IF NOT EXISTS notifications (
     ref TEXT
 );
 
+CREATE TABLE IF NOT EXISTS news_reads (
+    username TEXT NOT NULL,
+    news_id INTEGER NOT NULL,
+    read_at TEXT NOT NULL,
+    PRIMARY KEY (username, news_id)
+);
+
 CREATE TABLE IF NOT EXISTS notification_reads (
     username TEXT PRIMARY KEY,
     last_seen_id INTEGER NOT NULL DEFAULT 0,

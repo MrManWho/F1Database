@@ -70,7 +70,7 @@ AUDIT_LABELS = {
     "target_excuse": "Changed a weekend target ruling", "seat_resolve": "Changed a seat or contract",
     "ownership_transfer": "Handed over the league", "league_leave": "Left the league", "notify_prefs": "Changed their notifications",
 }
-QUIET_ENDPOINTS = {"readiness_page", "view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
+QUIET_ENDPOINTS = {"readiness_page", "view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "news_read", "news_unread", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
 
 
@@ -725,7 +725,7 @@ HELP_TOPICS = [("weekend", "The race weekend"), ("roles", "Roles and permissions
 
 
 # The only league POSTs a Spectator may make: marking their own notifications and the time-zone probe.
-SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "timezone_detect", "notify_prefs", "view_mode",
+SPECTATOR_POST_OK = {"notifications_read", "notifications_clear", "news_read", "news_unread", "timezone_detect", "notify_prefs", "view_mode",
                      "league_pin", "league_order", "league_leave", "upgrade_notice_ack", "upgrade_notice_hide"}
 
 
@@ -781,6 +781,12 @@ LEGACY_BANNER_PAGES = {"dashboard", "standings_page", "stats_page", "results_ind
 LEGACY_ROUND_PAGES = {"weekend", "race_summary"}
 # The season under way after a mid-season upgrade shows the banner only where the earlier rounds are the subject.
 LEGACY_MIXED_PAGES = {"stats_page", "results_index", "seasons_page", "season_review"}
+
+
+def _unread_news(conn, limit):
+    """Home's Paddock news: the newsworthy stories this person hasn't read yet."""
+    read = feed.read_ids(conn, g.user["username"]) if g.get("user") else set()
+    return [n for n in feed.relevant(conn) if n["id"] not in read][:limit]
 
 
 def _legacy_context(conn, ctx, token):
@@ -1972,7 +1978,7 @@ def register_routes(app):
                     constructors=S.constructor_standings(conn, sid)[:5],
                     rec=_recs_off(conn) or S.difficulty_recommendation(conn, before),
                     windows=[w for w in market.windows(conn) if w["status"] == C.WINDOW_OPEN],
-                    news=feed.latest(conn, 6), chart=insights.progression_chart(conn, sid),
+                    news=_unread_news(conn, 6), chart=insights.progression_chart(conn, sid),
                     backup_due=bool(g.user and g.user["is_master"] and offsite.remind()),
                     hub=_hub(conn, ctx, nxt) if nxt else None,
                     circuit=circuits.lookup(nxt["name"], nxt["location"]) if nxt else None,
@@ -3880,10 +3886,32 @@ def register_routes(app):
     @app.route("/career/<token>/news")
     @career_page()
     def news_page(conn, ctx):
-        news = feed.latest(conn, 100)
+        stories = feed.relevant(conn)
+        read = feed.read_ids(conn, g.user["username"])
+        tab = "read" if request.args.get("tab") == "read" else "unread"
+        unread = [n for n in stories if n["id"] not in read]
+        news = [n for n in stories if n["id"] in read] if tab == "read" else unread
         social = _social(conn, ctx, [f"news:{n['id']}" for n in news])
         threads = {t: community.comments(conn, t) for t in social["comment_counts"]}
-        return page("news.html", ctx, news=news, threads=threads, **social)
+        return page("news.html", ctx, news=news, threads=threads, tab=tab, unread_count=len(unread),
+                    read_count=len(stories) - len(unread), news_read_buttons=True, **social)
+
+    @app.route("/career/<token>/news/read", methods=["POST"])
+    @career_page()
+    def news_read(conn, ctx):
+        """Mark one story (news_id) or every story on the News page as read; they move to the Read tab."""
+        one = request.form.get("news_id", type=int)
+        ids = [one] if one else [n["id"] for n in feed.relevant(conn)]
+        feed.mark_news_read(conn, g.user["username"], ids)
+        if wants_json():
+            return jsonify(ok=True)
+        return redirect(url_for("news_page", token=ctx["token"]))
+
+    @app.route("/career/<token>/news/<int:news_id>/unread", methods=["POST"])
+    @career_page()
+    def news_unread(conn, ctx, news_id):
+        feed.mark_news_unread(conn, g.user["username"], news_id)
+        return redirect(url_for("news_page", token=ctx["token"], tab="read"))
 
     @app.route("/career/<token>/rivalry")
     @career_page()
@@ -5199,7 +5227,7 @@ def register_routes(app):
                               winners={e["id"]: community.race_story(conn, e["id"])["podium"][:1] for e in done},
                               last=last, story=community.race_story(conn, last["id"]) if last else None,
                               profiles=community.profiles(conn), next_event=S.next_incomplete_event(conn, sid),
-                              news=feed.latest(conn, 5))
+                              news=feed.relevant(conn, 5))
 
     @app.route("/public/<token>/<key>/calendar")
     @public_view
@@ -5267,7 +5295,7 @@ def register_routes(app):
     @app.route("/public/<token>/<key>/news")
     @public_view
     def public_news(conn, pub):
-        return _public_render("news", pub, news=feed.latest(conn, 40))
+        return _public_render("news", pub, news=feed.relevant(conn, 40))
 
     @app.route("/public/<token>/<key>/incidents")
     @public_view

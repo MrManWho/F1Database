@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Paddock News{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="kicker">The paddock</div><h1>News &amp; rumours</h1></div></div>
+<div class="page-head"><div><div class="kicker">The paddock</div><h1>News</h1></div>
+  {% if tab == 'unread' and unread_count %}<form method="post" action="{{ url_for('news_read', token=ctx.token) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-ghost">Mark all as read</button></form>{% endif %}</div>
+<nav class="nav-sub-strip" aria-label="News">
+  <a href="{{ url_for('news_page', token=ctx.token) }}" {% if tab == 'unread' %}aria-current="page"{% endif %}>Unread{% if unread_count %} ({{ unread_count }}){% endif %}</a>
+  <a href="{{ url_for('news_page', token=ctx.token, tab='read') }}" {% if tab == 'read' %}aria-current="page"{% endif %}>Read{% if read_count %} ({{ read_count }}){% endif %}</a>
+</nav>
+{% if news %}
 <section class="card">{% include "_news_list.html" %}</section>
+{% elif tab == 'unread' %}
+<section class="card"><div class="news-empty"><span aria-hidden="true">📰</span><p><b>You're all caught up.</b><br><span class="muted small">{% if read_count %}Stories you've read are on the <a href="{{ url_for('news_page', token=ctx.token, tab='read') }}">Read</a> tab.{% else %}Stories appear here as rounds are completed, deals are signed and records fall.{% endif %}</span></p></div></section>
+{% else %}
+<section class="card"><div class="news-empty"><span aria-hidden="true">📰</span><p><b>Nothing read yet.</b><br><span class="muted small">Mark a story as read and it moves here.</span></p></div></section>
+{% endif %}
 {% endblock %}

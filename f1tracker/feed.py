@@ -1,5 +1,6 @@
 """Paddock news headlines and per-player notifications, generated from what happens in the career."""
 
+import re
 import threading
 from pathlib import Path
 
@@ -20,7 +21,8 @@ def post(conn, season_id, kind, headline, body="", link=None, driver_id=None, te
                     VALUES(?,?,?,?,?,?,?,?,?)""",
                  (season_id, kind, headline, body, link, driver_id, team_id, now_iso(), ref))
     token = _token(conn)
-    if token and kind != "result":  # race results go to Discord as one summary instead
+    if token and kind != "result" and newsworthy({"kind": kind, "headline": headline, "body": body, "ref": ref}):
+        # race results go to Discord as one summary instead
         from . import discord
         discord.queue_news(token, headline, body)
 
@@ -85,6 +87,71 @@ def delete_notification(conn, notification_id):
 def delete_by_ref(conn, ref):
     conn.execute("DELETE FROM news WHERE ref = ?", (ref,))
     conn.execute("DELETE FROM notifications WHERE ref = ?", (ref,))
+
+
+# Stories that are stored (race summaries, the market page and team profiles still use them) but never make the
+# News page: day-to-day running of a round, press quotes, rumours, lead changes and small streaks.
+ROUTINE_PREFIXES = ("The paddock is open for", "Lights out at", "Heartbreak for ")
+STREAK_RE = re.compile(r"delivers again: (\d+) team targets in a row")
+
+
+def newsworthy(row):
+    """Only stories that mean something: results, first-time milestones, signings, titles, warnings and drops."""
+    headline, ref = row.get("headline") or "", row.get("ref") or ""
+    if row.get("kind") == "rumour" or ref.startswith("battle-lead:") or headline.startswith(ROUTINE_PREFIXES):
+        return False
+    if (row.get("body") or "").startswith('Asked "'):          # a press answer
+        return False
+    streak = STREAK_RE.search(headline)
+    if streak and int(streak.group(1)) < 5:
+        return False
+    return True
+
+
+NEWS_READS = """CREATE TABLE IF NOT EXISTS news_reads (
+    username TEXT NOT NULL, news_id INTEGER NOT NULL, read_at TEXT NOT NULL, PRIMARY KEY (username, news_id))"""
+
+
+def _reads_table(conn):
+    conn.execute(NEWS_READS)
+
+
+def read_ids(conn, username):
+    _reads_table(conn)
+    return {r[0] for r in conn.execute("SELECT news_id FROM news_reads WHERE username = ?", (username,))}
+
+
+def mark_news_read(conn, username, news_ids):
+    _reads_table(conn)
+    conn.executemany("INSERT OR IGNORE INTO news_reads(username, news_id, read_at) VALUES(?,?,?)",
+                     [(username, i, now_iso()) for i in news_ids])
+
+
+def mark_news_unread(conn, username, news_id):
+    _reads_table(conn)
+    conn.execute("DELETE FROM news_reads WHERE username = ? AND news_id = ?", (username, news_id))
+
+
+def relevant(conn, limit=100):
+    """The News page: this season's newsworthy stories, plus last season's titles and the signings for this one."""
+    sid = S.current_season_id(conn)
+    if not sid:
+        return []
+    year = conn.execute("SELECT year FROM seasons WHERE id = ?", (sid,)).fetchone()[0]
+    prev = conn.execute("SELECT id FROM seasons WHERE year < ? ORDER BY year DESC LIMIT 1", (year,)).fetchone()
+    rows = conn.execute("SELECT * FROM news WHERE season_id = ? OR (season_id = ? AND kind IN ('season', 'market')) "
+                        "ORDER BY id DESC", (sid, prev[0] if prev else -1)).fetchall()
+    tmap = S.team_map(conn)
+    out = []
+    for r in rows:
+        r = dict(r)
+        if not newsworthy(r):
+            continue
+        r["team"] = tmap.get(r["team_id"])
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return decorate(conn, out)
 
 
 def latest(conn, limit=10, season_id=None):

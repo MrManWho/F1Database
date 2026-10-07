@@ -17,6 +17,12 @@
         {{ comment_thread(ctx, tgt, threads.get(tgt, []), '“' ~ n.headline ~ '”') }}</details>
     </div>
     {% endif %}
+    {% if news_read_buttons is defined and news_read_buttons %}
+    {% if tab == 'read' %}<form method="post" action="{{ url_for('news_unread', token=ctx.token, news_id=n.id) }}" class="news-mark">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost">Mark as unread</button></form>
+    {% else %}<form method="post" action="{{ url_for('news_read', token=ctx.token) }}" class="news-mark">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="news_id" value="{{ n.id }}"><button class="btn btn-sm btn-ghost">✓ Mark as read</button></form>{% endif %}
+    {% endif %}
     {% if ctx.is_master %}<form method="post" action="{{ url_for('news_delete', token=ctx.token, news_id=n.id) }}" class="news-del"
       onsubmit="return confirm('Delete this headline?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-ghost" title="Delete headline" aria-label="Delete headline">✕</button></form>{% endif %}
   </article>
