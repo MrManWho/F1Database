@@ -1083,6 +1083,7 @@ def transition_view(v, conn):
     evs = S.events(conn, sid) if sid else []
     done = sum(1 for e in evs if e["status"] == C.EVENT_COMPLETE)
     when = ("between seasons" if evs and done == len(evs) else
+            "at the start of a season, before Round 1" if evs and not done else
             f"mid-season ({done} of {len(evs)} rounds played)" if evs else "before the first season")
     if mig:
         how = (f"Upgraded from 3.x mid-season: new tracking began at Round {mig['start_round']} of {mig['start_year']}."

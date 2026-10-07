@@ -1,6 +1,36 @@
-# Paddock Legacy 3.0: admin guide
+# Paddock Legacy 4.0: admin guide
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
+
+## 4.0.0: launch
+
+The first public 4.0. Compared with beta.19, only launch tidying:
+- **What's New** has one 4.0.0 entry for everyone instead of the 21 test-site builds (those are kept in
+  `docs/4.0/BETA_CHANGELOG.md`), and the 3.2.4–3.2.6 entries from the live site are back in the list.
+- **Visitor-facing wording:** Help no longer names the hosting setup code, the Readiness check's last card is
+  "Version and backups" (no deployment notes), the Calculation Update page says Version 3 throughout, and a few
+  leftover version labels are gone ("Before v1.16" now reads "Not recorded").
+- **Design system page** (`/design`) is for site Race Masters only. It was reachable by any signed-in account.
+- **Legacy banner** shows on a round from an older season even while the new season is selected.
+- **Readiness check** says "at the start of a season, before Round 1" right after a rollover, not "mid-season (0 of 24)".
+
+Test-site-only things stay off on the live site by themselves: the TEST SITE banner, live backup import, Try a season
+finale and Delivery preview all need `F1_TRACKER_TEST_SITE=1`, the environment badge is hidden on Render
+(production), and live reload only exists in `dev.py`.
+
+### Switch day
+1. Account → Settings → turn **maintenance** on, then take a backup (Backups & data, and the encrypted site backup).
+2. Merge `release-4.0` into the live branch (`git merge --no-ff -X theirs origin/release-4.0`); `git diff
+   origin/release-4.0` should be empty. Push, and Render deploys.
+3. Open each league once: it backs itself up (`before-v26-upgrade`) and upgrades on first open.
+4. Turn maintenance off. Everyone sees What's New for 4.0.0, then their league's one-time upgrade note.
+5. Rollback if needed: redeploy 3.2.6 (commit `12e99b7`). It opens 4.0 data, and the pre-upgrade backups are in
+   `backups/`.
+
+### Shutting down the 4.0 test site
+On render.com, open the test service (the one with `F1_TRACKER_TEST_SITE=1`) → **Settings** → **Suspend Web
+Service** to pause it, or **Delete Web Service** to remove it. It has no disk, so nothing is kept either way. The
+`release-4.0` branch can stay for the next round of testing.
 
 ## 4.0.0-beta.19: local development
 

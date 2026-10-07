@@ -345,7 +345,7 @@ def test_the_page_lists_findings_with_filters_and_collapsed_passes(app, master_c
     master_client.post(f"/career/{token}/readiness", data={"csrf_token": "tok"})
     page = master_client.get(f"/career/{token}/readiness").get_data(as_text=True)
     for bit in ('data-sev="blocking"', 'data-sev="warning"', 'data-sev="optional"', 'id="rd-cat"',
-                "Passed or not applicable", "What each check verifies", "4.0 transition", "Site deployment",
-                "aren't verified here", "Who can resolve it", "Blocks:"):
+                "Passed or not applicable", "What each check verifies", "4.0 transition", "Version and backups",
+                "Who can resolve it", "Blocks:"):
         assert bit in page, bit
     assert '<details class="rd-details"><summary>Passed' in page             # collapsed by default

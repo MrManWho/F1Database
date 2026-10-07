@@ -76,7 +76,7 @@
           </select>
           {% endif %}
         </td>
-        <td class="small">{{ m.joined_at|day if m.joined_at else 'Before v1.16' }}</td>
+        <td class="small">{{ m.joined_at|day if m.joined_at else 'Not recorded' }}</td>
         <td class="small">{{ m.last_active|ago if m.last_active else 'Not yet' }}</td>
         <td>
           <div class="button-row tight">

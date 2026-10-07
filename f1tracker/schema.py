@@ -620,6 +620,8 @@ def migrate(conn):
     v19 -> v20: weekend targets are chosen (v2.4): target_options (three per driver per round: safe, standard,
                stretch) and weekend_targets.tier / hit / miss (the choice and its reward and penalty). Targets set
                before this version have no tier and keep the old +2 / -1.5.
+    v21 -> v22 (3.2.4): no new columns (the version bump backs every league up before the press clean-up). The
+               clean-up itself (teamlife.press_fix_with_notices) runs once per league, tracked by meta press_fix_notice.
     v20 -> v21: the 2.5 calculation engine (see constants.ENGINE_*): season_calc (which engine each season uses and
                the Future-only cutoff), calc_migrations (every Calculation Update, with before/after values and the
                backup), round_ranks (the car rank used to judge each round), pace_inputs (optional lap-time evidence

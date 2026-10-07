@@ -1,312 +1,196 @@
-# Paddock Legacy v1.19
+# Paddock Legacy 4.0
 
-A companion website for F1 game career **leagues**. Any number of people can drive. Each player has
-their own login, garage, contract talks and relationship with their team. The Race Master or a
-Scorekeeper enters the results after every race.
+A companion website for F1 game career **leagues**. Any number of people can drive. Each player has their own
+login, garage, contract talks and relationship with their team, and the Race Master or a Scorekeeper enters the
+results after every race.
 
-The game handles the racing, and the tracker remembers everything else:
-- every result, Sprint and championship;
-- transfers and contracts;
-- Reputation and Form changes;
-- AI difficulty settings.
+The game handles the racing, and Paddock Legacy remembers everything else, across as many seasons as you play:
+- every result, Sprint and championship, with the weather for each session;
+- race weekends, from the paddock opening to the debrief, with race times for each session;
+- contracts, transfers, pledges and team goals;
+- Form, Reputation and how your team rates you;
+- a track-aware recommended AI difficulty for the next race.
 
-It keeps all of this across as many seasons as you play.
+It's a small Flask + SQLite app. Host it as a website that updates itself (see **Hosting** below), or run it on
+your own PC.
 
-It's a small Flask + SQLite app. Run it on your own PC, or host it as a website that updates itself
-(see **Hosting** below).
-
-**What's new:** see [CHANGELOG.md](CHANGELOG.md), or **account menu → What's new** in the app.
-
-## Quick start (Windows)
-
-1. Install Python 3.11+ from python.org and tick **Add python.exe to PATH**.
-2. Double-click **`run.bat`**. On first launch it creates a private `.venv` and installs everything.
-3. The browser opens at `http://127.0.0.1:8765`. On your first visit, create the **Race Master** login.
-4. Create logins in **Accounts**, or let people sign up themselves (this needs email set up).
-5. Click **New league**. Add player drivers (or none), then choose what's on: rookies, open to join and the extras.
-
-To let people on the same home network join, start **`run_lan.bat`** instead. It prints an address
-like `http://192.168.1.20:8765`. Only do this on a network you trust.
+- **What's new:** [CHANGELOG.md](CHANGELOG.md), or **account menu → What's new** in the app.
+- **Every rule and number:** **Help** in the app. The formulas are in [docs/CALCULATION_V3.md](docs/CALCULATION_V3.md).
+- **Running the site:** [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md), for the site owner and Race Masters.
 
 ## Hosting it as a website (Render)
 
 1. Create an account at render.com and connect your GitHub.
-2. Choose **New → Blueprint** and pick the `F1Database` repo. `render.yaml` sets up three things:
-   - the web service;
-   - a persistent disk at `/data`;
-   - auto-deploy from the branch, so every update goes live in a couple of minutes.
+2. Choose **New → Blueprint** and pick this repo. `render.yaml` sets up:
+   - the web service, on the **Starter** plan (persistent disks need a paid instance);
+   - a 1 GB persistent disk at `/data`, where every league and login is kept;
+   - auto-deploy from the branch named in `render.yaml`, so every push to it goes live in a couple of minutes.
+3. Open **Environment** on the service and copy **F1_TRACKER_SETUP_CODE**. On your first visit, enter it to create
+   the **site owner** account. Nobody can claim the site without it.
+4. Everyone else creates their own account from the sign-in page. Add them to a league from **Members & roles**,
+   invite them, or let them ask to join.
 
-   Persistent disks need a paid instance (the Starter plan).
-3. Open **Environment** on the service and copy **F1_TRACKER_SETUP_CODE**. You need it to create the
-   first Race Master, so nobody else can grab the admin account.
-4. Optional environment variables:
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM` for email.
+Optional environment variables:
 
-   You can also enter these in **Accounts → Settings**. For Gmail, use an App password with
-   `smtp.gmail.com`, port 587.
+| Variable | What it does |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | Email (sign-up codes, password resets, results). You can also enter these in **Account → Settings**. For Gmail, use an App password with `smtp.gmail.com`, port 587. |
+| `FORCE_MAINTENANCE=true` | Emergency switch that closes the site to everyone but the owner. Remove it and redeploy to reopen. |
 
-Other hosts work too. Use the `Dockerfile` or `Procfile`, and set `F1_TRACKER_DATA_DIR` to a
-persistent volume.
+Other hosts work too. Use the `Dockerfile` or `Procfile`, and set `F1_TRACKER_DATA_DIR` to a persistent volume.
+`/healthz` answers for uptime monitors.
 
-## Where your data lives (and why updates don't lose it)
+## Running it on your own PC (Windows)
 
-Each league is one SQLite file. Logins and settings live in `accounts.db`, and uploaded driver photos
-in `avatars/`. All of these are in the **data folder**, not with the code:
+1. Install Python 3.11+ from python.org and tick **Add python.exe to PATH**.
+2. Double-click **`run.bat`**. On first launch it creates a private `.venv` and installs everything.
+3. The browser opens at `http://127.0.0.1:8765`. Create the site owner account (no setup code is needed on your
+   own PC).
+4. Click **New league** and follow the setup: Essentials → Players → (optional) More options → Ready.
 
-* **On Render:** the persistent disk at `/data`. A deploy replaces only the program files.
+To let people on the same home network join, start **`run_lan.bat`** instead. It prints the address others should
+open. Only do this on a network you trust.
+
+**Updating at home:** close the tracker, double-click **`update.bat`**, then start it again (see `UPDATING.txt`).
+On Render there's nothing to do: updates deploy themselves.
+
+## Where your data lives
+
+Each league is one SQLite file (`careers/*.f1career`). Logins and site settings live in `accounts.db`. All of it is
+in the **data folder**, never with the code, so an update can't lose it:
+
+* **On Render:** the persistent disk at `/data`.
 * **At home:** `%LOCALAPPDATA%\F1UniverseTracker` on Windows (`~/.f1-universe-tracker` elsewhere).
 
-Automatic backups are made once a day and after every completed race weekend, and the newest 20 are
-kept. A league is also copied to `backups/` before an update changes its save format. Now and then,
-download a backup to your own computer as well: **Race Master → League & Saves**.
-
-## Updating (at home)
-
-Close the tracker, double-click **`update.bat`**, then start it again. `run.bat` reinstalls packages
-when `requirements.txt` changes. On Render there's nothing to do: updates deploy themselves.
+Backups:
+* Automatic backups once a day and after every completed race weekend, plus safety backups before an upgrade,
+  a season rollover, a restore, a recalculation or a delete.
+* **Backups & data** (Race Master) can restore any of them. The current state is backed up first, so a restore can be
+  undone. It also has an integrity check, a JSON export and a standings CSV.
+* The site owner can download one **encrypted backup of the whole site** (Account → Settings) to keep somewhere
+  else, and gets a reminder when one is due.
 
 ## How it works
 
-### Who can do what
+### Roles
 
-Everyone in a league has **one access role**, set on the league's **Players & Logins** page. Having a
-driver is separate from the role, so any role except Spectator can also drive.
+Everyone in a league has one role, set on **Members & roles**. Having a driver is separate from the role, so any
+role except Spectator can also drive.
 
 | Role | Can do |
 |---|---|
-| **Race Master** | Runs the league: results (including reopening submitted rounds), grid, calendar, seasons, transfer market, members and roles, settings, saves, every garage, the Activity Log. Site Race Masters (set in **Accounts**) are Race Master of every league. |
-| **Scorekeeper** | Enters and edits results, statuses, Fastest Lap, Driver of the Day, notes and AI difficulty, and submits a round. After submitting, only the Race Master can change it. Can't change settings, roles, seasons or delete anything. |
-| **Member** | Views everything. With a driver: their own garage, contract talks, Team Standing and press pen. |
-| **Spectator** | View only. Pages show plain text instead of greyed-out forms, and the server refuses any change. Can't have a driver. |
+| **Race Master** | Runs the league: results (including reopening submitted rounds), grid, calendar, seasons, transfer market, team management, members, settings, backups and the Activity log. The site owner is Race Master of every league. |
+| **Scorekeeper** | Opens the paddock, starts the race, and enters results, weather and AI difficulty. After submitting, only the Race Master can change a round. |
+| **Member** | Views everything. With a driver: their own garage, contracts & offers, team relationship and press. |
+| **Spectator** | View only, and can't have a driver. |
 
-Possible combinations include Race Master + driver, Scorekeeper + driver, Scorekeeper without a driver
-and Spectator without a driver. A league always keeps at least one Race Master, and the last one can't
-be demoted or removed.
-
-**Joining** (League Settings, or Players & Logins):
-- **Join requests enabled**: people ask from their League Library and choose a role. The Race Master
-  accepts as asked, accepts with a different role, or declines.
-- **Invite only**: the Race Master invites a login from Players & Logins; they accept from their League Library.
-- **Closed to new members**: no requests, and invitations can't be accepted.
-
-Existing members are never affected. Before joining, people only see a league's name, season and status.
-
-**Upgrading from 1.15 or earlier:** the old account-wide "Scorekeeper" switch is gone. Anyone who had it
-becomes Scorekeeper in every league they belong to (keeping their driver), members without a driver
-become Spectators, and everyone else keeps what they had. This happens automatically on first start.
+Race Masters and Scorekeepers can preview the league as another role. Joining can be by request, invite only, or
+closed. Leagues are private unless the Race Master makes them Public (a share link) or Listed (in the directory).
 
 ### Race weekends
 
-Enter qualifying, Sprint and race positions, statuses, Fastest Lap and Driver of the Day. Everything
-autosaves, and there are three ways to enter results:
-- type positions in the table;
-- tap drivers in finishing order;
-- import screenshots of the game's classification. This is free and runs in your browser (Tesseract.js,
-  bundled in `static/vendor/tesseract`): nothing is uploaded, no API key or account is needed, and you review
-  and correct every row before it's put into the table. Typing results in by hand always works too.
+Each round is one page with four steps, and it opens on the step you need:
 
-Edits are kept in the browser until the server confirms them, so a dropped connection doesn't lose
-anything: saving resumes when you're back online, and unsent edits come back if you reopen the page. If
-someone else changed the same values meanwhile, you choose which to keep.
+1. **Prepare.** The paddock opens an hour before the scheduled race time, or when a Scorekeeper or the Race Master
+   opens it. Each driver answers pre-race press, picks a **weekend target** (Safe, Standard or Stretch), checks in and
+   makes predictions.
+2. **Sessions.** Qualifying, the Sprint on Sprint weekends, then the Race, one at a time. Each session has its own
+   results (typed, tapped in finishing order, or imported from screenshots with free in-browser OCR that you check
+   row by row), race times, weather and incidents. **Save & continue** saves and moves on; it never submits.
+3. **Review & submit.** One list of anything that must be fixed, with a **Fix** button that goes straight to it, then a
+   single **Submit weekend** button. Pressing it twice still submits once.
+4. **Debrief.** The podium, your Form, Reputation and championship changes and why, post-race press, your weekend
+   target and the AI for the next round.
 
-When done, **Review and submit** shows a summary with **blocking errors** (must be fixed) and
-**warnings** (can be accepted). Once submitted the round is locked: only the Race Master can correct it
-or **reopen** it for a Scorekeeper.
+Every player driver needs a linked login, or the Race Master marks them **No account**. Edits autosave and survive a
+dropped connection. The Race Master can **reset** the latest weekend as if it never happened.
 
-Points: GP 25-18-15-12-10-8-6-4-2-1, Sprint 8-7-6-5-4-3-2-1. There's no Fastest Lap point, and only a
-Finished result scores.
+**Race times:** on a tracked round, each player who finished types their race time and their AI teammate's from the
+game's results screen (the site works out the gap), or ticks **Don't submit times**. The Race Master can switch this
+off in League settings → Race weekends.
 
-### Form and Reputation
+**Points:** Grand Prix 25-18-15-12-10-8-6-4-2-1 (reduced for shortened races), Sprint 8-7-6-5-4-3-2-1. There are no
+points for fastest lap. Ties are split by full countback. Each session's weather (dry, overcast, light rain, heavy
+rain, changing) is recorded too, and never changes anyone's numbers.
 
-* **Form** is this season's level, rebuilt from results. It covers:
-  - average finish and qualifying;
-  - wins, podiums, poles, fastest laps and Driver of the Day;
-  - DNFs;
-  - **racecraft**: places gained from the grid, weighted by where you finish, so P20 → P1 is worth
-    far more than P20 → P19.
-* **Reputation** is long-term. It builds from points, results, Form and racecraft, is locked at the
-  end of each season and carries forward. **Paddock Admin → Recalculate Reputation history** replays
-  old seasons if the formula changes.
+### Your driver
 
-### Contracts and the transfer market
+* **Form** is how you're driving now (your last six races). **Reputation** is long-term: it builds over seasons
+  and can fall after a bad one.
+* **Contracts** have no money. A deal is a seat status (No. 2, Equal Status or No. 1), a length of 1–5 years, and a
+  **growth pledge**: an average finish you promise, measured against where your car should finish, so it's equally
+  hard in any car. Offers are negotiations, and what you write to a team counts.
+* **Your team relationship** (out of 100) follows your pace against your pledge, your teammate head-to-head, season
+  goals, press answers and weekend targets. Struggle for long enough and you get a **final warning**. Miss it and the
+  Race Master decides whether you're dropped.
+* **Team goals** (optional): each team picks Safe, Competitive or Ambitious at the start of a season.
+* **Change notices:** whenever an update or a Race Master action changes your driver's numbers, you see the before
+  and after and agree to it before carrying on.
 
-Teams judge players on a **Driver Value**:
+### AI difficulty
 
-```
-Driver Value = 0.5 × Market Score (0.8 × Reputation + 0.2 × Form)
-             + 0.3 × Form
-             + 0.2 × Car-adjusted rating (finishing ahead of where the car should)
-             + teammate head-to-head bonus (±4)
-```
+One AI level covers the whole weekend, on the game's 0–110 scale. Each round starts from the community average for
+that circuit in F1 26, then learns from your league: after each weekend it compares every player with their AI
+teammate and cars of similar speed. DNFs, damage and no-fault results never count as "too hard", and every
+recommendation shows its working and how confident it is. Each round keeps the recommendation made before it next to
+the AI actually used.
 
-Car strength is ranked from AI drivers' points only, so winning in a slow car makes *you* look good.
+### Earlier seasons
 
-**Transfer windows:**
-* The **Rookie Draft** opens when a league starts with rookies.
-* **Silly Season** opens by itself at half-distance.
-* The Race Master can open a window any time.
-
-Offers are negotiations. Every deal has three terms:
-
-* **Seat status:** No. 2, Equal Status or No. 1.
-* **Length:** 1–5 years.
-* **Growth pledge:** how well you promise to drive each season. There's no money involved.
-
-A pledge is an **average finishing position**, measured against where your car should finish (about
-P1.5 in the fastest car, P21.5 in the slowest). Each pledge closes the same share of the gap between
-that and P1, so it's equally hard in any car:
-
-| Pledge | Closes | Fastest car | 4th-fastest | Slowest car | Reward if kept |
-|---|---|---|---|---|---|
-| Steady | 0% | P1.5 | P7.5 | P21.5 | +0.5 Reputation |
-| Solid | 12% | P1.4 | P6.7 | P19.0 | +1 |
-| Strong | 25% | P1.4 | P5.9 | P16.4 | +1.75 |
-| Breakout | 40% | P1.3 | P4.9 | P13.3 | +2.5 |
-
-A DNF or DSQ counts as last place, and from round 5 your single worst weekend is dropped. Keep your
-pledge to the end of the season and the reward is added to your starting Reputation for next season.
-Form and Reputation aren't used to judge the pledge: they depend too much on the car (a slow car
-rarely scores points, so its Reputation barely moves however well you drive).
-
-**What each team wants:**
-* Each team privately wants a minimum pledge. Keen teams accept Steady, and lukewarm ones want Strong.
-* No. 1 status and deals of 3+ years each need one level more.
-* Rookies are No. 2 and must pledge at least Solid.
-* Promise more than a team needs and you can win an extra year. An experienced driver who pledges
-  two levels more can also get one step more status than the team first offered.
-
-**Negotiating:**
-* Counter-offers use up the team's patience, and greedy asks use it up twice as fast. When patience
-  runs out, the team makes a final offer, and pushing past that ends the talks.
-* You can also **approach** up to 3 teams per window.
-* If you run out of options, the weakest team with a free seat throws you a last-chance lifeline.
-
-**Contract length matters.** While your deal covers next season, you're off the market: no offers,
-and no approaches. The exception is if your team releases you.
-
-### Team Standing: your relationship with your team
-
-Once results come in, your team rates you out of 100:
-- the score compares your average finish with your pledge, in steps scaled to your car;
-- your head-to-head against your teammate also counts;
-- the team's judgement firms up after about a third of the season.
-
-| Status | What happens |
-|---|---|
-| Delighted / Happy | You're on or ahead of your pledge. A happy team always offers a renewal. |
-| Concerned | A quiet word from the team |
-| Unhappy | A formal warning |
-| Seat at risk | They openly question your future |
-
-If you're still **at risk** when Silly Season opens, or when the season ends, you're **released**.
-The team won't renew you, and without a new deal you start next season as a reserve. Turn it around
-and the warning is lifted.
-
-**Team Standing** (My career) shows:
-- your relationship and status;
-- your average finish against your pledge (and your Form and Reputation for reference);
-- your teammate head-to-head;
-- everything the team has said to you;
-- how eager every other team is.
-
-### Pledges, goals, the press and team orders
-
-* **Everyone needs a pledge.** If a seated driver has none, they choose it before using the league.
-  Pledges are locked for the season. The Race Master can ask a driver, or everyone, for a new one on
-  **Team Standings**.
-* **Targets re-set after round 3** to the car's real pace in your league (from AI drivers' points).
-* **Season goals** from the team:
-  - points in a number of races;
-  - a championship position;
-  - beating your teammate (No. 1 and Equal Status drivers only).
-
-  Each goal that's on track helps the relationship, and each one behind hurts it.
-* **Press pen:** after every race you get two questions based on your result. Answers nudge the
-  relationship, and some make headlines. It's optional.
-* **Team orders:** No. 2 drivers can be told to let their teammate through. Finishing ahead of them
-  counts as ignoring the order: −6 relationship and a headline. Following it is +2.
-* Press answers and team orders can move the relationship by up to ±15 in total per season.
-
-### Incidents
-
-Anyone driving can report an incident from a race weekend. The Race Master rules on it: no further
-action, a reprimand, a warning, or a penalty (for a penalty, they adjust the results themselves).
-Rulings go in the news and in the rivalry page between the two drivers.
-
-### Extras (League Settings)
-
-| Extra | Default | What it does |
-|---|---|---|
-| Race-night check-in | off | Members answer I'm in / Maybe / Can't make it for the next race |
-| Comments & reactions | on | Chat and emoji reactions on race weekends and news, and a fans' Driver of the Day vote |
-| Predictions game | on | Pick pole (3), winner (5), fastest lap (2) and the top player driver (2). Picks lock at race time. |
-| Public results page | off | A read-only link with the standings, calendar and results |
-| Discord | off | Paste a channel webhook to post race results and paddock headlines |
-
-**Race night:**
-* The Race Master sets a race time in the league's time zone (League Settings; detected from the Race
-  Master's browser the first time). Every date and time in the league is shown in that zone, e.g.
-  "Lights out Wed, Sep 23 at 11:30 AM" and "Starts in 9h 56m".
-* After the race, the page tells the story: podium, biggest movers, pole, fastest lap and DNFs.
+A league that started on 3.x keeps its earlier seasons exactly as they were played. Anything those seasons never
+tracked (race times, incidents by session, the AI shown before each round) is marked "Not tracked under this
+season's rules" and never counts as missing. **League → What was tracked** lists when each feature began.
 
 ### Everything else
 
-* **Driver profiles** with a photo, number, flag, helmet colour, bio, trophy cabinet and contract history.
-* **Season review awards and the Hall of Records:** champions, a record book and streaks.
-* **Rivalry:** compare any two drivers.
-* **Paddock news**, notifications, and optional emails with the race results.
-* **Car development each winter.** Edit car ratings in Paddock Admin to match the game.
-* **AI difficulty recommender.** Enter the AI level you raced on. It only suggests a change after 3–5
-  rounds point the same way, learns across seasons, and ignores DNFs.
-* **Install it as an app** (account menu → Install, or Safari → Share → Add to Home Screen) and turn
-  on phone alerts (account menu). Alerts need the https website address.
-* **Themes:** light, dark or match your device.
-* **How it works** (menu) explains every number in the app.
-* **Result cards:** share a picture of the podium and your weekend from any completed race.
-* **Post-race summary** for every completed round: podium, pole, each player's weekend, Form and
-  Reputation changes, championship movement, the rivalry and the next AI difficulty.
-* **Player colours:** every human-controlled driver keeps one accent colour (separate from the team
-  colour) across tables, charts, the grid and profiles.
-* **Change since last round** in My Garage and on driver profiles, with sparklines once there are three
-  completed rounds.
-* **Density:** Comfortable or Compact (account menu).
-* **Restore:** roll a league back to any automatic backup from **League & Saves**. The current state
-  is backed up first, so a restore can be undone.
+* **Home** with your next action and everything waiting for you.
+* A **League Readiness Check** for the Race Master: what needs attention before a weekend, a season end or a rollover,
+  and where to fix it.
+* Driver profiles, rivalries, statistics (including wet vs dry), season awards and the Hall of Records.
+* Paddock news, announcements, comments, predictions, race-night check-in and optional Discord posts.
+* Per-league notifications by email and phone alert. It installs as an app on phones and computers.
+* Light and dark themes, and pages checked for keyboard and screen-reader use.
+* **Maintenance mode** (site owner): closes the site with a "we'll be right back" page and holds emails and alerts
+  until it reopens.
 
 ## Security
 
-* Passwords are hashed.
-* Login lockout: 5 wrong passwords locks the account for 10 minutes, and addresses that keep
-  guessing get locked too.
+* Hashed passwords, with 8+ characters and no common ones.
+* Optional two-step sign-in with any authenticator app, and a list of signed-in devices.
+* Login lockout per account after too many wrong passwords. A shared connection is only blocked when it guesses at
+  several accounts.
 * Email confirmation at sign-up, and password-reset links that expire.
-* CSRF protection on every form, per-league access checks, and a secret key kept in the data folder.
-* On Render the site is served over HTTPS.
+* CSRF protection on every form, a server-side role check on every page, and rate limits on sign-ups, invitations
+  and codes.
+* Emails, alerts and Discord posts go through an outbox, so a restart never loses one. Secrets, images and OCR text
+  are never logged.
+* No paid services: screenshot import runs in your browser, and nothing is sent to an AI service.
 
 ## Development
 
 ```
 python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
-.venv/bin/python -m pytest -q          # includes a two-season simulation that crawls every page
+.venv/bin/python -m pytest -q          # includes full-season simulations that crawl every page
 .venv/bin/python launcher.py           # or: launcher.py --lan
 ```
 
-**Code layout.** The program code is in `f1tracker/`:
+Use Python 3.11 (pinned in `.python-version` and `render.yaml`): newer versions add up decimals slightly differently
+and would shift career numbers. On Windows, `dev.bat` runs a private local copy with live reload; see
+[docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).
+
+Program code is in `f1tracker/`, pages in `templates/`, and CSS and JS in `static/`. The main modules:
 
 | Module | What it holds |
 |---|---|
-| `constants` | Shared settings and constants |
-| `schema` | The database schema and migrations |
-| `storage` | Saves |
-| `services` | Rules, standings and difficulty |
-| `market` | Offers and negotiations |
-| `relations` | Team relationships, pledges and season goals |
-| `teamlife` | The press pen and team orders |
-| `discord` | Optional Discord posts |
-| `community` | Extras, profiles, incidents and the activity log |
-| `feed` | News and notifications |
-| `insights` | Charts, rivalry and awards |
-| `auth` | Logins |
-| `push` | Phone alerts |
 | `app` | Routes |
-
-Pages are in `templates/`. `static/` holds the CSS and JS.
+| `schema`, `storage` | Database schema, upgrades and league files |
+| `services`, `calc3`, `engine`, `migration`, `recalc` | Standings, Form, Reputation, the calculation engines and recalculating |
+| `weekend`, `gates`, `press`, `weather` | Race weekends, round gates, the press room and weather |
+| `market`, `pitch`, `seats` | Offers, negotiations, team talks and seats |
+| `relations`, `teamgoals`, `teamlife`, `ultimatums` | Team relationships, goals, weekend targets, team orders and final warnings |
+| `ai3`, `ai_track` | The AI difficulty tracker |
+| `impacts` | Change notices |
+| `auth`, `security`, `ratelimit` | Accounts, two-step sign-in and rate limits |
+| `feed`, `notices`, `delivery`, `outbox`, `mailer`, `push`, `discord` | News, notifications and sending |
+| `maintenance`, `offsite` | Maintenance mode and the encrypted site backup |
+| `tracking`, `readiness` | Earlier seasons' rules and the League Readiness Check |

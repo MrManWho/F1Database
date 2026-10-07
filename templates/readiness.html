@@ -83,8 +83,7 @@
 </section>
 
 <section class="card" aria-labelledby="rd-site-title">
-  <div class="card-head"><h2 id="rd-site-title">Site deployment</h2><span class="muted small">Belongs to the site owner</span></div>
-  <p class="small">These league checks don't show that the whole site is safe to deploy. Render health, deployment status and backup restore tests are the site owner's, and aren't verified here.</p>
+  <div class="card-head"><h2 id="rd-site-title">Version and backups</h2></div>
   <ul class="plain-list small">
     <li>Running Paddock Legacy {{ app_version }}.</li>
     <li>{% if latest_backup %}Latest automatic backup of this league: {{ latest_backup.when|stamp }} ({{ latest_backup.size_kb }} KB). Restoring it hasn't been tested by this check.{% else %}No automatic backup of this league was found.{% endif %} <a href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a></li>

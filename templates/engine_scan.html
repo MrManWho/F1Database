@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Calculation engine scan{% endblock %}
 {% block plain %}
-<div class="page-head"><div><div class="kicker">Site owner · 4.0 Phase 0</div><h1>Calculation engine scan</h1></div></div>
+<div class="page-head"><div><div class="kicker">Site owner</div><h1>Calculation engine scan</h1></div></div>
 <section class="card">
   <p><b>{{ scan.verdict }}</b></p>
-  <p class="muted small">Every league file on this site, read without changing anything. On the test site, load a backup of the live site first so this shows your real leagues.
+  <p class="muted small">Every league file on this site, read without changing anything.
     Active seasons on Version 2: <b>{{ scan.v2_active|length }}</b> · finished seasons on Version 2: <b>{{ scan.v2_history|length }}</b> ·
     leagues that haven't answered the Calculation Update: <b>{{ scan.pending_choice|length }}</b>.</p>
 </section>

@@ -790,14 +790,19 @@ def _legacy_context(conn, ctx, token):
     if request.path.startswith("/api/") or request.method != "GET":
         return
     season = ctx["season"]
+    event = None
     if request.endpoint == "season_review":
         season = S.get_season(conn, (request.view_args or {}).get("season_id")) or season
+    elif request.endpoint in LEGACY_ROUND_PAGES:
+        # a round page belongs to the round's own season, whichever season is selected in the menu
+        event = S.get_event(conn, (request.view_args or {}).get("event_id"))
+        if event:
+            season = S.get_season(conn, event["season_id"]) or season
     summary = tracking.season_summary(conn, season)
     if summary and request.endpoint in LEGACY_BANNER_PAGES:
         if season["id"] != ctx["current_season_id"] or request.endpoint in LEGACY_MIXED_PAGES:
             ctx["legacy"] = summary
         elif request.endpoint in LEGACY_ROUND_PAGES:
-            event = S.get_event(conn, (request.view_args or {}).get("event_id"))
             if event and any(f["from_round"] is None or event["round_number"] < f["from_round"]
                              for f in summary["features"]):
                 ctx["legacy"] = summary
@@ -5296,6 +5301,7 @@ def register_routes(app):
         return render_template("changelog.html", versions=changelog.versions(_base_dir()))
 
     @app.route("/design")
+    @master_required
     def design_page():
         """4.0: the design system: tokens, components and every state a component can be in."""
         return render_template("design.html")
