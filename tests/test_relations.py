@@ -212,7 +212,9 @@ def test_contract_years_keep_you_off_the_market_unless_released(db, rng):
 
 def test_changelog_page_and_salary_era_saves(app, master_client, career, rng):
     page = master_client.get("/changelog").get_data(as_text=True)
-    assert f"v{C.APP_VERSION}" in page and "Current" in page and "Growth pledge" not in page.split("v1.13")[1]
+    assert f"v{C.APP_VERSION}" in page and "Current" in page
+    older = master_client.get("/changelog?view=older").get_data(as_text=True)
+    assert "Growth pledge" not in older.split("v1.13")[1]
     # A v1.13 save with salary-era offers opens, and the garage shows pledges instead of money.
     with storage.session(career) as conn:
         market.open_window(conn, S.current_season_id(conn), rng=rng)

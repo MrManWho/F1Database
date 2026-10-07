@@ -5298,7 +5298,11 @@ def register_routes(app):
     @app.route("/changelog")
     def changelog_page():
         from . import changelog
-        return render_template("changelog.html", versions=changelog.versions(_base_dir()))
+        # 4.0 is shown by default; 3.x and earlier are on their own tab (?view=older)
+        older = request.args.get("view") == "older"
+        versions = [v for v in changelog.versions(_base_dir())
+                    if (int(v["version"].split(".")[0]) < 4) == older]
+        return render_template("changelog.html", versions=versions, older=older)
 
     @app.route("/design")
     @master_required

@@ -4,6 +4,10 @@
 <div class="page-head"><div><div class="kicker">Version history</div><h1>What's new</h1></div>
   <a class="btn btn-ghost" href="{{ url_for('home') }}">← {{ 'Your leagues' if user else 'Home' }}</a></div>
 <p class="muted">You're on <b>v{{ APP_VERSION }}</b>. Every update keeps your leagues, logins and results.</p>
+<nav class="nav-sub-strip" aria-label="Versions">
+  <a href="{{ url_for('changelog_page') }}" {% if not older %}aria-current="page"{% endif %}>Version 4.0</a>
+  <a href="{{ url_for('changelog_page', view='older') }}" {% if older %}aria-current="page"{% endif %}>3.x and older</a>
+</nav>
 {# v3.0 / 4.0: the development eras, as separators above their versions #}
 {% set eras = {4: ('THE NEXT GENERATION', 'Versions 4.0–4.x', 'The same career universe, rebuilt to be clearer, safer and ready to last.'),
                3: ('THE DEFINITIVE RELEASE', 'Versions 3.0–3.x', 'Balanced. Polished. Complete.'),

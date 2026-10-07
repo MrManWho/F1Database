@@ -308,8 +308,11 @@ def test_permission_denied_uses_the_denied_state(app, master_client):
 def test_version_and_changelog_era(app, master_client):
     assert C.APP_VERSION.startswith("4.0.0")
     page = master_client.get("/changelog").get_data(as_text=True)
-    assert "THE NEXT GENERATION" in page and "Versions 4.0–4.x" in page and "THE DEFINITIVE RELEASE" in page
-    assert page.index("THE NEXT GENERATION") < page.index("THE DEFINITIVE RELEASE")
+    assert "THE NEXT GENERATION" in page and "Versions 4.0–4.x" in page and "THE DEFINITIVE RELEASE" not in page
+    assert "v3.2.6" not in page and 'href="/changelog?view=older"' in page
+    older = master_client.get("/changelog?view=older").get_data(as_text=True)
+    assert "THE DEFINITIVE RELEASE" in older and "v3.2.6" in older and "THE NEXT GENERATION" not in older
+    assert older.index("THE DEFINITIVE RELEASE") < older.index("THE FOUNDATION ERA")
 
 
 def test_no_career_numbers_changed(app):
