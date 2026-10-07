@@ -9,7 +9,7 @@ _Released October 7, 2026_
 > career history all come with you, exactly as they were.
 
 ### Highlights
-- **A new look everywhere.** Navy, white and orange, with clearer type, cards and tables on every page. Light is the default; dark is in My settings → Theme.
+- **A new look everywhere.** Navy, white and orange, with clearer type, cards and tables on every page. Dark is the default; light is in My settings → Theme.
 - **Simpler menus.** Every league has Home, Race Weekend, Championship, Career and More, with the Race Master's tools in their own Manage League area. Old links still work.
 - **Home starts with one next action,** then the current weekend, your tasks, what the league is waiting on, the last race, the championship and your career.
 - **Each race weekend is one page with four steps:** Prepare, Sessions, Review & submit and Debrief. It opens on the step you need, and each session (Qualifying, Sprint, Race) has its own results, race times, weather and incidents.

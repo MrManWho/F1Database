@@ -15,8 +15,8 @@
   {% if push_key %}<meta name="push-key" content="{{ push_key }}">{% endif %}
   <script>
     (function () {
-      var t = "light", saved = {{ (user.theme if user and user.theme else '')|tojson }};
-      try { t = saved || localStorage.getItem("f1-theme") || "light"; if (saved) localStorage.setItem("f1-theme", saved); } catch (e) {}
+      var t = "dark", saved = {{ (user.theme if user and user.theme else '')|tojson }};
+      try { t = saved || localStorage.getItem("f1-theme") || "dark"; if (saved) localStorage.setItem("f1-theme", saved); } catch (e) {}
       if (t === "auto") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", t);
     })();

@@ -374,7 +374,7 @@
   // Theme
   var pick = document.getElementById("theme-pick");
   if (pick) {
-    try { pick.value = localStorage.getItem("f1-theme") || "light"; } catch (e) {}
+    try { pick.value = localStorage.getItem("f1-theme") || "dark"; } catch (e) {}
     pick.addEventListener("change", function () {
       try { localStorage.setItem("f1-theme", pick.value); } catch (e) {}
       savePreference("theme", pick.value);
