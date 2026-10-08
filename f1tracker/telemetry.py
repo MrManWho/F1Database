@@ -22,7 +22,7 @@ from . import services as S
 from .storage import get_meta, now_iso, set_meta
 
 MAX_BYTES = 256 * 1024     # one session's summary is a few KB; anything far bigger isn't one
-KEEP = 40                  # uploads kept per league (oldest are dropped)
+KEEP = 40                  # uploads not linked to a round kept per league (oldest are dropped); linked ones stay
 MAX_CARS = 24              # 22 in the 2025 format, 24 in the 2026 Season Pack format
 MAX_EVENTS = 300
 STATUSES = {"Finished", "DNF", "DSQ", "Not Classified", "Retired", "Inactive", "Invalid", "Active"}
@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS telemetry_uploads (
 
 def ensure_table(conn):
     conn.execute(TABLE)   # one statement: executescript would commit an open transaction
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry_uploads)")}
+    if "raw" not in cols:     # 2026-10-08: the upload as it was sent, kept for features that need more of it later
+        conn.execute("ALTER TABLE telemetry_uploads ADD COLUMN raw TEXT")
+    if "recorder" not in cols:
+        conn.execute("ALTER TABLE telemetry_uploads ADD COLUMN recorder TEXT NOT NULL DEFAULT ''")
 
 
 def enabled(conn):
@@ -156,17 +161,39 @@ def store(conn, payload):
         row = conn.execute("SELECT id FROM telemetry_uploads WHERE session_uid = ? AND session_type_id IS ?",
                            (data["session_uid"], sess["session_type_id"])).fetchone()
     values = (now_iso(), data["session_uid"], sess["session_type_id"], sess["track"], sess["session_type"],
-              len(data["results"]), json.dumps(data, ensure_ascii=False))
-    if row:
+              len(data["results"]), json.dumps(data, ensure_ascii=False), json.dumps(payload, ensure_ascii=False),
+              _text(payload.get("recorder"), 60))
+    if row:   # sent again (say, rebuilt by a newer recorder): the newer copy replaces it and keeps its round
         conn.execute("UPDATE telemetry_uploads SET received_at = ?, session_uid = ?, session_type_id = ?, track = ?, "
-                     "session_type = ?, cars = ?, payload = ? WHERE id = ?", values + (row["id"],))
+                     "session_type = ?, cars = ?, payload = ?, raw = ?, recorder = ? WHERE id = ?", values + (row["id"],))
         upload_id = row["id"]
     else:
         upload_id = conn.execute("INSERT INTO telemetry_uploads(received_at, session_uid, session_type_id, track, "
-                                 "session_type, cars, payload) VALUES(?, ?, ?, ?, ?, ?, ?)", values).lastrowid
-    conn.execute("DELETE FROM telemetry_uploads WHERE id NOT IN "
-                 "(SELECT id FROM telemetry_uploads ORDER BY id DESC LIMIT ?)", (KEEP,))
+                                 "session_type, cars, payload, raw, recorder) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                 values).lastrowid
+    link(conn, upload_id)
+    conn.execute("DELETE FROM telemetry_uploads WHERE used_event_id IS NULL AND id NOT IN "
+                 "(SELECT id FROM telemetry_uploads WHERE used_event_id IS NULL ORDER BY id DESC LIMIT ?)", (KEEP,))
     return upload_id
+
+
+def link(conn, upload_id):
+    """Link a new upload to its round: the current season's first unfinished round at that circuit. Linked uploads
+    are kept for good, so later features can read more out of a round's game data."""
+    row = conn.execute("SELECT track, used_event_id FROM telemetry_uploads WHERE id = ?", (upload_id,)).fetchone()
+    if not row or row["used_event_id"]:
+        return None
+    circuit = _circuit(row["track"])
+    if not circuit:
+        return None
+    from . import constants as C
+    sid = S.current_season_id(conn)
+    for e in S.events(conn, sid) if sid else []:
+        if e["status"] != C.EVENT_COMPLETE and _circuit(f"{e['name']} {e.get('location') or ''}") == circuit:
+            conn.execute("UPDATE telemetry_uploads SET used_event_id = ?, used_at = ? WHERE id = ?",
+                         (e["id"], now_iso(), upload_id))
+            return e["id"]
+    return None
 
 
 def recent(conn, limit=12):
@@ -251,8 +278,11 @@ def for_round(conn, event):
     circuit = _circuit(f"{event['name']} {event.get('location') or ''}")
     if not circuit:
         return {}
-    rows = [r for r in conn.execute("SELECT id, received_at, track, session_type_id FROM telemetry_uploads "
-                                    "ORDER BY id DESC") if _circuit(r["track"]) == circuit]
+    rows = [r for r in conn.execute("SELECT id, received_at, track, session_type_id, used_event_id FROM telemetry_uploads "
+                                    "WHERE used_event_id = ? OR used_event_id IS NULL ORDER BY id DESC", (event["id"],))
+            if r["used_event_id"] == event["id"] or _circuit(r["track"]) == circuit]
+    if any(r["used_event_id"] == event["id"] for r in rows):
+        rows = [r for r in rows if r["used_event_id"] == event["id"]]   # linked to this round: just those
     if not rows:
         return {}
 
@@ -291,4 +321,60 @@ def round_summary(bundle):
     for kind, label in (("sprint", "Sprint"), ("race", "Race")):
         if bundle[kind]:
             out.append((label, f"{len(bundle[kind]['results'])} cars"))
+    return out
+
+
+# --------------------------------------------------------------------------- what each round's game data holds
+# Every piece of data the site can take from the game, and how to tell whether a session's upload has it. When a
+# feature needs more, add it here: the Race data page then lists which rounds are missing it, and a newer recorder
+# can rebuild old recordings and send them again (the same session replaces its earlier copy and keeps its round).
+DATA = [
+    ("order", "Finishing order", ("qualifying", "sprint", "race"), lambda u: any(r.get("position") for r in u["results"])),
+    ("names", "Driver names", ("qualifying", "sprint", "race"), lambda u: all(r.get("name") for r in u["results"])),
+    ("best_laps", "Best laps", ("qualifying", "sprint", "race"), lambda u: any(r.get("best_lap_ms") for r in u["results"])),
+    ("race_times", "Race times", ("sprint", "race"), lambda u: any(r.get("race_time_s") for r in u["results"])),
+    ("ai_level", "AI level", ("qualifying", "sprint", "race"), lambda u: bool(u["session"].get("ai_difficulty"))),
+    ("weather", "Weather through the session", ("qualifying", "sprint", "race"),
+     lambda u: bool(u["session"].get("weather_seen"))),
+    ("incidents", "Penalties and incidents", ("sprint", "race"), lambda u: "events" in (u.get("raw") or {})),
+]
+
+
+def coverage(conn, season_id):
+    """Per round of a season: the game sessions linked to it and what data is missing.
+    [{event, sessions: {kind: [{id, label, recorder, received_at}]}, missing: [(session label, data label)]}]"""
+    ensure_table(conn)
+    rows = conn.execute("SELECT * FROM telemetry_uploads WHERE used_event_id IN "
+                        "(SELECT id FROM events WHERE season_id = ?) ORDER BY id", (season_id,)).fetchall()
+    by_event = {}
+    for r in rows:
+        u = json.loads(r["payload"])
+        try:
+            u["raw"] = json.loads(r["raw"]) if r["raw"] else {}
+        except ValueError:
+            u["raw"] = {}
+        by_event.setdefault(r["used_event_id"], []).append((r, u))
+    out = []
+    for e in S.events(conn, season_id):
+        kinds = {"qualifying": [], "sprint": [], "race": []}
+        for r, u in by_event.get(e["id"], []):
+            kind = KINDS.get(r["session_type_id"])
+            if kind == "sprint_or_race":
+                kind = "sprint" if e["is_sprint"] else "race"
+            if kind in kinds:
+                kinds[kind].append((r, u))
+        missing = []
+        wanted = ["qualifying"] + (["sprint"] if e["is_sprint"] else []) + ["race"]
+        if any(kinds.values()):
+            for kind in wanted:
+                label = {"qualifying": "Qualifying", "sprint": "Sprint", "race": "Race"}[kind]
+                if not kinds[kind]:
+                    missing.append((label, "not recorded"))
+                    continue
+                for key, text, applies, has in DATA:
+                    if kind in applies and not any(has(u) for _r, u in kinds[kind]):
+                        missing.append((label, text))
+        out.append({"event": e, "missing": missing, "recorded": any(kinds.values()),
+                    "sessions": {k: [{"id": r["id"], "label": r["session_type"], "recorder": r["recorder"],
+                                      "received_at": r["received_at"]} for r, _u in v] for k, v in kinds.items()}})
     return out

@@ -372,3 +372,35 @@ def test_fill_weekend_in_a_real_browser(app, master_client, live_server):
     assert (gp["race_time"], gp["bench_race_time"], gp["laps"]) == (5505.0, 5499.0, 56)
     assert gp["quali_time"] is not None and gp["mate_quali_time"] is not None
     assert (sp["race_time"], sp["bench_race_time"], sp["laps"]) == (1900.0, 1895.5, 19)
+
+
+def test_game_data_stays_linked_to_its_round(master_client, app):
+    """Uploads link to the first unfinished round at their circuit and are kept for good; the Race data page lists
+    what each round is missing, and a rebuilt copy sent later replaces the old one without losing its round."""
+    token = _league(master_client)
+    key = _turn_on(master_client, token)
+    with storage.session(token) as conn:
+        ev = next(e for e in S.events(conn, S.current_season_id(conn)) if "chin" in e["name"].lower())
+    up = app.test_client()
+
+    def send(uid, type_id, track="Shanghai", **row):
+        return up.post(f"/api/telemetry/{token}/{key}", json={
+            "recorder": "Paddock Legacy Telemetry 0.6", "session_uid": uid, "events": [],
+            "session": {"track": track, "session_type": "Race", "session_type_id": type_id, "ai_difficulty": 80},
+            "results": [{"position": 1, "name": "NORRIS", "team": "McLaren", "best_lap_ms": 90000, **row}]}).get_json()["id"]
+    race = send("r1", 16)
+    for i in range(telemetry.KEEP + 3):   # plenty of unlinked practice laps elsewhere
+        send(f"x{i}", 15, track="Nowhere")
+    with storage.session(token) as conn:
+        kept = {r["id"]: r["used_event_id"] for r in conn.execute("SELECT id, used_event_id FROM telemetry_uploads")}
+        raw = json.loads(conn.execute("SELECT raw FROM telemetry_uploads WHERE id = ?", (race,)).fetchone()[0])
+    assert kept[race] == ev["id"] and len(kept) == telemetry.KEEP + 1
+    assert raw["recorder"] == "Paddock Legacy Telemetry 0.6"
+    page = master_client.get(f"/career/{token}/telemetry/data").get_data(as_text=True)
+    assert "Race data from the game" in page and "Qualifying: not recorded" in page and "Race: race times" in page
+    # A newer recorder rebuilds the same session with race times: it replaces the copy and keeps the round.
+    assert send("r1", 16, race_time_s=5400.5) == race
+    page = master_client.get(f"/career/{token}/telemetry/data").get_data(as_text=True)
+    assert "Race: race times" not in page and "Race: weather through the session" in page
+    with storage.session(token) as conn:
+        assert conn.execute("SELECT used_event_id FROM telemetry_uploads WHERE id = ?", (race,)).fetchone()[0] == ev["id"]
