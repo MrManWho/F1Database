@@ -223,7 +223,7 @@ def test_season_card_summary(master_client):
     assert p["sprints_left"] == sum(1 for e in evs[2:] if e["is_sprint"])
     assert p["finish_at"] == max(e for e in [f"2026-{4 + i // 3:02d}-{1 + (i % 3) * 7:02d}T18:00:00+00:00" for i in range(len(evs) - 2)])
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    for label in ("Completed", "Remaining", "Current round", "Sprint weekends", "Next event", "Projected finish"):
+    for label in ("Completed", "Remaining", "Current round", "Sprint weekends", "Next round", "Projected finish"):
         assert label in page
 
 

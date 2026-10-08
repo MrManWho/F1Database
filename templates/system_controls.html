@@ -26,7 +26,7 @@
     {% if waiting %}<p class="small muted">{{ waiting }} message{{ 's' if waiting != 1 }} waiting to be sent.</p>{% endif %}
 
     {% if not st.enabled %}
-    <label>Type <b>{{ confirm_word }}</b> to turn maintenance mode on
+    <label><span>Type <b>{{ confirm_word }}</b> to turn maintenance mode on</span>
       <input name="confirm" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
     <div class="button-row">
       <button class="btn btn-danger" name="action" value="enable"

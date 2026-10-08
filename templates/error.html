@@ -10,8 +10,8 @@
            message) }}
   <div class="button-row">
   {% if back is defined and back %}<a class="btn btn-primary" href="{{ back }}">Back to where you were</a>
-  <a class="btn btn-ghost" href="{{ url_for('home') }}">My leagues</a>
-  {% else %}<a class="btn btn-primary" href="{{ url_for('home') }}">Back to my leagues</a>{% endif %}
+  <a class="btn btn-ghost" href="{{ url_for('home') }}">Your leagues</a>
+  {% else %}<a class="btn btn-primary" href="{{ url_for('home') }}">Back to your leagues</a>{% endif %}
   </div>
 </section>
 {% endblock %}

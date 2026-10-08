@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import notify_choice %}
-{% block title %}My leagues{% endblock %}
+{% block title %}Your leagues{% endblock %}
 {% block plain %}
 <div class="page-head">
   <div><div class="kicker">Paddock Legacy</div><h1>Your leagues</h1>
@@ -19,7 +19,7 @@
   <article class="league-card card {{ 'is-pinned' if l.pinned }}" {% if l.accent %}style="--accent: {{ l.accent }}"{% endif %}>
     <a class="league-card-link" href="{{ url_for('dashboard', token=l.token) }}">
       <span class="league-mark" aria-hidden="true">{{ l.initials }}</span>
-      <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site admin · not a member' }}{% if l.year %} · {{ l.year }} season{% endif %}</small></span>
+      <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site owner (not a member)' }}{% if l.year %} · {{ l.year }} season{% endif %}</small></span>
     </a>
     <div class="league-card-meta small">
       <span>{{ c.completed }}/{{ c.total }} rounds</span><span>{{ c.players }} player driver{{ 's' if c.players != 1 }}</span>
@@ -149,11 +149,11 @@
   </form>
 </dialog>
 <dialog id="import-dialog" class="dialog">
-  <div class="dialog-head"><h2>Import a career</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
+  <div class="dialog-head"><h2>Import a league</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
   <form method="post" action="{{ url_for('career_import') }}" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="file" name="file" accept=".f1career" required>
-    <p class="muted small">The imported save gets a new career ID, so it never overwrites an existing one. Max 100 MB.</p>
+    <p class="muted small">The imported save gets a new league ID, so it never overwrites an existing one. Max 100 MB.</p>
     <button class="btn btn-primary">Check file</button>
   </form>
 </dialog>

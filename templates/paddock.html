@@ -13,7 +13,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="rating-grid">
       {% for t in all_teams if t.active %}{% set cr = ratings.get(t.id) %}
-      <label style="--team: {{ t.color }}">{{ team_dot(t) }}{{ t.name }}
+      <label style="--team: {{ t.color }}"><span>{{ team_dot(t) }}{{ t.name }}</span>
         <input type="number" name="rating_{{ t.id }}" step="0.1" min="{{ C.CAR_RATING_MIN }}" max="{{ C.CAR_RATING_MAX }}" value="{{ '%.1f'|format(cr.rating) if cr }}">
       </label>
       {% endfor %}
@@ -102,7 +102,7 @@
   {% if align.skipped %}<p class="form-error">Left alone (a driver would end up with two results): {% for e in align.skipped %}R{{ e.round_number }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
   <form method="post" action="{{ url_for('paddock_align_results', token=ctx.token) }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Type <b>MATCH</b> to confirm<input name="confirm" autocomplete="off" required></label>
+    <label><span>Type <b>MATCH</b> to confirm</span><input name="confirm" autocomplete="off" required></label>
     <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('paddock_admin', token=ctx.token) }}#align-results">Cancel</a>
       <button class="btn btn-primary">Match results</button></div>
   </form>
@@ -147,7 +147,7 @@
         records and head-to-heads update straight away. Completed seasons aren't touched.</p>
       {% if move.from_seat %}<label class="check"><input type="checkbox" name="swap_seats" value="1" checked>
         Also give {{ move.to.name }} the seat {{ move.from.name }} has now{% if move.to_seat %} (and {{ move.from.name }} takes {{ move.to.name }}'s current seat){% else %} ({{ move.from.name }} becomes a free agent){% endif %}, for the rounds still to come</label>{% endif %}
-      <label>Type <b>{{ move.to.name }}</b> to confirm<input name="confirm_name" autocomplete="off" required></label>
+      <label><span>Type <b>{{ move.to.name }}</b> to confirm</span><input name="confirm_name" autocomplete="off" required></label>
       <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('paddock_admin', token=ctx.token) }}#move-results">Cancel</a>
         <button class="btn btn-primary">Move results</button></div>
     </form>

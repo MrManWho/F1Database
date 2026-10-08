@@ -4,7 +4,7 @@
 {% block content %}
 <div class="profile-head player-head" style="--team: {{ team.color if team else '#e10600' }}; --player: {{ driver.player_color or 'var(--blue)' }};">
   <div>
-    <div class="kicker">{{ ('Contracts & offers' if view == 'offers' else 'My Garage' if own else 'Garage') }} · {{ ctx.season.year }}</div>
+    <div class="kicker">{{ ('Contracts & offers' if view == 'offers' else 'My garage' if own else 'Garage') }} · {{ ctx.season.year }}</div>
     <h1>{{ driver.name }}</h1>
     <div class="hero-meta">
       <span>{% if team %}{{ team_dot(team) }}{{ team.name }}{% else %}No race seat{% endif %}</span>
@@ -148,7 +148,7 @@ Average P{{ '%.1f'|format(t.finish_target) }} or better (car: P{{ '%.1f'|format(
   {% elif window %}
   <p class="muted">No offers on the table.{% if approaches %} Try approaching a team below.{% else %} You've used all your approaches. If nothing else comes, you keep your current seat, or sit out as a reserve without losing Reputation. The Race Master can still place you by hand.{% endif %}</p>
   {% else %}
-  <p class="muted">The transfer market is closed. Teams make offers when a window opens: the Rookie Draft at the start of a career, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
+  <p class="muted">The transfer market is closed. Teams make offers when a window opens: the Rookie Draft when a league starts, and Silly Season once half the calendar is done. Keep an eye on the interest board below.</p>
   {% endif %}
 
   {% if window and can_respond and not signed_in_window and not locked %}

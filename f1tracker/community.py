@@ -74,22 +74,6 @@ def audit_entries(conn, limit=300, username=None):
 
 # --------------------------------------------------------------------------- race times
 
-def parse_race_at(value, tz_offset_minutes=0):
-    """A browser datetime-local value plus the browser's getTimezoneOffset() -> UTC ISO string."""
-    value = (value or "").strip()
-    if not value:
-        return None
-    try:
-        local = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise ValidationError("That race time isn't a valid date and time") from exc
-    try:
-        offset = int(tz_offset_minutes or 0)
-    except (TypeError, ValueError):
-        offset = 0
-    return (local + timedelta(minutes=offset)).replace(tzinfo=timezone.utc).isoformat(timespec="minutes")
-
-
 def race_started(event):
     """True once the scheduled race time has passed. Times saved without a zone (older saves) are read as the
     server's clock instead of crashing the comparison."""

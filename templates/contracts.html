@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% from "_macros.html" import driver_link, team_dot with context %}
-{% block title %}Driver Market{% endblock %}
+{% block title %}Transfers{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><div class="kicker">Driver Market</div><h1>The market</h1></div>
+  <div><div class="kicker">Transfers</div><h1>The market</h1></div>
   {% if ctx.is_master %}<button class="btn btn-primary" data-dialog="contract-dialog">Add negotiation</button>{% endif %}
 </div>
 {% set o = overview %}

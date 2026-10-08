@@ -4,7 +4,7 @@
 <section class="auth-card card">
   <div class="kicker">Report</div>
   <h1>Report {{ league.name }}</h1>
-  <p class="muted small">The site administrators review every report and can remove a league from the directory. Your report doesn't include your email or IP address.</p>
+  <p class="muted small">The site owner reviews every report and can remove a league from the directory. Your report doesn't include your email or IP address.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>What's wrong?<select name="reason" required>{% for k, v in reasons.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>

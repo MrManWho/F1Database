@@ -14,4 +14,7 @@ Flask + Jinja + SQLite F1 career league tracker. `accounts.db` holds the site an
   approval. Pre-4.0 leagues must keep migrating (schema.py, migration.py, tracking.py).
 - Every released change gets a version (`f1tracker/constants.py` APP_VERSION) and a CHANGELOG.md entry with
   Highlights. Admin details go in docs/ADMIN_GUIDE.md.
+- **4.0.0 is final** (closed 2026-10-08 after the post-launch play-testing fixes and a site-wide audit). The
+  post-launch changelog pause is over: from now on every user-facing change gets the next version (4.0.1, 4.0.2, ...)
+  and its own CHANGELOG.md entry. Don't add to the 4.0.0 entry any more.
 - Specs and route maps for 4.0: docs/4.0/.

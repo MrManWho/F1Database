@@ -126,12 +126,6 @@ def touch(conn, username):
         conn.execute("UPDATE career_members SET last_active = ? WHERE username = ?", (now, username))
 
 
-def join_role(requested):
-    """A join request's role (see C.LEAGUE_ROLES) as an access role plus whether it comes with a driver."""
-    return {"driver": ("member", True), "driver_scorekeeper": ("scorekeeper", True),
-            "scorekeeper": ("scorekeeper", False), "spectator": ("spectator", False)}.get(requested, ("member", True))
-
-
 # --------------------------------------------------------------------------- one-off migration
 
 def unify_legacy_scorekeepers():

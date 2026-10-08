@@ -21,13 +21,13 @@
 
 <section class="card table-card">
   <h2>Table</h2>
-  <table class="data-table">
+  <div class="table-wrap"><table class="data-table">
     <thead><tr><th>#</th><th>Player</th><th>Pts</th><th>Correct picks</th><th>Perfect rounds</th><th>Rounds played</th></tr></thead>
     <tbody>{% for r in table %}
       <tr class="{{ 'player-row' if r.username == user.username }}"><td class="num">{{ r.position }}</td><td><strong>{{ r.name }}</strong></td>
         <td class="num"><b>{{ r.points }}</b></td><td class="num">{{ r.correct }}</td><td class="num">{{ r.exact }}</td><td class="num">{{ r.rounds }}</td></tr>
     {% else %}<tr><td colspan="6" class="muted">No scored rounds yet. Make your picks for the next race.</td></tr>{% endfor %}</tbody>
-  </table>
+  </table></div>
 </section>
 {% for rd in rounds %}
 <section class="card table-card">

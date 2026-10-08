@@ -24,7 +24,7 @@
   </ul></section>
   {% if ctx.my_driver %}
   <section class="card"><h2>Career</h2><ul>
-    <li><a href="{{ url_for('garage', token=t) }}">My Garage</a></li>
+    <li><a href="{{ url_for('garage', token=t) }}">My garage</a></li>
     <li><a href="{{ url_for('team_standing', token=t) }}">Relationships</a></li>
     <li><a href="{{ url_for('offers_page', token=t) }}">Contracts &amp; offers</a></li>
     <li><a href="{{ url_for('press_page', token=t) }}">Press history</a></li>
@@ -32,7 +32,7 @@
   {% endif %}
   <section class="card"><h2>You</h2><ul>
     <li><a href="{{ url_for('my_settings', token=t) }}">My settings &amp; notifications</a></li>
-    <li><a href="{{ url_for('home') }}">All my leagues</a></li>
+    <li><a href="{{ url_for('home') }}">Your leagues</a></li>
     <li><a href="{{ url_for('help_page') }}">Help</a></li>
   </ul></section>
 </div>

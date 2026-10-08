@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Paddock News{% endblock %}
+{% block title %}News{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="kicker">The paddock</div><h1>News</h1></div>
   {% if tab == 'unread' and unread_count %}<form method="post" action="{{ url_for('news_read', token=ctx.token) }}" class="inline">

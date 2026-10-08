@@ -375,10 +375,6 @@ def on_talks_collapsed(conn, offer_id, link):
          "Sources say the two sides were too far apart.", link, driver["id"], team["id"], ref=ref)
 
 
-def on_new_offer(conn, driver_id, team_id, text, link):
-    notify(conn, driver_id, text, link)
-
-
 def on_new_season(conn, old_id, new_id, link):
     old = S.get_season(conn, old_id)
     new = S.get_season(conn, new_id)

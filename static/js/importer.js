@@ -281,7 +281,7 @@
     showStep("review");
   }
   function driverOptions(selected) {
-    let html = '<option value="">— choose a driver —</option>';
+    let html = '<option value="">Pick a driver…</option>';
     grid.forEach(function (d) {
       html += '<option value="' + d.id + '"' + (String(d.id) === String(selected) ? " selected" : "") + ">" + esc(d.name) +
         (d.is_player ? " ★" : "") + (d.team ? " · " + esc(d.team) : "") + "</option>";

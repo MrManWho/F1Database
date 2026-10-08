@@ -16,7 +16,6 @@ from pathlib import Path
 from flask import (Flask, abort, current_app, flash, g, jsonify, make_response, redirect, render_template, request,
                    send_file, session, url_for)
 
-import random
 
 from . import (auth, community, discord, feed, insights, mailer, market, push, relations, roles,
                services as S, storage, teamlife, timefmt)
@@ -75,6 +74,8 @@ AUDIT_LABELS = {
 }
 QUIET_ENDPOINTS = {"readiness_page", "view_mode", "league_notice_seen", "upgrade_notice_ack", "upgrade_notice_hide", "league_pin", "league_order", "league_leave", "timezone_detect", "notifications_read", "notifications_clear", "news_read", "news_unread", "checkin", "comment_add", "react", "fan_vote_route", "prediction_save",
                    "save_now"}
+# Clicks that can't move any number: they skip the "take a fresh calculation copy" step, which made the next page slow.
+NO_NUMBER_ENDPOINTS = QUIET_ENDPOINTS - {"save_now", "readiness_page", "league_leave", "prediction_save", "checkin"}
 
 
 _MONEY = __import__("re").compile(r"\s*[,;]?\s*(?:salary\s*:?\s*)?[$£€]\s?\d[\d.,]*\s*(?:[MmKk](?:illion)?)?"
@@ -226,6 +227,9 @@ def register_hooks(app):
     def vendor_files(response):
         """The self-hosted OCR engine: cache it for a month, and hand the language data over still gzipped
         (Tesseract unpacks it itself)."""
+        if request.path.startswith("/static/fonts/"):
+            # fonts.css asks for them without a fingerprint (and the page preloads the same address): keep them a week
+            response.headers["Cache-Control"] = "public, max-age=604800"
         if request.path.startswith("/static/vendor/"):
             response.headers["Cache-Control"] = "public, max-age=2592000"
             if request.path.endswith(".gz"):
@@ -558,6 +562,7 @@ def career_page(master_only=False, ops_only=False, read_only=False):
                         abort(403)  # spectators are strictly read-only, whatever endpoint is called
                     if not read_only:
                         roles.touch(conn, g.user["username"])
+                        storage.touch_opened(conn)   # writes come before the reads below, so they stay memoised
                         # 3.2.6: a window with nothing left to decide closes by itself (including ones left open before)
                         market.close_settled_windows(conn)
                     season_id = _selected_season(conn, token)
@@ -610,7 +615,6 @@ def career_page(master_only=False, ops_only=False, read_only=False):
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
                         if mine and not request.path.startswith("/api/") and not read_only else None
                     if not read_only:
-                        storage.touch_opened(conn)
                         impacts.on_open(conn, is_api=request.path.startswith("/api/"), refresh_stale=False)
                     g.ctx["league_notice"] = impacts.announcement_for(conn, g.user["username"]) \
                         if not request.path.startswith("/api/") else None
@@ -628,7 +632,7 @@ def career_page(master_only=False, ops_only=False, read_only=False):
                     result = fn(conn, g.ctx, *args, **kwargs)
                     if request.method == "GET" and not request.path.startswith("/api/") and not read_only:
                         impacts.refresh_if_stale(conn)   # after the page: reuses what the page worked out
-                    if request.method == "POST" and not read_only:
+                    if request.method == "POST" and not read_only and request.endpoint not in NO_NUMBER_ENDPOINTS:
                         impacts.mark_stale(conn)   # numbers may have moved: take a fresh copy on the next page
                     if request.method == "POST" and request.endpoint not in QUIET_ENDPOINTS and not g.get("repeat") \
                             and not read_only:
@@ -1055,12 +1059,12 @@ def register_routes(app):
         username = session.get("2fa_user")
         if not username or time.time() - session.get("2fa_at", 0) > 300:
             session.clear()
-            flash("Please log in again.", "info")
+            flash("Please sign in again.", "info")
             return redirect(url_for("login"))
         if request.method == "POST":
             if not ratelimit.allow("2fa", username, 6, 600):
                 session.clear()
-                flash("Too many wrong codes. Wait a few minutes and log in again.", "error")
+                flash("Too many wrong codes. Wait a few minutes and sign in again.", "error")
                 return redirect(url_for("login"))
             if security.verify_code(security.totp_status(username)["secret"], request.form.get("code")):
                 target = session.get("2fa_next") or url_for("home")
@@ -1176,7 +1180,7 @@ def register_routes(app):
                 flash(str(exc), "error")
                 return redirect(url_for("forgot"))
             session.clear()
-            flash("Password changed. Log in with your new password.", "success")
+            flash("Password changed. Sign in with your new password.", "success")
             return redirect(url_for("login"))
         if not username:
             flash("That reset link has expired or was already used. Ask for a new one.", "error")
@@ -1404,7 +1408,7 @@ def register_routes(app):
     @app.route("/logout", methods=["POST"])
     def logout():
         session.clear()
-        flash("Logged out.", "success")
+        flash("Signed out.", "success")
         return redirect(url_for("login"))
 
     @app.route("/accounts")
@@ -1540,7 +1544,7 @@ def register_routes(app):
                 flash("Add the key below to your authenticator app, then enter the code it shows to finish.", "info")
             elif action == "confirm":
                 security.enable_totp(me, request.form.get("code"))
-                flash("Two-step sign-in is on. You'll be asked for a code each time you log in.", "success")
+                flash("Two-step sign-in is on. You'll be asked for a code each time you sign in.", "success")
             elif action == "disable":
                 if not auth.verify(me, request.form.get("password") or ""):
                     raise AuthError("That password isn't right")
@@ -1629,7 +1633,7 @@ def register_routes(app):
         security.end_other_sessions(me)
         auth.delete_user(me)
         session.clear()
-        flash("Your account is deleted. Leagues keep their results; nobody can log in as you any more.", "success")
+        flash("Your account is deleted. Leagues keep their results; nobody can sign in as you any more.", "success")
         return redirect(url_for("home"))
 
     @app.route("/privacy")
@@ -1730,7 +1734,7 @@ def register_routes(app):
         if request.method == "GET":
             return render_template("demo.html", hours=demo.DEMO_HOURS)
         if g.get("user") and not g.user.get("is_demo"):
-            flash("You're logged in, so the demo would sign you out. Log out first to try it.", "info")
+            flash("You're signed in, so the demo would sign you out. Sign out first to try it.", "info")
             return redirect(url_for("home"))
         if not ratelimit.allow("demo", request.remote_addr or "?", 10, 3600):
             flash("Several demos were started from here recently. Please try again later.", "error")
@@ -1776,7 +1780,7 @@ def register_routes(app):
     def league_new_page():
         """The step-by-step new-league setup."""
         if not onboarding.may_create(g.user):
-            flash("On this site only administrators can create leagues. Ask one, or join an existing league.", "info")
+            flash("On this site only the site owner can create leagues. Ask them, or join an existing league.", "info")
             return redirect(url_for("home"))
         draft = session.pop("league_draft", None)       # what was typed before a failed attempt, if any
         return render_template("new_league.html", draft=draft, presets=onboarding.PRESETS, notify_presets=notices.PRESETS,
@@ -2370,7 +2374,7 @@ def register_routes(app):
                  ("Incidents", url_for("incidents_page", token=t)), ("My notifications", url_for("notify_prefs", token=t)),
                  ("Help", url_for("help_page"))]
         if ctx["my_driver"]:
-            pages += [("My Garage", url_for("garage", token=t)), ("Relationships", url_for("team_standing", token=t))]
+            pages += [("My garage", url_for("garage", token=t)), ("Relationships", url_for("team_standing", token=t))]
         if ctx["can_run"]:
             pages.append(("Enter results", url_for("weekend_next", token=t)))
         if ctx["is_master"]:
@@ -2671,7 +2675,7 @@ def register_routes(app):
             for d, a in decisions.items()) if decisions else ""))
         left = seats.problems(conn, new_id)
         if left:
-            flash(f"{len(left)} seat/contract problem(s) still need attention: see Grid & Contracts.", "error")
+            flash(f"{len(left)} seat/contract problem(s) still need attention: see Grid & contracts.", "error")
         if goal_changes:
             met = sum(1 for v in goal_changes.values() if v > 0)
             flash(f"Team goals settled: {met} of {len(goal_changes)} player driver(s) gain Reputation from their "
@@ -3766,7 +3770,7 @@ def register_routes(app):
     @career_page(master_only=True)
     def market_open(conn, ctx):
         market.open_window(conn, ctx["current_season_id"])
-        flash("Market window opened. Each player can now review their offers in My Garage.", "success")
+        flash("Market window opened. Each player can now review their offers in My garage.", "success")
         return redirect(url_for("market_page", token=ctx["token"]))
 
     @app.route("/career/<token>/market/<int:window_id>/close", methods=["POST"])
@@ -5027,8 +5031,8 @@ def register_routes(app):
         me = g.user["username"]
         member = bool(conn.execute("SELECT 1 FROM career_members WHERE username = ?", (me,)).fetchone())
         if request.method == "POST" and not member:
-            raise ValidationError("You can open this league as a site admin but aren't a member, so it never notifies "
-                                  "you. Add yourself in Members & Roles to choose notifications.")
+            raise ValidationError("You can open this league as the site owner but aren't a member, so it never notifies "
+                                  "you. Add yourself in Members & roles to choose notifications.")
         if request.method == "POST":
             before = notices.summary(notices.prefs(conn, me))
             if request.form.get("preset") in notices.PRESETS:
@@ -5757,7 +5761,7 @@ def register_routes(app):
     @app.route("/career/<token>/copy", methods=["POST"])
     @master_required
     def save_as(token):
-        name = (request.form.get("name") or "").strip()[:80] or "Career copy"
+        name = (request.form.get("name") or "").strip()[:80] or "League copy"
         try:
             storage.checkpoint(token)
             new = storage.save_as(token, name)

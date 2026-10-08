@@ -2,7 +2,7 @@
 {% block title %}Start {{ year }}{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('seasons_page', token=ctx.token) }}">Calendar &amp; Seasons</a> <span aria-hidden="true">›</span> <span aria-current="page">Start {{ year }}</span></nav>
-<div class="page-head"><div><div class="kicker">Manage · Season rollover</div><h1>Start the {{ year }} season</h1>
+<div class="page-head"><div><div class="kicker">Manage league · Season rollover</div><h1>Start the {{ year }} season</h1>
   <p class="page-purpose">Check what happens to every player driver's seat and contract before anything changes. A backup is saved first.</p></div></div>
 
 {% if unfinished %}
@@ -25,7 +25,7 @@
   {% if review.conflicts %}
   <div class="banner banner-danger" role="alert"><b>Can't start yet:</b>
     {% for c in review.conflicts %}{{ c.team.name }} has {{ c.drivers|length }} drivers signed for {{ year }} ({{ c.drivers|map(attribute='name')|join(', ') }}).{% endfor %}
-    Fix this in <a href="{{ url_for('grid_page', token=ctx.token) }}">Grid &amp; Contracts</a> first.</div>
+    Fix this in <a href="{{ url_for('grid_page', token=ctx.token) }}">Grid &amp; contracts</a> first.</div>
   {% endif %}
 </section>
 
@@ -47,7 +47,7 @@
         <label class="sr-only" for="dec-{{ r.driver.id }}">What happens to {{ r.driver.name }}</label>
         <span class="ro-note">⚠️ {{ r.outcome }}. Choose:</span>
         <select name="decision_{{ r.driver.id }}" id="dec-{{ r.driver.id }}" required>
-          <option value="">— choose —</option>
+          <option value="">Choose…</option>
           {% for key, label in actions.items() %}<option value="{{ key }}" {{ 'selected' if key == default }}>{{ label }}</option>{% endfor %}
         </select>
         {% else %}{{ r.outcome }}{% endif %}

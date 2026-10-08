@@ -92,7 +92,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {%- endmacro %}
 
 {% macro avatar(token, driver, prof, size='md', key=None) -%}
-{%- set helmet = (prof.helmet_color if prof and prof.helmet_color) or 'var(--panel-2)' -%}
+{%- set helmet = (prof.helmet_color if prof and prof.helmet_color) or 'var(--navy-3)' -%}
 <span class="avatar-pic av-{{ size }}" style="--helmet: {{ helmet }}">
   {%- if prof and prof.avatar -%}<img src="{{ url_for('avatar', token=token, name=prof.avatar, k=key) }}" alt="" loading="lazy">
   {%- else -%}{{ driver.name.split()|map('first')|join('')|upper|truncate(2, True, '') }}{%- endif -%}

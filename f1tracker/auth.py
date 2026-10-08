@@ -256,16 +256,6 @@ def set_password(username, password, force_change=False):
             raise AuthError("Unknown user")
 
 
-def set_master(username, is_master):
-    with accounts() as conn:
-        if not is_master:
-            masters = conn.execute("SELECT COUNT(*) FROM users WHERE is_master = 1 AND username != ?",
-                                   (normalise(username),)).fetchone()[0]
-            if masters == 0:
-                raise AuthError("At least one Race Master account is required")
-        conn.execute("UPDATE users SET is_master = ? WHERE username = ?", (int(bool(is_master)), normalise(username)))
-
-
 def delete_user(username, reserve=False):
     """reserve=True keeps the username for its owner (its league memberships are still there)."""
     with accounts() as conn:
@@ -628,15 +618,6 @@ def release_username(username):
         return conn.execute("DELETE FROM reserved_usernames WHERE username = ?", (normalise(username),)).rowcount
 
 
-def may_claim(username, email, verified):
-    """A reserved (pre-2.1.2) username can be taken again only by the same person: a verified sign-up with the email
-    that login had. Otherwise the owner has to release it."""
-    r = reserved(username)
-    if not r:
-        return True
-    return bool(verified and r["email_hash"] and _email_hash(email) == r["email_hash"])
-
-
 def find_users(query):
     """Owner's account recovery: every account whose exact username or email matches (several accounts can share
     an email). Never a list of all accounts."""
@@ -647,11 +628,6 @@ def find_users(query):
         rows = conn.execute("SELECT * FROM users WHERE (username = ? OR lower(email) = ?) AND is_demo = 0 "
                             "ORDER BY created_at, username LIMIT 50", (q, q)).fetchall()
     return [dict(r) for r in rows]
-
-
-def find_user(query):
-    found = find_users(query)
-    return found[0] if found else None
 
 
 def signup_direct(username, display_name, password, ip, email=None):

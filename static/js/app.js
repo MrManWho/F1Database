@@ -240,7 +240,9 @@
       }).catch(function () { /* offline: try again next minute */ });
     }
     setCount(last);
-    setInterval(poll, 60000);
+    // a hidden tab doesn't ask; it catches up as soon as it's shown again
+    setInterval(function () { if (!document.hidden) poll(); }, 60000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
     // Opening the panel only shows notifications; reading them is the person's choice.
     if (markBtn) markBtn.addEventListener("click", function () {
       postJSON(bell.dataset.read, {}).then(function () { last = 0; setCount(0); markBtn.disabled = true; poll(); });

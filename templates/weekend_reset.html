@@ -27,7 +27,7 @@
 </section>
 <form method="post" class="card stack">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Type <b>R{{ event.round_number }}</b> to confirm<input name="confirm" required autocomplete="off" pattern="R{{ event.round_number }}" placeholder="R{{ event.round_number }}"></label>
+  <label><span>Type <b>R{{ event.round_number }}</b> to confirm</span><input name="confirm" required autocomplete="off" pattern="R{{ event.round_number }}" placeholder="R{{ event.round_number }}"></label>
   <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('weekend', token=ctx.token, event_id=event.id) }}">Cancel</a>
     <button class="btn btn-danger">Reset R{{ event.round_number }}</button></div>
 </form>

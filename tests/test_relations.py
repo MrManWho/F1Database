@@ -110,7 +110,7 @@ def test_team_standing_page_and_admin_menu(app, master_client):
     login(carsten, "carsten")
     page = carsten.get(f"/career/{token}/team-standing").get_data(as_text=True)
     assert "Relationship" in page and "Your targets" in page and "Eagerness around the paddock" in page
-    assert "Relationships" in page and "My Garage" in page
+    assert "Relationships" in page and "My garage" in page
     # The Race Master isn't a driver here: admin menu, no "My career".
     dash = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "Player garages" in dash and "Relationships" in dash and "Team management" in dash and ">Career<" not in dash

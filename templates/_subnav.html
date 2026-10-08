@@ -6,7 +6,7 @@
                 ('rivalry_page', 'Rivalries', url_for('rivalry_page', token=t)), ('records', 'Records', url_for('records', token=t))] %}
 {% set champ_alias = {'team_profile': 'teams_page', 'driver_profile': 'drivers_page', 'season_review': 'seasons_page', 'season_rollover': 'seasons_page', 'race_summary': 'results_index'} %}
 {% set career = [] %}
-{% if ctx.my_driver %}{% set career = [('garage', 'My Garage', url_for('garage', token=t)), ('team_standing', 'Relationships', url_for('team_standing', token=t)),
+{% if ctx.my_driver %}{% set career = [('garage', 'My garage', url_for('garage', token=t)), ('team_standing', 'Relationships', url_for('team_standing', token=t)),
                 ('offers_page', 'Contracts & offers', url_for('offers_page', token=t)), ('driver_profile', 'Progression', url_for('driver_profile', token=t, driver_id=ctx.my_driver.id)),
                 ('press_page', 'Press', url_for('press_page', token=t))] + ([('team_goals_page', 'Team goals', url_for('team_goals_page', token=t))] if ctx.team_goals_on else []) %}{% endif %}
 {% set more = [('news_page', 'News', url_for('news_page', token=t)), ('announcements_page', 'Announcements', url_for('announcements_page', token=t)),

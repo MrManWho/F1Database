@@ -270,13 +270,13 @@ def test_an_older_league_file_gains_an_empty_change_record(app, master_client):
 def test_the_shell_has_the_five_destinations_and_manage_league(app, master_client):
     token = _league(master_client)
     page = master_client.get(f"/career/{token}/dashboard", follow_redirects=True).get_data(as_text=True)
-    for title in ("Home", "Race Weekend", "Championship", "More", "Manage League", "League administration"):  # 4.0 UI
+    for title in ("Home", "Race Weekend", "Championship", "More", "Manage league", "League administration"):  # 4.0 UI
         assert f">{title}<" in page, title
     auth.create_user("sam", "Sam", "password1")
     with storage.session(token) as conn:
         roles.set_member(conn, "sam", "spectator")
     spectator = _client(app, "sam").get(f"/career/{token}/dashboard", follow_redirects=True).get_data(as_text=True)
-    assert ">Championship<" in spectator and "Manage League" not in spectator
+    assert ">Championship<" in spectator and "Manage league" not in spectator
 
 
 def test_design_system_page_shows_every_state(app, master_client):

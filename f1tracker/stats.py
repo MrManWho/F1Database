@@ -15,10 +15,6 @@ def _rows(conn, season_id):
            WHERE e.season_id = ? AND e.status = ? ORDER BY e.round_number""", (season_id, C.EVENT_COMPLETE))]
 
 
-def _started(r):
-    return r["result_status"] not in (C.STATUS_NOT_RUN, "DNS")
-
-
 def season(conn, season_id, players_only=False):
     """Per-driver breakdowns for one season: finishes, qualifying vs race, Sprint points, reliability."""
     dmap, tmap = S.driver_map(conn), S.team_map(conn)

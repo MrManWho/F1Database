@@ -21,7 +21,7 @@
     <div><div class="kicker">{{ pub.season.year }} season · public results</div><h1><a href="{{ pub.base }}">{{ pub.name }}</a></h1>
       <p class="muted small">{% for bit in [P.league_region, P.league_platform, P.league_schedule] if bit %}{{ bit }}{{ ' · ' if not loop.last }}{% endfor %}</p></div>
   </div>
-  {% if not user %}<a class="btn btn-ghost btn-sm" href="{{ url_for('login') }}">Log in</a>{% endif %}
+  {% if not user %}<a class="btn btn-ghost btn-sm" href="{{ url_for('login') }}">Sign in</a>{% endif %}
 </header>
 <nav class="public-nav" aria-label="{{ pub.name }}">
   {% for v, label, href in [('home', 'Home', pub.base), ('calendar', 'Calendar', pub.base ~ '/calendar'), ('standings', 'Standings', pub.base ~ '/standings'),

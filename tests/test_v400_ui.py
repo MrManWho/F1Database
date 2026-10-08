@@ -281,4 +281,4 @@ def test_home_offers_only_what_you_can_do(app, master_client):
     assert "Next action" in rm and "Run R1" in rm and "Your tasks" in rm
     spec = _client(app, "pat").get(f"/career/{token}/dashboard").get_data(as_text=True)
     assert "Your tasks" not in spec and "Run R1" not in spec and "Enter R1" not in spec and "Follow R1" in spec
-    assert "Manage League" not in spec
+    assert "Manage league" not in spec

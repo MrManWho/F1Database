@@ -22,8 +22,8 @@
     })();
   </script>
   {% block meta %}{% endblock %}
-  <link rel="preload" href="{{ url_for('static', filename='fonts/Barlow-400.woff2') }}" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="{{ url_for('static', filename='fonts/BarlowSemiCondensed-700.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/Barlow-400.woff2').split('?')[0] }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/BarlowSemiCondensed-700.woff2').split('?')[0] }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/pl.css') }}">
@@ -52,7 +52,7 @@
       <a href="{{ href }}" class="{{ 'active' if active }}" {% if active %}aria-current="page"{% endif %} title="{{ label }}">{{ icon(ic) }}<span class="label">{{ label }}</span>{{ extra }}</a>
       {%- endmacro %}
       {% set badge %}{% if ctx.pending_offers %}<span class="pill pill-hot" title="{{ ctx.pending_offers }} offer(s) waiting">{{ ctx.pending_offers }}</span>{% endif %}{% endset %}
-      {# 4.0: four destinations and More; Manage League sits apart and only shows for people who can use it #}
+      {# 4.0: four destinations and More; Manage league sits apart and only shows for people who can use it #}
       {% set champ_eps = ('standings_page', 'stats_page', 'drivers_page', 'teams_page', 'team_profile', 'records', 'rivalry_page', 'seasons_page', 'season_review', 'season_rollover', 'results_index', 'race_summary', 'championship') %}
       {% set mine_profile = ep == 'driver_profile' and ctx.my_driver and request.view_args.get('driver_id') == ctx.my_driver.id %}
       {% set career_eps = ('garage', 'team_standing', 'offers_page', 'press_page', 'pledge_page', 'my_career') + (('team_goals_page',) if ctx.my_driver else ()) %}
@@ -78,7 +78,7 @@
       {% if ctx.can_run %}
       <div class="nav-group nav-admin" id="nav-admin">
         <button type="button" class="nav-title nav-toggle" id="nav-admin-toggle" aria-expanded="true" aria-controls="nav-admin-items">
-          <span>Manage League</span><span class="chev" aria-hidden="true">▾</span></button>
+          <span>Manage league</span><span class="chev" aria-hidden="true">▾</span></button>
         <div class="nav-admin-items" id="nav-admin-items">
         <div class="nav-sub" role="group" aria-labelledby="nav-sub-race"><div class="nav-subtitle" id="nav-sub-race">Race weekends</div>
         {{ item(url_for('race_weekend', token=t) ~ '?stage=sessions', 'Results entry', 'entry', false) }}
@@ -97,7 +97,7 @@
         <div class="nav-sub" role="group" aria-labelledby="nav-sub-admin"><div class="nav-subtitle" id="nav-sub-admin">League administration</div>
         {{ item(url_for('members', token=t), 'Members & roles', 'players', ep == 'members') }}
         {{ item(url_for('league_settings', token=t), 'League settings', 'toggles', ep in ('league_settings', 'league_settings_section')) }}
-        {{ item(url_for('delivery_log_page', token=t), 'Notifications', 'bell', ep == 'delivery_log_page') }}
+        {{ item(url_for('delivery_log_page', token=t), 'Delivery log', 'bell', ep == 'delivery_log_page') }}
         {{ item(url_for('activity_log', token=t), 'Activity log', 'log', ep == 'activity_log') }}
         {{ item(url_for('backups_page', token=t), 'Backups & data', 'backup', ep == 'backups_page') }}
         </div>
@@ -107,7 +107,7 @@
       {% endif %}
       <div class="nav-group nav-bottom" role="group" aria-label="Account">
         {{ item(url_for('my_settings', token=t), 'My settings', 'settings', ep == 'my_settings') }}
-        {{ item(url_for('home'), 'All my leagues', 'library', false) }}
+        {{ item(url_for('home'), 'Your leagues', 'library', false) }}
       </div>
     </nav>
     <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse menu" aria-label="Collapse menu">{{ icon('collapse') }}<span class="label">Collapse</span></button>
@@ -164,7 +164,7 @@
             <li class="{{ 'current' if l.token == t }}">
               <a href="{{ url_for('dashboard', token=l.token) }}" role="menuitem" data-league-link {% if l.token == t %}aria-current="true"{% endif %}>
                 <span class="league-mark" {% if l.accent %}style="--accent: {{ l.accent }}"{% endif %} aria-hidden="true">{{ l.initials }}</span>
-                <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site admin (not a member)' }}{% if l.year %} · {{ l.year }}{% endif %}{% if l.muted %} · 🔕{% endif %}</small></span>
+                <span class="league-name"><b>{{ l.name }}</b><small>{{ l.role_label if l.member else 'Site owner (not a member)' }}{% if l.year %} · {{ l.year }}{% endif %}{% if l.muted %} · 🔕{% endif %}</small></span>
                 {% if l.pinned %}<span class="pin-mark" title="Pinned" aria-label="Pinned">★</span>{% endif %}
                 {% if l.pending %}<span class="pill pill-hot" title="{{ l.pending }} join request(s) waiting">{{ l.pending }}</span>{% endif %}
               </a>
@@ -232,7 +232,7 @@
             <div class="dropdown-title">League administration</div>
             <a role="menuitem" href="{{ url_for('members', token=t) }}">Members &amp; roles</a>
             <a role="menuitem" href="{{ url_for('league_settings', token=t) }}">League settings</a>
-            <a role="menuitem" href="{{ url_for('delivery_log_page', token=t) }}">Notifications</a>
+            <a role="menuitem" href="{{ url_for('delivery_log_page', token=t) }}">Delivery log</a>
             <a role="menuitem" href="{{ url_for('activity_log', token=t) }}">Activity log</a>
             <a role="menuitem" href="{{ url_for('backups_page', token=t) }}">Backups &amp; data</a>{% endif %}
           </div>
@@ -333,7 +333,7 @@
 {% if user %}
 <dialog id="account-dialog" class="dialog">
   <div class="dialog-head"><h2>{{ user.display_name }}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>
-  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Site Race Master' if user.is_master else 'Member' }}{% if ctx is defined and ctx %} · {{ ctx.role }} in {{ ctx.career_name }}{% endif %}</p>
+  <p class="muted">Signed in as <strong>{{ user.username }}</strong> · {{ 'Site owner' if user.is_master else 'Member' }}{% if ctx is defined and ctx %} · {{ ctx.role }} in {{ ctx.career_name }}{% endif %}</p>
   <div class="stack">
     <label>Theme
       <select id="theme-pick">
@@ -364,7 +364,7 @@
     <a class="btn btn-ghost" href="{{ url_for('changelog_page') }}">What's new in v{{ APP_VERSION }}</a>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn">Log out</button>
+      <button class="btn">Sign out</button>
     </form>
   </div>
 </dialog>
@@ -436,7 +436,7 @@
 (function () {
   var d = document.getElementById("whats-new"); if (!d || !d.showModal) return;
   var form = d.querySelector("[data-wn-form]"), box = d.querySelector("[data-wn-agree]"), go = d.querySelector("[data-wn-continue]");
-  d.showModal();
+  d.showModal(); d.scrollTop = 0;
   box.addEventListener("change", function () { go.disabled = !box.checked; });
   // It has to be agreed to. Browsers close a modal on a second Escape even when "cancel" is cancelled, so block the
   // key itself and re-open the dialog if it closes any other way before it's been agreed to.

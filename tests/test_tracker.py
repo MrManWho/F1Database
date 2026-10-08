@@ -432,7 +432,7 @@ def test_login_is_required_and_setup_runs_first(app):
     other = app.test_client()
     # v2.0: a first-time visitor sees the welcome page; anything inside still needs a login.
     welcome = other.get("/")
-    assert welcome.status_code == 200 and "Log in" in welcome.get_data(as_text=True)
+    assert welcome.status_code == 200 and "Sign in" in welcome.get_data(as_text=True)
     assert "/login" in other.get("/accounts").headers["Location"]
 
 

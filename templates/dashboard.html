@@ -197,7 +197,7 @@
         <div><dt>Remaining</dt><dd>{{ p.remaining }} round{{ 's' if p.remaining != 1 }}</dd></div>
         <div><dt>Current round</dt><dd>{% if p.current %}R{{ p.current.round_number }} · {{ p.current.name }}{% else %}Season finished{% endif %}</dd></div>
         {% if p.sprints_total %}<div><dt>Sprint weekends</dt><dd>{{ p.sprints_done }} done · {{ p.sprints_left }} left</dd></div>{% endif %}
-        <div><dt>Next event</dt><dd>{% if p.next_event %}{{ p.next_event.name }}{% if p.next_event.race_at %} · {{ p.next_event.race_at|race_time }}{% else %} · <span class="muted">not scheduled</span>{% endif %}{% else %}—{% endif %}</dd></div>
+        <div><dt>Next round</dt><dd>{% if p.next_event %}{{ p.next_event.name }}{% if p.next_event.race_at %} · {{ p.next_event.race_at|race_time }}{% else %} · <span class="muted">not scheduled</span>{% endif %}{% else %}—{% endif %}</dd></div>
         <div><dt>Projected finish</dt><dd>{% if p.finish_at %}{{ p.finish_at|day }}{% elif p.remaining == 0 %}Done{% elif p.last_scheduled %}<span class="muted">{{ p.unscheduled_left }} round{{ 's' if p.unscheduled_left != 1 }} not scheduled yet</span>{% else %}<span class="muted">Not scheduled yet</span>{% endif %}</dd></div>
       </dl>
       <p class="season-leaders small muted">{% if p.wdc %}<abbr title="Drivers' Championship">WDC</abbr> leader {{ driver_link(ctx, p.wdc.driver) }} ({{ p.wdc.points }}){% endif %}{% if p.wcc %} · <abbr title="Constructors' Championship">WCC</abbr> {{ p.wcc.team.name }} ({{ p.wcc.points }}){% endif %}{% if p.avg_ai is not none %} · avg AI {{ p.avg_ai }}{% endif %}{% if p.milestone %} · next milestone: {{ p.milestone.label|lower }} after R{{ p.milestone.round }}{% endif %}</p>

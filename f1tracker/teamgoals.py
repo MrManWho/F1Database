@@ -92,12 +92,6 @@ def _previous_pace(conn, season_id, team_id):
     return None
 
 
-def _points_for(position, rounds, sprints, factor):
-    idx = max(0, min(len(POINTS_PER_ROUND) - 1, round(position) - 1))
-    per = POINTS_PER_ROUND[idx]
-    return max(1, round((per * rounds + per * SPRINT_SHARE * sprints) * factor))
-
-
 PACE_ROUNDS = 4          # after this many completed rounds, observed pace counts as much as the car (v2.2)
 MIN_GAP = (3, 0.25)      # each tier asks for at least 3 more points, or 25% more still to score, than the one below
 REALISTIC_SHARE = 0.75   # 4.0 goal refresh: no target asks for more than 75% of the points still available

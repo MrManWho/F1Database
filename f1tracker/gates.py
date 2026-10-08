@@ -43,8 +43,9 @@ def bypass_for(conn, event_id):
     return dict(row) if row else None
 
 
-def status(conn, event_id, issue=True):
-    """The checklist for a round. blocking is True when result entry is locked."""
+def status(conn, event_id, issue=True, only_driver=None):
+    """The checklist for a round. blocking is True when result entry is locked. only_driver limits the players
+    checked to one (the banner on every page only needs the viewer's own row; waiting/blocking then cover them only)."""
     event = S.get_event(conn, event_id)
     out = {"event": event, "active": False, "blocking": False, "players": [], "bypass": None, "press_event": None,
            "waiting": 0}
@@ -69,6 +70,8 @@ def status(conn, event_id, issue=True):
     out["weekend"] = weekend.enabled(conn)
     dmap = S.driver_map(conn)
     for driver_id, username in linked_players(conn, event["season_id"]).items():
+        if only_driver is not None and driver_id != only_driver:
+            continue
         items = []
         if press_event:
             pen = teamlife._pen(conn, press_event, driver_id)
@@ -147,7 +150,7 @@ def my_todo(conn, season_id, driver_id):
     nxt = S.next_incomplete_event(conn, season_id)
     if not nxt or nxt["status"] != C.EVENT_NOT_RUN or bypass_for(conn, nxt["id"]):
         return None
-    gate = status(conn, nxt["id"])
+    gate = status(conn, nxt["id"], only_driver=driver_id)
     me = next((p for p in gate["players"] if p["driver"]["id"] == driver_id), None)
     if not me or me["done"]:
         return None

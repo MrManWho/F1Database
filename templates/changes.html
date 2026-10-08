@@ -36,7 +36,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label class="check"><input type="checkbox" name="agree" value="1" required> I've read these changes to {{ ctx.real.my_driver.name }} and I agree to them</label>
   <div><button class="btn btn-primary">Continue</button></div>
-  <p class="muted small">You can use the league again once you've agreed. Questions? Ask your Race Master; everything here is also in the Activity Log.</p>
+  <p class="muted small">You can use the league again once you've agreed. Questions? Ask your Race Master; everything here is also in the Activity log.</p>
 </form>
 {% else %}
 <section class="card empty-state"><h2>You're all caught up</h2><p class="muted">Nothing new has changed for your driver.</p></section>

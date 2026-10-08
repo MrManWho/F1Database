@@ -60,7 +60,7 @@ def checklist(conn, event):
 
 def my_tasks(conn, ctx, event, wk, gate, my_target, hub):
     """This driver's own jobs for the round, required ones first. Each has the stage and anchor to do it at."""
-    from . import gates, teamlife
+    from . import gates
     me = ctx.get("my_driver")
     if not me or ctx.get("is_spectator"):
         return []

@@ -2,10 +2,10 @@
 {% from "_macros.html" import target_state with context %}
 {% block title %}Team management{% endblock %}
 {% block content %}
-<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">Team management</span></nav>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage league</span> <span aria-hidden="true">›</span> <span aria-current="page">Team management</span></nav>
 <div class="page-head"><div><div class="kicker">Race Master · {{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Team management</h1>
   <p class="page-purpose">Pledges, season goals, team goals and weekend targets for every player driver. Anything you change here is
-    explained to the drivers it affects, and they agree to it before carrying on. Everything is recorded in the Activity Log.</p></div></div>
+    explained to the drivers it affects, and they agree to it before carrying on. Everything is recorded in the Activity log.</p></div></div>
 
 {% macro back(anchor) %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="admin"><input type="hidden" name="anchor" value="{{ anchor }}">{% endmacro %}
 

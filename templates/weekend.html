@@ -775,7 +775,7 @@
     <a class="btn btn-sm btn-ghost" href="{{ url_for('team_admin', token=ctx.token) }}#orders">Rule on team orders</a>
     <a class="btn btn-sm btn-ghost" href="{{ url_for('team_admin', token=ctx.token) }}#targets">Weekend targets &amp; excuses</a>
   </div>
-  <p class="muted small">Opening a round early is under Prepare, in Paddock &amp; lights out. Every action here asks first and is kept in the Activity Log.</p>
+  <p class="muted small">Opening a round early is under Prepare, in Paddock &amp; lights out. Every action here asks first and is kept in the Activity log.</p>
   </div>
 </details>
 {% endif %}
@@ -882,7 +882,7 @@
   <p class="small"><b>Recalculated from the corrected results:</b> drivers' and constructors' standings, Form, Reputation (this season),
     Driver Value and team interest, team relationships and goals, records, the AI-difficulty history and recommendation,
     predictions scoring and the post-race summary.</p>
-  <p class="small muted"><b>Not changed:</b> headlines, notifications and emails already sent for this round. Edit or delete a headline in Paddock News if it's now wrong.
+  <p class="small muted"><b>Not changed:</b> headlines, notifications and emails already sent for this round. Edit or delete a headline in News if it's now wrong.
     An automatic backup is kept before each completed round, so a correction can be undone by restoring it (Backups &amp; data).</p>
   <div class="button-row"><button type="button" class="btn btn-ghost" data-close autofocus>Cancel</button>
     <button type="button" class="btn btn-primary" id="corrections-go">Save corrections</button></div>
@@ -984,7 +984,7 @@
     <div class="imp-session-row">
       <label>Apply to
         <select id="imp-session2">
-          <option value="">— choose a session —</option>
+          <option value="">Choose a session…</option>
           <option value="qualifying">Qualifying</option>
           {% if event.is_sprint %}<option value="sprint">Sprint</option>{% endif %}
           <option value="race">Race</option>

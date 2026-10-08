@@ -5,8 +5,8 @@
   <div class="kicker">Email preferences</div>
   {% if error %}
   <h1>This link doesn't work</h1>
-  <p class="muted">It may be incomplete, or the league no longer exists. You can change what each league emails you after logging in: Account → Notifications by league.</p>
-  <a class="btn" href="{{ url_for('login') }}">Log in</a>
+  <p class="muted">It may be incomplete, or the league no longer exists. You can change what each league emails you after signing in: Account → Notifications by league.</p>
+  <a class="btn" href="{{ url_for('login') }}">Sign in</a>
   {% elif done == 'league' %}
   <h1>Emails from {{ league }} are off</h1>
   <p>You won't get emails from <b>{{ league }}</b> any more. You're still in the league, and your other leagues are unchanged.</p>

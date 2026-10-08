@@ -17,7 +17,7 @@
 {%- endmacro %}
 {% set t = ctx.token %}
 {% set base = url_for('dashboard', token=t).rsplit('/', 1)[0] ~ '/' %}
-<div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · Manage League</div><h1>League Readiness Check</h1>
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · Manage league</div><h1>League Readiness Check</h1>
   <p class="page-purpose">What needs attention in this league, and where to fix it. Checking only reads the league: it never recalculates, submits, closes, sends or repairs anything.</p></div></div>
 
 <section class="card rd-summary" aria-labelledby="rd-sum-title">

@@ -444,9 +444,3 @@ def store(conn, event_id):
                   now_iso()))
     return rec
 
-
-def history_rows(conn, season_id):
-    """Every submitted round of a season: the recommendation shown, the AI actually used and the snapshot version."""
-    return [dict(r) for r in conn.execute("""SELECT t.*, e.round_number, e.name FROM ai_track_recs t
-                                             JOIN events e ON e.id = t.event_id WHERE t.season_id = ?
-                                             ORDER BY e.round_number""", (season_id,))]

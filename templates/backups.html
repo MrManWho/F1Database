@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Backups & data{% endblock %}
 {% block content %}
-<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage</span> <span aria-hidden="true">›</span> <span aria-current="page">Backups &amp; data</span></nav>
-<div class="page-head"><div><div class="kicker">Manage · {{ ctx.career_name }}</div><h1>Backups &amp; data</h1>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><span>Manage league</span> <span aria-hidden="true">›</span> <span aria-current="page">Backups &amp; data</span></nav>
+<div class="page-head"><div><div class="kicker">Manage league · {{ ctx.career_name }}</div><h1>Backups &amp; data</h1>
   <p class="page-purpose">Everything saves automatically. Backups are made every day, after every completed round, and before risky changes such as a season rollover, a restore or moving results.</p></div></div>
 
 <div class="grid-2">
@@ -66,7 +66,7 @@
       <label>Backup file (.f1career)<input type="file" name="file" accept=".f1career" required></label>
       <div><button class="btn">Check and restore</button></div>
     </form>
-    <p class="muted small">To try a backup without touching this league, import it as a new league from <a href="{{ url_for('home') }}">All my leagues</a>.</p>
+    <p class="muted small">To try a backup without touching this league, import it as a new league from <a href="{{ url_for('home') }}">Your leagues</a>.</p>
   </section>
   <section class="card">
     <h2>League name &amp; copies</h2>
@@ -86,11 +86,11 @@
 <section class="card danger-card" id="danger">
   <h2>Danger zone</h2>
   <p>Deleting <b>{{ ctx.career_name }}</b> removes it for every member: results, seasons, contracts and history. It can't be undone from here.
-    A final backup is kept on the site so a site administrator could recover it.</p>
+    A final backup is kept on the site so the site owner could recover it.</p>
   <form method="post" action="{{ url_for('delete', token=ctx.token) }}" class="stack"
         data-confirm='{{ {"title": "Delete " ~ ctx.career_name ~ " permanently?", "target": ctx.career_name,
           "what": "The league and everything in it is deleted for every member.", "history": "All results, seasons and career history are removed.",
-          "backup": "A final backup is kept on the site.", "undo": "Not from here. Only a site administrator can recover it.",
+          "backup": "A final backup is kept on the site.", "undo": "Not from here. Only the site owner can recover it.",
           "strong": ctx.career_name, "ok": "Delete league"}|tojson }}'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Type the league's name to confirm<input name="confirm_name" autocomplete="off" required placeholder="{{ ctx.career_name }}"></label>

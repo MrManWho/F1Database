@@ -26,7 +26,7 @@ A separate copy of Paddock Legacy for building and trying 4.0 while the live sit
 
 ## Checking which leagues still use Calculation Version 2 (4.0 Phase 0)
 
-After loading the live backup: Account → Settings → *Calculation engine scan* (`/settings/engine-scan`). It reads every
+After loading the live backup, open `/settings/engine-scan` (site owner only, not linked from any menu). It reads every
 league file without changing anything and says whether any **active** season still uses Version 2. If one does, the
 Version 2 code stays until that season finishes; otherwise Version 2 can be retired from new calculations.
 

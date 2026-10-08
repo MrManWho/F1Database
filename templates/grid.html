@@ -74,7 +74,7 @@
             <button class="btn btn-sm btn-primary">Apply</button>
           </form>
         </details>
-        {% elif st.kind == 'unseated' %}<span class="muted small">Place them in a seat below, or delete the signing in Driver Market.</span>{% endif %}
+        {% elif st.kind == 'unseated' %}<span class="muted small">Place them in a seat below, or delete the signing in Transfers.</span>{% endif %}
       </td>{% endif %}
     </tr>
     {% else %}
@@ -111,7 +111,7 @@
 
 <section class="card">
   <h2>Player seats</h2>
-  {% if not ro %}<p class="muted small">Normally players sign seats through offers in My Garage. You can also place players directly here. Taking a seat replaces its current occupant.</p>{% endif %}
+  {% if not ro %}<p class="muted small">Normally players sign seats through offers in My garage. You can also place players directly here. Taking a seat replaces its current occupant.</p>{% endif %}
   {% if not ro %}
   <form method="post" action="{{ url_for('grid_players', token=ctx.token) }}" id="player-form" class="player-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

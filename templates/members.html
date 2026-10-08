@@ -48,7 +48,7 @@
 <section class="card">
   <div class="card-head"><h2>League members</h2><span class="muted small">{{ rows|length }} member{{ 's' if rows|length != 1 }}</span></div>
   <p class="muted small">Each person has <b>one access role</b> and, separately, <b>the player driver they control</b> (if any).
-    Changes apply immediately. Site Race Masters are managed in <a href="{{ url_for('accounts_page') }}">Accounts</a>.</p>
+    Changes apply immediately. The site owner is Race Master of every league.</p>
   <div class="table-wrap">
   <table class="data-table member-grid">
     <thead><tr><th>Member</th><th>Player driver</th><th>Access</th><th>Joined</th><th>Last active</th><th></th></tr></thead>
@@ -68,7 +68,7 @@
           </form>
         </td>
         <td>
-          {% if m.site_master %}<span class="role-chip master">Race Master</span><br><small class="muted">Site admin</small>
+          {% if m.site_master %}<span class="role-chip master">Race Master</span><br><small class="muted">Site owner</small>
             <input form="m-{{ loop.index }}" type="hidden" name="role" value="race_master">
           {% else %}
           <select form="m-{{ loop.index }}" name="role" aria-label="Access for {{ m.display_name }}">

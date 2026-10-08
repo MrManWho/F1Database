@@ -2,6 +2,21 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## Final 4.0.0 audit (October 8, 2026)
+
+The last change counted as 4.0.0. Anything after it gets its own version and What's New entry.
+
+- **Faster pages.** A league's *last opened* time is now saved at most every ten minutes instead of on every page
+  view, the "you still have to…" banner only checks the person viewing, and clicks that can't change any number
+  (marking news read, reactions, pins, the view mode) no longer make the next page recalculate. Notification checks
+  pause while a tab is hidden. Fonts are cached for a week.
+- **Layout fixes.** Table headers no longer cover the first rows on phones; the Manage league and league menus stay
+  on screen; the phone menu opens above the top and bottom bars; settings pages don't scroll sideways; light-theme
+  team codes, player names and avatar initials are readable; What's New opens at the top.
+- **One vocabulary.** Sign in / Sign out, Your leagues, Manage league, site owner, My garage, Activity log,
+  Transfers, News and Delivery log are used the same way everywhere.
+- Nothing about calculations, saved data or league files changed.
+
 ## Calendar permissions (after 4.0.0)
 
 Everyone in a league (Race Master, Scorekeepers, members and spectators) can see the calendar under Seasons &

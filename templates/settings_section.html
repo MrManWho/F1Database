@@ -3,7 +3,7 @@
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('league_settings', token=ctx.token) }}">League settings</a> <span aria-hidden="true">›</span> <span aria-current="page">{{ sections[section][0] }}</span></nav>
 <div class="page-head"><div><div class="kicker">League settings · {{ ctx.career_name }}</div><h1>{{ sections[section][0] }}</h1>
-  <p class="page-purpose">{{ sections[section][1] }} These apply to the whole league; each change is recorded in the Activity Log.</p></div></div>
+  <p class="page-purpose">{{ sections[section][1] }} These apply to the whole league; each change is recorded in the Activity log.</p></div></div>
 
 {% macro save() %}<div class="settings-save"><button class="btn btn-primary">Save</button> <a class="btn btn-ghost" href="{{ url_for('league_settings', token=ctx.token) }}">Back to League settings</a></div>{% endmacro %}
 {% macro season_note() %}{% if active_season %}<p class="banner small" role="note">A season is in progress: changes apply from the next round. Nothing already completed changes (use Data &amp; tools → Recalculate everything if you want that).</p>{% endif %}{% endmacro %}
@@ -209,7 +209,7 @@
     <h2>Discord</h2>
     <p class="muted small">Post race results and paddock headlines to a Discord channel. In Discord: channel settings → Integrations → Webhooks →
       New Webhook → Copy Webhook URL, then paste it here. Leave it empty to turn Discord off. Garages, offers and team messages are never posted.
-      The webhook address is private and never shown in the Activity Log.</p>
+      The webhook address is private and never shown in the Activity log.</p>
     <label>Webhook URL<input name="discord_webhook" value="{{ discord.url }}" placeholder="https://discord.com/api/webhooks/…" autocomplete="off"></label>
     <label class="check"><input type="checkbox" name="discord_results" value="1" {{ 'checked' if discord.results }}> Post race results (podium, player results, top 5)</label>
     <label class="check"><input type="checkbox" name="discord_news" value="1" {{ 'checked' if discord.news }}> Post paddock headlines (signings, drops, press quotes, rulings)</label>

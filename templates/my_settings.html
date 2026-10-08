@@ -23,7 +23,7 @@
     <p>Currently: <b>{{ notify }}</b></p>
     <p><a class="btn btn-sm" href="{{ url_for('notify_prefs', token=ctx.token) }}">Choose notifications</a></p>
     <p class="muted small">Email and phone alerts by category, or mute this league. Your email address and "pause every email" are in <a href="{{ url_for('accounts_page') }}#email">your account</a>.</p>
-    {% else %}<p class="muted small">You can open this league as a site admin but aren't a member, so it never notifies you.</p>{% endif %}
+    {% else %}<p class="muted small">You can open this league as the site owner but aren't a member, so it never notifies you.</p>{% endif %}
   </section>
 
   {% if mine %}
@@ -57,7 +57,7 @@
       and your other leagues aren't affected. If you're its only Race Master, hand it over first.</p>
     <form method="post" action="{{ url_for('league_leave', token=ctx.token) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Type <b>{{ ctx.career_name }}</b> to confirm<input name="confirm_name" autocomplete="off" required></label>
+      <label><span>Type <b>{{ ctx.career_name }}</b> to confirm</span><input name="confirm_name" autocomplete="off" required></label>
       <div><button class="btn btn-danger">Leave league</button></div>
     </form>
   </section>

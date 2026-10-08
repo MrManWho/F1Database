@@ -7,7 +7,7 @@
 {% if not member %}
 <section class="card empty-state">
   <h2>You're not a member of this league</h2>
-  <p class="muted">You can open it as a site admin, but it never emails or alerts you. Add yourself in Members &amp; Roles if you want notifications from it.</p>
+  <p class="muted">You can open it as the site owner, but it never emails or alerts you. Add yourself in Members &amp; roles if you want notifications from it.</p>
 </section>
 {% else %}
 {% if not email %}<div class="banner banner-warn" role="note">You haven't added an email address, so no league can email you. <a href="{{ url_for('accounts_page') }}#email">Add one in your account</a>.</div>

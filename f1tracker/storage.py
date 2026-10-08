@@ -232,7 +232,7 @@ def _summary(path):
         return None
     return {
         "token": token,
-        "name": meta.get("career_name", "Unnamed career"),
+        "name": meta.get("career_name", "Unnamed league"),
         "year": season["year"] if season else None,
         "completed": done,
         "total": total,
@@ -325,13 +325,17 @@ def list_careers():
     return items
 
 
-def touch_opened(conn):
-    set_meta(conn, "last_opened_at", now_iso())
+def touch_opened(conn, force=False):
+    """Record when the league was last opened, at most every ten minutes: a write on every page view made each
+    view re-read the league and emptied the per-request memo before the page used it."""
+    now = now_iso()
+    if force or (get_meta(conn, "last_opened_at") or "")[:15] != now[:15]:
+        set_meta(conn, "last_opened_at", now)
 
 
 def checkpoint(token):
     with session(token) as conn:
-        touch_opened(conn)
+        touch_opened(conn, force=True)
     conn = _connect(career_path(token))
     try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")

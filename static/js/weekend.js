@@ -292,7 +292,7 @@
       statusEl.textContent = res.status;
       statusEl.className = "status-badge status-" + res.status.toLowerCase().replace(/ /g, "-");
       setState("saved", "Saved");
-      if (res.market_opened) window.F1.toast("Silly season! The transfer market just opened for next year.", "success");
+      if (res.market_opened) window.F1.toast("Silly Season! The transfer market just opened for next year.", "success");
       if (queued || dirty) { queued = false; return save(false).then(function () { return true; }); }
       return res;
     }).catch(function () {
@@ -371,7 +371,7 @@
       dirty = true; remember(); save(false);
       return;
     }
-    setState("error", "Conflict detected — choose which values to keep");
+    setState("error", "Conflict: choose which values to keep");
     const list = document.getElementById("conflict-list");
     list.innerHTML = "";
     conflicts.forEach(function (c, i) {

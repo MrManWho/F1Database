@@ -10,7 +10,7 @@
       a few friends, or a big public league.</p>
     <div class="button-row">
       {% if signups %}<a class="btn btn-primary" href="{{ url_for('register') }}">Create a free account</a>{% endif %}
-      <a class="btn" href="{{ url_for('login') }}">Log in</a>
+      <a class="btn" href="{{ url_for('login') }}">Sign in</a>
       <a class="btn btn-ghost" href="{{ url_for('demo_start') }}">Explore the demo</a>
       <a class="btn btn-ghost" href="{{ url_for('directory') }}">Browse public leagues{% if listed %} ({{ listed }}){% endif %}</a>
     </div>

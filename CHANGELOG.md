@@ -10,7 +10,7 @@ _Released October 7, 2026_
 
 ### Highlights
 - **A new look everywhere.** Navy, white and orange, with clearer type, cards and tables on every page. Dark is the default; light is in My settings → Theme.
-- **Simpler menus.** Every league has Home, Race Weekend, Championship, Career and More, with the Race Master's tools in their own Manage League area. Old links still work.
+- **Simpler menus.** Every league has Home, Race Weekend, Championship, Career and More, with the Race Master's tools in their own Manage league area. Old links still work.
 - **Home starts with one next action,** then the current weekend, your tasks, what the league is waiting on, the last race, the championship and your career.
 - **Each race weekend is one page with four steps:** Prepare, Sessions, Review & submit and Debrief. It opens on the step you need, and each session (Qualifying, Sprint, Race) has its own results, race times, weather and incidents.
 - **Save & continue never submits.** The bar at the bottom says whether your changes are saved, even when the connection drops. Review & submit lists anything that must be fixed with a **Fix** button, and pressing **Submit weekend** twice still submits once.
@@ -18,7 +18,7 @@ _Released October 7, 2026_
 - **A track-aware AI recommendation.** Each round starts from what players really use at that circuit in F1 26, then learns from how your league races. It's fair to bad luck (DNFs and incidents never count as "too hard") and explains every step.
 - **One stewards' story per race** instead of a headline for every incident, and incidents now belong to the session they happened in.
 - **Your earlier seasons are kept under their own rules.** Things the old site never tracked are marked "Not tracked under this season's rules" and never count as missing. The first time you open your league, a short note explains where the new tracking begins.
-- **League Readiness Check** (Manage League): one page that tells the Race Master what needs attention before submitting a weekend, closing a season or starting the next one, and where to fix it.
+- **League Readiness Check** (Manage league): one page that tells the Race Master what needs attention before submitting a weekend, closing a season or starting the next one, and where to fix it.
 - **Results straight from the game.** Turn on **Telemetry import** and anyone in your league running the free telemetry recorder sends each session's results to the site. **Fill weekend from the game** fills a whole round in one click: qualifying, the Sprint and the race, the fastest lap, the AI level, each session's weather and your race and qualifying times against your AI teammate. Times and weather you already entered are kept, and nothing is submitted until you do. Single sessions can still be checked one at a time in **Import results**.
 - **Role permissions.** The Race Master chooses what Scorekeepers may do (Joining & roles → Role permissions): import telemetry, manage the league's upload link, set race times and edit the calendar. Everyone can still see the calendar.
 - **A living calendar.** **Shuffle calendar** lets some races sit out a season while others come back, with a preview before anything changes. Only rounds that haven't been run move. Every circuit in the game is on the list, including Imola and the reverse layouts, each with its track map, and Qatar is no longer mistaken for Austin.
