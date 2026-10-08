@@ -19,6 +19,8 @@ _Released October 7, 2026_
 - **One stewards' story per race** instead of a headline for every incident, and incidents now belong to the session they happened in.
 - **Your earlier seasons are kept under their own rules.** Things the old site never tracked are marked "Not tracked under this season's rules" and never count as missing. The first time you open your league, a short note explains where the new tracking begins.
 - **League Readiness Check** (Manage League): one page that tells the Race Master what needs attention before submitting a weekend, closing a season or starting the next one, and where to fix it.
+- **Results straight from the game.** Turn on **Telemetry import** and anyone in your league running the free telemetry recorder sends each session's results to the site. Open them in a round's **Import results**, check the preview and apply: positions, DNFs, fastest lap and the AI level fill in, and nothing is submitted until you do.
+- **Role permissions.** The Race Master chooses what Scorekeepers may do (Joining & roles → Role permissions), starting with importing telemetry and managing the league's upload link.
 - **Link a login to any player driver** from Members & roles, and asking to join as a driver who's already on the grid hands you that driver.
 - **Forms bring you back to where you were,** say plainly when something didn't save and keep what you typed. Pages open two to four times faster.
 
