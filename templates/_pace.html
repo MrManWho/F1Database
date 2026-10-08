@@ -61,9 +61,9 @@
         <span class="pace-rh">Race time</span>
         <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
         <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
-        <span class="pace-rh">Laps completed</span>
-        <label><span class="sr-only">Laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
-        <span class="small muted pace-note">Your laps, from the results screen.</span>
+        <span class="pace-rh">Race laps</span>
+        <label><span class="sr-only">Race laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
+        <span class="small muted pace-note">Laps you finished in the race (not qualifying). Turns the gap into seconds a lap.</span>
       </div>
       <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
       <details class="small pace-gap-alt"><summary>Don't have both race times? Type the gap instead</summary>
