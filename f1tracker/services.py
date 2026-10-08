@@ -515,7 +515,7 @@ def team_strength_ranks(conn, season_id):
 
     Once three rounds are complete it comes from AI drivers' points only, so a player winning in a
     slow car doesn't make the car look fast. Before that it follows the season's car ratings, which
-    develop over each winter (and which the Race Master can edit to match the game).
+    start where last season's AI results left each car (and which the Race Master can edit to match the game).
     """
     if engine.is_v3(conn, season_id):
         return calc3.effective_ranks(conn, season_id)
@@ -536,7 +536,7 @@ def team_strength_ranks(conn, season_id):
     return {tid: pos for pos, tid in enumerate(by_rating, start=1)}
 
 
-# --------------------------------------------------------------------------- car ratings & development
+# --------------------------------------------------------------------------- car ratings
 
 def ensure_car_ratings(conn, season_id):
     """Every active team gets a car rating per season: carried from the previous season, else seeded
@@ -582,27 +582,40 @@ def set_car_rating(conn, season_id, team_id, rating):
                  (rating, season_id, team_id))
 
 
-def develop_cars(conn, source_id, new_id, rng):
-    """Winter development: every car moves toward the pack (cost cap, wind-tunnel handicaps), results
-    bring money (constructors' position), and there is always some luck. Returns the changes."""
-    old = car_ratings(conn, source_id)
-    table = {t["team"]["id"]: t["position"] for t in constructor_standings(conn, source_id)}
-    mean = sum(v["rating"] for v in old.values()) / max(1, len(old))
-    field = len(table) or 11
-    changes = []
-    for team in teams(conn):
-        base = old.get(team["id"], {"rating": mean - 2})["rating"]
-        pos = table.get(team["id"], field)
-        change = (mean - base) * 0.2 + ((field + 1) / 2 - pos) * 0.35 + rng.gauss(0, 2.2)
-        change = round(clamp(change, -8, 8), 1)
-        rating = round(clamp(base + change, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)
-        change = round(rating - base, 1)
-        conn.execute("""INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,?)
-                        ON CONFLICT(season_id, team_id) DO UPDATE SET car_rating = excluded.car_rating,
-                        change = excluded.change""", (new_id, team["id"], rating, change))
-        changes.append({"team": team, "rating": rating, "change": change})
-    changes.sort(key=lambda c: -c["change"])
-    return changes
+def carry_cars(conn, source_id, new_id):
+    """A new season keeps the same cars: the game doesn't develop them over the winter. Each car starts where the
+    AI drivers' results left it at the end of last season (its final car-strength rank), on the default rating
+    ladder. A team new to the grid starts at the back. Nothing random, no winter change."""
+    ranks = team_strength_ranks(conn, source_id)
+    active = teams(conn)
+    last = len(active)
+    order = sorted(active, key=lambda t: (ranks.get(t["id"], last + 1), t["id"]))
+    for pos, team in enumerate(order, start=1):
+        rating = round(clamp(C.CAR_RATING_TOP - (pos - 1) * C.CAR_RATING_STEP, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)
+        conn.execute("""INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,0)
+                        ON CONFLICT(season_id, team_id) DO UPDATE SET car_rating = excluded.car_rating, change = 0""",
+                     (new_id, team["id"], rating))
+
+
+def undo_winter_development(conn):
+    """2026-10 cleanup: earlier versions rolled random winter car development at each new season and posted
+    "Winter testing" / "Trouble at" stories about it. Removes those stories and the winter change, and re-seeds
+    the current season's cars from last season's final ranks (carry_cars) unless a team's rating was edited by
+    hand after the roll, in which case that season's ratings are left as the Race Master set them."""
+    conn.execute("""DELETE FROM news WHERE kind = 'tech' AND (headline LIKE 'Winter testing: %'
+                    OR headline LIKE 'Trouble at %: new car is off the pace%')""")
+    seasons = _rows(conn, "SELECT id, year, status FROM seasons ORDER BY year")
+    if len(seasons) >= 2:
+        prev, cur = seasons[-2], seasons[-1]
+        before = {r["team_id"]: r["car_rating"] for r in _rows(
+            conn, "SELECT team_id, car_rating FROM team_seasons WHERE season_id = ?", (prev["id"],))}
+        now = _rows(conn, "SELECT team_id, car_rating, change FROM team_seasons WHERE season_id = ?", (cur["id"],))
+        rolled = [r for r in now if r["change"]]
+        untouched = all(r["team_id"] in before and abs(before[r["team_id"]] + r["change"] - r["car_rating"]) < 0.05
+                        for r in rolled)
+        if rolled and untouched and cur["status"] != C.SEASON_COMPLETE:
+            carry_cars(conn, prev["id"], cur["id"])
+    conn.execute("UPDATE team_seasons SET change = 0 WHERE change != 0")
 
 
 # --------------------------------------------------------------------------- race entry
@@ -894,7 +907,7 @@ def submission_check(conn, event_id):
                      "sprint": (f"P{r['sprint_position']}" if r["sprint_status"] == C.STATUS_FINISHED else r["sprint_status"]) if sprint else None,
                      "points": r["gp_points"] + r["sprint_pts"]}
                     for r in rows if r["driver"]["is_player"]],
-        "ai_difficulty": event["ai_difficulty"],
+        "ai_difficulty": event["ai_difficulty"], "ai_untracked": bool(event["ai_untracked"]),
     }
     return {"blocking": blocking, "warnings": warnings, "summary": summary, "revision": event["revision"],
             "status": event["status"], "player_issues": player_issues,
@@ -1643,6 +1656,10 @@ def driver_history(conn, driver_id):
     }
 
 
+def _result_label(r):
+    return f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"] else r["result_status"]
+
+
 def results_transfer_preview(conn, from_id, to_id, season_id):
     """What moving from_id's results in this season onto to_id would do. Nothing is changed here."""
     dmap = driver_map(conn)
@@ -1663,12 +1680,14 @@ def results_transfer_preview(conn, from_id, to_id, season_id):
         if not _result_has_data(r):
             continue
         clash = _row(conn, "SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (r["event_id"], to_id))
+        clash = clash if clash and _result_has_data(clash) else None
         pts = calc3.Points(conn).total(r)
         rounds.append({"event_id": r["event_id"], "round": r["round_number"], "name": r["event_name"],
                        "team": tmap.get(r["team_id"]), "points": pts, "status": r["event_status"],
-                       "result": f"P{r['race_position']}" if r["result_status"] == C.STATUS_FINISHED and r["race_position"]
-                       else r["result_status"],
-                       "clash": bool(clash and _result_has_data(clash))})
+                       "result": _result_label(r), "clash": bool(clash),
+                       # both raced: the round can be swapped instead (each driver takes the other's result)
+                       "other": {"team": tmap.get(clash["team_id"]), "result": _result_label(clash),
+                                 "points": calc3.Points(conn).total(clash)} if clash else None})
     seats = driver_seats(conn, season_id)
     return {"from": src, "to": dst, "season": season, "rounds": rounds,
             "points": sum(r["points"] for r in rounds if not r["clash"]),
@@ -1676,16 +1695,18 @@ def results_transfer_preview(conn, from_id, to_id, season_id):
             "from_seat": seats.get(from_id), "to_seat": seats.get(to_id)}
 
 
-def transfer_results(conn, from_id, to_id, season_id, event_ids, swap_seats=False):
+def transfer_results(conn, from_id, to_id, season_id, event_ids, swap_seats=False, swap_event_ids=()):
     """Move one driver's results in the chosen rounds onto another driver (a wrong teammate, say).
 
     The results keep their team, so constructors' points don't change. Rounds where the other driver already
-    has results are refused. Optionally swaps the two drivers' seats for the rounds still to come.
+    has results are refused unless they're in swap_event_ids: there the two drivers trade results (each takes the
+    other's car, finish and points). Optionally swaps the two drivers' seats for the rounds still to come.
     """
     preview = results_transfer_preview(conn, from_id, to_id, season_id)
     allowed = {r["event_id"]: r for r in preview["rounds"]}
     chosen = [int(e) for e in event_ids if int(e) in allowed]
-    if not chosen:
+    swaps = [int(e) for e in swap_event_ids if int(e) in allowed and allowed[int(e)]["clash"] and int(e) not in chosen]
+    if not chosen and not swaps:
         raise ValidationError("Choose at least one round to move")
     clashes = [allowed[e] for e in chosen if allowed[e]["clash"]]
     if clashes:
@@ -1695,6 +1716,15 @@ def transfer_results(conn, from_id, to_id, season_id, event_ids, swap_seats=Fals
         # The target driver may have an empty placeholder row (never in a run round, but be safe).
         conn.execute("DELETE FROM results WHERE event_id = ? AND driver_id = ?", (event_id, to_id))
         conn.execute("UPDATE results SET driver_id = ? WHERE event_id = ? AND driver_id = ?", (to_id, event_id, from_id))
+    if swaps:
+        # Trade everything but the row's identity (a driver_id swap would trip UNIQUE(event_id, driver_id)).
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(results)") if r[1] not in ("id", "event_id", "driver_id")]
+        for event_id in swaps:
+            a = _row(conn, "SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (event_id, from_id))
+            b = _row(conn, "SELECT * FROM results WHERE event_id = ? AND driver_id = ?", (event_id, to_id))
+            sets = ", ".join(f"{c} = ?" for c in cols)
+            conn.execute(f"UPDATE results SET {sets} WHERE id = ?", [b[c] for c in cols] + [a["id"]])
+            conn.execute(f"UPDATE results SET {sets} WHERE id = ?", [a[c] for c in cols] + [b["id"]])
     if swap_seats:
         gmap = grid_map(conn, season_id)
         a = next((k for k, v in gmap.items() if v == from_id), None)
@@ -1706,7 +1736,70 @@ def transfer_results(conn, from_id, to_id, season_id, event_ids, swap_seats=Fals
         write_grid(conn, season_id, gmap)
         sync_not_run_results(conn, season_id)
     return {"moved": len(chosen), "points": sum(allowed[e]["points"] for e in chosen), "from": preview["from"],
-            "to": preview["to"], "rounds": [allowed[e]["round"] for e in chosen]}
+            "to": preview["to"], "rounds": [allowed[e]["round"] for e in chosen],
+            "swapped": [allowed[e]["round"] for e in swaps]}
+
+
+def align_results_preview(conn, season_id):
+    """What lining this season's run rounds up with the current grid would change. Nothing is changed here.
+
+    Every result stays with its team (the car), so constructors' points don't change; it's given to the driver who
+    sits in that team now. A driver who no longer has a seat (one a player replaced, say) loses those results.
+    Returns {"rounds": [{event, changes: [{team, result, points, from, to}]}], "skipped": [...], "dropped": [...]}.
+    """
+    season = get_season(conn, season_id)
+    if season["status"] == C.SEASON_COMPLETE:
+        raise ValidationError("That season is finished; its Reputation is locked.")
+    tmap, dmap = team_map(conn), driver_map(conn)
+    seated = {}
+    for (team_id, _seat), did in grid_map(conn, season_id).items():
+        if did:
+            seated.setdefault(team_id, []).append(did)
+    rounds, skipped, losing = [], [], set()
+    for ev in _rows(conn, "SELECT * FROM events WHERE season_id = ? AND status != ? ORDER BY round_number",
+                    (season_id, C.EVENT_NOT_RUN)):
+        rows = _rows(conn, "SELECT * FROM results WHERE event_id = ?", (ev["id"],))
+        new = {r["id"]: r["driver_id"] for r in rows}
+        for team_id in {r["team_id"] for r in rows}:
+            want = seated.get(team_id, [])
+            team_rows = [r for r in rows if r["team_id"] == team_id]
+            have = {r["driver_id"] for r in team_rows if r["driver_id"] in want}
+            free = sorted((d for d in want if d not in have), key=lambda d: dmap[d]["name"])
+            wrong = sorted((r for r in team_rows if r["driver_id"] not in want),
+                           key=lambda r: (r["race_position"] or 99, r["id"]))
+            for r, did in zip(wrong, free):
+                new[r["id"]] = did
+        if len(set(new.values())) != len(new):   # someone would hold two results in one round: leave it alone
+            skipped.append(ev)
+            continue
+        changes = []
+        for r in rows:
+            if new[r["id"]] != r["driver_id"]:
+                changes.append({"row": r["id"], "team": tmap.get(r["team_id"]), "result": _result_label(r),
+                                "points": calc3.Points(conn).total(r), "from": dmap.get(r["driver_id"]),
+                                "to": dmap.get(new[r["id"]])})
+        if changes:
+            rounds.append({"event": ev, "changes": changes})
+            losing |= {r["driver_id"] for r in rows} - set(new.values())
+    return {"season": season, "rounds": rounds, "skipped": skipped,
+            "dropped": sorted((dmap[d] for d in losing), key=lambda d: d["name"])}
+
+
+def align_results(conn, season_id):
+    """Apply align_results_preview: each changed result row is re-filed under the driver now in that car."""
+    preview = align_results_preview(conn, season_id)
+    for rnd in preview["rounds"]:
+        rows = {r["id"]: dict(r) for r in _rows(conn, "SELECT * FROM results WHERE event_id = ?", (rnd["event"]["id"],))}
+        changed = [c for c in rnd["changes"]]
+        for c in changed:
+            conn.execute("DELETE FROM results WHERE id = ?", (c["row"],))
+        for c in changed:
+            row = rows[c["row"]]
+            row["driver_id"] = c["to"]["id"]
+            cols = list(row)
+            conn.execute(f"INSERT INTO results({', '.join(cols)}) VALUES({', '.join('?' * len(cols))})",
+                         [row[k] for k in cols])
+    return preview
 
 
 def delete_driver(conn, driver_id, season_id, force=False):

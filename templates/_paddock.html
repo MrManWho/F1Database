@@ -1,5 +1,6 @@
 {# v2.3 race weekend panel for the round page. Needs: ctx, event, wk (weekend summary), gate, reminded. #}
 {% from "_macros.html" import race_clock with context %}
+{% from "_icons.html" import icon %}
 {% if wk and wk.on %}
 {% set ev = event %}
 {% set stages = [('upcoming', 'Upcoming'), ('paddock', 'Paddock open'), ('live', 'Lights out'), ('complete', 'Chequered flag')] %}
@@ -9,10 +10,10 @@
   {% if not bare_ %}<div class="card-head">
     <h2 id="paddock-title">{{ {'upcoming': '📅', 'paddock': '🏁', 'live': '🚦', 'complete': '🏆'}[wk.phase] }} {{ wk.label }}</h2>
     {% if wk.phase in ('upcoming', 'paddock') %}{{ race_clock(ev) }}{% elif wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% endif %}
-  </div>{% else %}<div class="paddock-clock">{% if wk.phase in ('upcoming', 'paddock') %}{{ race_clock(ev) }}{% elif wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% endif %}</div>{% endif %}
+  </div>{% elif (wk.phase in ('upcoming', 'paddock') and ev.race_at) or wk.phase == 'live' %}<div class="paddock-clock">{% if wk.phase == 'live' %}<span class="live-badge" role="status">● LIVE</span>{% else %}{{ race_clock(ev) }}{% endif %}</div>{% endif %}
   <ol class="phase-track" aria-label="Race weekend stages">
     {% for key, label in stages %}
-    <li class="{{ 'done' if loop.index0 < at else 'now' if loop.index0 == at else '' }}" {% if loop.index0 == at %}aria-current="step"{% endif %}>{{ label }}</li>
+    <li class="{{ 'done' if loop.index0 < at else 'now' if loop.index0 == at else '' }}" {% if loop.index0 == at %}aria-current="step"{% endif %}>{% if loop.index0 < at %}{{ icon('check') }}{% endif %}<span>{{ label }}</span></li>
     {% endfor %}
   </ol>
 
@@ -36,11 +37,12 @@
   {% elif wk.phase == 'paddock' %}
     <p class="small">Drivers: answer your pre-race press{% if ctx.team_life.targets %}, choose your weekend target{% endif %} and check in. {{ 'You start' if ctx.can_run else 'A Scorekeeper or the Race Master starts' }} the race when everyone's ready; results can go in after lights out.</p>
     {% if gate.players %}
-    <ul class="gate-list ready-board" aria-label="Who's ready">
+    <ul class="ready-board" aria-label="Who's ready">
       {% for p in gate.players %}
       <li class="{{ 'is-done' if p.done else 'is-waiting' }}" {% if p.driver.player_color %}style="--player: {{ p.driver.player_color }}"{% endif %}>
-        <span class="gate-who"><b>{{ p.driver.name }}</b> {{ '✅ Ready' if p.done else '⏳ Not ready' }}</span>
-        <span class="gate-items">{% for i in p.checks %}<span class="gate-item {{ 'ok' if i.done else 'no' }}">{{ '✓' if i.done else '✗' }} {{ i.label }}</span>{% endfor %}</span>
+        <span class="rb-who"><span class="rb-dot" aria-hidden="true"></span><b>{{ p.driver.name }}</b></span>
+        <span class="rb-state">{{ 'Ready' if p.done else 'Not ready' }}</span>
+        <span class="rb-checks">{% for i in p.checks %}<span class="rb-check {{ 'ok' if i.done else 'no' }}"><span class="rb-mark" aria-hidden="true">{% if i.done %}{{ icon('check') }}{% endif %}</span><span class="sr-only">{{ 'Done:' if i.done else 'To do:' }}</span> {{ i.label }}</span>{% endfor %}</span>
       </li>
       {% endfor %}
     </ul>
@@ -54,11 +56,13 @@
         {% if gate.bypass %}<span class="muted small">Opened early by the Race Master: “{{ gate.bypass.note }}”</span>{% endif %}
       </form>
       {% else %}
-      <p class="small"><b>Can't start yet.</b> Waiting on {{ gate.players|rejectattr('done')|map(attribute='driver.name')|join(', ') }}.</p>
-      <div class="button-row tight">
+      {% set waiting_on = gate.players|rejectattr('done')|map(attribute='driver.name')|list %}
+      <div class="pk-gate" role="status">
+        <p><b>Can't start yet.</b> Waiting on {{ waiting_on[:-1]|join(', ') ~ ' and ' ~ waiting_on[-1] if waiting_on|length > 1 else waiting_on|join('') }}.
+          {% if not ctx.is_master %}<span class="pk-gate-sub">Only the Race Master can start the race while someone isn't ready.</span>{% endif %}</p>
         <form method="post" action="{{ url_for('gate_remind', token=ctx.token, event_id=ev.id) }}" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-sm" {{ 'disabled' if reminded }}>{{ '✓ Reminder sent' if reminded else '🔔 Send a reminder' }}</button>
+          <button class="btn btn-sm" {{ 'disabled' if reminded }}>{% if reminded %}{{ icon('check') }} Reminder sent{% else %}{{ icon('bell') }} Send a reminder{% endif %}</button>
         </form>
       </div>
       {% if ctx.is_master %}
@@ -72,7 +76,7 @@
           <div><button class="btn btn-sm btn-primary">🚦 Start the race anyway</button></div>
         </form>
       </details>
-      {% else %}<p class="muted small">Only the Race Master can start the race while someone isn't ready.</p>{% endif %}
+      {% endif %}
       {% endif %}
     {% endif %}
 

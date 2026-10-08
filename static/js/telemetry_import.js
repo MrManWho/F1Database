@@ -39,6 +39,57 @@
         function () { window.F1Import.loadTelemetry(data, null, {}); });
     }).catch(function (err) { toast(err.message, "error"); });
   });
+  // "Fill the whole weekend": every session of this round from the game, then weather and race times, then a reload
+  // so everything shows. Results go into the results table as a draft; nothing is submitted.
+  const roundUrl = dlg.dataset.teleRound, extrasUrl = dlg.dataset.teleExtras, DONE_KEY = "f1-tele-filled:" + eventId;
+  function postJSON(url, body) {
+    return fetch(url, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, Accept: "application/json" },
+      body: JSON.stringify(body) }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok || !j.ok) throw new Error(j.error || "Couldn't save that (" + r.status + ")");
+        return j;
+      });
+    });
+  }
+  function summary(rep, server) {
+    const bits = [];
+    if (rep.filled.length) bits.push("Results: " + rep.filled.join(", ") + ".");
+    (rep.extra_notes || []).forEach(function (n) { bits.push(n); });
+    if (server.done && server.done.length) bits.push("Saved " + server.done.join("; ") + ".");
+    (server.notes || []).forEach(function (n) { bits.push(n); });
+    if (rep.missing.length) bits.push("Not matched, so left for you: " + rep.missing.slice(0, 6).join(", ") + (rep.missing.length > 6 ? " and " + (rep.missing.length - 6) + " more" : "") + ".");
+    if (rep.review) bits.push(rep.review + " driver match" + (rep.review === 1 ? " is a best guess" : "es are best guesses") + ": check the names.");
+    bits.push("Review everything, then submit as usual.");
+    return bits.join(" ");
+  }
+  document.querySelectorAll("[data-tele-fill]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!window.F1Entry || !window.F1Import.fillWeekend) return;
+      document.querySelectorAll("[data-tele-fill]").forEach(function (x) { x.disabled = true; });
+      let rep = null;
+      getJSON(roundUrl).then(function (j) {
+        rep = window.F1Import.fillWeekend(j.sessions, j.names || {});
+        if (dlg.open) dlg.close();
+        return postJSON(extrasUrl, { sessions: rep.sessions, pace: j.pace ? rep.pace : [], names: rep.names, upload_ids: rep.upload_ids });
+      }).then(function (server) {
+        const text = summary(rep, server);
+        return window.F1Entry.flush().then(function (saved) {
+          if (saved) {
+            try { sessionStorage.setItem(DONE_KEY, text); } catch (e) { /* private mode: no message after reload */ }
+            location.reload();
+          } else {
+            toast(text + " The results table couldn't save yet: fix the highlighted boxes. Reload to see the weather and times.", "error");
+          }
+        });
+      }).catch(function (err) { toast(err.message, "error"); })
+        .then(function () { document.querySelectorAll("[data-tele-fill]").forEach(function (x) { x.disabled = false; }); });
+    });
+  });
+  try {
+    const done = sessionStorage.getItem(DONE_KEY);
+    if (done) { sessionStorage.removeItem(DONE_KEY); setTimeout(function () { toast("Filled from the game. " + done, "success"); }, 300); }
+  } catch (e) { /* private mode */ }
   window.F1TelemetryHooks = {
     applied: function (info) {
       fetch(appliedUrl, { method: "POST", credentials: "same-origin",

@@ -38,7 +38,7 @@
     {% if details.ratings %}
     <div class="rating-bars">
       {% for r in details.ratings %}
-      <div class="rating-row"><span class="muted small">{{ r.year }}</span><span class="bar"><span style="width: {{ r.rating }}%; background: var(--team)"></span></span><b class="num">{{ '%.1f'|format(r.rating) }}</b>{% if r.change %}{{ delta(r.change) }}{% else %}<span class="delta same">—</span>{% endif %}</div>
+      <div class="rating-row"><span class="muted small">{{ r.year }}</span><span class="bar"><span style="width: {{ r.rating }}%; background: var(--team)"></span></span><b class="num">{{ '%.1f'|format(r.rating) }}</b></div>
       {% endfor %}
     </div>
     <p class="muted small">Ratings change over each winter. The Race Master can adjust them to match the game.</p>

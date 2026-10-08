@@ -802,6 +802,18 @@
       });
       return out;
     },
+    // Save now (the round page reloads after "Fill the weekend from the game"); false if it couldn't be saved.
+    flush: function () {
+      if (readOnly || locked || correcting) return Promise.resolve(!dirty);
+      if (!dirty) return Promise.resolve(true);
+      const attempt = function (n) {   // a save already under way finishes first, then this one goes
+        return save(false).then(function () {
+          if (!dirty) return true;
+          return n > 0 ? new Promise(function (r) { setTimeout(r, 700); }).then(function () { return attempt(n - 1); }) : false;
+        });
+      };
+      return attempt(4);
+    },
     applyImport: function (session, imported) {
       const f = SESSION_FIELDS[session];
       if (!f || readOnly || locked) return 0;

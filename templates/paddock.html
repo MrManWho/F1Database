@@ -15,7 +15,6 @@
       {% for t in all_teams if t.active %}{% set cr = ratings.get(t.id) %}
       <label style="--team: {{ t.color }}">{{ team_dot(t) }}{{ t.name }}
         <input type="number" name="rating_{{ t.id }}" step="0.1" min="{{ C.CAR_RATING_MIN }}" max="{{ C.CAR_RATING_MAX }}" value="{{ '%.1f'|format(cr.rating) if cr }}">
-        {% if cr and cr.change %}<small class="{{ 'up' if cr.change > 0 else 'down' }}">{{ '%+.1f'|format(cr.change) }} over winter</small>{% endif %}
       </label>
       {% endfor %}
     </div>
@@ -80,6 +79,36 @@
   <p class="muted small">Turning a team off removes its seats from the current season (its drivers become free agents) and from future seasons. Past results stay.</p>
 </section>
 
+<section class="card" id="align-results">
+  <h2>Match results to the grid</h2>
+  <p class="muted small">Fixed the grid after some rounds were run? This gives each result in the {{ season.year }} season to the driver who sits in
+    that car now. Results stay with their team, so constructors' points don't change. A driver who no longer has a seat (one a player replaced)
+    loses those results. A backup is made first.</p>
+  {% if not align %}
+  <a class="btn btn-ghost" href="{{ url_for('paddock_admin', token=ctx.token, align=1) }}#align-results">Preview</a>
+  {% elif not align.rounds %}
+  <p class="muted">Every run round already matches the grid. Nothing to change.</p>
+  {% else %}
+  <div class="table-wrap">
+  <table class="data-table compact">
+    <thead><tr><th>Round</th><th>Team</th><th>Result</th><th class="num">Pts</th><th>Now under</th><th>Goes to</th></tr></thead>
+    <tbody>{% for rnd in align.rounds %}{% for c in rnd.changes %}
+      <tr><td>R{{ rnd.event.round_number }} {{ rnd.event.name }}</td><td>{{ c.team.name if c.team else '—' }}</td><td>{{ c.result }}</td>
+        <td class="num">{{ c.points }}</td><td>{{ c.from.name }}</td><td><b>{{ c.to.name }}</b></td></tr>
+    {% endfor %}{% endfor %}</tbody>
+  </table>
+  </div>
+  {% if align.dropped %}<p>No longer in a car, so their results this season go: <b>{{ align.dropped | map(attribute='name') | join(', ') }}</b>.</p>{% endif %}
+  {% if align.skipped %}<p class="form-error">Left alone (a driver would end up with two results): {% for e in align.skipped %}R{{ e.round_number }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
+  <form method="post" action="{{ url_for('paddock_align_results', token=ctx.token) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Type <b>MATCH</b> to confirm<input name="confirm" autocomplete="off" required></label>
+    <div class="button-row"><a class="btn btn-ghost" href="{{ url_for('paddock_admin', token=ctx.token) }}#align-results">Cancel</a>
+      <button class="btn btn-primary">Match results</button></div>
+  </form>
+  {% endif %}
+</section>
+
 <section class="card" id="move-results">
   <h2>Move results to another driver</h2>
   <p class="muted small">Use this when the wrong driver was in a seat (for example, your teammate in the game isn't the one the tracker had).
@@ -108,9 +137,9 @@
       <table class="data-table compact">
         <thead><tr><th>Move</th><th>Round</th><th>Team</th><th>Result</th><th class="num">Pts</th><th></th></tr></thead>
         <tbody>{% for r in move.rounds %}
-          <tr><td><input type="checkbox" name="event_id" value="{{ r.event_id }}" {{ 'checked' if not r.clash else 'disabled' }} aria-label="Move R{{ r.round }}"></td>
+          <tr><td>{% if r.clash %}<input type="checkbox" name="swap_event_id" value="{{ r.event_id }}" aria-label="Swap R{{ r.round }}">{% else %}<input type="checkbox" name="event_id" value="{{ r.event_id }}" checked aria-label="Move R{{ r.round }}">{% endif %}</td>
             <td>R{{ r.round }} {{ r.name }}</td><td>{{ r.team.name if r.team else '—' }}</td><td>{{ r.result }}</td><td class="num">{{ r.points }}</td>
-            <td class="small">{% if r.clash %}<span class="form-error">{{ move.to.name }} already raced this round</span>{% elif r.status != 'Complete' %}<span class="muted">round not completed yet</span>{% endif %}</td></tr>
+            <td class="small">{% if r.clash %}<span class="form-error">{{ move.to.name }} also raced this round</span> ({{ r.other.team.name if r.other.team else '—' }}, {{ r.other.result }}, {{ r.other.points }} pts). Tick to swap: each driver takes the other's result.{% elif r.status != 'Complete' %}<span class="muted">round not completed yet</span>{% endif %}</td></tr>
         {% endfor %}</tbody>
       </table>
       </div>

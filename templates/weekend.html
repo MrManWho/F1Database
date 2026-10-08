@@ -276,6 +276,7 @@
     {% if event.is_sprint %}<button type="button" class="btn btn-sm btn-ghost" data-tap="sprint_position" data-session-only="s">Sprint</button>{% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-tap="race_position" data-session-only="r">Race</button>
     <button type="button" class="btn btn-sm" data-dialog="import-dialog">{{ '📥 Import results' if telemetry_uploads is not none else '📷 Import screenshot' }}</button>
+    {% if telemetry_round %}<button type="button" class="btn btn-sm btn-primary" data-tele-fill title="Fill every session of this round from the game's telemetry">Fill weekend from the game</button>{% endif %}
     <select id="copy-order" class="btn-sm" data-session-only="s r" aria-label="Copy one session's order into another">
       <option value="">Copy an order…</option>
       <option value="qualifying_position>race_position">Qualifying → Grand Prix</option>
@@ -559,21 +560,21 @@
     </div>
   </section>
 
-  <section class="card ws-summary-card">
+  <section class="card ws-summary-card" data-submit-summary>
     <div class="card-head"><h2>What will be submitted</h2><span class="muted small">{{ 'Sprint weekend' if sm.sprint else 'Standard weekend' }}</span></div>
     <dl class="submit-summary">
-      <div><dt>Pole</dt><dd>{{ sm.pole or '—' }}</dd></div>
-      {% if sm.sprint %}<div><dt>Sprint winner</dt><dd>{{ sm.sprint_winner or '—' }}</dd></div>{% endif %}
-      <div><dt>Grand Prix winner</dt><dd>{{ sm.winner or '—' }}</dd></div>
-      <div><dt>Podium</dt><dd>{{ sm.podium|join(', ') or '—' }}</dd></div>
-      <div><dt>DNF / DNS / DSQ</dt><dd>{{ sm.out.DNF|join(', ') or '—' }} / {{ sm.out.DNS|join(', ') or '—' }} / {{ sm.out.DSQ|join(', ') or '—' }}</dd></div>
-      <div><dt>Fastest Lap</dt><dd>{{ sm.fastest_lap or '—' }}</dd></div>
-      <div><dt>Driver of the Day</dt><dd>{{ sm.dotd or '—' }}</dd></div>
-      <div><dt>AI used</dt><dd>{{ sm.ai_difficulty if sm.ai_difficulty is not none else 'Not tracked' }}</dd></div>
+      <div><dt>Pole</dt><dd data-sm="pole">{{ sm.pole or '—' }}</dd></div>
+      {% if sm.sprint %}<div><dt>Sprint winner</dt><dd data-sm="sprint_winner">{{ sm.sprint_winner or '—' }}</dd></div>{% endif %}
+      <div><dt>Grand Prix winner</dt><dd data-sm="winner">{{ sm.winner or '—' }}</dd></div>
+      <div><dt>Podium</dt><dd data-sm="podium">{{ sm.podium|join(', ') or '—' }}</dd></div>
+      <div><dt>DNF / DNS / DSQ</dt><dd data-sm="out">{{ sm.out.DNF|join(', ') or '—' }} / {{ sm.out.DNS|join(', ') or '—' }} / {{ sm.out.DSQ|join(', ') or '—' }}</dd></div>
+      <div><dt>Fastest Lap</dt><dd data-sm="fastest_lap">{{ sm.fastest_lap or '—' }}</dd></div>
+      <div><dt>Driver of the Day</dt><dd data-sm="dotd">{{ sm.dotd or '—' }}</dd></div>
+      <div><dt>AI used</dt><dd data-sm="ai">{{ sm.ai_difficulty if sm.ai_difficulty is not none else ('Not tracked' if sm.ai_untracked else 'Not entered yet') }}</dd></div>
     </dl>
     {% if sm.players %}<h3 class="mini-head">Player results</h3>
     <table class="data-table compact review-players"><thead><tr><th>Driver</th><th>Quali</th>{% if sm.sprint %}<th>Sprint</th>{% endif %}<th>Race</th><th class="num">Points</th></tr></thead>
-      <tbody>{% for p in sm.players %}<tr class="player-row"><td><b>{{ p.name }}</b></td><td>{{ 'P' ~ p.quali if p.quali else '—' }}</td>{% if sm.sprint %}<td>{{ p.sprint or '—' }}</td>{% endif %}<td>{{ p.race }}</td><td class="num">{{ p.points }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+      <tbody data-sm="players">{% for p in sm.players %}<tr class="player-row"><td><b>{{ p.name }}</b></td><td>{{ 'P' ~ p.quali if p.quali else '—' }}</td>{% if sm.sprint %}<td>{{ p.sprint or '—' }}</td>{% endif %}<td>{{ p.race }}</td><td class="num">{{ p.points }}</td></tr>{% endfor %}</tbody></table>{% endif %}
     <h3 class="mini-head">Incidents &amp; penalties · {{ incidents|length }} recorded</h3>
     {% if incidents %}
     <ul class="plain-list small incident-summary">{% for i in incidents %}<li>{{ i.session_label }} · <b>{{ i.accused.name if i.accused else 'Unknown' }}</b>: {{ i.ruling_label if i.status != 'Open' else 'Under review' }}</li>{% endfor %}</ul>
@@ -899,7 +900,9 @@
         data-vendor="{{ url_for('static', filename='vendor/tesseract/') }}"
         {% if telemetry_uploads is not none %}data-tele-get="{{ url_for('telemetry_get', token=ctx.token, upload_id=0) }}"
         data-tele-names="{{ url_for('telemetry_names', token=ctx.token) }}"
-        data-tele-applied="{{ url_for('telemetry_applied', token=ctx.token) }}" data-event-id="{{ event.id }}"{% endif %}>
+        data-tele-applied="{{ url_for('telemetry_applied', token=ctx.token) }}" data-event-id="{{ event.id }}"
+        data-tele-round="{{ url_for('telemetry_round', token=ctx.token, event_id=event.id) }}"
+        data-tele-extras="{{ url_for('telemetry_extras', token=ctx.token, event_id=event.id) }}"{% endif %}>
   <div class="dialog-head"><h2 id="imp-title">{{ 'Import results' if telemetry_uploads is not none else 'Import from screenshot' }}</h2><button class="icon-btn" data-imp-cancel aria-label="Close">✕</button></div>
   <p class="imp-privacy small"><span aria-hidden="true">🔒</span> {{ 'Screenshots are' if telemetry_uploads is not none else 'Your screenshot is' }} processed locally in this browser and {{ 'are' if telemetry_uploads is not none else 'is' }} not uploaded or sent to an AI provider.
     It's free, needs no account, and nothing is kept after you close this window.</p>
@@ -908,6 +911,15 @@
     {% if telemetry_uploads is not none %}
     <div class="imp-telemetry">
       <h3 class="mini-head">From the game's telemetry</h3>
+      {% if telemetry_round %}
+      <div class="imp-round">
+        <p><b>This round from the game:</b> {% for label, what in telemetry_round %}{{ label }} <span class="muted">({{ what }})</span>{{ ' · ' if not loop.last }}{% endfor %}</p>
+        <p class="small muted">Fills every session's results, the fastest lap, the AI level, each session's weather and the players' race times
+          against their AI teammates. Weather and times already entered are kept. Nothing is submitted: you review it all first.</p>
+        <button type="button" class="btn btn-primary btn-sm" data-tele-fill>Fill the whole weekend</button>
+      </div>
+      <h3 class="mini-head">Or one session</h3>
+      {% endif %}
       {% if telemetry_uploads %}
       <ul class="imp-tele-list">
         {% for u in telemetry_uploads %}

@@ -448,7 +448,103 @@
     rows.forEach(function (r) { if (r.include && r.driver_id && r.teleKey) names[r.teleKey] = r.driver_id; });
     if (window.F1TelemetryHooks) window.F1TelemetryHooks.applied({ upload_id: tele.upload_id, session: session, names: names });
   }
-  window.F1Import = { loadTelemetry: loadTelemetry };
+  // ---------------------------------------------------------------- telemetry: a whole weekend at once
+  // bundle: this round's game sessions ({qualifying: [Q1, Q2, Q3...], sprint, race}, from the league). Every session
+  // is matched like a single import, then filled into the results table (a draft); drivers that don't match
+  // confidently are left out and listed. Weather and race times are worked out here and saved by the caller.
+  function ident(r) { return teleKey(r) + "|" + (r.race_number || ""); }
+  function byPos(a, b) { return (a.position || 99) - (b.position || 99); }
+  function combineQuali(list) {
+    // Q1, Q2 and Q3 come as separate sessions: the final order is Q3, then those out in Q2, then those out in Q1.
+    const seen = {}, out = [];
+    list.slice().reverse().forEach(function (q) {
+      (q.results || []).filter(function (r) { return r.position; }).sort(byPos).forEach(function (r) {
+        if (seen[ident(r)]) return;
+        seen[ident(r)] = true;
+        out.push(Object.assign({}, r, { position: out.length + 1 }));
+      });
+    });
+    return out;
+  }
+  function fillWeekend(bundle, known) {
+    const report = { filled: [], missing: [], review: 0, names: {}, pace: [], upload_ids: [], sessions: {} };
+    if (!window.F1Entry) return report;
+    const label = { qualifying: "qualifying", sprint: "Sprint", race: "race" };
+    const plans = [];
+    if (bundle.qualifying && bundle.qualifying.length) plans.push({ key: "qualifying", results: combineQuali(bundle.qualifying), uploads: bundle.qualifying });
+    if (bundle.sprint && isSprintWeekend) plans.push({ key: "sprint", results: bundle.sprint.results || [], uploads: [bundle.sprint] });
+    if (bundle.race) plans.push({ key: "race", results: bundle.race.results || [], uploads: [bundle.race] });
+    const driverOf = {};
+    plans.forEach(function (p) {
+      const matched = p.results.map(function (r, i) { return teleRow(r, i, known || {}); });
+      const count = {};
+      matched.forEach(function (m) { if (m.driver_id) count[m.driver_id] = (count[m.driver_id] || 0) + 1; });
+      const use = [];
+      matched.forEach(function (m, i) {
+        if (m.driver_id && count[m.driver_id] === 1) {
+          use.push(m); driverOf[ident(p.results[i])] = m.driver_id;
+          if (m.teleKey) report.names[m.teleKey] = m.driver_id;
+          if (m.state === "review") report.review++;
+        } else if (report.missing.indexOf(m.raw) < 0) report.missing.push(label[p.key] + ": " + m.raw);
+      });
+      const n = window.F1Entry.applyImport(p.key, use.map(function (m) {
+        return { driver_id: m.driver_id, position: m.status === "DNS" ? null : m.position, status: m.status || "Finished" };
+      }));
+      if (n) report.filled.push(n + " " + label[p.key]);
+      p.uploads.forEach(function (u) { if (u.id) report.upload_ids.push(u.id); });
+      report.sessions[{ qualifying: "quali", sprint: "sprint", race: "race" }[p.key]] = p.uploads.map(function (u) { return u.id; }).filter(Boolean);
+    });
+    // Fastest lap (Grand Prix) and the AI level, as a single race import would.
+    const race = bundle.race;
+    const fastest = race && (race.results || []).find(function (r) { return r.fastest_lap; });
+    const anySession = race || bundle.sprint || (bundle.qualifying || [])[0];
+    const ai = anySession && anySession.session && anySession.session.ai_difficulty;
+    const extras = window.F1Entry.applyExtras ? window.F1Entry.applyExtras({
+      fastest_lap: fastest ? driverOf[ident(fastest)] || null : null, ai_difficulty: typeof ai === "number" && ai > 0 ? ai : null }) : [];
+    report.extra_notes = extras;
+    // Race times for each player against their AI teammate (same team in the game), and qualifying laps.
+    const isPlayer = function (id) { return id && byId[id] && byId[id].is_player; };
+    const bestQ = {};
+    (bundle.qualifying || []).forEach(function (q) {
+      (q.results || []).forEach(function (r) {
+        if (r.best_lap_ms && (!bestQ[ident(r)] || r.best_lap_ms < bestQ[ident(r)])) bestQ[ident(r)] = r.best_lap_ms;
+      });
+    });
+    grid.filter(function (d) { return d.is_player; }).forEach(function (d) {
+      [["gp", race], ["sprint", isSprintWeekend ? bundle.sprint : null]].forEach(function (pair) {
+        const sess = pair[1], entry = { driver_id: d.id, session: pair[0] };
+        const all = sess ? sess.results || [] : [];
+        let me = all.find(function (r) { return driverOf[ident(r)] === d.id; });
+        if (!me && pair[0] === "gp") {   // no race: qualifying still gives lap times
+          Object.keys(bestQ).some(function (k) { return driverOf[k] === d.id && (me = { _ident: k }); });
+        }
+        if (!me) return;
+        const myIdent = me._ident || ident(me);
+        const myTeam = myIdent.split("|")[1];
+        const mate = all.find(function (r) { return ident(r) !== myIdent && r.team === myTeam && !isPlayer(driverOf[ident(r)]); });
+        if (pair[0] === "gp") {
+          let mateIdent = mate ? ident(mate) : null;
+          if (!mateIdent) Object.keys(bestQ).some(function (k) {
+            return k !== myIdent && k.split("|")[1] === myTeam && !isPlayer(driverOf[k]) && (mateIdent = k);
+          });
+          if (bestQ[myIdent] && mateIdent && bestQ[mateIdent]) {
+            entry.quali_time = bestQ[myIdent] / 1000; entry.mate_quali_time = bestQ[mateIdent] / 1000;
+          }
+        }
+        if (!me._ident) {
+          if (me.laps) entry.laps = me.laps;
+          const done = function (r) { return r && r.status === "Finished" && r.race_time_s > 0; };
+          if (done(me) && done(mate) && me.laps === mate.laps) {
+            entry.race_time = me.race_time_s + (me.penalty_s || 0);
+            entry.bench_race_time = mate.race_time_s + (mate.penalty_s || 0);
+          }
+        }
+        if (Object.keys(entry).length > 2) report.pace.push(entry);
+      });
+    });
+    return report;
+  }
+  window.F1Import = { loadTelemetry: loadTelemetry, fillWeekend: fillWeekend };
 
   // ---------------------------------------------------------------- steps, open/close
   function showStep(step) {

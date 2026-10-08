@@ -2051,6 +2051,9 @@ def register_routes(app):
                     entrants=_entrants(conn, event_id, rows),
                     telemetry_uploads=(telemetry.recent(conn) if ctx["features"].get("telemetry") and ctx["can_run"]
                                        and ctx["perms"]["telemetry_import"] else None),
+                    telemetry_round=(telemetry.round_summary(telemetry.for_round(conn, event))
+                                     if ctx["features"].get("telemetry") and ctx["can_run"]
+                                     and ctx["perms"]["telemetry_import"] and event["status"] != C.EVENT_COMPLETE else []),
                     gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
                     sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
@@ -2655,8 +2658,8 @@ def register_routes(app):
         new_id = S.create_next_season(conn, latest["id"], year)
         rewarded, goal_changes = relations.carry_rewards(conn, latest["id"], new_id)
         rewarded = {d: v for d, v in rewarded.items() if v > 0}
-        changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
-        feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
+        S.carry_cars(conn, latest["id"], new_id)
+        feed.on_new_season(conn, latest["id"], new_id, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
         seats.apply_rollover_decisions(conn, latest["id"], new_id, decisions, g.user["username"])
         dmap = S.driver_map(conn)
@@ -3989,8 +3992,30 @@ def register_routes(app):
                 move = S.results_transfer_preview(conn, src, dst, sid)
             except ValidationError as exc:
                 flash(str(exc), "error")
+        align = None
+        if request.args.get("align"):
+            try:
+                align = S.align_results_preview(conn, sid)
+            except ValidationError as exc:
+                flash(str(exc), "error")
         return page("paddock.html", ctx, all_drivers=all_drivers, all_teams=all_teams,
-                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid), move=move)
+                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid), move=move, align=align)
+
+    @app.route("/career/<token>/paddock/align-results", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_align_results(conn, ctx):
+        sid = ctx["current_season_id"]
+        if request.form.get("confirm", "").strip().upper() != "MATCH":
+            raise ValidationError("Type MATCH to confirm")
+        storage.auto_backup(ctx["token"], "before-matching-results", force=True)
+        done = S.align_results(conn, sid)
+        moved = sum(len(r["changes"]) for r in done["rounds"])
+        g.audit_summary = (f"matched {moved} result(s) in "
+                           + ", ".join(f"R{r['event']['round_number']}" for r in done["rounds"])
+                           + " to the drivers now in those cars")
+        flash(f"Re-filed {moved} result(s) under the drivers now in those cars. Standings, Form and Reputation are "
+              "recalculated. A backup was made first (Backups & data).", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/move-results", methods=["POST"])
     @career_page(master_only=True)
@@ -4002,13 +4027,24 @@ def register_routes(app):
             raise ValidationError(f"Type {preview['to']['name']} exactly to confirm")
         storage.auto_backup(ctx["token"], "before-moving-results", force=True)
         done = S.transfer_results(conn, src, dst, sid, request.form.getlist("event_id"),
-                                  swap_seats=bool(request.form.get("swap_seats")))
-        g.audit_summary = (f"moved {done['from']['name']}'s results in "
-                           + ", ".join(f"R{r}" for r in done["rounds"]) + f" ({done['points']} pts) to {done['to']['name']}"
-                           + (" and swapped their seats" if request.form.get("swap_seats") else ""))
+                                  swap_seats=bool(request.form.get("swap_seats")),
+                                  swap_event_ids=request.form.getlist("swap_event_id"))
+        rounds = lambda rs: ", ".join(f"R{r}" for r in rs)  # noqa: E731
+        parts = []
+        if done["rounds"]:
+            parts.append(f"moved {done['from']['name']}'s results in {rounds(done['rounds'])} ({done['points']} pts) "
+                         f"to {done['to']['name']}")
+        if done["swapped"]:
+            parts.append(f"swapped {done['from']['name']}'s and {done['to']['name']}'s results in {rounds(done['swapped'])}")
+        g.audit_summary = "; ".join(parts) + (" and swapped their seats" if request.form.get("swap_seats") else "")
         g.audit_link = f"driver/{dst}"
-        flash(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
-              f"{done['to']['name']}. Standings, Form and Reputation are recalculated. A backup was made first "
+        msg = []
+        if done["rounds"]:
+            msg.append(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
+                       f"{done['to']['name']}.")
+        if done["swapped"]:
+            msg.append(f"Swapped their results in {rounds(done['swapped'])}.")
+        flash(" ".join(msg) + " Standings, Form and Reputation are recalculated. A backup was made first "
               "(Backups & data).", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
@@ -4545,6 +4581,93 @@ def register_routes(app):
         upload_id = data.get("upload_id") if isinstance(data.get("upload_id"), int) else None
         telemetry.applied(conn, upload_id, event["id"], data.get("names") if isinstance(data.get("names"), dict) else {})
         return jsonify(ok=True)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/telemetry")
+    @career_page(ops_only=True)
+    def telemetry_round(conn, ctx, event_id):
+        """Every game session found for this round (qualifying, Sprint, race), for "Fill the weekend from the game"."""
+        if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"]:
+            abort(404)
+        event = S.get_event(conn, event_id)
+        if not event:
+            abort(404)
+        bundle = telemetry.for_round(conn, event)
+        if not bundle:
+            return jsonify(ok=False, error="Nothing from the game matches this round's circuit yet"), 404
+        return jsonify(ok=True, sessions=bundle, names=telemetry.names(conn), pace=bool(engine.round_v3(conn, event)))
+
+    @app.route("/career/<token>/weekend/<int:event_id>/telemetry/extras", methods=["POST"])
+    @career_page(ops_only=True)
+    def telemetry_extras(conn, ctx, event_id):
+        """The rest of a weekend filled from the game: each session's weather and the players' race times. Only
+        blanks are filled; anything already recorded is kept. Results themselves go into the results table (a draft)."""
+        from . import weather
+        if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"]:
+            abort(403)
+        event = S.get_event(conn, event_id)
+        if not event:
+            return jsonify(ok=False, error="Round not found"), 404
+        if event["status"] == C.EVENT_COMPLETE:
+            return jsonify(ok=False, error="This round is complete; reopen it to change it"), 409
+        data = request.get_json(silent=True) or {}
+        notes, done = [], []
+        wx_in = {}   # each session's conditions, from the game sessions used for it
+        for key, ids in (data.get("sessions") or {}).items() if isinstance(data.get("sessions"), dict) else ():
+            ups = [telemetry.get(conn, i) for i in (ids or [])[:6] if isinstance(i, int)]
+            seen = [w for u in ups if u for w in (u["session"].get("weather_seen") or []) + [u["session"].get("weather")]]
+            wx_in[key] = telemetry.weather_key({"weather_seen": seen}) if seen else None
+        have = weather.get(conn, event_id)
+        form = {f"weather_{k}": v for k, v in have.items()}
+        added = [k for k in weather.sessions_for(event) if not have.get(k) and wx_in.get(k) in weather.CONDITIONS]
+        form.update({f"weather_{k}": wx_in[k] for k in added})
+        if added:
+            weather.save(conn, event, form, g.user["username"])
+            done.append("weather for " + ", ".join(weather.SESSIONS[k].lower() for k in added))
+        if engine.round_v3(conn, event):
+            players = {r[0] for r in conn.execute("SELECT r.driver_id FROM results r JOIN drivers d ON d.id = r.driver_id "
+                                                  "WHERE r.event_id = ? AND d.is_player = 1", (event_id,))}
+            dmap = S.driver_map(conn)
+            for p in (data.get("pace") or [])[:20]:
+                if not isinstance(p, dict) or p.get("driver_id") not in players or p.get("session") not in ("gp", "sprint"):
+                    continue
+                old = ai3.pace_input(conn, event_id, p["driver_id"], p["session"])
+                if old and old["untracked"]:
+                    continue
+                form = {k: ai3.format_time(old[k]) if old and old[k] is not None else ""
+                        for k in ("quali_time", "mate_quali_time", "comp_quali_time", "race_time", "bench_race_time")}
+                form.update(laps=str(old["laps"]) if old and old["laps"] else "",
+                            race_gap=str(old["race_gap"]) if old and old["race_gap"] is not None and not old["race_time"] else "",
+                            comp_driver_id=str(old["comp_driver_id"] or "") if old else "",
+                            representative="" if not old or old["representative"] is None else str(old["representative"]),
+                            untracked="", **{f"flag_{f}": "1" for f in (old["flag_list"] if old else [])})
+                filled = []
+                for key in ("quali_time", "mate_quali_time") if p["session"] == "gp" and not form["comp_quali_time"] else ():
+                    if not form[key] and isinstance(p.get(key), (int, float)) and p[key] > 0:
+                        form[key] = ai3.format_time(round(p[key], 3)); filled.append(key)
+                if (not form["race_time"] and not form["bench_race_time"] and not form["race_gap"]
+                        and not form["comp_driver_id"] and all(isinstance(p.get(k), (int, float)) and p[k] > 0
+                                                                for k in ("race_time", "bench_race_time"))):
+                    form["race_time"] = ai3.format_time(round(p["race_time"], 3))
+                    form["bench_race_time"] = ai3.format_time(round(p["bench_race_time"], 3))
+                    filled.append("race_time")
+                if not form["laps"] and isinstance(p.get("laps"), int) and 1 <= p["laps"] <= 200:
+                    form["laps"] = str(p["laps"]); filled.append("laps")
+                if not filled:
+                    continue
+                try:
+                    ai3.save_pace_input(conn, event_id, p["driver_id"], p["session"], form, g.user["username"])
+                except ValueError as exc:
+                    notes.append(f"{dmap[p['driver_id']]['name']}'s times weren't saved: {exc}")
+                    continue
+                done.append(f"{dmap[p['driver_id']]['name']}'s {'Sprint' if p['session'] == 'sprint' else 'Grand Prix'} times")
+        names = data.get("names") if isinstance(data.get("names"), dict) else {}
+        for uid in [u for u in (data.get("upload_ids") or []) if isinstance(u, int)][:8] or [None]:
+            telemetry.applied(conn, uid, event_id, names)
+        if done:
+            year = S.get_season(conn, event["season_id"])["year"]
+            g.audit_link = f"weekend/{event_id}"
+            g.audit_summary = f"filled {event_label(event, year)} from the game's telemetry: " + "; ".join(done)
+        return jsonify(ok=True, done=done, notes=notes)
 
     @app.route("/career/<token>/telemetry-link")
     @career_page(ops_only=True)

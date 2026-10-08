@@ -603,6 +603,24 @@ def _team_goal_refresh_once(conn):
         logging.getLogger(__name__).exception("team goal refresh failed")
 
 
+def _winter_cleanup_once(conn):
+    """2026-10: the game doesn't develop cars over the winter, so undo the random winter car development of earlier
+    versions once (services.undo_winter_development). Never stops a league opening."""
+    if conn.execute("SELECT 1 FROM meta WHERE key = 'winter_cleanup_2026_10'").fetchone():
+        return
+    from . import services
+    conn.execute("SAVEPOINT winter_cleanup")
+    try:
+        services.undo_winter_development(conn)
+        conn.execute("INSERT INTO meta(key, value) VALUES('winter_cleanup_2026_10', '1')")
+        conn.execute("RELEASE winter_cleanup")
+    except Exception:
+        conn.execute("ROLLBACK TO winter_cleanup")
+        conn.execute("RELEASE winter_cleanup")
+        import logging
+        logging.getLogger(__name__).exception("winter car cleanup failed")
+
+
 def migrate(conn):
     """Bring any older save forward to SCHEMA_VERSION without discarding data.
 
@@ -682,6 +700,7 @@ def migrate(conn):
         if row and row[0] == str(SCHEMA_VERSION) and "join_requests" in tables and "member_notify" in tables:
             _press_fix_once(conn)
             _team_goal_refresh_once(conn)
+            _winter_cleanup_once(conn)
             return
     old_incidents = "incidents" in tables and "session" not in _columns(conn, "incidents")
     from . import tracking
@@ -822,6 +841,7 @@ def migrate(conn):
                      ("requests" if opened and opened[0] == "1" else "invite",))
     _press_fix_once(conn)
     _team_goal_refresh_once(conn)
+    _winter_cleanup_once(conn)
     if pre_40:
         # 4.0: a league last written by 3.x. Record what each season tracked and where new tracking begins (once).
         tracking.record_upgrade(conn, old_version)

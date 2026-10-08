@@ -90,7 +90,7 @@ def build_template():
         relations.settle(conn, sid)
         new_id = S.create_next_season(conn, sid, 2027)
         relations.apply_rewards(conn, sid, new_id)
-        S.develop_cars(conn, sid, new_id, random.Random(7))
+        S.carry_cars(conn, sid, new_id)
         S.place_players(conn, new_id, {ids["Alex Rivera"]: (teams["Aston Martin"], 1)})
         relations.ensure(conn, new_id)
         for e in S.events(conn, new_id)[:4]:

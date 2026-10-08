@@ -379,7 +379,7 @@ def on_new_offer(conn, driver_id, team_id, text, link):
     notify(conn, driver_id, text, link)
 
 
-def on_new_season(conn, old_id, new_id, car_changes, link):
+def on_new_season(conn, old_id, new_id, link):
     old = S.get_season(conn, old_id)
     new = S.get_season(conn, new_id)
     table = S.driver_standings(conn, old_id)
@@ -392,14 +392,6 @@ def on_new_season(conn, old_id, new_id, car_changes, link):
     if teams and teams[0]["points"]:
         post(conn, old_id, "season", f"{teams[0]['team']['name']} win the {old['year']} Constructors' title",
              f"{teams[0]['points']} points.", link, team_id=teams[0]["team"]["id"])
-    if car_changes:
-        best, worst = car_changes[0], car_changes[-1]
-        if best["change"] > 0:
-            post(conn, new_id, "tech", f"Winter testing: {best['team']['name']} find big gains ({best['change']:+.1f})",
-                 f"Their car is rated {best['rating']:.1f} heading into {new['year']}.", link, team_id=best["team"]["id"])
-        if worst["change"] < 0:
-            post(conn, new_id, "tech", f"Trouble at {worst['team']['name']}: new car is off the pace ({worst['change']:+.1f})",
-                 f"Rated {worst['rating']:.1f} for {new['year']}.", link, team_id=worst["team"]["id"])
     old = conn.execute("SELECT year FROM seasons WHERE id = ?", (old_id,)).fetchone()
     if old:
         notify(conn, None, f"The {old['year']} season is complete. See the season review.", link, category="season",
