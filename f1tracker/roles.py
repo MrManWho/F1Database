@@ -170,7 +170,7 @@ PERMISSIONS = [
     ("Enter and submit results for rounds that aren't complete", True, True, False, False),
     ("Correct a completed round, or reopen it", True, False, False, False),
     ("Open a round early past its round gates (with a note)", True, False, False, False),
-    ("Calendar, race times, seasons and the season rollover", True, False, False, False),
+    ("Seasons, the season rollover and historical calendar corrections", True, False, False, False),
     ("Grid, seats, contracts and the transfer market", True, False, False, False),
     ("Members, roles, invitations and join requests", True, False, False, False),
     ("League settings, visibility, integrations and branding", True, False, False, False),
@@ -186,6 +186,9 @@ GRANTS = {
     "telemetry_import": ("Import results sent from the game's telemetry (when Telemetry import is on)",
                          {"scorekeeper": True}),
     "telemetry_link": ("See and manage the league's telemetry upload link", {"scorekeeper": False}),
+    "race_times": ("Set race times and mark rounds postponed", {"scorekeeper": False}),
+    "calendar_edit": ("Edit the calendar: rename rounds, change round order and Sprint weekends, add or remove rounds "
+                      "that haven't run", {"scorekeeper": False}),
 }
 
 

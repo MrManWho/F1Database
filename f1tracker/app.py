@@ -2680,10 +2680,13 @@ def register_routes(app):
         return redirect(url_for("grid_page", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/save", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_save(conn, ctx):
+        _allowed(ctx, "calendar_edit")
         sid = ctx["season"]["id"]
         history = request.form.get("historical_correction") == "1"
+        if history and not ctx["is_master"]:
+            abort(403)  # historical correction rewrites completed rounds: Race Master only
         if S.get_season(conn, sid)["status"] == C.SEASON_COMPLETE and not history:
             raise ValidationError(f"The {ctx['season']['year']} season is archived. Turn on historical correction mode "
                                   "to change its calendar.")
@@ -4076,16 +4079,18 @@ def register_routes(app):
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/add", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_add(conn, ctx):
+        _allowed(ctx, "calendar_edit")
         S.add_event(conn, ctx["season"]["id"], request.form.get("name"), request.form.get("location"),
                     request.form.get("is_sprint"))
         flash("Round added to the end of the calendar.", "success")
         return redirect(url_for("seasons_page", token=ctx["token"]))
 
     @app.route("/career/<token>/calendar/<int:event_id>/delete", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_delete(conn, ctx, event_id):
+        _allowed(ctx, "calendar_edit")
         event = S.get_event(conn, event_id)
         if not event or event["season_id"] != ctx["season"]["id"]:
             abort(404)
@@ -4103,9 +4108,10 @@ def register_routes(app):
                 "keep_ids": [int(i) for i in src.getlist("keep") if i.isdigit()], "seed": src.get("seed") or None}
 
     @app.route("/career/<token>/calendar/shuffle", methods=["GET", "POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def calendar_shuffle(conn, ctx):
         """Shuffle the calendar: some races sit out this season, others come in. Preview first, then apply."""
+        _allowed(ctx, "calendar_edit")
         from . import calendar_shuffle as CS
         sid = ctx["season"]["id"]
         if request.method == "POST":
@@ -4739,7 +4745,7 @@ def register_routes(app):
             hub["targets"] = teamlife.targets_for_event(conn, event["id"])
         if full and hub["complete"]:
             hub["battles"] = battle.player_battles(conn, event)
-        if full and ctx["is_master"] and not hub["complete"]:
+        if full and ctx["perms"]["race_times"] and not hub["complete"]:
             people = [u for u in notices.audience(conn, "schedule") if u != g.user["username"]]
             hub["notify_preview"] = {"members": len(people),
                                      "push": len(notices.wanted(conn, people, "schedule", "push")),
@@ -4902,6 +4908,11 @@ def register_routes(app):
         """The notification choice made on a create/join/accept form (defaults to Important only)."""
         value = request.form.get("notify_preset")
         return value if value in notices.PRESETS else "important"
+
+    def _allowed(ctx, grant):
+        """A permission the Race Master chooses per role (roles.GRANTS); Race Masters always have it."""
+        if not ctx["perms"][grant]:
+            abort(403)
 
     def _need(ctx, feature):
         if not ctx["features"][feature]:
@@ -5124,8 +5135,9 @@ def register_routes(app):
         return redirect(navigation.back(default, ctx["token"], anchor=anchor))
 
     @app.route("/career/<token>/weekend/<int:event_id>/time", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def race_time(conn, ctx, event_id):
+        _allowed(ctx, "race_times")
         if not S.get_event(conn, event_id):
             abort(404)
         try:

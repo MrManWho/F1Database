@@ -9,7 +9,7 @@
     {% if not hub.complete %}{{ race_clock(ev) }}{% endif %}
   </div>{% endif %}
 
-  {% if full and ctx.is_master and not hub.complete and not (hide_time is defined and hide_time) %}
+  {% if full and ctx.perms.race_times and not hub.complete and not (hide_time is defined and hide_time) %}
   <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=ev.id) }}" class="inline-form race-time-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ ev.race_at|time_input }}"></label>

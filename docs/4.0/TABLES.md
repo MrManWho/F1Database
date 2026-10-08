@@ -86,6 +86,7 @@ These appear only once a feature is used.
 | rate_hits | `ratelimit.py` | not migrated: rate-limit history |
 | site_audit | `audit_trail.py` | migrated exactly |
 | team_goal_choices | `teamgoals.py` | migrated exactly |
+| team_goal_choices_cleared | `teamgoals.py` | migrated exactly |
 | telemetry_uploads | `telemetry.py` | migrated exactly |
 | ultimatums | `ultimatums.py` | migrated exactly |
 | user_leagues | `library.py` | migrated exactly |
