@@ -57,7 +57,7 @@ AUDIT_LABELS = {
     "offer_accept": "Accepted an offer", "offer_decline": "Declined an offer", "offer_counter": "Made a counter-offer",
     "market_approach": "Approached a team", "paddock_driver": "Edited a driver", "paddock_driver_delete": "Deleted a driver",
     "paddock_team": "Edited a team", "paddock_cars": "Changed car ratings", "paddock_recalculate": "Recalculated reputation",
-    "calendar_add": "Added a race", "calendar_delete": "Removed a race", "members": "Changed league members",
+    "calendar_add": "Added a race", "calendar_shuffle": "Shuffled the calendar", "calendar_delete": "Removed a race", "members": "Changed league members",
     "members_add_player": "Added a player driver", "member_add": "Added a league member",
     "member_update": "Changed a member's role or driver", "member_remove": "Removed a league member", "members_request": "Answered a join request",
     "member_invite_cancel": "Cancelled an invitation",
@@ -2603,6 +2603,7 @@ def register_routes(app):
         from . import weather
         wx_head = {eid: weather.headline(w) for eid, w in weather.for_season(conn, ctx["season"]["id"]).items()}
         return page("seasons.html", ctx, seasons_list=seasons, events=evs_, warnings=_calendar_warnings(evs_), wx_head=wx_head,
+                    circuit_list=circuits.catalogue(),
                     months=timefmt.month_grid(evs_, ctx["timezone"]),
                     next_year=(latest["year"] + 1) if latest else 2026, latest=latest,
                     all_complete=all(e["status"] == C.EVENT_COMPLETE for e in S.events(conn, latest["id"])))
@@ -4091,6 +4092,43 @@ def register_routes(app):
         S.delete_event(conn, event_id)
         flash("Round removed.", "success")
         return redirect(url_for("seasons_page", token=ctx["token"]))
+
+    def _shuffle_args(src):
+        """The shuffle options from a preview's query string or the apply form. A first visit gets the defaults."""
+        from . import calendar_shuffle as CS
+        chosen = src.get("set") == "1"
+        return {"swaps": src.get("swaps", CS.DEFAULT_SWAPS), "reorder": src.get("reorder") == "1" if chosen else True,
+                "keep_ends": src.get("keep_ends") == "1" if chosen else True,
+                "pool_keys": set(src.getlist("pool")) if chosen else None,
+                "keep_ids": [int(i) for i in src.getlist("keep") if i.isdigit()], "seed": src.get("seed") or None}
+
+    @app.route("/career/<token>/calendar/shuffle", methods=["GET", "POST"])
+    @career_page(master_only=True)
+    def calendar_shuffle(conn, ctx):
+        """Shuffle the calendar: some races sit out this season, others come in. Preview first, then apply."""
+        from . import calendar_shuffle as CS
+        sid = ctx["season"]["id"]
+        if request.method == "POST":
+            args = _shuffle_args(request.form)
+            result = CS.apply(conn, sid, request.form.get("fingerprint", ""), **args)
+            g.audit_summary = (f"shuffled the {ctx['season']['year']} calendar"
+                               + (": " + ", ".join(e["name"] for e in result["out"]) + " sit out; "
+                                  + ", ".join(c["gp"] for c in result["incoming"]) + " come in"
+                                  if result["incoming"] else " (no races swapped)"))
+            flash("Calendar shuffled." + (f" {len(result['incoming'])} race(s) sit out this season and "
+                                          f"{len(result['incoming'])} come in." if result["incoming"] else ""), "success")
+            return redirect(url_for("seasons_page", token=ctx["token"]) + "#calendar")
+        args = _shuffle_args(request.args)
+        opts = CS.options(conn, sid)
+        try:
+            preview = CS.plan(conn, sid, **args)
+        except ValidationError as exc:
+            preview = None
+            flash(str(exc), "error")
+        if args["pool_keys"] is None:
+            args["pool_keys"] = {c["key"] for c in opts["pool"] if c["where"] == "game"}
+        return page("calendar_shuffle.html", ctx, opts=opts, preview=preview, args=args,
+                    catalogue=circuits.catalogue())
 
     @app.route("/career/<token>/autobackup/<name>")
     @master_required

@@ -1,8 +1,14 @@
-"""Country flags and simplified circuit outlines for the next-race card.
+"""Country flags, simplified circuit outlines and the catalogue of every circuit a league can race.
 
 The outlines are original, deliberately simplified sketches (a rough impression of each layout on a
 100 x 60 canvas), not official track maps. Rounds the tracker doesn't recognise get a generic loop.
+
+CATALOGUE lists every circuit in the F1 game (F1 25 and its 2026 season), including ones not on the default
+calendar (Imola, the reverse layouts), plus older-game circuits (Portimão, Paul Ricard). The calendar shuffle
+(calendar_shuffle.py) brings races in from it, and the Add round form offers it.
 """
+
+import re
 
 GENERIC = "M12 40 C12 18 30 12 50 12 C72 12 88 18 88 30 C88 44 70 48 50 48 C32 48 12 54 12 40 Z"
 
@@ -60,7 +66,49 @@ CIRCUITS = [
      "M10 30 L24 14 L50 12 L70 18 L90 24 L84 36 L64 34 L56 44 L36 48 L20 44 Z"),
     (("portug", "portimão", "portimao", "algarve"), "PT", "Algarve International Circuit",
      "M12 44 L16 20 L30 12 L46 18 L62 12 L86 18 L88 32 L70 36 L66 46 L48 42 L30 50 Z"),
+    (("french", "france", "paul ricard", "le castellet"), "FR", "Circuit Paul Ricard",
+     "M10 40 L14 22 L30 18 L36 26 L52 24 L58 14 L86 12 L90 22 L72 30 L64 40 L44 44 L28 48 Z"),
 ]
+
+# Layouts the game also offers driven the other way round: same outline, its own circuit.
+REVERSE_WORDS = ("reverse", "reversed")
+
+# Every circuit a league can race: (circuit name as in CIRCUITS, Grand Prix name, location, where it's available).
+# "game" circuits are in F1 25 / F1 26; "older" ones were only in earlier games, so the shuffle leaves them out
+# unless the Race Master ticks them.
+CATALOGUE = [
+    ("Albert Park", "Australian GP", "Melbourne", "game"),
+    ("Shanghai International Circuit", "Chinese GP", "Shanghai", "game"),
+    ("Suzuka", "Japanese GP", "Suzuka", "game"),
+    ("Bahrain International Circuit", "Bahrain GP", "Sakhir", "game"),
+    ("Jeddah Corniche Circuit", "Saudi Arabian GP", "Jeddah", "game"),
+    ("Miami International Autodrome", "Miami GP", "Miami", "game"),
+    ("Imola", "Emilia Romagna GP", "Imola", "game"),
+    ("Circuit Gilles Villeneuve", "Canadian GP", "Montreal", "game"),
+    ("Circuit de Monaco", "Monaco GP", "Monaco", "game"),
+    ("Circuit de Barcelona-Catalunya", "Barcelona-Catalunya GP", "Barcelona", "game"),
+    ("Red Bull Ring", "Austrian GP", "Spielberg", "game"),
+    ("Silverstone", "British GP", "Silverstone", "game"),
+    ("Spa-Francorchamps", "Belgian GP", "Spa-Francorchamps", "game"),
+    ("Hungaroring", "Hungarian GP", "Budapest", "game"),
+    ("Zandvoort", "Dutch GP", "Zandvoort", "game"),
+    ("Monza", "Italian GP", "Monza", "game"),
+    ("Madring", "Madrid GP", "Madrid", "game"),
+    ("Baku City Circuit", "Azerbaijan GP", "Baku", "game"),
+    ("Marina Bay", "Singapore GP", "Marina Bay", "game"),
+    ("Circuit of the Americas", "United States GP", "Austin", "game"),
+    ("Autódromo Hermanos Rodríguez", "Mexico City GP", "Mexico City", "game"),
+    ("Interlagos", "São Paulo GP", "Interlagos", "game"),
+    ("Las Vegas Strip Circuit", "Las Vegas GP", "Las Vegas", "game"),
+    ("Lusail International Circuit", "Qatar GP", "Lusail", "game"),
+    ("Yas Marina", "Abu Dhabi GP", "Yas Marina", "game"),
+    ("Silverstone (Reverse)", "British GP (Reverse)", "Silverstone Reverse", "game"),
+    ("Red Bull Ring (Reverse)", "Austrian GP (Reverse)", "Spielberg Reverse", "game"),
+    ("Zandvoort (Reverse)", "Dutch GP (Reverse)", "Zandvoort Reverse", "game"),
+    ("Algarve International Circuit", "Portuguese GP", "Portimão", "older"),
+    ("Circuit Paul Ricard", "French GP", "Le Castellet", "older"),
+]
+AVAILABILITY = {"game": "F1 25 / F1 26", "older": "Older F1 games only"}
 
 FLAGS = {"GB": "Great Britain"}
 
@@ -71,9 +119,33 @@ def flag_emoji(code):
     return "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in code.upper())
 
 
+def _has(text, key):
+    """key appears at the start of a word ("brit" in "British GP"), never inside one ("usa" in "Lusail")."""
+    return re.search(r"(?<!\w)" + re.escape(key), text) is not None
+
+
 def lookup(name, location=""):
     text = f"{name} {location}".lower()
     for keys, code, circuit, path in CIRCUITS:
-        if any(k in text for k in keys):
-            return {"code": code, "flag": flag_emoji(code), "circuit": circuit, "path": path}
-    return {"code": "", "flag": "", "circuit": location or "", "path": GENERIC}
+        if any(_has(text, k) for k in keys):
+            reverse = any(w in text for w in REVERSE_WORDS)
+            return {"code": code, "flag": flag_emoji(code), "circuit": f"{circuit} (Reverse)" if reverse else circuit,
+                    "path": path, "reverse": reverse}
+    return {"code": "", "flag": "", "circuit": location or "", "path": GENERIC, "reverse": False}
+
+
+def catalogue():
+    """Every circuit a league can race, each with its Grand Prix name, location, flag and outline."""
+    out = []
+    for circuit, gp, location, where in CATALOGUE:
+        info = lookup(gp, location)
+        out.append({"key": circuit, "circuit": circuit, "gp": gp, "location": location, "where": where,
+                    "available": AVAILABILITY[where], "code": info["code"], "flag": info["flag"],
+                    "path": info["path"], "reverse": info["reverse"]})
+    return out
+
+
+def circuit_of(event):
+    """The catalogue circuit a calendar round is held at, or "" when it isn't one the tracker knows."""
+    found = lookup(event["name"], event.get("location") or "")
+    return found["circuit"] if found["path"] != GENERIC else ""

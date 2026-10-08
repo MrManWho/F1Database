@@ -12,6 +12,12 @@
     });
   }
   if (mode) { mode.addEventListener("change", lock); lock(); }
+  // Picking a known circuit for a new round fills in its location.
+  var gp = document.querySelector("[data-circuit-name]"), loc = document.querySelector("[data-circuit-location]");
+  if (gp && loc) gp.addEventListener("change", function () {
+    var o = Array.prototype.find.call(document.querySelectorAll("#circuit-list option"), function (x) { return x.value === gp.value; });
+    if (o && !loc.value) loc.value = o.getAttribute("data-location");
+  });
   // Each person also sees race times in their own time zone when it differs from the league's.
   var league = {{ ctx.timezone|tojson }}, mine = "";
   try { mine = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { /* old browser */ }
@@ -55,6 +61,7 @@
   <div class="card-head"><h2>{{ ctx.season.year }} calendar</h2>
     <div class="button-row tight">
       <a class="btn btn-sm btn-ghost" href="{{ url_for('calendar_ics', token=ctx.token) }}" download title="Add the race times to Google, Apple or Outlook calendar">📅 Calendar file (.ics)</a>
+      {% if ctx.is_master and ctx.season.status != 'Complete' %}<a class="btn btn-sm btn-ghost" href="{{ url_for('calendar_shuffle', token=ctx.token) }}" title="Some races sit out this season and others come in">🔀 Shuffle calendar…</a>{% endif %}
       {% if not ctx.is_master %}<span class="view-only-badge">View only</span>{% endif %}</div></div>
   <p class="muted small">Times are shown in the league's time zone ({{ ctx.timezone.replace('_', ' ') }}){% if events|selectattr('race_at')|list %}<span data-your-zone hidden>, with your own time alongside</span>{% endif %}.
     A round only shows Completed once its results are submitted.</p>
@@ -138,13 +145,14 @@
   {% endfor %}
   <form method="post" action="{{ url_for('calendar_add', token=ctx.token) }}" class="inline-form add-round">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>New Grand Prix<input name="name" required maxlength="80" placeholder="Portuguese GP"></label>
-    <label>Location<input name="location" maxlength="80" placeholder="Portimão"></label>
+    <label>New Grand Prix<input name="name" required maxlength="80" placeholder="Portuguese GP" list="circuit-list" data-circuit-name></label>
+    <datalist id="circuit-list">{% for c in circuit_list %}<option value="{{ c.gp }}" data-location="{{ c.location }}">{{ c.circuit }}</option>{% endfor %}</datalist>
+    <label>Location<input name="location" maxlength="80" placeholder="Portimão" data-circuit-location></label>
     <label class="check"><input type="checkbox" name="is_sprint" value="1"> Sprint</label>
     <button class="btn">Add round</button>
   </form>
   <p class="muted small">New rounds go on the end; drag them into place by changing the round numbers above. Rounds that have been run can't be removed.
-    Next season copies this calendar, including anything you add or remove.</p>
+    Next season copies this calendar, including anything you add or remove. Shuffle calendar rests some races for a season and brings others in.</p>
   {% endif %}
 </section>
 
