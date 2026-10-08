@@ -30,13 +30,13 @@
   <div class="pace-tabs" role="tablist" aria-label="Player">
     {% for item in entries_ %}{% set p = item.input %}{% set miss_ = (item.row.driver.name, label_[item.session]) in pace.missing %}
     <button type="button" role="tab" class="pace-tab {{ 'is-on' if loop.first }}" id="pt-{{ item.session }}-{{ item.row.driver_id }}" aria-controls="pp-{{ item.session }}-{{ item.row.driver_id }}" aria-selected="{{ 'true' if loop.first else 'false' }}" {% if item.row.driver.player_color %}style="--player: {{ item.row.driver.player_color }}"{% endif %}>
-      {{ item.row.driver.name }}{% if miss_ %} <span class="pill pill-hot">Needed</span>{% elif p and (p.untracked or p.race_gap is not none) %} <span class="pill pill-ok">✓ Saved</span>{% endif %}</button>
+      {{ item.row.driver.name }}{% if miss_ %} <span class="pill pill-hot">Needed</span>{% elif p and (p.untracked or p.race_dnf or p.bench_dnf or p.race_gap is not none) %} <span class="pill pill-ok">✓ Saved</span>{% endif %}</button>
     {% endfor %}
   </div>
   {% endif %}
   {% for item in entries_ %}{% set r = item.row %}{% set p = item.input %}
   {% if bare_ %}<div class="pace-panel" role="{{ 'tabpanel' if entries_|length > 1 else 'group' }}" id="pp-{{ item.session }}-{{ r.driver_id }}" {% if entries_|length > 1 %}aria-labelledby="pt-{{ item.session }}-{{ r.driver_id }}"{% endif %} {{ 'hidden' if not loop.first }}>
-  <h3 class="pace-who">{{ r.driver.name }}'s timing{% if p %} <span class="muted small">· {% if p.untracked %}times not submitted{% elif p.race_gap is not none and p.laps %}{{ '%.3f'|format(p.race_gap|abs) }}s {{ 'behind' if p.race_gap > 0 else 'ahead' if p.race_gap < 0 else 'level' }} ({{ '%.2f'|format((p.race_gap / p.laps)|abs) }}s a lap){% endif %}</span>{% endif %}</h3>
+  <h3 class="pace-who">{{ r.driver.name }}'s timing{% if p %} <span class="muted small">· {% if p.untracked %}times not submitted{% elif p.race_dnf or p.bench_dnf %}{{ 'DNF' if p.race_dnf else "they DNF'd" }}, no race gap{% elif p.race_gap is not none and p.laps %}{{ '%.3f'|format(p.race_gap|abs) }}s {{ 'behind' if p.race_gap > 0 else 'ahead' if p.race_gap < 0 else 'level' }} ({{ '%.2f'|format((p.race_gap / p.laps)|abs) }}s a lap){% endif %}</span>{% endif %}</h3>
   {% else %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
@@ -71,6 +71,9 @@
         <span class="pace-rh">Race time</span>
         <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.race_box(p.race_time, pace.winner[item.session]) if p and p.race_time }}" placeholder="1:32:45.123 or +12.345" inputmode="decimal" data-race-time></label>
         <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.race_box(p.bench_race_time, pace.winner[item.session]) if p and p.bench_race_time }}" placeholder="1:32:32.700 or +12.345" inputmode="decimal" data-bench-time></label>
+        <span class="pace-rh pace-rh-dnf"><span class="sr-only">Did not finish</span></span>
+        <label class="check small"><input type="checkbox" name="race_dnf" value="1" data-dnf="race_time" {{ 'checked' if p and p.race_dnf }}> DNF</label>
+        <label class="check small"><input type="checkbox" name="bench_dnf" value="1" data-dnf="bench_race_time" {{ 'checked' if p and p.bench_dnf }}> DNF</label>
         <span class="pace-rh">Race laps</span>
         <label><span class="sr-only">Race laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
         <span class="small muted pace-note">Laps you finished in the race (not qualifying). Turns the gap into seconds a lap.</span>
@@ -130,7 +133,12 @@
     var a = f.querySelector("[data-race-time]"), b = f.querySelector("[data-bench-time]"), out = f.querySelector("[data-gap-preview]"),
         laps = f.querySelector("[name=laps]");
     if (!a || !b || !out) return;
-    function show() { var x = secs(a.value), y = secs(b.value);
+    var dnfs = f.querySelectorAll("[data-dnf]");
+    function dnfSync() { dnfs.forEach(function (c) { var box = f.querySelector("[name=" + c.dataset.dnf + "]"); if (box) box.disabled = c.checked; }); }
+    function show() { dnfSync();
+      if (Array.prototype.some.call(dnfs, function (c) { return c.checked; })) {
+        out.textContent = "A DNF has no race time, so there's no race gap. Qualifying still counts."; return; }
+      var x = secs(a.value), y = secs(b.value);
       if (x === null || y === null) { out.textContent = ""; return; }
       var pa = /^\s*\+/.test(a.value), pb = /^\s*\+/.test(b.value);
       /* "+gap" is behind the winner: the shared winner's time above, else the full time in the other box */
@@ -145,7 +153,8 @@
       out.textContent = me + " " + d.toFixed(3) + " s " + (gap > 0 ? "behind" : "ahead of") + " " + them +
         (l > 0 ? " (" + (d / l).toFixed(2) + " s a lap)" : ""); }
     var card = f.closest(".pace-card"), win = card && card.querySelector("[data-winner-time]");
-    [a, b, laps, win].forEach(function (el) { if (el) el.addEventListener("input", show); }); show();
+    [a, b, laps, win].forEach(function (el) { if (el) el.addEventListener("input", show); });
+    dnfs.forEach(function (c) { c.addEventListener("change", show); }); show();
   });
 })();
 </script>

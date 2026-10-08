@@ -83,6 +83,7 @@ These appear only once a feature is used.
 | login_failure_names | `auth.py` | not migrated: temporary security data (lockout counters) |
 | outbox | `outbox.py` | not migrated: old delivery queue |
 | push_subscriptions | `push.py` | migrated exactly |
+| race_time_dnfs | `ai3.py` | migrated exactly |
 | race_winner_times | `ai3.py` | migrated exactly |
 | rate_hits | `ratelimit.py` | not migrated: rate-limit history |
 | site_audit | `audit_trail.py` | migrated exactly |

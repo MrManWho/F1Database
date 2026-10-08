@@ -139,7 +139,19 @@ def pace_input(conn, event_id, driver_id, session="gp"):
         return None
     d = dict(row)
     d["flag_list"] = [f for f in (d["flags"] or "").split(",") if f]
+    _dnf_table(conn)
+    dnf = conn.execute("SELECT me, them FROM race_time_dnfs WHERE event_id = ? AND driver_id = ? AND session = ?",
+                       (event_id, driver_id, session)).fetchone()
+    d["race_dnf"], d["bench_dnf"] = (bool(dnf[0]), bool(dnf[1])) if dnf else (False, False)
     return d
+
+
+def _dnf_table(conn):
+    """Race time boxes marked DNF (the player's own, or the driver they compare with): no race gap, and none asked for."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS race_time_dnfs (
+        event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        driver_id INTEGER NOT NULL, session TEXT NOT NULL, me INTEGER NOT NULL DEFAULT 0, them INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (event_id, driver_id, session))""")
 
 
 def save_pace_input(conn, event_id, driver_id, session, form, username):
@@ -157,6 +169,11 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
         bench_time, bench_plus = parse_race_entry(form.get("bench_race_time"))
     except ValueError:
         raise ValueError("Race times look like 1:32:45.123 (hours:minutes:seconds), or +12.345 behind the winner")
+    race_dnf, bench_dnf = bool(form.get("race_dnf")), bool(form.get("bench_dnf"))
+    if race_dnf or bench_dnf:                        # a DNF has no race time, so there's no race gap to compare
+        race_time = bench_time = None
+        race_plus = bench_plus = False
+        form = {**form, "race_gap": ""}
     if race_plus or bench_plus:                      # "+gap" is behind the round winner
         winner = winner_time(conn, event_id, session)
         other = bench_time if race_plus else race_time
@@ -202,6 +219,13 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
                  (event_id, driver_id, session, quali, mate_q, comp, comp_q, gap,
                   ("comparison" if comp else "teammate"), laps, rep, flags, int(bool(form.get("untracked"))),
                   username, now_iso(), race_time, bench_time))
+    _dnf_table(conn)
+    if race_dnf or bench_dnf:
+        conn.execute("INSERT OR REPLACE INTO race_time_dnfs(event_id, driver_id, session, me, them) VALUES(?,?,?,?,?)",
+                     (event_id, driver_id, session, int(race_dnf), int(bench_dnf)))
+    else:
+        conn.execute("DELETE FROM race_time_dnfs WHERE event_id = ? AND driver_id = ? AND session = ?",
+                     (event_id, driver_id, session))
 
 
 # --------------------------------------------------------------------------- 4.0: race times are required
@@ -236,7 +260,7 @@ def missing_pace(conn, event, rows=None):
             if r[status_key] not in C.CLASSIFIED_STATUSES:
                 continue
             p = pace_input(conn, event["id"], r["driver_id"], session)
-            if p and (p["untracked"] or (p["race_gap"] is not None and p["laps"])):
+            if p and (p["untracked"] or p["race_dnf"] or p["bench_dnf"] or (p["race_gap"] is not None and p["laps"])):
                 continue
             out.append((r["driver"]["name"], label))
     return out

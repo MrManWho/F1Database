@@ -4663,6 +4663,7 @@ def register_routes(app):
                             race_gap=str(old["race_gap"]) if old and old["race_gap"] is not None and not old["race_time"] else "",
                             comp_driver_id=str(old["comp_driver_id"] or "") if old else "",
                             representative="" if not old or old["representative"] is None else str(old["representative"]),
+                            race_dnf="1" if old and old["race_dnf"] else "", bench_dnf="1" if old and old["bench_dnf"] else "",
                             untracked="", **{f"flag_{f}": "1" for f in (old["flag_list"] if old else [])})
                 filled = []
                 for key in ("quali_time", "mate_quali_time") if p["session"] == "gp" and not form["comp_quali_time"] else ():
@@ -4673,6 +4674,10 @@ def register_routes(app):
                                                                 for k in ("race_time", "bench_race_time"))):
                     form["race_time"] = ai3.format_time(round(p["race_time"], 3))
                     form["bench_race_time"] = ai3.format_time(round(p["bench_race_time"], 3))
+                    filled.append("race_time")
+                elif (not form["race_time"] and not form["bench_race_time"] and not form["race_gap"] and not form["race_dnf"]
+                        and not form["bench_dnf"] and not form["comp_driver_id"] and (p.get("race_dnf") or p.get("bench_dnf"))):
+                    form["race_dnf"], form["bench_dnf"] = ("1" if p.get("race_dnf") else ""), ("1" if p.get("bench_dnf") else "")
                     filled.append("race_time")
                 if not form["laps"] and isinstance(p.get("laps"), int) and 1 <= p["laps"] <= 200:
                     form["laps"] = str(p["laps"]); filled.append("laps")

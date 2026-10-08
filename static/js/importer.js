@@ -537,6 +537,10 @@
           if (done(me) && done(mate) && me.laps === mate.laps) {
             entry.race_time = me.race_time_s + (me.penalty_s || 0);
             entry.bench_race_time = mate.race_time_s + (mate.penalty_s || 0);
+          } else {      // a retirement shows as DNF in the race time boxes (no race gap)
+            const out = function (r) { return r && ["DNF", "Retired", "DSQ", "Not Classified"].indexOf(r.status) >= 0; };
+            if (out(me)) entry.race_dnf = true;
+            if (out(mate)) entry.bench_dnf = true;
           }
         }
         if (Object.keys(entry).length > 2) report.pace.push(entry);
