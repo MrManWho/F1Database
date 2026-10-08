@@ -742,20 +742,47 @@ def test_signing_is_announced_to_the_other_player(db, rng):
     assert not any("Devon Corwin just signed" in n["text"] for n in mine)
 
 
-def test_cars_develop_over_winter_and_ratings_drive_early_ranks(db):
+def test_cars_carry_over_winter_and_ratings_drive_early_ranks(db):
     sid = S.current_season_id(db)
     ratings = S.car_ratings(db, sid)
     assert ratings[1]["rating"] > ratings[11]["rating"]
     S.set_car_rating(db, sid, 11, 98)
     assert S.team_strength_ranks(db, sid)[11] == 1
     run_event(db, S.events(db, sid)[0])
+    end_ranks = S.team_strength_ranks(db, sid)
     new_id = S.create_next_season(db, sid, 2027)
-    changes = S.develop_cars(db, sid, new_id, random.Random(3))
+    S.carry_cars(db, sid, new_id)
     new = S.car_ratings(db, new_id)
-    assert len(changes) == 11 and all(C.CAR_RATING_MIN <= r["rating"] <= C.CAR_RATING_MAX for r in new.values())
-    assert any(r["change"] for r in new.values())
-    feed.on_new_season(db, sid, new_id, changes, f"review/{sid}")
-    assert any(n["kind"] == "tech" for n in feed.latest(db, 20))
+    # The game doesn't develop cars: each starts where last season's ranks left it, with no winter change.
+    assert S.team_strength_ranks(db, new_id) == end_ranks
+    assert not any(r["change"] for r in new.values())
+    feed.on_new_season(db, sid, new_id, f"review/{sid}")
+    assert not any(n["kind"] == "tech" for n in feed.latest(db, 20))
+
+
+def test_winter_development_cleanup(db):
+    sid = S.current_season_id(db)
+    run_event(db, S.events(db, sid)[0])
+    new_id = S.create_next_season(db, sid, 2027)
+    old = S.car_ratings(db, sid)
+    for tid, r in old.items():   # what earlier versions' random winter roll left behind
+        db.execute("UPDATE team_seasons SET car_rating = ?, change = ? WHERE season_id = ? AND team_id = ?",
+                   (r["rating"] + (3 if tid % 2 else -3), 3 if tid % 2 else -3, new_id, tid))
+    feed.post(db, new_id, "tech", "Winter testing: Ferrari find big gains (+3.0)", "Rated 90.0")
+    S.undo_winter_development(db)
+    assert S.team_strength_ranks(db, new_id) == S.team_strength_ranks(db, sid)
+    assert not any(r["change"] for r in S.car_ratings(db, new_id).values())
+    assert not any(n["kind"] == "tech" for n in feed.latest(db, 20))
+
+
+def test_winter_cleanup_keeps_hand_edited_ratings(db):
+    sid = S.current_season_id(db)
+    new_id = S.create_next_season(db, sid, 2027)
+    db.execute("UPDATE team_seasons SET car_rating = car_rating + 2, change = 2 WHERE season_id = ? AND team_id = 1",
+               (new_id,))
+    S.set_car_rating(db, new_id, 11, 97)   # the Race Master matched the game after the roll
+    S.undo_winter_development(db)
+    assert S.car_ratings(db, new_id)[11]["rating"] == 97
 
 
 def test_rivalry_and_season_review(db):

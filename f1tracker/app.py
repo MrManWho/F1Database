@@ -2657,8 +2657,8 @@ def register_routes(app):
         new_id = S.create_next_season(conn, latest["id"], year)
         rewarded, goal_changes = relations.carry_rewards(conn, latest["id"], new_id)
         rewarded = {d: v for d, v in rewarded.items() if v > 0}
-        changes = S.develop_cars(conn, latest["id"], new_id, random.Random())
-        feed.on_new_season(conn, latest["id"], new_id, changes, f"review/{latest['id']}")
+        S.carry_cars(conn, latest["id"], new_id)
+        feed.on_new_season(conn, latest["id"], new_id, f"review/{latest['id']}")
         market.on_new_season(conn, new_id, previous_id=latest["id"])
         seats.apply_rollover_decisions(conn, latest["id"], new_id, decisions, g.user["username"])
         dmap = S.driver_map(conn)

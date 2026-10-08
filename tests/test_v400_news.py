@@ -33,7 +33,7 @@ def test_older_seasons_are_hidden_except_titles_and_signings(app, career):
         champ = _post(conn, old, "season", "Player One is the 2026 World Champion")
         signing = _post(conn, old, "market", "Official: Player One signs with Ferrari")
         new = S.create_next_season(conn, old, 2027)
-        fresh = _post(conn, new, "tech", "Winter testing: Ferrari find big gains")
+        fresh = _post(conn, new, "market", "Official: Player Two signs with Alpine")
         assert [n["id"] for n in feed.relevant(conn)] == [fresh, signing, champ]
 
 

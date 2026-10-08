@@ -515,7 +515,7 @@ def team_strength_ranks(conn, season_id):
 
     Once three rounds are complete it comes from AI drivers' points only, so a player winning in a
     slow car doesn't make the car look fast. Before that it follows the season's car ratings, which
-    develop over each winter (and which the Race Master can edit to match the game).
+    start where last season's AI results left each car (and which the Race Master can edit to match the game).
     """
     if engine.is_v3(conn, season_id):
         return calc3.effective_ranks(conn, season_id)
@@ -536,7 +536,7 @@ def team_strength_ranks(conn, season_id):
     return {tid: pos for pos, tid in enumerate(by_rating, start=1)}
 
 
-# --------------------------------------------------------------------------- car ratings & development
+# --------------------------------------------------------------------------- car ratings
 
 def ensure_car_ratings(conn, season_id):
     """Every active team gets a car rating per season: carried from the previous season, else seeded
@@ -582,27 +582,40 @@ def set_car_rating(conn, season_id, team_id, rating):
                  (rating, season_id, team_id))
 
 
-def develop_cars(conn, source_id, new_id, rng):
-    """Winter development: every car moves toward the pack (cost cap, wind-tunnel handicaps), results
-    bring money (constructors' position), and there is always some luck. Returns the changes."""
-    old = car_ratings(conn, source_id)
-    table = {t["team"]["id"]: t["position"] for t in constructor_standings(conn, source_id)}
-    mean = sum(v["rating"] for v in old.values()) / max(1, len(old))
-    field = len(table) or 11
-    changes = []
-    for team in teams(conn):
-        base = old.get(team["id"], {"rating": mean - 2})["rating"]
-        pos = table.get(team["id"], field)
-        change = (mean - base) * 0.2 + ((field + 1) / 2 - pos) * 0.35 + rng.gauss(0, 2.2)
-        change = round(clamp(change, -8, 8), 1)
-        rating = round(clamp(base + change, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)
-        change = round(rating - base, 1)
-        conn.execute("""INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,?)
-                        ON CONFLICT(season_id, team_id) DO UPDATE SET car_rating = excluded.car_rating,
-                        change = excluded.change""", (new_id, team["id"], rating, change))
-        changes.append({"team": team, "rating": rating, "change": change})
-    changes.sort(key=lambda c: -c["change"])
-    return changes
+def carry_cars(conn, source_id, new_id):
+    """A new season keeps the same cars: the game doesn't develop them over the winter. Each car starts where the
+    AI drivers' results left it at the end of last season (its final car-strength rank), on the default rating
+    ladder. A team new to the grid starts at the back. Nothing random, no winter change."""
+    ranks = team_strength_ranks(conn, source_id)
+    active = teams(conn)
+    last = len(active)
+    order = sorted(active, key=lambda t: (ranks.get(t["id"], last + 1), t["id"]))
+    for pos, team in enumerate(order, start=1):
+        rating = round(clamp(C.CAR_RATING_TOP - (pos - 1) * C.CAR_RATING_STEP, C.CAR_RATING_MIN, C.CAR_RATING_MAX), 1)
+        conn.execute("""INSERT INTO team_seasons(season_id, team_id, car_rating, change) VALUES(?,?,?,0)
+                        ON CONFLICT(season_id, team_id) DO UPDATE SET car_rating = excluded.car_rating, change = 0""",
+                     (new_id, team["id"], rating))
+
+
+def undo_winter_development(conn):
+    """2026-10 cleanup: earlier versions rolled random winter car development at each new season and posted
+    "Winter testing" / "Trouble at" stories about it. Removes those stories and the winter change, and re-seeds
+    the current season's cars from last season's final ranks (carry_cars) unless a team's rating was edited by
+    hand after the roll, in which case that season's ratings are left as the Race Master set them."""
+    conn.execute("""DELETE FROM news WHERE kind = 'tech' AND (headline LIKE 'Winter testing: %'
+                    OR headline LIKE 'Trouble at %: new car is off the pace%')""")
+    seasons = _rows(conn, "SELECT id, year, status FROM seasons ORDER BY year")
+    if len(seasons) >= 2:
+        prev, cur = seasons[-2], seasons[-1]
+        before = {r["team_id"]: r["car_rating"] for r in _rows(
+            conn, "SELECT team_id, car_rating FROM team_seasons WHERE season_id = ?", (prev["id"],))}
+        now = _rows(conn, "SELECT team_id, car_rating, change FROM team_seasons WHERE season_id = ?", (cur["id"],))
+        rolled = [r for r in now if r["change"]]
+        untouched = all(r["team_id"] in before and abs(before[r["team_id"]] + r["change"] - r["car_rating"]) < 0.05
+                        for r in rolled)
+        if rolled and untouched and cur["status"] != C.SEASON_COMPLETE:
+            carry_cars(conn, prev["id"], cur["id"])
+    conn.execute("UPDATE team_seasons SET change = 0 WHERE change != 0")
 
 
 # --------------------------------------------------------------------------- race entry
