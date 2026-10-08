@@ -26,14 +26,14 @@
   {% endif %}
   {% for item in entries_ %}{% set r = item.row %}{% set p = item.input %}
   {% if bare_ %}<div class="pace-panel" role="{{ 'tabpanel' if entries_|length > 1 else 'group' }}" id="pp-{{ item.session }}-{{ r.driver_id }}" {% if entries_|length > 1 %}aria-labelledby="pt-{{ item.session }}-{{ r.driver_id }}"{% endif %} {{ 'hidden' if not loop.first }}>
-  <h3 class="pace-who">{{ r.driver.name }}'s timing{% if p %} <span class="muted small">· {% if p.untracked %}times not submitted{% elif p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% endif %}</span>{% endif %}</h3>
+  <h3 class="pace-who">{{ r.driver.name }}'s timing{% if p %} <span class="muted small">· {% if p.untracked %}times not submitted{% elif p.race_gap is not none and p.laps %}{{ '%.3f'|format(p.race_gap|abs) }}s {{ 'behind' if p.race_gap > 0 else 'ahead' if p.race_gap < 0 else 'level' }} ({{ '%.2f'|format((p.race_gap / p.laps)|abs) }}s a lap){% endif %}</span>{% endif %}</h3>
   {% else %}
   <details class="pace-item" {{ 'open' if loop.first and not p }}>
     <summary><b>{{ r.driver.name }}</b> · {{ 'Grand Prix' if item.session == 'gp' else 'Sprint' }}
-      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%+.3f'|format(p.race_gap) }}s ({{ '%+.2f'|format(p.race_gap / p.laps) }}s/lap){% elif pace.required %}race times missing{% elif pace.legacy and p.race_gap is none %}race times not tracked{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· {{ "race times not tracked under this season's rules" if pace.legacy else 'nothing entered' }}</span>{% endif %}</summary>
+      {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%.3f'|format(p.race_gap|abs) }}s {{ 'behind' if p.race_gap > 0 else 'ahead' if p.race_gap < 0 else 'level' }} ({{ '%.2f'|format((p.race_gap / p.laps)|abs) }}s a lap){% elif pace.required %}race times missing{% elif pace.legacy and p.race_gap is none %}race times not tracked{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· {{ "race times not tracked under this season's rules" if pace.legacy else 'nothing entered' }}</span>{% endif %}</summary>
   {% endif %}
     {% if pace.can_edit %}
-    <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
+    <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form" data-me="{{ r.driver.name }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="driver_id" value="{{ r.driver_id }}"><input type="hidden" name="session" value="{{ item.session }}">
       {% set mate_ = pace.drivers|selectattr('team_id', 'equalto', r.team_id)|first %}
@@ -126,8 +126,12 @@
       /* "+gap" is behind the winner, whose full time is in the other box (or both are gaps: compare them) */
       if (pa && !pb) x = y + x; else if (pb && !pa) y = x + y;
       var gap = x - y, l = parseInt(laps.value, 10);
-      out.textContent = "Gap: " + (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s (" + (gap >= 0 ? "behind" : "ahead") + ")" +
-        (l > 0 ? ", " + (gap >= 0 ? "+" : "") + (gap / l).toFixed(2) + " s a lap" : ""); }
+      /* in words, no minus sign: "Carson Hayes 39.183 s ahead of George Russell (1.96 s a lap)" */
+      var me = f.dataset.me || "You", head = f.querySelector("[data-pace-them]"), them = (head && head.textContent.trim()) || "them",
+          d = Math.abs(gap);
+      if (d < 0.0005) { out.textContent = me + " level with " + them; return; }
+      out.textContent = me + " " + d.toFixed(3) + " s " + (gap > 0 ? "behind" : "ahead of") + " " + them +
+        (l > 0 ? " (" + (d / l).toFixed(2) + " s a lap)" : ""); }
     [a, b, laps].forEach(function (el) { el.addEventListener("input", show); }); show();
   });
 })();
