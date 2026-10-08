@@ -184,8 +184,12 @@ Bands 80 Delighted · 55 Happy · 40 Concerned · 25 Unhappy · below Seat at ri
 
 ## 13. Team goals
 
-Chosen target frozen when chosen. Cap: `target ≤ earned + floor(0.90 × max remaining)` where max remaining =
-Σ remaining (25 + 18) + remaining Sprints (8 + 7). A position target past P1 is clamped to P1 and kept as a route.
+Chosen target frozen when chosen. Points (2026-10 refresh): expected haul per weekend = typical points at the
+expected position (`POINTS_PER_ROUND`), half-blended with last season's pace when there is one, then blended with this
+season's pace (`done / (done + 4)`); × weekends left × Safe 0.75 / Competitive 1.00 / Ambitious 1.25. If Ambitious
+would pass the cap, all three are scaled down together. Cap: `target ≤ earned + floor(0.75 × max remaining)` where
+max remaining = Σ remaining (25 + 18) + remaining Sprints (8 + 7). Unsettled goals chosen before the refresh were
+cleared once per league (meta `team_goal_refresh_2026_10`, kept in `team_goal_choices_cleared`) to be chosen again. A position target past P1 is clamped to P1 and kept as a route.
 Progress: points still needed, per remaining weekend, **Secured** (points reached), **Impossible** (points out of
 reach and no position route); position routes are decided at the end of the season.
 
@@ -263,7 +267,7 @@ P22 alone is never proof: what matters is the gap to the teammate and comparable
 | Solid pledge target | P1.4 | P10.2 | P19.0 |
 | Pledge "unit" | 0.60 | 1.26 | 2.46 |
 | Ultimatum target | P4 | P14 | P20 |
-| Team goal cap (from 0) | 1009 of 1122 points available | same | same |
+| Team goal cap (from 0) | 841 of 1122 points available | same | same |
 
 ## 20. Calendar length (5 / 10 / 24 rounds)
 

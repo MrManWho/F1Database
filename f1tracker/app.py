@@ -776,7 +776,8 @@ def _mandatory_steps(conn, ctx, master_only=False):
     if teamgoals.enabled(conn):
         seat = S.driver_seats(conn, sid).get(mine["id"])
         if seat and not teamgoals.choice(conn, sid, seat[0]) and not teamgoals.locked(conn, sid, seat[0]):
-            steps.append(("team_goals_page", "Choose your team's goal first."))
+            steps.append(("team_goals_page", "Team goals were refined, so please choose your team's goal again."
+                          if teamgoals.was_refreshed(conn, sid, seat[0]) else "Choose your team's goal first."))
     return steps
 
 
@@ -3675,14 +3676,16 @@ def register_routes(app):
         for team_id, drivers in sorted(lineup.items(), key=lambda kv: tmap[kv[0]]["name"]):
             open_ = not teamgoals.locked(conn, sid, team_id)
             teams.append({"team": tmap[team_id], "drivers": drivers, "goal": chosen.get(team_id), "reopened": open_ and locked,
+                          "refreshed": not chosen.get(team_id) and teamgoals.was_refreshed(conn, sid, team_id),
                           "info": teamgoals.options(conn, sid, team_id) if open_ else None,
                           "can_choose": team_id in can and open_ and teamgoals.enabled(conn)})
         mine = ctx.get("real", ctx).get("my_driver")
         my_seat = S.driver_seats(conn, sid).get(mine["id"]) if mine else None
         must_choose = bool(my_seat and teamgoals.enabled(conn) and sid == ctx["current_season_id"]
                            and not teamgoals.choice(conn, sid, my_seat[0]) and not teamgoals.locked(conn, sid, my_seat[0]))
+        refreshed = bool(must_choose and teamgoals.was_refreshed(conn, sid, my_seat[0]))
         return page("team_goals.html", ctx, teams=teams, locked=locked, enabled=teamgoals.enabled(conn), must_choose=must_choose,
-                    tiers=teamgoals.TIERS)
+                    refreshed=refreshed, tiers=teamgoals.TIERS)
 
     @app.route("/career/<token>/team-goals/<int:team_id>", methods=["POST"])
     @career_page()

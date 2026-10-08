@@ -27,7 +27,7 @@ from .storage import get_meta, now_iso, set_meta
 TIERS = {
     "safe": {"label": "Safe", "shift": 2, "points": 0.75, "reward": 1.0, "penalty": 0.0},
     "competitive": {"label": "Competitive", "shift": 0, "points": 1.0, "reward": 3.0, "penalty": -1.0},
-    "ambitious": {"label": "Ambitious", "shift": -2, "points": 1.3, "reward": 6.0, "penalty": -3.0},
+    "ambitious": {"label": "Ambitious", "shift": -2, "points": 1.25, "reward": 6.0, "penalty": -3.0},
 }
 
 # Typical team points per Grand Prix by Constructors' position (a 10-team grid), and a Sprint's share of that.
@@ -100,6 +100,7 @@ def _points_for(position, rounds, sprints, factor):
 
 PACE_ROUNDS = 4          # after this many completed rounds, observed pace counts as much as the car (v2.2)
 MIN_GAP = (3, 0.25)      # each tier asks for at least 3 more points, or 25% more still to score, than the one below
+REALISTIC_SHARE = 0.75   # 4.0 goal refresh: no target asks for more than 75% of the points still available
 
 
 def _season_so_far(conn, season_id, team_id, evs):
@@ -152,30 +153,35 @@ def options(conn, season_id, team_id):
         why.append(f"{earned:g} point{'s' if earned != 1 else ''} already scored in {n_done} round{'s' if n_done != 1 else ''} "
                    f"(pace {pace:.1f} a round, counted {round(blend * 100)}%) with {len(evs) - n_done} to go")
     v3 = engine.is_v3(conn, season_id)
-    if v3:
-        # v2.5: the most still available (a 1-2 finish every Grand Prix and Sprint left) and the 90% cap.
-        max_left = sum(C.GP_POINTS[1] + C.GP_POINTS[2] + ((C.SPRINT_POINTS[1] + C.SPRINT_POINTS[2]) if e["is_sprint"] else 0)
-                       for e in evs if e["status"] != C.EVENT_COMPLETE)
-        cap = earned + engine.floor_int(0.90 * max_left)
-        why.append(f"at most {cap:g} points (what's scored plus 90% of the {max_left} still available)")
+    # The most still available (a 1-2 finish every Grand Prix and Sprint left) and the realistic ceiling on any target.
+    max_left = sum(C.GP_POINTS[1] + C.GP_POINTS[2] + ((C.SPRINT_POINTS[1] + C.SPRINT_POINTS[2]) if e["is_sprint"] else 0)
+                   for e in evs if e["status"] != C.EVENT_COMPLETE)
+    ceiling = engine.floor_int(REALISTIC_SHARE * max_left)
+    cap = earned + ceiling
+    why.append(f"at most {cap:g} points (what's scored plus {round(REALISTIC_SHARE * 100)}% of the {max_left} still available)")
+    # 4.0 goal refresh: every tier's points come from the same expected haul (the car's typical points at the expected
+    # position, half-blended with last season's actual pace, then with this season's pace as rounds are played),
+    # scaled by the tier: Safe 75%, Competitive 100%, Ambitious 125%. Older versions moved the position first and then
+    # scaled last season's pace up with it as well, which stacked into targets near the most a team could ever score.
+    car = POINTS_PER_ROUND[max(0, min(len(POINTS_PER_ROUND) - 1, expected - 1))]
+    if last_pace is not None:
+        car = 0.5 * car + 0.5 * last_pace
+    per = (1 - blend) * car + blend * pace
+    raw = {key: per * w_left * t["points"] for key, t in TIERS.items()}
+    if raw["ambitious"] > ceiling > 0:     # a strong team: bring all three down together so they stay in step
+        raw = {key: v * ceiling / raw["ambitious"] for key, v in raw.items()}
     out, floor = {}, earned
     for key, t in TIERS.items():
         wanted = expected + t["shift"]
         pos = max(1, min(n, wanted))
-        car = POINTS_PER_ROUND[max(0, min(len(POINTS_PER_ROUND) - 1, pos - 1))]
-        if last_pace is not None:    # what this team actually scored last season, scaled to this tier's position
-            car = 0.5 * car + 0.5 * last_pace * car / POINTS_PER_ROUND[max(0, min(len(POINTS_PER_ROUND) - 1, expected - 1))]
-        per = (1 - blend) * car + blend * pace
-        gain = per * w_left * t["points"]
+        gain = raw[key]
         if key == "safe":
             gain = max(gain, 1.0, 0.25 * w_left)
         else:
             gain = max(gain, (floor - earned) + max(MIN_GAP[0], MIN_GAP[1] * (floor - earned)))
-        if v3:
-            pts = max(1, engine.round_half_up(earned + gain)) if w_left else max(1, engine.round_half_up(earned))
-            pts = min(pts, max(1, cap))
-        else:
-            pts = max(1, round(earned + gain)) if w_left else max(1, round(earned))
+        rnd = engine.round_half_up if v3 else round
+        pts = max(1, rnd(earned + gain)) if w_left else max(1, rnd(earned))
+        pts = min(pts, max(1, cap))
         floor = pts
         if v3 and wanted < 1:
             pass        # v2.5: a target that improves past P1 is clamped to P1 and P1 stays a way to complete it
@@ -256,6 +262,7 @@ def choose(conn, season_id, team_id, tier, username):
                  (season_id, team_id, tier, o["target_position"], o["target_points"], o["reward"], o["penalty"],
                   info["why"], username, now_iso()))
     set_meta(conn, _reopen_key(season_id, team_id), "0")    # a reopened choice locks again once made
+    set_meta(conn, _refresh_key(season_id, team_id), "0")
     return o
 
 
@@ -377,3 +384,35 @@ def apply_rewards(conn, old_season_id, new_season_id):
             conn.execute("UPDATE season_driver_state SET starting_reputation = MAX(0, MIN(100, starting_reputation + ?)) "
                          "WHERE season_id = ? AND driver_id = ?", (delta, new_season_id, driver_id))
     return changes
+
+
+REFRESH_KEY = "team_goal_refresh_2026_10"
+
+
+def _refresh_key(season_id, team_id):
+    return f"team_goal_refreshed_{season_id}_{team_id}"
+
+
+def refresh_once(conn):
+    """4.0 goal refresh: the targets are worked out with the refined numbers above, so every team's goal that isn't
+    settled yet is cleared once per league and the team chooses again (even mid-season). The cleared rows are kept in
+    team_goal_choices_cleared, and the Team goals page explains why the choice is back. Tracked by meta REFRESH_KEY."""
+    if get_meta(conn, REFRESH_KEY):
+        return
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'team_goal_choices'").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS team_goal_choices_cleared AS
+                        SELECT *, '' AS cleared_at FROM team_goal_choices WHERE 0""")
+        rows = conn.execute("SELECT season_id, team_id FROM team_goal_choices WHERE outcome IS NULL").fetchall()
+        if rows:
+            conn.execute("INSERT INTO team_goal_choices_cleared SELECT *, ? FROM team_goal_choices WHERE outcome IS NULL",
+                         (now_iso(),))
+            conn.execute("DELETE FROM team_goal_choices WHERE outcome IS NULL")
+            for r in rows:
+                set_meta(conn, _reopen_key(r["season_id"], r["team_id"]), "1")
+                set_meta(conn, _refresh_key(r["season_id"], r["team_id"]), "1")
+    set_meta(conn, REFRESH_KEY, now_iso())
+
+
+def was_refreshed(conn, season_id, team_id):
+    """True while this team's goal was cleared by the 4.0 goal refresh and hasn't been chosen again."""
+    return get_meta(conn, _refresh_key(season_id, team_id)) == "1"

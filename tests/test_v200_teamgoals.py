@@ -160,3 +160,38 @@ def test_goals_stay_in_their_league(app, master_client):
         teamgoals.choose(conn, sid, team, "competitive", "devon")
     with storage.session(t2) as conn:
         assert teamgoals.progress(conn, S.current_season_id(conn)) == []
+
+
+def test_goal_refresh_clears_unsettled_goals_once_and_asks_again(app, master_client):
+    """2026-10 refresh: unsettled goals are cleared once per league (kept aside), the team must choose again even
+    mid-season, the page says why, and targets stay within 75% of the points still available."""
+    auth.create_user("ana", "Ana", "password1")
+    token = _league(master_client)
+    with storage.session(token) as conn:
+        sid = S.current_season_id(conn)
+        a, b = players(conn)
+        _seat(conn, {a: (3, 1), b: (8, 1)})
+        team = S.driver_seats(conn, sid)[a][0]
+        teamgoals.set_enabled(conn, True)
+        assert storage.get_meta(conn, teamgoals.REFRESH_KEY)          # new leagues are marked done straight away
+        teamgoals.choose(conn, sid, team, "ambitious", "ana")
+        run_event(conn, S.events(conn, sid)[0])
+        conn.execute("DELETE FROM meta WHERE key = ?", (teamgoals.REFRESH_KEY,))   # as if written before the refresh
+        evs = S.events(conn, sid)
+        max_left = sum(43 + (15 if e["is_sprint"] else 0) for e in evs if e["status"] != "Complete")
+    pledge_all(token)
+    with storage.session(token) as conn:                                  # opening the league runs it
+        assert teamgoals.choice(conn, sid, team) is None
+        assert conn.execute("SELECT tier FROM team_goal_choices_cleared").fetchone()["tier"] == "ambitious"
+        assert not teamgoals.locked(conn, sid, team) and teamgoals.was_refreshed(conn, sid, team)
+        earned = teamgoals._standings(conn, sid)[team][1]
+        for o in teamgoals.options(conn, sid, team)["options"].values():
+            assert o["target_points"] <= earned + 0.75 * max_left
+    ana = _client(app, "ana")
+    assert ana.get(f"/career/{token}/dashboard").headers["Location"].endswith("/team-goals")
+    assert "refined how team goals are worked out" in ana.get(f"/career/{token}/team-goals").get_data(as_text=True)
+    ana.post(f"/career/{token}/team-goals/{team}", data={"csrf_token": "tok", "tier": "competitive"})
+    with storage.session(token) as conn:
+        assert teamgoals.choice(conn, sid, team)["tier"] == "competitive"
+        assert not teamgoals.was_refreshed(conn, sid, team)
+        assert conn.execute("SELECT COUNT(*) FROM team_goal_choices_cleared").fetchone()[0] == 1   # only once
