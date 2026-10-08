@@ -15,7 +15,6 @@
       {% for t in all_teams if t.active %}{% set cr = ratings.get(t.id) %}
       <label style="--team: {{ t.color }}">{{ team_dot(t) }}{{ t.name }}
         <input type="number" name="rating_{{ t.id }}" step="0.1" min="{{ C.CAR_RATING_MIN }}" max="{{ C.CAR_RATING_MAX }}" value="{{ '%.1f'|format(cr.rating) if cr }}">
-        {% if cr and cr.change %}<small class="{{ 'up' if cr.change > 0 else 'down' }}">{{ '%+.1f'|format(cr.change) }} over winter</small>{% endif %}
       </label>
       {% endfor %}
     </div>
