@@ -306,7 +306,7 @@ def test_permission_denied_uses_the_denied_state(app, master_client):
 
 
 def test_version_and_changelog_era(app, master_client):
-    assert C.APP_VERSION.startswith("4.0")
+    assert C.APP_VERSION.startswith("4.")
     page = master_client.get("/changelog").get_data(as_text=True)
     assert "THE NEXT GENERATION" in page and "Versions 4.0–4.x" in page and "THE DEFINITIVE RELEASE" not in page
     assert "v3.2.6" not in page and 'href="/changelog?view=older"' in page
