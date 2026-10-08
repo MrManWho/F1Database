@@ -8,7 +8,7 @@ The first version after the 4.0.0 changelog pause. Anything after it gets its ow
 
 - **Remember me** on the sign-in page (ticked by default) makes the sign-in cookie last 60 days
   (`PERMANENT_SESSION_LIFETIME`, the same as `security.SESSION_IDLE_DAYS`); unticked, it ends when the browser
-  closes, as before. Signing out, or ending the session from Account → Sessions, still ends it straight away. Two-step
+  closes, as before. Signing out, or ending it under Account → Security → Signed-in devices, still ends it straight away. Two-step
   sign-in carries the choice through the code step.
 
 - **Faster pages.** A league's *last opened* time is now saved at most every ten minutes instead of on every page
