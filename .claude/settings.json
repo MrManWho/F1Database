@@ -1,6 +1,6 @@
 {
   "permissions": {
-    "ask": [
+    "allow": [
       "Bash(git push *)",
       "Bash(git merge *)",
       "Bash(git rebase *)",
