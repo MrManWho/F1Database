@@ -89,6 +89,15 @@ def _int(v, lo=0, hi=10**9):
     return n if lo <= n <= hi else None
 
 
+def _seconds(v):
+    """A session time in seconds (0 when missing or nonsense)."""
+    try:
+        v = round(float(v), 3)
+    except (TypeError, ValueError):
+        return 0
+    return v if 0 < v < 36000 else 0
+
+
 def clean(payload):
     """Check an upload and keep only what the site uses. Raises ValidationError when it isn't a results summary."""
     if not isinstance(payload, dict):
@@ -103,7 +112,8 @@ def clean(payload):
     out_sess = {"track": _text(sess.get("track")), "session_type": _text(sess.get("session_type")),
                 "session_type_id": type_id, "kind": KINDS.get(type_id, "unknown"),
                 "ai_difficulty": _int(sess.get("ai_difficulty"), 0, 110),
-                "weather": _text(sess.get("weather"), 24), "total_laps": _int(sess.get("total_laps"), 0, 200)}
+                "weather": _text(sess.get("weather"), 24), "total_laps": _int(sess.get("total_laps"), 0, 200),
+                "weather_seen": [_text(w, 24) for w in (sess.get("weather_seen") or [])[:12] if isinstance(w, str)]}
     rows = []
     for r in results:
         if not isinstance(r, dict):
@@ -115,7 +125,7 @@ def clean(payload):
                      "laps": _int(r.get("laps"), 0, 300), "best_lap_ms": _int(r.get("best_lap_ms"), 0, 10**8),
                      "best_lap": _text(r.get("best_lap"), 12), "penalty_s": _int(r.get("penalty_s"), 0, 255),
                      "race_number": _int(r.get("race_number"), 0, 999), "ai": bool(r.get("ai")),
-                     "fastest_lap": bool(r.get("fastest_lap"))})
+                     "fastest_lap": bool(r.get("fastest_lap")), "race_time_s": _seconds(r.get("race_time_s"))})
     if not any(r["name"] for r in rows):
         raise S.ValidationError("The results have no driver names")
     # The fastest lap, if the sender didn't mark it: the lowest best lap.
@@ -202,3 +212,83 @@ def applied(conn, upload_id, event_id, mapping):
         ensure_table(conn)
         conn.execute("UPDATE telemetry_uploads SET used_event_id = ?, used_at = ? WHERE id = ?",
                      (event_id, now_iso(), upload_id))
+
+
+# --------------------------------------------------------------------------- a whole round from the game
+# The game's weather, per session, as the round's weather record (f1tracker/weather.py CONDITIONS).
+WEATHER = {"Clear": "dry", "Light cloud": "dry", "Overcast": "overcast", "Light rain": "light_rain",
+           "Heavy rain": "heavy_rain", "Storm": "heavy_rain"}
+ROUND_WINDOW_HOURS = 72     # sessions of one race night arrive together; older ones at the same track aren't this round
+
+
+def weather_key(sess):
+    """One condition for a session: "changing" when it was both dry and wet, else what it mostly was."""
+    seen = [WEATHER[w] for w in (sess.get("weather_seen") or []) + [sess.get("weather")] if w in WEATHER]
+    if not seen:
+        return None
+    wet = [w for w in seen if w in ("light_rain", "heavy_rain")]
+    if wet and len(wet) < len(seen):
+        return "changing"
+    if wet:
+        return "heavy_rain" if "heavy_rain" in wet else "light_rain"
+    return "overcast" if seen.count("overcast") > len(seen) / 2 else "dry"
+
+
+GAME_TRACKS = {"Losail": "Lusail"}   # the game's track names the circuit list spells differently
+
+
+def _circuit(text):
+    from . import circuits
+    found = circuits.lookup(GAME_TRACKS.get(text, text) or "")
+    return found["circuit"] if found["code"] else None
+
+
+def for_round(conn, event):
+    """The game sessions that belong to this round, newest race night at its circuit:
+    {"qualifying": [uploads, Q1 first], "sprint": upload or None, "race": upload or None}. Empty when none match."""
+    from datetime import datetime, timedelta
+    ensure_table(conn)
+    circuit = _circuit(f"{event['name']} {event.get('location') or ''}")
+    if not circuit:
+        return {}
+    rows = [r for r in conn.execute("SELECT id, received_at, track, session_type_id FROM telemetry_uploads "
+                                    "ORDER BY id DESC") if _circuit(r["track"]) == circuit]
+    if not rows:
+        return {}
+
+    def when(r):
+        try:
+            return datetime.fromisoformat(r["received_at"].replace("Z", "+00:00"))
+        except (TypeError, ValueError, AttributeError):
+            return None
+    newest = when(rows[0])
+    rows = [r for r in rows if newest is None or (when(r) and newest - when(r) <= timedelta(hours=ROUND_WINDOW_HOURS))]
+    out = {"qualifying": [], "sprint": None, "race": None}
+    quali = {}
+    for r in rows:   # newest first: the first of each kind wins
+        kind = KINDS.get(r["session_type_id"])
+        if kind == "sprint_or_race":
+            kind = "sprint" if event.get("is_sprint") else "race"
+        if kind == "qualifying":
+            quali.setdefault(r["session_type_id"], r["id"])
+        elif kind in ("sprint", "race") and out[kind] is None:
+            out[kind] = r["id"]
+    out["qualifying"] = [get(conn, quali[t]) for t in sorted(quali)]
+    for kind in ("sprint", "race"):
+        out[kind] = get(conn, out[kind]) if out[kind] else None
+    if not out["qualifying"] and not out["sprint"] and not out["race"]:
+        return {}
+    return out
+
+
+def round_summary(bundle):
+    """What a round's game sessions hold, for the round page: [("Qualifying", "Q1, Q2, Q3"), ("Race", "22 cars")]."""
+    if not bundle:
+        return []
+    out = []
+    if bundle["qualifying"]:
+        out.append(("Qualifying", ", ".join(q["session"]["session_type"] for q in bundle["qualifying"])))
+    for kind, label in (("sprint", "Sprint"), ("race", "Race")):
+        if bundle[kind]:
+            out.append((label, f"{len(bundle[kind]['results'])} cars"))
+    return out

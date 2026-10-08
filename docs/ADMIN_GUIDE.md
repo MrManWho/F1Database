@@ -34,6 +34,14 @@ Off by default, per league. Results can come straight from F1 25's UDP telemetry
   `f1tracker/telemetry.py`). When the game shows a session's final classification, the recorder posts that session
   to the link. Uploads don't need a sign-in; they're accepted only while the feature is on and the key matches,
   are limited to 256 KB and 120 per hour per address, and the last 40 per league are kept.
+- **Filling a whole weekend:** when the game's sessions for a round have arrived (matched by the round's circuit, and
+  only sessions sent within 72 hours of the newest one), the round shows **Fill weekend from the game** (also at the
+  top of Import results). One click fills qualifying (Q1, Q2 and Q3 combined into the final order), the Sprint and the
+  race into the results table, the Grand Prix fastest lap, the AI level, each session's weather (dry, overcast, light
+  or heavy rain, or "changing" when it was both) and each player's race times, laps and qualifying laps against
+  their AI teammate (the other car of their team in the game; penalties added to race times). Weather and times
+  already entered are kept. Drivers that don't match confidently are left out and listed. Nothing is submitted; the
+  results are the usual draft. Routes: GET `/career/<token>/weekend/<id>/telemetry`, POST `.../telemetry/extras`.
 - **Importing:** on a round, **Import results** lists the sessions received. Opening one fills the usual import
   preview (driver matching, checks, compare with what's entered); **Apply** fills the results table, the fastest lap
   (Grand Prix only) and the AI level if none is entered yet. Nothing is saved or submitted until the normal save and

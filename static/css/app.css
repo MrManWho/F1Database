@@ -1094,6 +1094,8 @@ form.inline { display: inline; }
 .imp-tele-list { list-style: none; padding: 0; margin: .4rem 0 .6rem; display: grid; gap: .35rem; }
 .imp-tele-list li { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .imp-telemetry { border-bottom: 1px solid var(--line); padding-bottom: .4rem; margin-bottom: .6rem; }
+.imp-round { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin: .4rem 0 .8rem; }
+.imp-round p { margin: 0 0 .4rem; }
 .imp-shot { border: 1px solid var(--line); border-radius: 10px; padding: .5rem; display: grid; gap: .4rem; min-width: 0; }
 .imp-shot-head { display: flex; gap: .5rem; align-items: center; }
 .imp-shot-head .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
