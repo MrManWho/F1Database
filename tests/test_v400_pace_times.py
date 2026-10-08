@@ -94,7 +94,7 @@ def test_a_plus_gap_behind_the_winner_works_like_the_game_shows_it(app, master_c
 def test_the_winners_race_time_is_shared_and_both_players_can_be_behind(app, master_client):
     token, one, ev = _league(master_client)
     res = _pace(master_client, token, ev, one, race_time="+6.332", bench_race_time="+12.664", laps="20")
-    assert "enter the winner" in master_client.get(res.headers["Location"]).get_data(as_text=True)
+    assert "at the top of Race times" in master_client.get(res.headers["Location"]).get_data(as_text=True)
     master_client.post(f"/career/{token}/weekend/{ev['id']}/pace",
                        data={"csrf_token": "tok", "session": "gp", "winner_time": "27:58.361"})
     _pace(master_client, token, ev, one, race_time="+6.332", bench_race_time="+12.664", laps="20")
@@ -112,15 +112,28 @@ def test_the_winners_race_time_is_shared_and_both_players_can_be_behind(app, mas
 
 def test_a_dnf_in_the_race_time_boxes_means_no_race_gap(app, master_client):
     token, one, ev = _league(master_client)
+    res = _pace(master_client, token, ev, one, race_time="+6.0", bench_dnf="1", laps="20")       # +gap needs the winner
+    assert "at the top of Race times" in master_client.get(res.headers["Location"]).get_data(as_text=True)
+    master_client.post(f"/career/{token}/weekend/{ev['id']}/pace",
+                       data={"csrf_token": "tok", "session": "gp", "winner_time": "27:58.361"})
     _pace(master_client, token, ev, one, quali_time="1:20.462", mate_quali_time="1:20.392", race_time="+6.0",
           bench_dnf="1", laps="20")
     with storage.session(token) as conn:
         p = ai3.pace_input(conn, ev["id"], one)
-    assert p["bench_dnf"] and not p["race_dnf"] and p["race_gap"] is None and p["race_time"] is None
+    assert p["bench_dnf"] and not p["race_dnf"] and p["race_gap"] is None
+    assert p["race_time"] == pytest.approx(1684.361) and p["bench_race_time"] is None   # the other time is kept
+    _pace(master_client, token, ev, one, race_dnf="1", bench_race_time="+0", laps="20")      # +0: level with the winner
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_dnf"] and p["bench_race_time"] == pytest.approx(1678.361) and p["race_gap"] is None
+    _pace(master_client, token, ev, one, quali_time="1:20.462", mate_quali_time="1:20.392", race_time="+6.0",
+          bench_dnf="1", laps="20")
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
     assert p["quali_time"] == pytest.approx(80.462)                                 # qualifying still counts
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}?stage=sessions&session=r").get_data(as_text=True)
     assert 'name="bench_dnf" value="1" data-dnf="bench_race_time" checked' in page and "they DNF" in page
-    _pace(master_client, token, ev, one, race_time="1:30:00.000", bench_race_time="1:30:05.000", laps="20")
+    _pace(master_client, token, ev, one, race_time="+0", bench_race_time="+5.000", laps="20")
     with storage.session(token) as conn:                                             # unticked: times count again
         p = ai3.pace_input(conn, ev["id"], one)
     assert not p["bench_dnf"] and p["race_gap"] == pytest.approx(-5.0)

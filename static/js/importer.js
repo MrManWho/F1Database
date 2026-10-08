@@ -541,6 +541,8 @@
             const out = function (r) { return r && ["DNF", "Retired", "DSQ", "Not Classified"].indexOf(r.status) >= 0; };
             if (out(me)) entry.race_dnf = true;
             if (out(mate)) entry.bench_dnf = true;
+            if (entry.race_dnf && !entry.bench_dnf && done(mate)) entry.bench_race_time = mate.race_time_s + (mate.penalty_s || 0);
+            if (entry.bench_dnf && !entry.race_dnf && done(me)) entry.race_time = me.race_time_s + (me.penalty_s || 0);
           }
         }
         if (Object.keys(entry).length > 2) report.pace.push(entry);

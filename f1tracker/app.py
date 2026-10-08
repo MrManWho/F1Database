@@ -4678,6 +4678,9 @@ def register_routes(app):
                 elif (not form["race_time"] and not form["bench_race_time"] and not form["race_gap"] and not form["race_dnf"]
                         and not form["bench_dnf"] and not form["comp_driver_id"] and (p.get("race_dnf") or p.get("bench_dnf"))):
                     form["race_dnf"], form["bench_dnf"] = ("1" if p.get("race_dnf") else ""), ("1" if p.get("bench_dnf") else "")
+                    for key in ("race_time", "bench_race_time"):     # the one who finished keeps their time
+                        if isinstance(p.get(key), (int, float)) and p[key] > 0:
+                            form[key] = ai3.format_time(round(p[key], 3))
                     filled.append("race_time")
                 if not form["laps"] and isinstance(p.get("laps"), int) and 1 <= p["laps"] <= 200:
                     form["laps"] = str(p["laps"]); filled.append("laps")

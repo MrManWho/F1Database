@@ -65,7 +65,10 @@ def parse_race_entry(value):
     Returns (seconds, True when it was a +gap); (None, False) for blank."""
     text = (value or "").strip()
     if text.startswith("+"):
-        gap = parse_time(text[1:])
+        rest = text[1:].strip().replace(",", ".")
+        if rest and all(part.replace(".", "", 1).isdigit() and float(part) == 0 for part in rest.split(":")):
+            return 0.0, True                         # "+0": level with the winner
+        gap = parse_time(rest)
         if gap is None:
             raise ValueError("Times look like 1:23.456")
         return gap, True
@@ -170,17 +173,19 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
     except ValueError:
         raise ValueError("Race times look like 1:32:45.123 (hours:minutes:seconds), or +12.345 behind the winner")
     race_dnf, bench_dnf = bool(form.get("race_dnf")), bool(form.get("bench_dnf"))
-    if race_dnf or bench_dnf:                        # a DNF has no race time, so there's no race gap to compare
-        race_time = bench_time = None
-        race_plus = bench_plus = False
+    if race_dnf:                                     # a DNF has no race time, so there's no race gap to compare;
+        race_time, race_plus = None, False           # the other driver's time is still kept
+    if bench_dnf:
+        bench_time, bench_plus = None, False
+    if race_dnf or bench_dnf:
         form = {**form, "race_gap": ""}
     if race_plus or bench_plus:                      # "+gap" is behind the round winner
         winner = winner_time(conn, event_id, session)
         other = bench_time if race_plus else race_time
         if winner is None and race_plus != bench_plus and other is not None:   # the other box is the winner's: share it
             winner = save_winner_time(conn, event_id, session, format_time(other), username)
-        if winner is None and race_plus and bench_plus:
-            raise ValueError("Neither of you won, so enter the winner's race time at the top of Race times first")
+        if winner is None and ((race_plus and bench_plus) or race_dnf or bench_dnf):
+            raise ValueError("Enter the winner's race time at the top of Race times first, so a +gap can be worked out")
         if winner is None:
             raise ValueError("Enter both race times (yours and theirs), or neither")
         if race_plus:
@@ -193,7 +198,9 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
         laps = int(form.get("laps")) if (form.get("laps") or "").strip() else None
     except ValueError:
         raise ValueError("The race gap is seconds (e.g. 12.4, or -3 if you finished ahead) and laps a whole number")
-    if race_time is not None and bench_time is not None:
+    if race_dnf or bench_dnf:
+        gap = None
+    elif race_time is not None and bench_time is not None:
         gap = round(race_time - bench_time, 3)       # 4.0: the site works the gap out (+ behind, - ahead)
     elif (race_time is None) != (bench_time is None):
         raise ValueError("Enter both race times (yours and theirs), or neither")
