@@ -36,22 +36,39 @@
     <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="driver_id" value="{{ r.driver_id }}"><input type="hidden" name="session" value="{{ item.session }}">
-      <div class="form-grid">
+      {% set mate_ = pace.drivers|selectattr('team_id', 'equalto', r.team_id)|first %}
+      {% set mate_name_ = mate_.driver.name if mate_ else 'AI teammate' %}
+      {% set comp_ = (p.comp_driver_id if p and p.comp_driver_id and item.session == 'gp') or none %}
+      {% set comp_row_ = pace.drivers|selectattr('driver_id', 'equalto', comp_)|first if comp_ else none %}
+      {% if item.session == 'gp' %}
+      <label class="pace-vs">Compare with
+        <select name="comp_driver_id" data-pace-vs>
+          <option value="" data-name="{{ mate_name_ }}">{{ mate_name_ }} (your AI teammate)</option>
+          <optgroup label="Another driver">{% for d in pace.drivers %}{% if not mate_ or d.driver_id != mate_.driver_id or comp_ == d.driver_id %}<option value="{{ d.driver_id }}" data-name="{{ d.driver.name }}" {{ 'selected' if comp_ == d.driver_id }}>{{ d.driver.name }} ({{ d.team.name }})</option>{% endif %}{% endfor %}</optgroup>
+        </select></label>
+      {% else %}
+      <p class="small muted pace-vs">Compared with <b>{{ mate_name_ }}</b>, your AI teammate.</p>
+      {% endif %}
+      <div class="pace-table" role="group" aria-label="{{ r.driver.name }}'s times">
+        <span class="pace-th"></span><span class="pace-th">{{ r.driver.name }}</span><span class="pace-th" data-pace-them>{{ comp_row_.driver.name if comp_row_ else mate_name_ }}</span>
         {% if item.session == 'gp' %}
-        <label>Your qualifying time <input name="quali_time" value="{{ pace.fmt(p.quali_time) if p }}" placeholder="1:23.456" inputmode="decimal"></label>
-        <label>AI teammate's qualifying time <input name="mate_quali_time" value="{{ pace.fmt(p.mate_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal"></label>
-        <label>Or compare with <select name="comp_driver_id"><option value="">—</option>{% for d in pace.drivers %}<option value="{{ d.driver_id }}" {{ 'selected' if p and p.comp_driver_id == d.driver_id }}>{{ d.driver.name }} ({{ d.team.name }})</option>{% endfor %}</select></label>
-        <label>Their qualifying time <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.300" inputmode="decimal"></label>
+        <span class="pace-rh">Qualifying</span>
+        <label><span class="sr-only">{{ r.driver.name }}'s qualifying time</span><input name="quali_time" value="{{ pace.fmt(p.quali_time) if p }}" placeholder="1:23.456" inputmode="decimal"></label>
+        <label><span class="sr-only">Their qualifying time</span>
+          <input name="mate_quali_time" value="{{ pace.fmt(p.mate_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal" data-pace-q="mate" {{ 'hidden disabled' if comp_ }}>
+          <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal" data-pace-q="comp" {{ 'hidden disabled' if not comp_ }}></label>
         {% endif %}
-        <label>Your race time <input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
-        <label>{{ "AI teammate's" if item.session == 'sprint' else "Their" }} race time <small class="muted">({{ 'AI teammate' if item.session == 'sprint' else 'AI teammate, or the driver picked above' }})</small>
-          <input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
-        <label>Laps you completed <input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}"></label>
-        <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
-        <details class="small"><summary>Or type the gap yourself</summary>
-          <label>Race gap to them (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
-          <span class="muted">Only used when the two race times are blank (for example if one of you was lapped).</span></details>
+        <span class="pace-rh">Race time</span>
+        <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
+        <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
+        <span class="pace-rh">Race laps</span>
+        <label><span class="sr-only">Race laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
+        <span class="small muted pace-note">Laps you finished in the race (not qualifying). Turns the gap into seconds a lap.</span>
       </div>
+      <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
+      <details class="small pace-gap-alt"><summary>Don't have both race times? Type the gap instead</summary>
+        <label>Gap to them at the finish (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
+        <span class="muted">Only used when both race times are blank (for example if one of you was lapped).</span></details>
       <fieldset class="flag-grid"><legend class="small">Anything unusual?</legend>
         {% for key, f in pace.flags.items() %}<label class="check small"><input type="checkbox" name="flag_{{ key }}" value="1" {{ 'checked' if p and key in p.flag_list }}> {{ f[0] }}</label>{% endfor %}
         <label class="check small"><input type="checkbox" name="untracked" value="1" {{ 'checked' if p and p.untracked }}> Don't submit times for this session (it won't count toward the AI recommendation)</label>
@@ -72,9 +89,11 @@
 <script>
 /* 4.0: show the gap as the two race times are typed (the site works it out the same way when saved) */
 (function () {
-  if (window.__paceGap) return; window.__paceGap = true;
+  /* included once per session section, so each run wires only what earlier runs haven't */
+  function fresh(el) { if (el.dataset.paceWired) return false; el.dataset.paceWired = "1"; return true; }
   /* player tabs inside a session's Race times section */
   document.querySelectorAll(".pace-tabs").forEach(function (bar) {
+    if (!fresh(bar)) return;
     bar.addEventListener("click", function (e) {
       const tab = e.target.closest("[role=tab]"); if (!tab) return;
       bar.querySelectorAll("[role=tab]").forEach(function (t) {
@@ -83,9 +102,20 @@
       });
     });
   });
+  /* "Compare with": show the qualifying box for whoever is picked and name them in the column head */
+  document.querySelectorAll("[data-pace-vs]").forEach(function (sel) {
+    if (!fresh(sel)) return;
+    var f = sel.form;
+    sel.addEventListener("change", function () {
+      var comp = sel.value !== "", opt = sel.options[sel.selectedIndex], head = f.querySelector("[data-pace-them]");
+      f.querySelectorAll("[data-pace-q]").forEach(function (i) { var on = (i.dataset.paceQ === "comp") === comp; i.hidden = !on; i.disabled = !on; });
+      if (head && opt) head.textContent = opt.dataset.name || opt.textContent;
+    });
+  });
   function secs(v) { v = (v || "").trim().replace(",", "."); if (!v) return null; var t = 0, parts = v.split(":");
     for (var i = 0; i < parts.length; i++) { var n = parseFloat(parts[i]); if (isNaN(n)) return null; t = t * 60 + n; } return t; }
   document.querySelectorAll(".pace-form").forEach(function (f) {
+    if (!fresh(f)) return;
     var a = f.querySelector("[data-race-time]"), b = f.querySelector("[data-bench-time]"), out = f.querySelector("[data-gap-preview]"),
         laps = f.querySelector("[name=laps]");
     if (!a || !b || !out) return;
