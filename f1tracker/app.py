@@ -4708,6 +4708,16 @@ def register_routes(app):
             g.audit_summary = f"filled {event_label(event, year)} from the game's telemetry: " + "; ".join(done)
         return jsonify(ok=True, done=done, notes=notes)
 
+    @app.route("/career/<token>/telemetry/data")
+    @career_page(ops_only=True)
+    def telemetry_data(conn, ctx):
+        """Race data from the game: which game sessions are linked to each round, and what data each is missing."""
+        if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"]:
+            abort(404)
+        rounds = telemetry.coverage(conn, ctx["season"]["id"])
+        return page("telemetry_data.html", ctx, rounds=rounds, data_items=telemetry.DATA,
+                    gaps=sum(1 for r in rounds if r["missing"]), recorded=sum(1 for r in rounds if r["recorded"]))
+
     @app.route("/career/<token>/telemetry-link")
     @career_page(ops_only=True)
     def telemetry_page(conn, ctx):

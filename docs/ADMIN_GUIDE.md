@@ -42,6 +42,13 @@ Off by default, per league. Results can come straight from F1 25's UDP telemetry
   their AI teammate (the other car of their team in the game; penalties added to race times). Weather and times
   already entered are kept. Drivers that don't match confidently are left out and listed. Nothing is submitted; the
   results are the usual draft. Routes: GET `/career/<token>/weekend/<id>/telemetry`, POST `.../telemetry/extras`.
+- **Kept with each round:** an upload is linked when it arrives to the current season's first unfinished round at
+  its circuit (or to the round it's imported into), and linked uploads are never dropped; only unlinked ones are
+  trimmed to the newest 40. Each keeps the summary as sent (`raw`) and the recorder version, so a later feature can
+  read more from races already run. **Race data from the game** (More, or Import results → Race data;
+  `/career/<token>/telemetry/data`) lists each round's linked sessions and what's missing, checked against
+  `telemetry.DATA` (add a row there when a feature needs more). The recorder's **Rebuild results...** with an
+  upload link sends old recordings again; the same session replaces its copy and keeps its round.
 - **Importing:** on a round, **Import results** lists the sessions received. Opening one fills the usual import
   preview (driver matching, checks, compare with what's entered); **Apply** fills the results table, the fastest lap
   (Grand Prix only) and the AI level if none is entered yet. Nothing is saved or submitted until the normal save and

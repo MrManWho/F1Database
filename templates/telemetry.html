@@ -22,9 +22,10 @@
 </section>
 <section class="card">
   <h2>Recently received</h2>
+  <p class="small"><a href="{{ url_for('telemetry_data', token=ctx.token) }}">Race data from the game →</a> shows what each round has.</p>
   {% if uploads %}
   <ul class="imp-tele-list">{% for u in uploads %}<li><b>{{ u.track or 'Session' }} · {{ u.session_type or 'Results' }}</b>
-    <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · used for R{{ u.used_round }}{% endif %}</span></li>{% endfor %}</ul>
+    <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · linked to R{{ u.used_round }}{% endif %}</span></li>{% endfor %}</ul>
   {% else %}<p class="muted small">Nothing received yet.</p>{% endif %}
 </section>
 {% endblock %}

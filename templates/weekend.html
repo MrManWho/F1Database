@@ -940,12 +940,13 @@
       <ul class="imp-tele-list">
         {% for u in telemetry_uploads %}
         <li><button type="button" class="btn btn-sm" data-tele-id="{{ u.id }}">{{ u.track or 'Session' }} · {{ u.session_type or 'Results' }}</button>
-          <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · used for R{{ u.used_round }}{% endif %}</span></li>
+          <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · R{{ u.used_round }}{% endif %}</span></li>
         {% endfor %}
       </ul>
       {% else %}<p class="muted small">Nothing has been sent from the game yet. Sessions arrive here when the recorder sees the results screen.</p>{% endif %}
       <label class="btn btn-sm btn-ghost">Open a telemetry file<input type="file" id="imp-tele-file" accept=".json,application/json" hidden></label>
       {% if ctx.perms.telemetry_link %}<a class="btn btn-sm btn-ghost" href="{{ url_for('telemetry_page', token=ctx.token) }}">Upload link</a>{% endif %}
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('telemetry_data', token=ctx.token) }}">Race data</a>
       <h3 class="mini-head">Or from a screenshot</h3>
     </div>
     {% endif %}

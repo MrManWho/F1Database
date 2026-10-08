@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Race data from the game{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }} · {{ ctx.season.year }}</div><h1>Race data from the game</h1>
+  <p class="page-purpose">Every session the game's telemetry sent is kept with its round, so anything the site learns to read later can come from races already run.</p></div></div>
+<section class="card">
+  <p class="small">{{ recorded }} of {{ rounds|length }} rounds have game data{% if gaps %}; {{ gaps }} {{ 'is' if gaps == 1 else 'are' }} missing something{% endif %}.
+    Sessions are linked to the first unfinished round at their circuit when they arrive, or to the round they're imported into.</p>
+  <p class="muted small">Missing data can be added later: in the telemetry recorder, press <b>Rebuild results…</b> and pick that round's
+    recordings. With the league upload link set, they're sent again and replace the copies here, keeping their round.</p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th class="num">Round</th><th>Grand Prix</th><th>Qualifying</th><th>Sprint</th><th>Race</th><th>Missing</th></tr></thead>
+    <tbody>
+    {% for r in rounds %}{% set e = r.event %}
+    <tr>
+      <td class="num">R{{ e.round_number }}</td>
+      <td><a href="{{ url_for('weekend', token=ctx.token, event_id=e.id) }}">{{ e.name }}</a></td>
+      {% for kind in ['qualifying', 'sprint', 'race'] %}
+      <td class="small">{% if kind == 'sprint' and not e.is_sprint %}<span class="muted">No Sprint</span>
+        {% elif r.sessions[kind] %}{% for s in r.sessions[kind] %}<span title="{{ s.recorder or 'Recorder unknown' }} · {{ s.received_at|stamp if s.received_at }}">✓ {{ s.label }}</span>{{ ', ' if not loop.last }}{% endfor %}
+        {% else %}<span class="muted">—</span>{% endif %}</td>
+      {% endfor %}
+      <td class="small">{% if not r.recorded %}<span class="muted">No game data</span>
+        {% elif r.missing %}{% for s, what in r.missing %}{{ s }}: {{ what|lower }}{{ '; ' if not loop.last }}{% endfor %}
+        {% else %}<span class="pill pill-ok">Complete</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Checked for each session: {% for key, label, applies, _f in data_items %}{{ label|lower }}{{ ', ' if not loop.last }}{% endfor %}.
+    Race times and incidents only apply to the Sprint and the race.</p>
+</section>
+{% endblock %}
