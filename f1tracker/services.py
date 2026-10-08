@@ -894,7 +894,7 @@ def submission_check(conn, event_id):
                      "sprint": (f"P{r['sprint_position']}" if r["sprint_status"] == C.STATUS_FINISHED else r["sprint_status"]) if sprint else None,
                      "points": r["gp_points"] + r["sprint_pts"]}
                     for r in rows if r["driver"]["is_player"]],
-        "ai_difficulty": event["ai_difficulty"],
+        "ai_difficulty": event["ai_difficulty"], "ai_untracked": bool(event["ai_untracked"]),
     }
     return {"blocking": blocking, "warnings": warnings, "summary": summary, "revision": event["revision"],
             "status": event["status"], "player_issues": player_issues,

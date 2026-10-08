@@ -216,6 +216,24 @@
     if (box) renderChecks(box.querySelector("[data-check-body]"), box.querySelector("[data-check-count]"), b, w);
   } };
   const box = document.querySelector("[data-checklist]");
+  // "What will be submitted" is rendered when the page loads; refill it from the saved round so edits made since
+  // (the AI level, results) show up when Review opens.
+  function renderSummary(sm) {
+    const card = document.querySelector("[data-submit-summary]");
+    if (!card) return;
+    const set = function (k, v) { const el = card.querySelector('[data-sm="' + k + '"]'); if (el) el.textContent = v; };
+    const or = function (v) { return v || "—"; };
+    const out = sm.out || {};
+    set("pole", or(sm.pole)); set("sprint_winner", or(sm.sprint_winner)); set("winner", or(sm.winner));
+    set("podium", or((sm.podium || []).join(", "))); set("fastest_lap", or(sm.fastest_lap)); set("dotd", or(sm.dotd));
+    set("out", ["DNF", "DNS", "DSQ"].map(function (k) { return or((out[k] || []).join(", ")); }).join(" / "));
+    set("ai", sm.ai_difficulty != null ? String(sm.ai_difficulty) : sm.ai_untracked ? "Not tracked" : "Not entered yet");
+    const tb = card.querySelector('[data-sm="players"]');
+    if (tb && sm.players) tb.innerHTML = sm.players.map(function (p) {
+      return '<tr class="player-row"><td><b>' + esc(p.name) + "</b></td><td>" + (p.quali ? "P" + p.quali : "—") + "</td>" +
+        (sm.sprint ? "<td>" + esc(p.sprint || "—") + "</td>" : "") + "<td>" + esc(p.race) + '</td><td class="num">' + esc(p.points) + "</td></tr>";
+    }).join("");
+  }
   function refreshChecklist() {
     if (!box || !table || !table.dataset.checklistUrl) return;
     flush().then(function () { return fetch(table.dataset.checklistUrl, { credentials: "same-origin" }); })
@@ -225,6 +243,7 @@
         const body = box.querySelector("[data-check-body]"), count = box.querySelector("[data-check-count]");
         const b = check.blocking || [], w = check.warnings || [];
         renderChecks(body, count, b, w);
+        if (check.summary) renderSummary(check.summary);
       }).catch(function () { /* offline: the last checklist stays on screen */ });
   }
 
