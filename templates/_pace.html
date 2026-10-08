@@ -18,11 +18,11 @@
   {% if wx and wx.wet %}<p class="small">🌧️ This round's weather is recorded as wet or changing. If it made a player's session unrepresentative, tick <em>Wet or changing conditions</em> for them below. Nothing is ticked for you.</p>{% endif %}
   {% set wsess_ = only_ or 'gp' %}{% set winner_ = pace.winner[wsess_] if pace.winner else none %}
   {% if pace.can_edit %}
-  <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-winner">
+  <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-winner" {{ 'data-autosave data-no-dirty' if event.status != 'Complete' }}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="session" value="{{ wsess_ }}">
     <label>Winner's race time <small class="muted">(P1's time on the game's results screen, shared by everyone)</small>
       <input name="winner_time" value="{{ pace.fmt(winner_) if winner_ }}" placeholder="1:32:32.700" inputmode="decimal" data-winner-time></label>
-    <button class="btn btn-sm btn-ghost">Save winner's time</button>
+    <button class="btn btn-sm btn-ghost">Save winner's time</button> <span class="small muted pace-autosave" data-autosave-state aria-live="polite"></span>
     <span class="small muted">Then anyone behind the winner types their time as <b>+12.345</b>, just like the game shows it.</span>
   </form>
   {% elif winner_ %}<p class="small muted">Winner's race time: <b>{{ pace.fmt(winner_) }}</b></p>{% endif %}
@@ -43,7 +43,7 @@
       {% if p %}<span class="muted small">· {% if p.untracked %}times not submitted{% else %}{% if p.race_gap is not none and p.laps %}{{ '%.3f'|format(p.race_gap|abs) }}s {{ 'behind' if p.race_gap > 0 else 'ahead' if p.race_gap < 0 else 'level' }} ({{ '%.2f'|format((p.race_gap / p.laps)|abs) }}s a lap){% elif pace.required %}race times missing{% elif pace.legacy and p.race_gap is none %}race times not tracked{% endif %}{% if p.quali_time %} · quali {{ pace.fmt(p.quali_time) }}{% endif %}{% if p.flag_list %} · {{ p.flag_list|length }} flag{{ 's' if p.flag_list|length != 1 }}{% endif %}{% endif %}</span>{% else %}<span class="muted small">· {{ "race times not tracked under this season's rules" if pace.legacy else 'nothing entered' }}</span>{% endif %}</summary>
   {% endif %}
     {% if pace.can_edit %}
-    <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form" data-me="{{ r.driver.name }}">
+    <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-form" data-me="{{ r.driver.name }}" data-session-label="{{ label_[item.session] }}" data-tab="pt-{{ item.session }}-{{ r.driver_id }}" {{ 'data-autosave data-no-dirty' if event.status != 'Complete' }}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="driver_id" value="{{ r.driver_id }}"><input type="hidden" name="session" value="{{ item.session }}">
       {% set mate_ = pace.drivers|selectattr('team_id', 'equalto', r.team_id)|first %}
@@ -93,7 +93,8 @@
         <option value="1" {{ 'selected' if p and p.representative == 1 }}>Yes: it still shows the level is too hard/easy (counts at half weight)</option>
         <option value="0" {{ 'selected' if p and p.representative == 0 }}>No: leave it out</option></select></label>
       {% endif %}
-      <div><button class="btn btn-sm btn-primary">Save {{ r.driver.name }}'s times</button></div>
+      <div><button class="btn btn-sm btn-primary">Save {{ r.driver.name }}'s times</button>
+        <span class="small muted pace-autosave" data-autosave-state aria-live="polite">{% if event.status != 'Complete' %}Saves by itself as you go{% endif %}</span></div>
     </form>
     {% endif %}
   {% if bare_ %}</div>{% else %}</details>{% endif %}
@@ -156,6 +157,70 @@
     [a, b, laps, win].forEach(function (el) { if (el) el.addEventListener("input", show); });
     dnfs.forEach(function (c) { c.addEventListener("change", show); }); show();
   });
+
+  /* Autosave, like the results table: a moment after typing stops (or straight away when a box is left or a tick
+     changes) the form is sent in the background. A half-finished entry the site can't use yet just says why and
+     waits for the next change; the Save button still works. A completed round isn't autosaved (corrections are
+     saved on purpose). */
+  var forms = window.F1PaceForms = window.F1PaceForms || [];
+  function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ""; }
+  function body(f) { return new URLSearchParams(new FormData(f)).toString(); }
+  function railTimes(missing) {
+    var card = document.querySelector("[data-rail-times]"); if (!card) return;
+    var st = card.querySelector(".sc-state"), dot = card.querySelector(".sc-dot");
+    if (missing.length) {
+      card.classList.remove("st-done", "st-current", "st-upcoming"); card.classList.add("st-attention");
+      if (st) st.textContent = missing.length + " needed"; if (dot) dot.textContent = "!";
+    } else if (card.classList.contains("st-attention")) {
+      card.classList.remove("st-attention"); card.classList.add("st-done");
+      if (st) st.textContent = "Saved"; if (dot) dot.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+    }
+  }
+  function tabMark(f, missing) {
+    var tab = f.dataset.tab && document.getElementById(f.dataset.tab); if (!tab) return;
+    var need = missing.some(function (m) { return m[0] === f.dataset.me && m[1] === f.dataset.sessionLabel; });
+    var pill = tab.querySelector(".pill");
+    if (!pill) { pill = document.createElement("span"); tab.appendChild(document.createTextNode(" ")); tab.appendChild(pill); }
+    pill.className = "pill " + (need ? "pill-hot" : "pill-ok"); pill.textContent = need ? "Needed" : "✓ Saved";
+  }
+  document.querySelectorAll("form[data-autosave]").forEach(function (f) {
+    if (f.dataset.autosaveWired) return; f.dataset.autosaveWired = "1";
+    var out = f.querySelector("[data-autosave-state]"), timer = null, sent = body(f), busy = null;
+    function say(t, bad) { if (out) { out.textContent = t; out.classList.toggle("text-bad", !!bad); } }
+    function save(keepalive) {
+      clearTimeout(timer);
+      var b = body(f);
+      if (b === sent) return busy || Promise.resolve(true);
+      say("Saving…");
+      var run = function () {
+        return fetch(f.action, { method: "POST", credentials: "same-origin", keepalive: !!keepalive, body: b,
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "fetch", "X-CSRF-Token": csrf() } })
+          .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Server error (" + r.status + ")" }; }); })
+          .then(function (res) {
+            if (!res.ok) { say("Not saved yet: " + (res.error || "try again")); return false; }   /* usually half-typed */
+            sent = b; say("Saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+            if (res.missing) { if (f.classList.contains("pace-form")) tabMark(f, res.missing); railTimes(res.missing); }
+            return true;
+          })
+          .catch(function () { say("Not saved: no connection. It will try again when you change something.", true); return false; });
+      };
+      busy = (busy || Promise.resolve()).then(run);
+      return busy;
+    }
+    f.addEventListener("input", function (e) {
+      if (e.target.type === "checkbox" || e.target.tagName === "SELECT") return;
+      say("Unsaved changes"); clearTimeout(timer); timer = setTimeout(save, 2500);
+    });
+    f.addEventListener("change", function () { clearTimeout(timer); timer = setTimeout(save, 150); });
+    f.addEventListener("submit", function () { clearTimeout(timer); sent = body(f); });
+    forms.push({ form: f, save: save, dirty: function () { return body(f) !== sent; } });
+  });
+  if (!window.F1Pace) {
+    /* autosaved forms tell the shell themselves when something is still unsent (they carry data-no-dirty) */
+    if (window.F1 && window.F1.registerUnsaved) window.F1.registerUnsaved(function () { return forms.some(function (x) { return x.dirty(); }); });
+    window.F1Pace = { flush: function () { return Promise.all(forms.map(function (x) { return x.save(); })); } };
+    window.addEventListener("pagehide", function () { forms.forEach(function (x) { if (x.dirty()) x.save(true); }); });
+  }
 })();
 </script>
 {% endif %}

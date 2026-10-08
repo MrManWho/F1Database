@@ -2033,8 +2033,10 @@ def register_routes(app):
         gate = gates.status(conn, event_id)
         my_target = _my_target(conn, ctx, event)
         hub = _hub(conn, ctx, event, full=True)
+        pace = _pace_panel(conn, ctx, event, rows)
         ws = workspace.build(conn, ctx, event, rows, wk, gate, my_target, hub,
-                             requested=request.args.get("stage"), requested_session=request.args.get("session"))
+                             requested=request.args.get("stage"), requested_session=request.args.get("session"),
+                             pace_missing=pace["missing"] if pace else None)
         chosen = {t["driver_id"]: t for t in teamlife.targets_for_event(conn, event_id)} if ctx["team_life"]["targets"] else {}
         weekend_drivers = [{"driver": r["driver"], "team": r["team"], "target": chosen.get(r["driver_id"])}
                            for r in rows if r["driver"]["is_player"]]
@@ -2059,7 +2061,7 @@ def register_routes(app):
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
                     distance_tables={k: (v[1] or {}) for k, v in C.GP_DISTANCES.items()}, sprint_min=_sprint_min(conn),
                     status_options=C.OVERRIDE_STATUSES if engine.round_v3(conn, event) else C.OVERRIDE_STATUSES_V2,
-                    pace=_pace_panel(conn, ctx, event, rows), hub=hub,
+                    pace=pace, hub=hub,
                     wx=_weather_panel(conn, ctx, event),
                     incidents=community.incidents(conn, event_id=event_id),
                     share=_share_card(conn, ctx, event) if event["status"] == C.EVENT_COMPLETE else None,
@@ -3031,6 +3033,8 @@ def register_routes(app):
                 ai3.store(conn, event_id)
             g.audit_summary = f"saved the winner's race time at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
             g.audit_link = f"weekend/{event_id}"
+            if wants_json():                      # autosave: the page stays as it is
+                return jsonify(ok=True, missing=ai3.missing_pace(conn, S.get_event(conn, event_id)))
             flash("Winner's race time saved. Each player can now enter their times as +gaps.", "success")
             return redirect(navigation.back(back, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
         try:
@@ -3054,6 +3058,9 @@ def register_routes(app):
             ai3.store(conn, event_id)
         g.audit_summary = f"saved pace data for {S.driver_map(conn)[driver_id]['name']} at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
         g.audit_link = f"weekend/{event_id}"
+        if wants_json():                          # autosave: say what's still needed so the page can update its marks
+            missing = ai3.missing_pace(conn, S.get_event(conn, event_id)) if ev["status"] != C.EVENT_COMPLETE else []
+            return jsonify(ok=True, missing=missing)
         flash("Race times saved. The AI recommendation uses them straight away.", "success")
         # 4.0: back to the session it was saved from (its stage and session are in the address it came from)
         return redirect(navigation.back(back, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))

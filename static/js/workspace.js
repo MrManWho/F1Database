@@ -24,7 +24,9 @@
   try { fromReview = new URL(location.href).searchParams.get("from") === "review"; } catch (e) { /* old browser */ }
 
   function flush() {
-    return window.F1Weekend && window.F1Weekend.flush ? window.F1Weekend.flush() : Promise.resolve(true);
+    const pace = window.F1Pace ? window.F1Pace.flush() : Promise.resolve();   // race times autosave too
+    return pace.then(function () { return window.F1Weekend && window.F1Weekend.flush ? window.F1Weekend.flush() : true; },
+                     function () { return window.F1Weekend && window.F1Weekend.flush ? window.F1Weekend.flush() : true; });
   }
   function setUrl() {
     try {
@@ -132,6 +134,8 @@
   }
 
   document.addEventListener("click", function (e) {
+    const railTimes = e.target.closest(".ws-rail [data-rail-times]");
+    if (railTimes) { e.preventDefault(); fromReview = false; goTo("sessions", railTimes.dataset.railTimes, railTimes.dataset.railAnchor); return; }
     const railSession = e.target.closest(".ws-rail [data-session]");
     if (railSession) { e.preventDefault(); fromReview = false; goTo("sessions", railSession.dataset.session); return; }
     const report = e.target.closest("[data-incident-session]");

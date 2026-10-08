@@ -132,8 +132,9 @@ def readiness(ctx, tasks, gate):
     return {"personal": personal, "league": league}
 
 
-def build(conn, ctx, event, rows, wk, gate, my_target, hub, requested=None, requested_session=None):
-    """Everything the workspace needs to decide where it opens and what state each stage is in."""
+def build(conn, ctx, event, rows, wk, gate, my_target, hub, requested=None, requested_session=None, pace_missing=None):
+    """Everything the workspace needs to decide where it opens and what state each stage is in. pace_missing: the
+    players' race times still needed (ai3.missing_pace), which keep Sessions open until they're in."""
     phase = wk["phase"] if wk and wk.get("on") else (
         "complete" if event["status"] == C.EVENT_COMPLETE else "live" if event["status"] == C.EVENT_IN_PROGRESS
         or any(r["result_status"] != C.STATUS_NOT_RUN for r in rows) else "upcoming")
@@ -150,8 +151,10 @@ def build(conn, ctx, event, rows, wk, gate, my_target, hub, requested=None, requ
     prepare_left = [t for t in tasks if t["stage"] == "prepare" and t["required"] and not t["done"] and not t.get("closed")]
     states["prepare"] = ("done" if phase in ("live", "complete") and not prepare_left else
                          "attention" if prepare_left else "current" if phase in ("upcoming", "paddock") else "done")
-    if complete or all_entered:
+    if complete or (all_entered and not pace_missing):
         states["sessions"] = "done"
+    elif all_entered:
+        states["sessions"] = "attention"          # results are in, race times aren't
     elif results_open and not gated:
         states["sessions"] = "current"
     else:
@@ -162,8 +165,9 @@ def build(conn, ctx, event, rows, wk, gate, my_target, hub, requested=None, requ
         states["review"] = "attention" if check["blocking"] else "current"
     else:
         states["review"] = "upcoming"
-    press_left = [t for t in tasks if t["stage"] == "debrief" and not t["done"]]
-    states["debrief"] = ("attention" if complete and press_left else "current" if complete else "upcoming")
+    press_left = [t for t in tasks if t["stage"] == "debrief" and not t["done"] and t["required"]]
+    # a submitted round is finished: Debrief reads Complete (or flags press still owed), never "In progress"
+    states["debrief"] = ("attention" if complete and press_left else "done" if complete else "upcoming")
 
     if complete:
         default = "debrief"

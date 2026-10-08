@@ -83,6 +83,9 @@
 .ws-rail .session-card.st-done .sc-dot { background: var(--good-dot); border-color: var(--good-dot); color: #fff; }
 .ws-rail .session-card.st-current .sc-dot { border-color: var(--orange); }
 .ws-rail .session-card.st-done .sc-state { color: #8fdcae; }
+.ws-rail .session-card.st-attention .sc-dot { background: var(--orange); border-color: var(--orange); color: #fff; font-size: .6rem; font-weight: 800; line-height: 1; }
+.ws-rail .session-card.st-attention .sc-state { color: #ffb08d; }
+.ws-rail .session-card.sc-times { margin-top: .2rem; border-top: 1px solid var(--navy-line); border-radius: 0 0 6px 6px; padding-top: .45rem; }
 .ws-rail .session-card.is-on, html[data-theme] .ws-rail .session-card.is-on { background: var(--navy-3); color: var(--on-navy); box-shadow: inset 2px 0 0 var(--orange); }
 .ws-rail .session-card.is-on .sc-label { font-weight: 700; }
 .ws-rail-link, html[data-theme] .ws-rail-link { display: flex; align-items: center; gap: .5rem; margin-top: .4rem; padding: .65rem .55rem .2rem; border-top: 1px solid var(--navy-line);
@@ -393,6 +396,7 @@
   .ws-layout[data-stage-now="sessions"] .ws-rail { margin-bottom: 3.1rem; }
   .ws-layout[data-stage-now="sessions"] .ws-rail-sessions .session-card { flex: 1; grid-template-columns: auto auto; justify-content: center; white-space: nowrap; }
   .ws-layout[data-stage-now="sessions"] .ws-rail-sessions .sc-state { display: none; }
+  .ws-layout[data-stage-now="sessions"] .ws-rail-sessions .session-card.sc-times { margin-top: 0; border-top: 0; padding-top: .4rem; }
   .ws-rail { position: relative; top: auto; }
   .ws-stage-title { font-size: 1.45rem; }
   .ws-sec > summary.ws-sec-head { grid-template-columns: auto minmax(0, 1fr) auto; gap: .7rem; padding: .8rem .85rem; }

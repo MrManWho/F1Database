@@ -54,6 +54,20 @@
   You can correct it under Sessions: edits are held until you press <b>Save corrections</b>. Or reopen it (Race Master tools, below) so a Scorekeeper can.</span></div>
 {% endif %}
 
+{# Race times in the rail: Saved, Needed (with how many), how many players have them, or optional #}
+{% set rail_times = none %}
+{% if pace and pace.entries %}
+  {% set rt_have = pace.entries|selectattr('input')|list %}
+  {% if not (pace.legacy and not rt_have) %}
+    {% set rt_miss = pace.missing %}
+    {% set rt_sess = 's' if rt_miss and rt_miss|selectattr(1, 'equalto', 'Grand Prix')|list|length == 0 else 'r' %}
+    {% if rt_miss and ws.results_open %}{% set rt = ('attention', rt_miss|length ~ ' needed') %}
+    {% elif rt_have|length == pace.entries|length or (pace.required and (ws.all_entered or ws.complete)) %}{% set rt = ('done', 'Saved' if rt_have else 'Complete') %}
+    {% elif pace.required %}{% set rt = ('current' if rt_have else 'upcoming', 'Required') %}
+    {% else %}{% set rt = ('optional', 'Optional') %}{% endif %}
+    {% set rail_times = {'state': rt[0], 'text': rt[1], 'session': rt_sess, 'anchor': 'sec-pace-sprint' if rt_sess == 's' else 'sec-pace'} %}
+  {% endif %}
+{% endif %}
 <div class="ws-layout" data-stage-now="{{ ws.stage }}">
 {# ============================================================== steps (left rail) #}
 <nav class="ws-rail" aria-label="This weekend">
@@ -63,10 +77,12 @@
     <li class="ws-steps-item st-{{ st.state }}">
       <a href="{{ wk_url }}?stage={{ st.key }}" class="ws-step st-{{ st.state }} {{ 'is-on' if st.on }}" data-stage-link="{{ st.key }}" {% if st.on %}aria-current="step"{% endif %}>
         <span class="st-ico is-{{ st.state }}" aria-hidden="true">{% if st.state == 'done' %}{{ icon('check') }}{% elif st.state == 'attention' %}!{% else %}{{ st.number }}{% endif %}</span>
-        <span class="ws-step-text"><b>{{ st.label }}</b><small>{{ state_text[st.state] }}</small></span></a>
+        <span class="ws-step-text"><b>{{ st.label }}</b><small>{{ 'Race times needed' if st.key == 'sessions' and st.state == 'attention' else state_text[st.state] }}</small></span></a>
       {% if st.key == 'sessions' %}
       <div class="session-cards session-tabs ws-rail-sessions" role="group" aria-label="Sessions">
         {% for s in ws.sessions %}<a href="{{ wk_url }}?stage=sessions&amp;session={{ s.key }}" class="session-card st-{{ s.state }} {{ 'is-on' if s.active }}" data-session="{{ s.key }}" {% if s.active %}aria-current="true"{% endif %}><span class="sc-dot" aria-hidden="true">{% if s.state == 'done' %}{{ icon('check') }}{% endif %}</span><span class="sc-label">{{ s.label }}</span><span class="sc-state">{% if s.state == 'done' %}Saved{% elif s.entered %}{{ s.entered }}/{{ s.total }}{% else %}Not started{% endif %}</span></a>{% endfor %}
+        {# Race times get their own line here so they read as part of the weekend, not an extra buried in Race #}
+        {% if rail_times %}<a href="{{ wk_url }}?stage=sessions&amp;session={{ rail_times.session }}#{{ rail_times.anchor }}" class="session-card sc-times st-{{ rail_times.state }}" data-rail-times="{{ rail_times.session }}" data-rail-anchor="{{ rail_times.anchor }}"><span class="sc-dot" aria-hidden="true">{% if rail_times.state == 'done' %}{{ icon('check') }}{% elif rail_times.state == 'attention' %}!{% endif %}</span><span class="sc-label">Race times</span><span class="sc-state">{{ rail_times.text }}</span></a>{% endif %}
       </div>
       {% endif %}
     </li>
@@ -470,7 +486,7 @@
   {% call sec('sec-pace' if pk == 'gp' else 'sec-pace-sprint', 'Race times', pt_state,
       summary=('Not tracked under this season\'s rules' if pace.legacy and not p_have else ('Needed for ' ~ p_miss|map('first')|join(', ') if p_miss
                else 'Saved for ' ~ p_have|map(attribute='row.driver.name')|join(', ') if p_have else 'Each player\'s race time and their AI teammate\'s, from the game\'s results screen')),
-      tag=pt_tag, who=staff, open=(pt_state == 'attention'), only=sk, edit=pace.can_edit) %}
+      tag=pt_tag, who=staff, open=(pt_state == 'attention' or (pt_state == 'current' and pace.can_edit and editing)), only=sk, edit=pace.can_edit) %}
     {% set bare = True %}{% set pace_only = pk %}{% include "_pace.html" with context %}
   {% endcall %}
   {% endfor %}
