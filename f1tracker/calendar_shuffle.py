@@ -73,7 +73,10 @@ def plan(conn, season_id, swaps=DEFAULT_SWAPS, reorder=True, keep_ends=True, poo
     open_ = sorted(opts["open"], key=lambda e: e["round_number"])
     if not open_:
         raise ValidationError("Every round of this season has been run, so there's nothing left to shuffle.")
-    seed = int(seed) if seed not in (None, "") else random.SystemRandom().randrange(1, 10 ** 9)
+    try:
+        seed = int(seed) if seed not in (None, "") else random.SystemRandom().randrange(1, 10 ** 9)
+    except (TypeError, ValueError):
+        raise ValidationError("The shuffle number must be a whole number") from None
     rng = random.Random(seed)
     try:
         swaps = max(0, int(swaps))
@@ -90,17 +93,19 @@ def plan(conn, season_id, swaps=DEFAULT_SWAPS, reorder=True, keep_ends=True, poo
     movable = [e for e in open_ if e["id"] not in pinned]
     swaps = min(swaps, len(movable), len(allowed))
     # A layout and its reverse never share a calendar: bringing one in sends the other (if still open) to sit out.
-    venue = {}
+    venue, held = {}, {}
     for e in evs:
         key = circuits.circuit_of(e)
         if key:
             venue.setdefault(_base(key), e)
+            held[_base(key)] = held.get(_base(key), 0) + 1
     movable_ids = {e["id"] for e in movable}
     away = _last_raced(conn, season)
     out, incoming, choices, sprint_of = [], [], list(allowed), {}
     while len(incoming) < swaps:
-        options_ = [c for c in choices if _base(c["key"]) not in venue or
-                    (venue[_base(c["key"])]["id"] in movable_ids and venue[_base(c["key"])] not in out)]
+        # a venue already on the calendar twice can't take its other layout as well
+        options_ = [c for c in choices if held.get(_base(c["key"]), 0) <= 1 and (_base(c["key"]) not in venue or
+                    (venue[_base(c["key"])]["id"] in movable_ids and venue[_base(c["key"])] not in out))]
         if not options_:
             break
         weights = [min(away.get(c["key"], 2), 4) for c in options_]   # away longest, likelier to return

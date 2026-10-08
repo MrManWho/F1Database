@@ -110,3 +110,15 @@ def test_page_shows_preview_and_every_circuit(app, master_client):
     html = master_client.get(f"/career/{token}/calendar/shuffle").get_data(as_text=True)
     assert "Use this calendar" in html and "Comes in" in html and "Circuit Paul Ricard" in html
     assert "Shuffle calendar" in master_client.get(f"/career/{token}/seasons").get_data(as_text=True)
+
+
+def test_bad_seed_and_a_venue_held_twice(app, master_client):
+    token, sid = _league(master_client)
+    with storage.session(token) as conn:
+        with pytest.raises(S.ValidationError):
+            CS.plan(conn, sid, seed="abc")
+        S.add_event(conn, sid, "British GP", "Silverstone", False)      # Silverstone twice on one calendar
+        for seed in range(30):
+            p = CS.plan(conn, sid, swaps=8, pool_keys={"Silverstone (Reverse)", "Imola"}, seed=seed)
+            assert "British GP (Reverse)" not in [r["name"] for r in p["rows"]]
+            assert len(p["out"]) == len(p["incoming"])
