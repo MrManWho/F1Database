@@ -108,6 +108,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username<input name="username" autocomplete="username" required autofocus></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <label class="check"><input type="checkbox" name="remember" value="1" checked> Remember me on this device</label>
     <button class="btn btn-primary">Sign in</button>
   </form>
   <p class="muted small"><a href="{{ url_for('forgot') }}" class="tap-link">Forgot your password?</a>

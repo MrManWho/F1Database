@@ -2,9 +2,14 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
-## Final 4.0.0 audit (October 8, 2026)
+## 4.0.1: Remember me, and the final 4.0.0 audit (October 8, 2026)
 
-The last change counted as 4.0.0. Anything after it gets its own version and What's New entry.
+The first version after the 4.0.0 changelog pause. Anything after it gets its own version and What's New entry.
+
+- **Remember me** on the sign-in page (ticked by default) makes the sign-in cookie last 60 days
+  (`PERMANENT_SESSION_LIFETIME`, the same as `security.SESSION_IDLE_DAYS`); unticked, it ends when the browser
+  closes, as before. Signing out, or ending the session from Account → Sessions, still ends it straight away. Two-step
+  sign-in carries the choice through the code step.
 
 - **Faster pages.** A league's *last opened* time is now saved at most every ten minutes instead of on every page
   view, the "you still have to…" banner only checks the person viewing, and clicks that can't change any number

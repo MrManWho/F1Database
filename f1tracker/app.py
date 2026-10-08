@@ -2,7 +2,7 @@
 
 import hmac
 import logging
-from datetime import timezone
+from datetime import timedelta, timezone
 import io
 import os
 import secrets
@@ -97,6 +97,8 @@ def create_app(config=None):
         MAX_CONTENT_LENGTH=100 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        # 4.0.1: "Remember me" keeps the sign-in cookie as long as an unused session lasts (security.SESSION_IDLE_DAYS)
+        PERMANENT_SESSION_LIFETIME=timedelta(days=security.SESSION_IDLE_DAYS),
         CSRF_ENABLED=True,
     )
     if config:
@@ -128,12 +130,14 @@ INVITE_LIMIT = 20     # invitations a Race Master can send per hour
 JOIN_LIMIT = 5        # join requests an account can send per hour (across leagues)
 
 
-def sign_in(username):
-    """Start a signed-in session (registered, so it can be listed and ended from Account)."""
+def sign_in(username, remember=False):
+    """Start a signed-in session (registered, so it can be listed and ended from Account). remember: keep it after
+    the browser closes ("Remember me"), until signing out or 60 days unused; otherwise it ends with the browser."""
     failed = session.get("_form_failed")      # a form that wasn't saved because the person was signed out
     session.clear()
     if failed:
         session["_form_failed"] = failed
+    session.permanent = bool(remember)
     session["user"] = username
     session["sid"] = security.start_session(username, request.headers.get("User-Agent", ""))
 
@@ -1048,8 +1052,9 @@ def register_routes(app):
                 # Password was right; the second step (a code from their authenticator app) comes next.
                 session.clear()
                 session["2fa_user"], session["2fa_at"], session["2fa_next"] = user["username"], time.time(), target
+                session["2fa_remember"] = bool(request.form.get("remember"))
                 return redirect(url_for("login_code"))
-            sign_in(user["username"])
+            sign_in(user["username"], remember=bool(request.form.get("remember")))
             return redirect(target)
         return render_template("login.html", mode="login", signups=auth.signups_allowed())
 
@@ -1068,7 +1073,7 @@ def register_routes(app):
                 return redirect(url_for("login"))
             if security.verify_code(security.totp_status(username)["secret"], request.form.get("code")):
                 target = session.get("2fa_next") or url_for("home")
-                sign_in(username)
+                sign_in(username, remember=session.get("2fa_remember"))
                 return redirect(target)
             flash("That code didn't match. Use the newest code from your authenticator app.", "error")
         return render_template("login.html", mode="code")

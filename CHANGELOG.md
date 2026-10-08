@@ -3,6 +3,27 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.0.1 · Remember me
+_Released October 8, 2026_
+> Stay signed in on your own devices, plus a round of polish across the whole site.
+
+### Highlights
+- **Remember me.** The sign-in page has a "Remember me on this device" tick (on by default). Leave it ticked and you stay signed in when you close the browser, until you sign out or don't visit for 60 days. Untick it on a shared computer.
+- **Faster pages.** Opening a page, marking news read or reacting no longer makes the site redo work, and tabs you aren't looking at stop checking for notifications.
+
+### Fixed
+- On phones, table headers no longer cover the first rows (results, drivers, stats, records and more).
+- The Manage league menu and the league menu stay on screen, and the phone menu opens above the top and bottom bars.
+- League settings and Predictions no longer scroll sideways on phones.
+- In the light theme, team codes, player names and avatar initials are easy to read again.
+- What's New opens at the top, and a few labels and forms no longer break onto odd lines.
+
+### Also new
+- The same words everywhere: **Sign in**, **Your leagues**, **Manage league**, **My garage**, **Activity log**, **Transfers** and **News**.
+
+### Nothing changed in
+- Your results, standings or any calculation.
+
 ## 4.0.0 · Paddock Legacy 4.0
 _Released October 7, 2026_
 > A brand-new look and a race weekend page with a clear place for every job. Your results, standings, contracts and
