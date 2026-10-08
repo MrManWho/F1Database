@@ -622,3 +622,21 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus, legen
   .diff-steps li { grid-template-columns: minmax(0, 1fr) auto; }
   .diff-steps .ds-note { grid-column: 1 / -1; }
 }
+
+/* calendar shuffle: options, circuit tiles with their outline, and the preview */
+.shuffle-options { display: flex; flex-direction: column; gap: .6rem; align-items: flex-start; }
+.shuffle-options h2, .shuffle-options h3 { margin: .2rem 0 0; }
+.shuffle-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .2rem 1rem; margin-top: .5rem; }
+.track-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; width: 100%; }
+.track-tile { display: flex; align-items: center; gap: .6rem; padding: .55rem .7rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface-3); min-width: 0; }
+label.track-tile { cursor: pointer; }
+.track-tile svg { flex: 0 0 64px; width: 64px; height: 40px; }
+.track-tile span { display: flex; flex-direction: column; min-width: 0; }
+.track-tile small { font-size: .78rem; overflow-wrap: anywhere; }
+.track-tile path, .track-mini path { fill: none; stroke: var(--orange); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.track-mini { width: 48px; height: 29px; display: block; }
+tr.shuffle-new td { background: var(--good-soft); }
+tr.shuffle-locked td { opacity: .7; }
+.shuffle-options label.track-tile { flex-direction: row; align-items: center; margin: 0; font-weight: 400; }
+.track-tile input[type=checkbox] { flex: 0 0 auto; width: auto; margin: 0; }
+.shuffle-options label.track-tile:has(input:checked) { border-color: var(--orange); }

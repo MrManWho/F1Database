@@ -24,9 +24,9 @@ Site owner: Race Master of every league, plus the site pages below. A Spectator 
 
 ## Routes by access level
 
-### Race Master + Scorekeeper (19)
+### Race Master + Scorekeeper (20)
 
-`api_weekend`, `api_weekend_checklist`, `api_weekend_state`, `calendar_add`, `calendar_delete`, `calendar_save`, `gate_remind`, `pace_save`, `paddock_open`, `race_start`, `race_time`, `readiness_page`, `telemetry_applied`, `telemetry_extras`, `telemetry_get`, `telemetry_names`, `telemetry_page`, `telemetry_round`, `telemetry_settings`
+`api_weekend`, `api_weekend_checklist`, `api_weekend_state`, `calendar_add`, `calendar_delete`, `calendar_save`, `calendar_shuffle`, `gate_remind`, `pace_save`, `paddock_open`, `race_start`, `race_time`, `readiness_page`, `telemetry_applied`, `telemetry_extras`, `telemetry_get`, `telemetry_names`, `telemetry_page`, `telemetry_round`, `telemetry_settings`
 
 ### league Race Master (74)
 

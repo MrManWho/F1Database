@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Shuffle the calendar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="kicker">Seasons &amp; Calendar</div><h1>Shuffle the {{ ctx.season.year }} calendar</h1></div>
+  <a class="btn btn-ghost" href="{{ url_for('seasons_page', token=ctx.token) }}#calendar">Back to the calendar</a>
+</div>
+<p class="muted">Some races sit out this season and others come in from every circuit in the game. Only rounds that
+  haven't been run change: rounds with results stay exactly as they are, and race times already set stay with their
+  round number. Nothing is saved until you press <b>Use this calendar</b>.</p>
+
+<form method="get" action="{{ url_for('calendar_shuffle', token=ctx.token) }}" class="card shuffle-options">
+  <input type="hidden" name="set" value="1">
+  <h2>Options</h2>
+  <label>Races to swap <input type="number" name="swaps" min="0" max="{{ opts.open|length }}" value="{{ args.swaps }}" class="narrow"></label>
+  <span class="muted small">That many races sit out and the same number come in.</span>
+  <label class="check"><input type="checkbox" name="reorder" value="1" {{ 'checked' if args.reorder }}> Mix up the order of the rounds that haven't been run</label>
+  <label class="check"><input type="checkbox" name="keep_ends" value="1" {{ 'checked' if args.keep_ends }}> Keep the season opener and finale where they are</label>
+
+  {% if opts.open %}
+  <details class="shuffle-keep" {{ 'open' if args.keep_ids }}>
+    <summary>Races that must stay on the calendar{% if args.keep_ids %} ({{ args.keep_ids|length }}){% endif %}</summary>
+    <div class="shuffle-checks">
+      {% for e in opts.open %}<label class="check small"><input type="checkbox" name="keep" value="{{ e.id }}" {{ 'checked' if e.id in args.keep_ids }}> R{{ e.round_number }} {{ e.name }}</label>{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  <h3>Circuits that can come in</h3>
+  {% if opts.pool %}
+  <div class="track-grid">
+    {% for c in opts.pool %}
+    <label class="track-tile">
+      <input type="checkbox" name="pool" value="{{ c.key }}" {{ 'checked' if c.key in args.pool_keys }}>
+      <svg viewBox="0 0 100 60" aria-hidden="true"><path d="{{ c.path }}"/></svg>
+      <span><b>{{ c.flag }} {{ c.gp }}</b><small>{{ c.circuit }}</small><small class="muted">{{ c.available }} · {{ c.away }}</small></span>
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted small">Every circuit is already on this calendar.</p>{% endif %}
+  <div class="button-row">
+    <button class="btn btn-primary">{{ 'Shuffle again' if preview else 'Preview' }}</button>
+  </div>
+</form>
+
+{% if preview %}
+<section class="card table-card" id="preview">
+  <div class="card-head"><h2>Preview</h2></div>
+  {% if preview.incoming %}
+  <p><b>Sitting out:</b> {{ preview.out|map(attribute='name')|join(', ') }}.<br>
+     <b>Coming in:</b> {% for c in preview.incoming %}{{ c.gp }}{{ ', ' if not loop.last }}{% endfor %}.</p>
+  {% else %}<p class="muted">No races are swapped{% if args.swaps|int > 0 %} (no circuit that can come in, or no race that can sit out){% endif %}.</p>{% endif %}
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th class="num">Round</th><th><span class="sr-only">Map</span></th><th>Grand Prix</th><th>Location</th><th>Weekend</th><th>Change</th></tr></thead>
+    <tbody>
+    {% for r in preview.rows %}
+    <tr class="shuffle-{{ r.change }}">
+      <td class="num">R{{ r.event.round_number }}</td>
+      <td><svg class="track-mini" viewBox="0 0 100 60" aria-hidden="true"><path d="{{ r.circuit.path }}"/></svg></td>
+      <td><strong>{{ r.circuit.flag }} {{ r.name }}</strong></td>
+      <td>{{ r.location or '—' }}</td>
+      <td>{% if r.is_sprint %}<span class="pill pill-sprint">Sprint</span>{% else %}<span class="muted small">Standard</span>{% endif %}</td>
+      <td class="small">{% if r.change == 'new' %}<span class="pill pill-good">Comes in</span>
+        {% elif r.change == 'locked' %}<span class="muted">Has results: unchanged</span>
+        {% elif r.change == 'kept' %}<span class="muted">Kept in place</span>
+        {% elif r.change == 'same' %}<span class="muted">Same round</span>
+        {% else %}Moved from R{{ r.was_round }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <form method="post" action="{{ url_for('calendar_shuffle', token=ctx.token) }}" class="button-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="set" value="1">
+    <input type="hidden" name="fingerprint" value="{{ preview.fingerprint }}">
+    <input type="hidden" name="seed" value="{{ preview.seed }}">
+    <input type="hidden" name="swaps" value="{{ args.swaps }}">
+    {% if args.reorder %}<input type="hidden" name="reorder" value="1">{% endif %}
+    {% if args.keep_ends %}<input type="hidden" name="keep_ends" value="1">{% endif %}
+    {% for k in args.pool_keys %}<input type="hidden" name="pool" value="{{ k }}">{% endfor %}
+    {% for k in args.keep_ids %}<input type="hidden" name="keep" value="{{ k }}">{% endfor %}
+    <button class="btn btn-primary">Use this calendar</button>
+    <span class="muted small">You can still edit names, round numbers and Sprint weekends on the calendar afterwards.</span>
+  </form>
+</section>
+{% endif %}
+
+<section class="card" id="circuits">
+  <h2>Every circuit</h2>
+  <p class="muted small">All {{ catalogue|length }} circuits the tracker knows, with their map. Circuits from older games are only offered when you tick them above.</p>
+  <div class="track-grid">
+    {% for c in catalogue %}
+    <div class="track-tile">
+      <svg viewBox="0 0 100 60" aria-hidden="true"><path d="{{ c.path }}"/></svg>
+      <span><b>{{ c.flag }} {{ c.gp }}</b><small>{{ c.circuit }} · {{ c.location }}</small><small class="muted">{{ c.available }}</small></span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
