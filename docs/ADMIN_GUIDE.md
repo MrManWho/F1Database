@@ -6,10 +6,14 @@ This is for site admins and Race Masters. The What's New screen and Help cover e
 
 Off by default, per league. Results can come straight from F1 25's UDP telemetry instead of being typed in.
 
-- **Turning it on:** League settings → Career & team → Extras → **Telemetry import**. Then **Make an upload link**
-  under "Telemetry upload link". The link holds a private key for that league only; **Make a new link** replaces it
-  (the old one stops working at once) and **Turn the link off** removes it. The key is left out of exports and
-  downloaded backups, like the Discord webhook.
+- **Turning it on:** League settings → Career & team → Extras → **Telemetry import**. Then open **Upload link →**
+  (also under More, and in a round's Import results) and **Make an upload link**. The link holds a private key for
+  that league only; **Make a new link** replaces it (the old one stops working at once) and **Turn the link off**
+  removes it. The key is left out of exports and downloaded backups, like the Discord webhook.
+- **Who may use it:** League settings → Joining & roles → **Role permissions**. Scorekeepers may import telemetry
+  by default; the Race Master can stop that, and can let Scorekeepers see and manage the upload link (off by
+  default). Race Masters can always do both. The server checks these on every request, and changes show in the
+  Activity Log. More permissions can be added to the same list (`roles.GRANTS`).
 - **Recording:** someone in the league runs a recorder on the PC the game sends telemetry to (the Paddock Legacy
   telemetry recorder, or any tool that posts the same JSON; the format is described at the top of
   `f1tracker/telemetry.py`). When the game shows a session's final classification, the recorder posts that session

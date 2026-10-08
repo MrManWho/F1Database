@@ -100,7 +100,7 @@ def test_round_page_offers_uploads_and_remembers_matches(master_client, app):
         assert telemetry.recent(conn)[0]["used_round"] == ev["round_number"]
     # The settings page shows the link; exports leave the key and the uploads out.
     settings = master_client.get(f"/career/{token}/settings/career").get_data(as_text=True)
-    assert f"/api/telemetry/{token}/{key}" in settings
+    assert "Upload link" in settings and f"/api/telemetry/{token}/{key}" in master_client.get(f"/career/{token}/telemetry-link").get_data(as_text=True)
     export = json.loads(storage.export_json(token))
     assert "telemetry_uploads" not in export and all(m["key"] != "telemetry_key" for m in export["meta"])
 
@@ -167,3 +167,50 @@ def test_import_in_a_real_browser(app, master_client, live_server):
         pw.stop()
     names = master_client.get(f"/career/{token}/telemetry/names").get_json()["names"]
     assert len(names) == len(entrants)
+
+
+def test_race_master_chooses_what_scorekeepers_may_do(master_client, app):
+    from conftest import login
+    from f1tracker import auth, roles
+    token = _league(master_client)
+    key = _turn_on(master_client, token)
+    app.test_client().post(f"/api/telemetry/{token}/{key}", json=_summary())
+    for name, role in (("kim", "scorekeeper"), ("max", "member")):
+        auth.create_user(name, name.title(), "password1")
+        with storage.session(token) as conn:
+            roles.set_member(conn, name, role)
+    kim, mx = app.test_client(), app.test_client()
+    login(kim, "kim"); login(mx, "max")
+    with storage.session(token) as conn:
+        ev = S.events(conn, S.current_season_id(conn))[0]
+        upload_id = telemetry.recent(conn)[0]["id"]
+    rnd = f"/career/{token}/weekend/{ev['id']}"
+    # Defaults: Scorekeepers import, but the upload link stays with the Race Master.
+    assert f'data-tele-id="{upload_id}"' in kim.get(rnd).get_data(as_text=True)
+    assert kim.get(f"/career/{token}/telemetry/{upload_id}").status_code == 200
+    assert kim.get(f"/career/{token}/telemetry-link").status_code == 403
+    assert kim.post(f"/career/{token}/settings/telemetry", data={"action": "off", "csrf_token": "tok"}).status_code == 403
+    assert mx.get(f"/career/{token}/telemetry/{upload_id}").status_code == 403
+    assert mx.get(f"/career/{token}/telemetry-link").status_code == 403
+    page = master_client.get(f"/career/{token}/settings/roles").get_data(as_text=True)
+    assert 'name="perm_scorekeeper_telemetry_import" value="1" checked' in page
+    assert 'name="perm_scorekeeper_telemetry_link" value="1" >' in page
+    # The Race Master swaps them round.
+    master_client.post(f"/career/{token}/settings", data={"section": "roles", "perm_form": "1", "join_mode": "invite",
+                                                          "perm_scorekeeper_telemetry_link": "1", "csrf_token": "tok"})
+    assert "data-tele-get" not in kim.get(rnd).get_data(as_text=True)
+    assert kim.get(f"/career/{token}/telemetry/{upload_id}").status_code == 404
+    assert kim.post(f"/career/{token}/telemetry/applied", headers={"X-CSRF-Token": "tok"},
+                    json={"event_id": ev["id"], "names": {}}).status_code == 403
+    assert key in kim.get(f"/career/{token}/telemetry-link").get_data(as_text=True)
+    kim.post(f"/career/{token}/settings/telemetry", data={"action": "new", "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        assert telemetry.upload_key(conn) not in (None, key)
+    log = master_client.get(f"/career/{token}/activity").get_data(as_text=True)
+    assert "telemetry upload link" in log
+    # Saving other settings sections never resets these choices.
+    master_client.post(f"/career/{token}/settings", data={"section": "career", "team_life": "1", "feature_telemetry": "1",
+                                                          "csrf_token": "tok"})
+    with storage.session(token) as conn:
+        assert roles.granted(conn, "scorekeeper", "telemetry_link") and not roles.granted(conn, "scorekeeper", "telemetry_import")
+        assert not roles.granted(conn, "member", "telemetry_link")

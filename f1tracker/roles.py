@@ -177,3 +177,50 @@ PERMISSIONS = [
     ("Backups, restore, export, activity log and delivery log", True, False, False, False),
     ("Delete the league or transfer ownership", True, False, False, False),
 ]
+
+
+# --------------------------------------------------------------------------- permissions the Race Master chooses
+# Extra things the Race Master can allow (or stop) per role, in League settings → Joining & roles. Race Masters can
+# always do all of them. key -> (what it allows, {role: default}); a role missing from the dict can never have it.
+GRANTS = {
+    "telemetry_import": ("Import results sent from the game's telemetry (when Telemetry import is on)",
+                         {"scorekeeper": True}),
+    "telemetry_link": ("See and manage the league's telemetry upload link", {"scorekeeper": False}),
+}
+
+
+def granted(conn, role, key):
+    if role == "race_master":
+        return True
+    defaults = GRANTS[key][1]
+    if role not in defaults:
+        return False
+    value = storage.get_meta(conn, f"perm_{role}_{key}")
+    return defaults[role] if value is None else value == "1"
+
+
+def grants(conn):
+    """{key: {role: allowed}} for every choosable permission and every role it can be given to."""
+    return {key: {role: granted(conn, role, key) for role in defaults} for key, (_l, defaults) in GRANTS.items()}
+
+
+def save_grants(conn, form):
+    """Read the role-permission checkboxes (perm_<role>_<key>). Returns readable changes for the Activity Log."""
+    changes = []
+    for key, (label, defaults) in GRANTS.items():
+        for role in defaults:
+            before = granted(conn, role, key)
+            after = bool(form.get(f"perm_{role}_{key}"))
+            storage.set_meta(conn, f"perm_{role}_{key}", "1" if after else "0")
+            if before != after:
+                changes.append(f"{'allowed' if after else 'stopped'} {C.ACCESS_ROLES[role]}s: {label[0].lower() + label[1:]}")
+    return changes
+
+
+def permission_rows(conn):
+    """PERMISSIONS plus this league's choices, for the "What each role can do" table."""
+    order = list(C.ACCESS_ROLES)
+    allowed = grants(conn)
+    extra = [(label, *[True if r == "race_master" else allowed[key].get(r, False) for r in order])
+             for key, (label, _d) in GRANTS.items()]
+    return PERMISSIONS[:5] + extra + PERMISSIONS[5:]

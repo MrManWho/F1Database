@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Telemetry upload link{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="kicker">{{ ctx.career_name }}</div><h1>Telemetry upload link</h1>
+  <p class="page-purpose">Results sent from the game's telemetry wait in each round's Import results until someone checks and applies them.</p></div></div>
+<section class="card settings-section" id="telemetry">
+  {% if not ctx.features.telemetry %}<p class="banner banner-warn small">Telemetry import is off for this league, so the link doesn't accept anything.
+    {% if ctx.is_master %}Turn it on in <a href="{{ url_for('league_settings_section', token=ctx.token, section='career') }}">League settings → Career &amp; team</a>.{% else %}Only the Race Master can turn it on.{% endif %}</p>{% endif %}
+  <p class="small">Anyone running a telemetry recorder during a race can send each session's results with this link. Nothing is saved to the
+    results or submitted by itself.</p>
+  {% if telemetry_link %}
+  <label>Upload link <small class="muted">(paste into the recorder's "League upload link". Keep it private: anyone with it can send results to check.)</small>
+    <input type="text" readonly value="{{ telemetry_link }}" onclick="this.select()" id="tele-link" data-no-dirty></label>
+  <div class="button-row"><button type="button" class="btn btn-sm" data-copy="#tele-link">Copy</button></div>
+  {% else %}<p class="muted small">No upload link yet.</p>{% endif %}
+  <form method="post" action="{{ url_for('telemetry_settings', token=ctx.token) }}" class="button-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" name="action" value="new" class="btn btn-sm">{{ 'Make a new link' if telemetry_link else 'Make an upload link' }}</button>
+    {% if telemetry_link %}<button type="submit" name="action" value="off" class="btn btn-sm btn-ghost">Turn the link off</button>{% endif %}
+  </form>
+  {% if telemetry_link %}<p class="muted small">A new link replaces this one straight away.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Recently received</h2>
+  {% if uploads %}
+  <ul class="imp-tele-list">{% for u in uploads %}<li><b>{{ u.track or 'Session' }} · {{ u.session_type or 'Results' }}</b>
+    <span class="muted small">{{ u.cars }} cars · {{ u.received_at|stamp if u.received_at }}{% if u.used_round %} · used for R{{ u.used_round }}{% endif %}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted small">Nothing received yet.</p>{% endif %}
+</section>
+{% endblock %}

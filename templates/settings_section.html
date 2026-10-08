@@ -150,20 +150,10 @@
 </form>
 <section class="card settings-section" id="telemetry">
   <h2>Telemetry upload link</h2>
-  <p class="small">With <b>Telemetry import</b> on (Extras, above), anyone in this league running a telemetry recorder during a race
-    can send each session's results here. They wait in the round's <b>Import results</b> dialog until a Scorekeeper checks and
-    applies them. Nothing is saved to the results or submitted by itself.</p>
-  {% if not feats.telemetry %}<p class="muted small">Telemetry import is off, so the link below doesn't accept anything yet.</p>{% endif %}
-  {% if telemetry_link %}
-  <label>Upload link <small class="muted">(paste into the recorder's "League upload link". Keep it private: anyone with it can send results to check.)</small>
-    <input type="text" readonly value="{{ telemetry_link }}" onclick="this.select()" data-no-dirty></label>
-  {% else %}<p class="muted small">No upload link yet.</p>{% endif %}
-  <form method="post" action="{{ url_for('telemetry_settings', token=ctx.token) }}" class="button-row">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" name="action" value="new" class="btn btn-sm">{{ 'Make a new link' if telemetry_link else 'Make an upload link' }}</button>
-    {% if telemetry_link %}<button type="submit" name="action" value="off" class="btn btn-sm btn-ghost">Turn the link off</button>{% endif %}
-  </form>
-  {% if telemetry_link %}<p class="muted small">A new link replaces this one straight away.</p>{% endif %}
+  <p class="small">With <b>Telemetry import</b> on (Extras, above), anyone running a telemetry recorder during a race can send each session's
+    results to this league with its upload link. They wait in the round's <b>Import results</b> until someone checks and applies them.</p>
+  <p><a href="{{ url_for('telemetry_page', token=ctx.token) }}">Upload link →</a></p>
+  <p class="muted small">Who else may use it: <a href="{{ url_for('league_settings_section', token=ctx.token, section='roles') }}#role-permissions">Joining &amp; roles</a>.</p>
 </section>
 
 {% elif section == 'roles' %}
@@ -182,6 +172,18 @@
       <p class="muted small">The server checks every one of these; hiding a button is never the only protection. A league always keeps at least one Race Master.</p>
     </details>
     <p><a href="{{ url_for('members', token=ctx.token) }}">Members &amp; roles →</a></p>
+  </section>
+  <section class="card settings-section" id="role-permissions">
+    <h2>Role permissions</h2>
+    <p class="muted small">Choose what each role may do on top of its usual access. Race Masters can always do all of these.</p>
+    <input type="hidden" name="perm_form" value="1">
+    {% for key, (label, defaults) in grant_labels.items() %}{% for role in defaults %}
+    <label class="toggle-row">
+      <input type="checkbox" name="perm_{{ role }}_{{ key }}" value="1" {{ 'checked' if role_grants[key][role] }}>
+      <span class="switch"></span>
+      <span><b>{{ C.ACCESS_ROLES[role] }}s</b><small class="muted">{{ label }}</small></span>
+    </label>
+    {% endfor %}{% endfor %}
   </section>
   {{ save() }}
 </form>

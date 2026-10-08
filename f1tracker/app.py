@@ -578,6 +578,8 @@ def career_page(master_only=False, ops_only=False, read_only=False):
                         "is_spectator": g.league_role == "spectator",
                         "my_driver": _member_driver(conn),
                         "features": community.features(conn),
+                        # permissions the Race Master chooses per role (League settings → Joining & roles)
+                        "perms": {k: is_master() or roles.granted(conn, g.league_role, k) for k in roles.GRANTS},
                         "open_windows": conn.execute("SELECT COUNT(*) FROM market_windows WHERE status = ?",
                                                      (C.WINDOW_OPEN,)).fetchone()[0],
                     }
@@ -2047,7 +2049,7 @@ def register_routes(app):
                     rec=_recs_off(conn, event) or _weekend_recommendation(conn, season, event),
                     entrants=_entrants(conn, event_id, rows),
                     telemetry_uploads=(telemetry.recent(conn) if ctx["features"].get("telemetry") and ctx["can_run"]
-                                       else None),
+                                       and ctx["perms"]["telemetry_import"] else None),
                     gp_points=(C.GP_DISTANCES.get(event.get("gp_distance") or "full", C.GP_DISTANCES["full"])[1] or {}),
                     sprint_points=(C.SPRINT_POINTS if (event.get("sprint_distance") or 100) >= _sprint_min(conn) else {}),
                     v3_round=engine.round_v3(conn, event), calc_label=engine.label(conn, season["id"]),
@@ -4469,7 +4471,7 @@ def register_routes(app):
     @app.route("/career/<token>/telemetry/<int:upload_id>")
     @career_page(ops_only=True)
     def telemetry_get(conn, ctx, upload_id):
-        if not ctx["features"].get("telemetry"):
+        if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"]:
             abort(404)
         data = telemetry.get(conn, upload_id)
         if not data:
@@ -4480,11 +4482,15 @@ def register_routes(app):
     @career_page(ops_only=True)
     def telemetry_names(conn, ctx):
         """Who was who in earlier imports, for a telemetry file opened from this computer."""
+        if not ctx["perms"]["telemetry_import"]:
+            abort(403)
         return jsonify(ok=True, names=telemetry.names(conn))
 
     @app.route("/career/<token>/telemetry/applied", methods=["POST"])
     @career_page(ops_only=True)
     def telemetry_applied(conn, ctx):
+        if not ctx["perms"]["telemetry_import"]:
+            abort(403)
         data = request.get_json(silent=True) or {}
         event = S.get_event(conn, request.args.get("event_id", type=int) or data.get("event_id") or 0)
         if not event:
@@ -4493,9 +4499,21 @@ def register_routes(app):
         telemetry.applied(conn, upload_id, event["id"], data.get("names") if isinstance(data.get("names"), dict) else {})
         return jsonify(ok=True)
 
+    @app.route("/career/<token>/telemetry-link")
+    @career_page(ops_only=True)
+    def telemetry_page(conn, ctx):
+        """The league's telemetry upload link: Race Masters, and Scorekeepers if the Race Master allows it."""
+        if not ctx["perms"]["telemetry_link"]:
+            abort(403)
+        key = telemetry.upload_key(conn)
+        link = url_for("telemetry_upload", token=ctx["token"], key=key, _external=True) if key else None
+        return page("telemetry.html", ctx, telemetry_link=link, uploads=telemetry.recent(conn))
+
     @app.route("/career/<token>/settings/telemetry", methods=["POST"])
-    @career_page(master_only=True)
+    @career_page(ops_only=True)
     def telemetry_settings(conn, ctx):
+        if not ctx["perms"]["telemetry_link"]:
+            abort(403)
         action = request.form.get("action")
         if action == "new":
             telemetry.new_key(conn)
@@ -4505,7 +4523,7 @@ def register_routes(app):
             telemetry.revoke_key(conn)
             g.audit_summary = "turned off the telemetry upload link"
             flash("Upload link turned off.", "success")
-        return redirect(url_for("league_settings_section", token=ctx["token"], section="career") + "#telemetry")
+        return redirect(url_for("telemetry_page", token=ctx["token"]))
 
     @app.route("/api/career/<token>/weekend/<int:event_id>", methods=["POST"])
     def api_weekend(token, event_id):
@@ -4911,6 +4929,7 @@ def register_routes(app):
                                            life["gate_press"], life["gate_targets"])
             if request.form.get("join_mode") in storage.JOIN_MODES:
                 storage.set_join_mode(conn, request.form.get("join_mode"))
+            perm_changes = roles.save_grants(conn, request.form) if mine("roles") and request.form.get("perm_form") else []
             if request.form.get("rollover_default") in seats.ACTIONS:
                 storage.set_meta(conn, "rollover_default", request.form.get("rollover_default"))
             if mine("privacy"):
@@ -4924,7 +4943,7 @@ def register_routes(app):
                 if not timefmt.valid_zone(zone):
                     raise ValidationError("Unknown time zone")
                 storage.set_meta(conn, "timezone", zone)
-            changes = [c for c in [_settings_changes(conn, before)] if c]
+            changes = [c for c in [_settings_changes(conn, before)] if c] + perm_changes
             if name and name != before["name"]:
                 changes.append(f"renamed the league from {before['name']} to {name}")
             vis = league_profile.visibility(conn)
@@ -4967,13 +4986,12 @@ def register_routes(app):
         link = url_for("public_page", token=ctx["token"], key=community.public_key(conn), _external=True) \
             if feats["public"] else None
         prof = league_profile.profile(conn)
-        tkey = telemetry.upload_key(conn)
-        tele_link = url_for("telemetry_upload", token=ctx["token"], key=tkey, _external=True) if tkey else None
-        return dict(feats=feats, public_link=link, discord=discord.settings(conn), telemetry_link=tele_link,
+        return dict(feats=feats, public_link=link, discord=discord.settings(conn),
+                    role_grants=roles.grants(conn), grant_labels=roles.GRANTS,
                     life=teamlife.settings(conn), rollover_actions=seats.ACTIONS, rollover_default=seats.carry_mode(conn),
                     zones=timefmt.COMMON_ZONES, windows=timefmt.RACE_WINDOW_CHOICES,
                     join_mode=storage.join_mode(conn), join_modes=storage.JOIN_MODES, profile=prof,
-                    visibility_opts=league_profile.VISIBILITY, permissions=roles.PERMISSIONS,
+                    visibility_opts=league_profile.VISIBILITY, permissions=roles.permission_rows(conn),
                     named_level=league_profile.named_level(prof["visibility"], storage.join_mode(conn)),
                     difficulty_recs=storage.get_meta(conn, "difficulty_recs", "1") == "1",
                     difficulty_sprints=storage.get_meta(conn, "difficulty_sprints", "1") == "1",

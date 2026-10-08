@@ -19,6 +19,7 @@
     <li><a href="{{ url_for('results_index', token=t) }}">Results</a></li>
     <li><a href="{{ url_for('stats_page', token=t) }}">Statistics</a></li>
     <li><a href="{{ url_for('records', token=t) }}">Records</a></li>
+    {% if ctx.features.telemetry and ctx.can_run and ctx.perms and ctx.perms.telemetry_link %}<li><a href="{{ url_for('telemetry_page', token=t) }}">Telemetry upload link</a></li>{% endif %}
   </ul></section>
   {% if ctx.my_driver %}
   <section class="card"><h2>Career</h2><ul>

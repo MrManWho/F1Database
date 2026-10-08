@@ -917,6 +917,7 @@
       </ul>
       {% else %}<p class="muted small">Nothing has been sent from the game yet. Sessions arrive here when the recorder sees the results screen.</p>{% endif %}
       <label class="btn btn-sm btn-ghost">Open a telemetry file<input type="file" id="imp-tele-file" accept=".json,application/json" hidden></label>
+      {% if ctx.perms.telemetry_link %}<a class="btn btn-sm btn-ghost" href="{{ url_for('telemetry_page', token=ctx.token) }}">Upload link</a>{% endif %}
       <h3 class="mini-head">Or from a screenshot</h3>
     </div>
     {% endif %}
