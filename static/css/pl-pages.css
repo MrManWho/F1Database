@@ -214,6 +214,43 @@
 .press-answer.chosen, html[data-theme] .press-answer.chosen { border-color: var(--orange); background: var(--orange-soft); color: var(--ink); opacity: 1; }
 .press-answer.chosen::before { content: "\2713"; font-weight: 700; margin-right: .35rem; color: var(--orange-ink); }
 .paddock-clock { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin-bottom: .6rem; }
+/* Paddock & lights out, inside its round page section: one stage track, a clean ready board, one gate line */
+.ws-inner.paddock-card, html[data-theme] .ws-inner.paddock-card { border-left: 0; padding-left: 0; }
+.ws-inner.paddock-card .phase-track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin: 0 0 .9rem; padding: 3px;
+  list-style: none; background: var(--surface-3); border: 1px solid var(--rule); border-radius: 10px; }
+.ws-inner.paddock-card .phase-track li { display: flex; align-items: center; justify-content: center; gap: .3rem; min-width: 0; padding: .4rem .5rem;
+  border-radius: 7px; background: none; color: var(--sub); font-family: var(--font-display); font-weight: 600; font-size: .9rem; line-height: 1.15; text-align: center; }
+.ws-inner.paddock-card .phase-track li.done { color: var(--ink-2); }
+.ws-inner.paddock-card .phase-track li.done .ico { width: 15px; height: 15px; color: var(--good); stroke-width: 2.4; }
+.ws-inner.paddock-card .phase-track li.now { background: var(--orange-btn); color: #fff; box-shadow: var(--shadow-1); }
+.ready-board { list-style: none; margin: .8rem 0; padding: 0; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface-2); }
+.ready-board li { display: grid; grid-template-columns: minmax(8rem, auto) auto 1fr; align-items: center; gap: .4rem 1rem; padding: .6rem .85rem; min-width: 0; }
+.ready-board li + li { border-top: 1px solid var(--rule); }
+.rb-who { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; }
+.rb-who b { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--player, var(--faint)); }
+.rb-state { justify-self: start; font-size: .78rem; font-weight: 700; padding: .12rem .55rem; border-radius: 99px; white-space: nowrap;
+  border: 1px solid var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+.ready-board li.is-done .rb-state { border-color: var(--good-line); background: var(--good-soft); color: var(--good); }
+.rb-checks { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .35rem 1rem; min-width: 0; font-size: .86rem; color: var(--sub); }
+.rb-check { display: inline-flex; align-items: center; gap: .35rem; }
+.rb-check.ok { color: var(--ink-2); }
+.rb-mark { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--field); }
+.rb-check.ok .rb-mark { border-color: var(--good); background: var(--good); color: var(--surface); }
+.rb-mark .ico { width: 11px; height: 11px; stroke-width: 3; }
+.pk-gate { display: flex; align-items: center; justify-content: space-between; gap: .6rem 1rem; flex-wrap: wrap; margin: .2rem 0 0;
+  padding: .7rem .85rem; border: 1px solid var(--warn-line); border-radius: 10px; background: var(--warn-soft); }
+.pk-gate p { margin: 0; font-size: .92rem; color: var(--ink); min-width: 0; flex: 1 1 18rem; }
+.pk-gate-sub { display: block; margin-top: .15rem; font-size: .84rem; color: var(--sub); }
+.pk-gate .btn .ico { width: 16px; height: 16px; }
+.ws-inner.paddock-card .gate-bypass { margin-top: .7rem; }
+@media (max-width: 600px) {
+  .ws-inner.paddock-card .phase-track li { flex-direction: column; gap: .1rem; padding: .35rem .2rem; font-size: .74rem; }
+  .ws-inner.paddock-card .phase-track li.done .ico { width: 12px; height: 12px; }
+  .ready-board li { grid-template-columns: 1fr auto; }
+  .rb-checks { grid-column: 1 / -1; flex-direction: column; gap: .3rem; }
+  .pk-gate form, .pk-gate .btn { width: 100%; }
+}
 .race-time-form { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end; }
 .race-time-form label { display: flex; flex-direction: column; gap: .25rem; }
 .race-time-form label.check { flex-direction: row; align-items: center; }
