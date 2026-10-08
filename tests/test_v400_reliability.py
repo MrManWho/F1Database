@@ -302,8 +302,8 @@ def test_fix_links_on_review_lead_back_to_review(app, master_client):
 def test_the_ai_explanation_calls_the_f1laps_average_a_starting_reference(app, master_client):
     token, _a, _b = _league(master_client)
     page = master_client.get(f"/career/{token}/dashboard").get_data(as_text=True)
-    assert "How this was worked out" in page
-    assert "Community starting reference" in page and "not proof" in page
+    assert "How the AI level is worked out" in page
+    assert "F1Laps community average" in page and "not proof" in page
 
 
 @pytest.mark.weekends

@@ -204,7 +204,7 @@ def test_a_completed_round_page_shows_the_recommendation_made_before_it(app, mas
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}", follow_redirects=True).get_data(as_text=True)
     assert "Before this round the recommendation was AI 81" in page and "AI 83 was used" in page
     dash = master_client.get(f"/career/{token}/dashboard", follow_redirects=True).get_data(as_text=True)
-    assert "F1Laps track baseline" in dash and "Learned league adjustment" in dash
+    assert "F1Laps community average" in dash and "League adjustment" in dash
 
 
 # --------------------------------------------------------------------------- track history
@@ -247,7 +247,7 @@ def test_an_unfinished_round_page_shows_the_recommendation(app, master_client):
     with storage.session(token) as conn:
         ev = S.events(conn, S.current_season_id(conn))[0]
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}")
-    assert page.status_code == 200 and "F1Laps track baseline" in page.get_data(as_text=True)
+    assert page.status_code == 200 and "F1Laps community average" in page.get_data(as_text=True)
     with storage.session(token) as conn:
         run_event(conn, S.get_event(conn, ev["id"]), difficulty=82, complete=False)
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}")

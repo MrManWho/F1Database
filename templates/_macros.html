@@ -21,36 +21,42 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
 {%- endmacro %}
 
 {% macro difficulty(rec, compact=False) -%}
-<div class="diff-rec diff-{{ rec.direction or 'none' }}">
+<div class="diff-rec diff-{{ rec.direction or 'none' }}{{ ' diff-track' if rec.track }}">
   <div class="diff-number">
     <svg class="diff-gauge" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5 16 9"/><circle cx="12" cy="13.5" r="1.2" fill="currentColor"/></svg>
     <strong>{{ rec.recommended if rec.recommended is not none else '—' }}</strong>
-    <small>{{ 'Recommended for next round' if rec.for_next else 'Recommended AI' }}{% if rec.band %} · {{ rec.band }}{% endif %}</small>
+    <small>{{ 'Recommended for next round' if rec.for_next else 'Recommended AI' }}</small>
+    {% if rec.band %}<small class="diff-band">{{ rec.band }}</small>{% endif %}
     {% if rec.recommended is not none and rec.direction in ('up', 'down') %}<span class="diff-move">{{ '▲ Raise' if rec.direction == 'up' else '▼ Lower' }}</span>{% endif %}
   </div>
   <div class="diff-copy">
+    {% if rec.track %}{% set t = rec.track %}
+    {% set conf = 'Low' if t.confidence < 0.4 else 'Medium' if t.confidence < 0.7 else 'High' %}
+    <p class="diff-lead"><b>AI {{ t.recommended }} for the whole weekend</b><span class="muted"> · qualifying, Sprint and race</span></p>
+    <ul class="diff-steps" aria-label="How the recommended AI is worked out">
+      <li><span class="ds-label">Starting point</span><span class="ds-val">{{ '%g'|format(t.baseline) }}</span>
+        <span class="ds-note">The F1Laps community average for {{ t.circuit }}. A starting point, not proof of what suits your league.</span></li>
+      <li><span class="ds-label">League adjustment</span><span class="ds-val">{{ '%+g'|format(t.league_adjustment) }}</span>
+        <span class="ds-note">{% if t.weekends %}Learned from {{ t.weekends }} completed round{{ 's' if t.weekends != 1 }}.{% else %}Starts at 0 and learns from each completed round.{% endif %}</span></li>
+      <li><span class="ds-label">Track history</span><span class="ds-val">{{ '%+g'|format(t.track_history) }}</span>
+        <span class="ds-note">{% if rec.history_on is defined and not rec.history_on %}Turned off in this league's settings.{% elif not t.history_parts or t.history_parts|map(attribute='visits')|max == 0 %}Nobody has raced here yet, so it doesn't count.{% else %}{% for h in t.history_parts %}{{ h.name }}: {{ h.visits }} visit{{ 's' if h.visits != 1 }}{% if h.visits %} ({{ '%+g'|format(h.value) }}){% endif %}{{ ' · ' if not loop.last }}{% endfor %}{% endif %}</span></li>
+      <li class="ds-total"><span class="ds-label">Recommended</span><span class="ds-val">{{ t.recommended }}</span>
+        <span class="ds-note"><span class="ds-conf ds-conf-{{ conf|lower }}">{{ conf }} confidence</span> {% if t.weekends %}based on {{ t.weekends }} completed round{{ 's' if t.weekends != 1 }}{% else %}until a round has been completed{% endif %}</span></li>
+      {% if rec.actual is defined and rec.actual is not none %}<li><span class="ds-label">AI actually used</span><span class="ds-val">{{ rec.actual }}</span>
+        <span class="ds-note">{{ 'As recommended.' if rec.actual == t.recommended else ('%+g'|format(rec.actual - t.recommended)) ~ ' from the recommendation.' }}</span></li>{% endif %}
+    </ul>
+    {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
+    {% if rec.this_round and rec.this_round != rec.reason %}<p class="diff-note">{{ rec.this_round }}</p>{% endif %}
+    {% if t.last and t.last.players %}<p class="diff-sub">After R{{ t.last.round }} {{ t.last.name }} <span class="muted">(AI {{ t.last.ai_used }})</span></p>
+    <ul class="diff-players">{% for p in t.last.players %}<li><b>{{ p.name }}</b>: {% if p.delta is none %}no usable result{% elif p.delta >= 0.5 %}comfortable, about {{ '%+.1f'|format(p.delta) }} levels{% elif p.delta <= -0.5 %}struggling, about {{ '%+.1f'|format(p.delta) }} levels{% else %}about right{% endif %}{% if p.sessions or p.notes %}<span class="muted">{% for s in p.sessions %} · {{ 'Sprint' if s.session == 'sprint' else 'Race' }} vs {{ s.benchmark }}{% if s.places is not none %} ({{ '%+.1f'|format(s.places) }} places){% endif %}{% endfor %}{% for n in p.notes %} · {{ n }}{% endfor %}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if t.players_own|length > 1 %}<p class="diff-sub">Each driver's own level: {% for o in t.players_own %}{{ o.name }} {{ o.value }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    <p class="diff-foot">Each player is compared with their AI teammate. DNFs, no-fault results and wet races never count against the AI, and it moves by at most a few levels at a time. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
+    {% else %}
     <p>{{ rec.reason }}</p>
     {% if rec.evidence %}<p class="small muted diff-evidence">{{ rec.evidence }}</p>{% endif %}
     {% if rec.note %}<p class="diff-note">{{ rec.note }}</p>{% endif %}
     {% if rec.this_round and rec.this_round != rec.reason %}<p class="diff-note">{{ rec.this_round }}</p>{% endif %}
-    {% if rec.track %}{% set t = rec.track %}
-    <details class="diff-why" {{ "open" if not compact }}><summary class="small">How this was worked out</summary>
-      <table class="data-table compact diff-sum">
-        <caption class="sr-only">AI recommendation for the whole weekend, part by part</caption>
-        <tbody>
-          <tr><th scope="row">Community starting reference</th><td class="num">{{ '%g'|format(t.baseline) }}</td><td class="small muted">F1Laps track baseline for {{ t.circuit }}: the F1 26 community average (snapshot {{ t.dataset_version }}). A starting point, not proof of what suits this league.</td></tr>
-          <tr><th scope="row">Learned league adjustment</th><td class="num">{{ '%+g'|format(t.league_adjustment) }}</td><td class="small muted">learned from {{ t.weekends }} completed weekend{{ 's' if t.weekends != 1 }}; starts at 0</td></tr>
-          <tr><th scope="row">Track history</th><td class="num">{{ '%+g'|format(t.track_history) }}</td><td class="small muted">{% if rec.history_on is defined and not rec.history_on %}off in this league's settings{% else %}{% for h in t.history_parts %}{{ h.name }}: {{ h.visits }} visit{{ 's' if h.visits != 1 }}{% if h.visits %} ({{ '%+g'|format(h.value) }}){% endif %}{{ ' · ' if not loop.last }}{% else %}no players yet{% endfor %}{% if not t.history_parts or t.history_parts|map(attribute='visits')|max == 0 %} · no influence until a circuit has been raced{% endif %}{% endif %}</td></tr>
-          <tr><th scope="row">Recommended AI (whole weekend)</th><td class="num"><b>{{ t.recommended }}</b></td><td class="small muted">confidence {{ (t.confidence * 100)|round|int }}% ({{ 'low' if t.confidence < 0.4 else 'medium' if t.confidence < 0.7 else 'high' }}: {{ t.weekends }} completed weekend{{ 's' if t.weekends != 1 }} of evidence) · model {{ t.model_version }}</td></tr>
-          {% if rec.actual is defined and rec.actual is not none %}<tr><th scope="row">AI actually used</th><td class="num">{{ rec.actual }}</td><td class="small muted">{{ 'as recommended' if rec.actual == t.recommended else ('%+g'|format(rec.actual - t.recommended)) ~ ' from the recommendation' }}</td></tr>{% endif %}
-        </tbody>
-      </table>
-      {% if t.last %}<p class="small"><b>Evidence from R{{ t.last.round }} {{ t.last.name }}</b> (AI {{ t.last.ai_used }} used; league adjustment {{ '%+g'|format(t.last.step) }}, limit ±{{ '%g'|format(t.last.cap) }}):</p>
-      <ul class="small diff-players">{% for p in t.last.players %}<li><b>{{ p.name }}</b>: {% if p.delta is none %}no usable evidence{% elif p.delta >= 0.5 %}comfortable, about {{ '%+.1f'|format(p.delta) }} levels{% elif p.delta <= -0.5 %}struggling, about {{ '%+.1f'|format(p.delta) }} levels{% else %}about right{% endif %}{% for s in p.sessions %} · {{ 'Sprint' if s.session == 'sprint' else 'GP' }} vs {{ s.benchmark }}{% if s.places is not none %} ({{ '%+.1f'|format(s.places) }} places){% endif %}{% endfor %}{% for n in p.notes %} · <span class="muted">{{ n }}</span>{% endfor %}</li>{% endfor %}</ul>{% endif %}
-      {% if t.players_own|length > 1 %}<p class="small">Each driver's own level: {% for o in t.players_own %}{{ o.name }} {{ o.value }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
-      <p class="small muted">One AI setting for qualifying, the Sprint and the race. Each player is judged against their AI teammate (or cars of similar speed, or the car's expected finish); DNFs, DNS, DSQ, major incidents and no-fault results never count against the AI, wet or disrupted races count less, and beating your teammate is never a bad sign. Players who agree move it further; mixed evidence moves it little or not at all. The league adjustment moves at most 2 after one weekend, 3 after two in a row and 4 after three. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
-    </details>
-    {% elif rec.used or rec.excluded or rec.recent|length > 1 %}
+    {% if rec.used or rec.excluded or rec.recent|length > 1 %}
     <details class="diff-why"><summary class="small">The rounds behind this</summary>
       {% if rec.recent|length > 1 %}
       {% set ds = rec.recent|map(attribute='difficulty')|list %}{% set lo = ds|min - 1 %}{% set hi = ds|max + 1 %}
@@ -70,6 +76,7 @@ style="{{ style }}{% if driver and driver.is_player %}--player: {{ driver.player
       <p class="small muted">Every completed, tracked round counts, at any AI level, with recent rounds weighing most. Each player driver is judged separately: if they agree it moves further, if one is struggling and another isn't it moves a little, and it never jumps more than {{ C.DIFF_MAX_STEP }} at once. <a href="{{ url_for('help_page') }}#difficulty">How it works</a></p>
       {% endif %}
     </details>
+    {% endif %}
     {% endif %}
     {% if not compact %}
     <div class="diff-facts">

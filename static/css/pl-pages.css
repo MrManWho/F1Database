@@ -526,3 +526,43 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus, legen
 .ov-race .race-state { font-size: .78rem; }
 /* the season being viewed and the version you're on: an orange edge next to their "Viewing" / "Current" pill */
 .season-card.selected, html[data-theme] .season-card.selected, .changelog-entry.current, html[data-theme] .changelog-entry.current { border-color: var(--orange-line); box-shadow: inset 3px 0 0 var(--orange), var(--shadow-1); }
+
+/* the recommended AI card (track-aware leagues): the number, then the sum that makes it, in plain words */
+.diff-rec, html[data-theme] .diff-rec { align-items: flex-start; gap: 1.25rem; background: var(--surface-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem 1.15rem; max-width: 100%; box-sizing: border-box; }
+.diff-number { flex: 0 0 auto; min-width: 104px; }
+.diff-number strong { font-family: var(--font-display); font-weight: 700; font-size: 2.6rem; line-height: 1; }
+.diff-number small { margin-top: .3rem; color: var(--sub); font-size: .68rem; font-weight: 600; letter-spacing: .08em; }
+.diff-number small.diff-band { margin-top: .15rem; text-transform: none; letter-spacing: 0; font-size: .78rem; color: var(--ink-2); }
+.diff-gauge { color: var(--orange); }
+.diff-copy { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.diff-copy p { margin: 0 0 .45rem; }
+.diff-lead { font-size: .98rem; }
+.diff-lead b { font-family: var(--font-display); font-weight: 700; font-size: 1.12rem; }
+.diff-steps { list-style: none; margin: .2rem 0 .7rem; padding: 0; border-top: 1px solid var(--rule); }
+.diff-steps li { display: grid; grid-template-columns: 10.5rem 3rem minmax(0, 1fr); align-items: baseline; gap: .2rem .8rem; padding: .5rem 0; border-bottom: 1px solid var(--rule); }
+.ds-label { font-size: .76rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sub); }
+.ds-val { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; text-align: right; font-variant-numeric: tabular-nums; }
+.ds-note { font-size: .86rem; color: var(--ink-2); }
+.diff-steps .ds-total .ds-label { color: var(--ink); }
+.diff-steps .ds-total .ds-val { color: var(--orange-ink); font-size: 1.3rem; }
+.ds-conf { display: inline-block; margin-right: .25rem; padding: .05rem .5rem; border-radius: 999px; font-size: .74rem; font-weight: 600; border: 1px solid var(--rule); background: var(--surface-3); color: var(--ink-2); }
+.ds-conf-low { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn); }
+.ds-conf-high { background: var(--good-soft); border-color: var(--good-line); color: var(--good); }
+.diff-sub { font-size: .86rem; font-weight: 600; }
+.diff-track .diff-players { margin: -.2rem 0 .6rem; padding-left: 1.1rem; font-size: .86rem; }
+.diff-track .diff-players li { margin: .15rem 0; }
+.diff-foot { font-size: .82rem; color: var(--sub); }
+.diff-copy .diff-foot { margin: 0; }
+/* the Race step's two-column strip and phones: label and number on one line, the note beneath */
+.diff-strip .diff-steps li { grid-template-columns: minmax(0, 1fr) auto; }
+.diff-strip .diff-steps .ds-note { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .diff-rec, html[data-theme] .diff-rec { flex-direction: column; gap: .7rem; padding: .9rem; }
+  .diff-number { display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-auto-flow: row dense; align-items: center; justify-items: start; gap: .05rem .6rem; text-align: left; min-width: 0; width: 100%; }
+  .diff-number .diff-gauge { grid-column: 1; grid-row: 1 / span 3; margin: 0; width: 26px; height: 26px; }
+  .diff-number strong { grid-column: 2; grid-row: 1 / span 3; font-size: 2.3rem; }
+  .diff-number small, .diff-number .diff-move { grid-column: 3; margin: 0; }
+  .diff-copy { width: 100%; }
+  .diff-steps li { grid-template-columns: minmax(0, 1fr) auto; }
+  .diff-steps .ds-note { grid-column: 1 / -1; }
+}
