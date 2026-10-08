@@ -244,6 +244,10 @@
     <div class="demo-banner" role="status"><span><b>Demo league.</b> Explore and change anything: it's your own private copy, it never emails anyone, and it deletes itself after a couple of hours.</span>
       <form method="post" action="{{ url_for('demo_start') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Restart the demo</button></form></div>
     {% endif %}
+    {% if ctx.is_test %}
+    <div class="demo-banner" role="status"><span><b>Test league.</b> A fictional league for trying things out. It never emails anyone or sends phone alerts.</span>
+      {% if user and user.is_master %}<a class="btn btn-sm" href="{{ url_for('test_leagues_page') }}#test-leagues">Test leagues</a>{% endif %}</div>
+    {% endif %}
     {% if ctx.mode_lowered %}
     <div class="mode-banner" role="status"><span>{{ icon('eye') }} Viewing <b>{{ ctx.career_name }}</b> as <b>{{ ctx.mode_label }}</b>. Your real role is {{ ctx.role }}; nothing about it has changed.</span>
       <form method="post" action="{{ url_for('view_mode', token=t) }}" data-mode-form class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

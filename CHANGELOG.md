@@ -3,6 +3,22 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.1.0 · Races fill themselves in from the game
+_Released October 8, 2026_
+> When the recorder sends the race, the round fills itself in and waits for one tap to approve.
+
+### Highlights
+- **Rounds fill themselves in from the game.** In leagues using Telemetry import, as soon as the recorder sends the race the site fills in the whole weekend: qualifying, Sprint and race order, DNFs, fastest lap, the AI level, each session's weather, the winner's race time and every player's times against their AI teammate. Only empty boxes are filled, so anything already typed in stays as it is.
+- **One tap to approve.** Everyone gets an alert that the results are in from the game. The round's Review & submit step says what was filled in and anything left for you, with one **Approve and submit** button. Nothing is submitted until someone presses it.
+- **If something can't be matched,** the driver is left blank and listed, and the usual checks stop the submit until it's filled in. If the race hasn't been started on the site yet, the round waits and offers **Fill it in now**.
+
+### Also new
+- The Race Master can switch this off on the Telemetry upload link page (it's on by default). The **Fill weekend from the game** button still works as before.
+- **Test leagues** for the site owner (My account → Test leagues): make a fictional league for a situation in one click. Race night from the game (send a made-up race and watch the round fill itself in), Season finale and First race of a season. Test leagues never email anyone or send phone alerts.
+
+### Nothing changed in
+- Your results, standings or any calculation.
+
 ## 4.0.1 · Remember me
 _Released October 8, 2026_
 > Stay signed in on your own devices, plus a round of polish across the whole site.

@@ -3,6 +3,7 @@
 {% block title %}My account{% endblock %}
 {% block plain %}
 <div class="page-head"><div><div class="kicker">{{ 'Site owner' if user.is_owner else 'Account' }}</div><h1>My account</h1></div></div>
+{% set here = 'account' %}{% include "_owner_tabs.html" %}
 <div class="grid-2">
   <section class="card" id="password">
     <h2>Change my password</h2>
@@ -204,17 +205,6 @@
       <label>Type REPLACE to confirm<input name="confirm" required autocomplete="off"></label>
     </div>
     <div><button class="btn btn-danger">Load backup</button></div>
-  </form>
-</section>
-{% endif %}
-{% if test_site %}
-<section class="card" id="test-final-round">
-  <h2>Try a season finale (test site only)</h2>
-  <p class="muted small">Adds a fictional league whose season has every round played except the last, with you as Race Master driving Player One.
-    Enter the last round, then start the new season to try the rollover. Add as many as you like; delete them from Leagues.</p>
-  <form method="post" action="{{ url_for('seed_final_round_league') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn">Add a league with one round left</button>
   </form>
 </section>
 {% endif %}

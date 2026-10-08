@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Test leagues{% endblock %}
+{% block plain %}
+<div class="page-head"><div><div class="kicker">Site owner</div><h1>Test leagues</h1>
+  <p class="page-purpose">Fictional leagues for trying a situation without touching a real one. They never email anyone or send phone alerts.</p></div></div>
+{% set here = 'tests' %}{% include "_owner_tabs.html" %}
+
+<section class="card" id="scenarios">
+  <h2>Make a test league</h2>
+  <p class="muted small">Each one is a fictional league with two players (Player One at Williams, Player Two at Haas) and the 2026 grid. You're its Race Master, driving Player One.
+    Make as many as you like and delete them below when you're done.</p>
+  <div class="test-scenarios">
+    {% for key, (label, blurb) in scenarios.items() %}
+    <form method="post" action="{{ url_for('test_league_new') }}" class="test-scenario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="scenario" value="{{ key }}">
+      <h3>{{ label }}{% if key == 'game_round' %} <span class="pill">New</span>{% endif %}</h3>
+      <p class="small">{{ blurb }}</p>
+      <button class="btn btn-sm">Make this test league</button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card" id="how-game-round">
+  <h2>How a race night from the game works</h2>
+  <ol class="small steps-list">
+    <li><b>During the race night</b> the recorder on your PC sends each session to the league as it ends. In the test league, qualifying has already arrived.</li>
+    <li><b>When the race ends</b> the recorder sends the race. Here, <b>Send the race from the game</b> does that part: the same made-up race goes through exactly the same steps as a real one.</li>
+    <li><b>The round fills itself in:</b> qualifying and race order, the retirement, the fastest lap, the AI level, the weather, the winner's race time and both players' times against their AI teammates. Only blanks are filled.</li>
+    <li><b>Everyone gets an alert</b> (in the bell; test leagues send no emails or phone alerts) that the results are in from the game.</li>
+    <li><b>Open the round:</b> Review &amp; submit shows what was filled in and anything left for you. Press <b>Approve and submit</b> and the weekend is submitted exactly like Submit weekend.</li>
+  </ol>
+</section>
+
+<section class="card" id="test-leagues">
+  <h2>Your test leagues</h2>
+  {% if leagues %}
+  <ul class="plain-list test-league-list">
+    {% for l in leagues %}
+    <li>
+      <div><b>{{ l.name }}</b> <span class="muted small">{{ l.label }}{% if l.created %} · made {{ l.created|ago }}{% endif %}</span></div>
+      <div class="button-row tight">
+        {% if l.race_waiting %}
+        <form method="post" action="{{ url_for('test_league_send_race', league=l.token) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-primary">Send the race from the game</button></form>
+        {% endif %}
+        <a class="btn btn-sm btn-ghost" href="{{ url_for('weekend', token=l.token, event_id=l.round_id) if l.scenario == 'game_round' else url_for('dashboard', token=l.token) }}">Open</a>
+        <form method="post" action="{{ url_for('test_league_delete', league=l.token) }}" class="inline"
+              data-confirm='{"title": "Delete this test league?", "what": "It is deleted for good.", "ok": "Delete"}'><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost">Delete</button></form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted small">No test leagues yet.</p>{% endif %}
+</section>
+{% endblock %}

@@ -31,6 +31,9 @@ def _turn_on(client, token):
     client.post(f"/career/{token}/settings", data={"section": "career", "team_life": "1", "feature_telemetry": "1",
                                                    "feature_comments": "1", "csrf_token": "tok"})
     client.post(f"/career/{token}/settings/telemetry", data={"action": "new", "csrf_token": "tok"})
+    # These tests are about uploads waiting in the Import dialog: rounds filling themselves in (4.1.0) is tested in
+    # test_v410_autofill.py, so it's off here.
+    client.post(f"/career/{token}/settings/telemetry", data={"action": "autofill_off", "csrf_token": "tok"})
     with storage.session(token) as conn:
         return telemetry.upload_key(conn)
 

@@ -97,7 +97,7 @@ def test_the_owner_adds_a_league_with_one_round_left_and_rolls_it_over(app, mast
     from f1tracker import golden, services as S
     assert master_client.post("/settings/test-final-round", data={"csrf_token": "tok"}).status_code == 404
     monkeypatch.setenv("F1_TRACKER_TEST_SITE", "1")
-    assert "one round left" in master_client.get("/accounts").get_data(as_text=True)
+    assert "Season finale" in master_client.get("/settings/tests").get_data(as_text=True)
     res = master_client.post("/settings/test-final-round", data={"csrf_token": "tok"})
     assert res.status_code == 302
     token = res.headers["Location"].split("/career/")[1].split("/")[0]

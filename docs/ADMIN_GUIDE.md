@@ -2,6 +2,27 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.1.0: rounds fill themselves in from the game, and Test leagues (October 8, 2026)
+
+- **Auto-fill** (`f1tracker/autofill.py`). After `telemetry.store` links an upload to its round, the upload route calls
+  `autofill.after_upload` inside a savepoint (a failure is logged and rolled back; the upload is always kept). When
+  the upload is the round's Grand Prix (type 15 on a non-Sprint weekend, 16/17 otherwise) it runs the same steps as
+  the round page's *Fill weekend from the game*: names matched like `ocr_match.js` (remembered names first; a test
+  checks the Python port gives the same answers as the browser), only blank sessions filled, then fastest lap and AI
+  level if empty, then `fill_extras` (weather, winner's time, players' race times; the `/telemetry/extras` route now
+  calls the same function). It never submits. The result is kept in meta `autofill_<event id>` (cleared when the
+  round is submitted) and shown on Review & submit with **Approve and submit**, which presses the normal Submit.
+  One in-app alert per race (category Results, no email); a resent race doesn't alert again.
+- If the race hasn't started on the site (race weekends on and no lights out, or a round gate blocking) the round is
+  marked *waiting* and nothing is filled; **Fill it in now** (`POST /career/<id>/weekend/<event>/telemetry/autofill`)
+  runs it again by hand. League switch: meta `telemetry_autofill` (default on), on the Telemetry upload link page.
+- **Test leagues** (`f1tracker/testleagues.py`, `/settings/tests`, site owner only): fictional leagues built from the
+  golden-fixture season, named "Test · …" and marked meta `test_league`. `delivery.plan`/`send_email` skip them like
+  demo leagues (no email or phone alerts; the bell still works). Scenarios: *Race night from the game* (telemetry on,
+  lights out on the last round, made-up qualifying already stored; **Send the race from the game** stores the made-up
+  race through `telemetry.store` + `autofill.after_upload`, the same path as a real upload), *Season finale*, *First
+  race of a season*. The old test-site-only finale button moved here; `python dev.py finale` still works.
+
 ## 4.0.1: Remember me, and the final 4.0.0 audit (October 8, 2026)
 
 The first version after the 4.0.0 changelog pause. Anything after it gets its own version and What's New entry.

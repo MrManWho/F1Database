@@ -661,6 +661,14 @@
   function shownWarnings() {
     return Array.prototype.map.call(document.querySelectorAll("[data-checklist] .check-list.is-warn li > span:first-child"), function (el) { return el.textContent.trim(); });
   }
+  // 4.1.0: "Approve and submit" on a round filled in from the game is the same Submit, from its card.
+  document.querySelectorAll("[data-approve]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!submitBtn) return;
+      submitBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+      submitBtn.click();
+    });
+  });
   let submitting = false;
   if (submitBtn) submitBtn.addEventListener("click", function () {
     if (submitting) return;

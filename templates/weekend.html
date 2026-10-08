@@ -68,6 +68,11 @@
     {% set rail_times = {'state': rt[0], 'text': rt[1], 'session': rt_sess, 'anchor': 'sec-pace-sprint' if rt_sess == 's' else 'sec-pace'} %}
   {% endif %}
 {% endif %}
+{% if autofill_state and ws.stage != 'review' and ws.check %}
+<div class="banner banner-ok af-banner" role="status"><span><b>{{ 'Ready to approve' if autofill_state.status == 'ready' else 'The race is in from the game' }}.</b>
+  {{ 'This round was filled in from the game.' if autofill_state.status == 'ready' else autofill_state.why }}</span>
+  <a class="btn btn-sm btn-primary" href="{{ wk_url }}?stage=review#from-the-game" data-stage-link="review">Review and approve</a></div>
+{% endif %}
 <div class="ws-layout" data-stage-now="{{ ws.stage }}">
 {# ============================================================== steps (left rail) #}
 <nav class="ws-rail" aria-label="This weekend">
@@ -554,6 +559,28 @@
     <a class="btn btn-sm" href="{{ wk_url }}?stage=debrief" data-stage-link="debrief">Go to the Debrief →</a>
   </section>
   {% elif ws.check %}{% set ck = ws.check %}{% set sm = ck.summary %}
+  {% if autofill_state %}{% set af = autofill_state %}
+  <section class="card af-card {{ 'is-ready' if af.status == 'ready' else 'is-waiting' }}" id="from-the-game" aria-labelledby="af-title">
+    <div class="af-head"><span class="st-ico is-{{ 'done' if af.status == 'ready' and not af.missing and not ck.blocking else 'attention' }}" aria-hidden="true">{% if af.status == 'ready' and not af.missing and not ck.blocking %}{{ icon('check') }}{% else %}!{% endif %}</span>
+      <div><h3 id="af-title">{% if af.status == 'waiting' %}The race is in from the game{% elif ck.blocking %}Filled in from the game: a few things to finish{% else %}Ready to approve{% endif %}</h3>
+        <p class="small muted">{% if af.status == 'waiting' %}It arrived {{ af.at|ago }}, but it can't be filled in yet.{% else %}Filled in from the game {{ af.at|ago }}. Nothing has been submitted.{% endif %}</p></div></div>
+    {% if af.status == 'waiting' %}
+    <p class="small">{{ af.why }}</p>
+    {% else %}
+    {% if af.filled %}<p class="small"><b>Filled in:</b> {{ af.filled|join(', ') }}.</p>{% endif %}
+    {% if af.kept %}<p class="small"><b>Kept as entered:</b> {{ af.kept|join(', ') }}.</p>{% endif %}
+    {% if af.missing %}<p class="small"><b>Not matched, so left blank for you:</b> {{ af.missing[:6]|join('; ') }}{% if af.missing|length > 6 %} and {{ af.missing|length - 6 }} more{% endif %}.</p>{% endif %}
+    {% if af.review %}<p class="small">{{ af.review }} driver name{{ 's were' if af.review != 1 else ' was' }} matched by best guess: check {{ 'them' if af.review != 1 else 'it' }} in the results.</p>{% endif %}
+    {% for n in af.notes %}<p class="small form-error">{{ n }}</p>{% endfor %}
+    <p class="small">{% if ck.blocking %}Fix what's listed under Must fix, then approve.{% else %}Check the summary below. Approving submits the weekend exactly like Submit weekend.{% endif %}</p>
+    {% endif %}
+    <div class="button-row">
+      {% if af.status == 'ready' %}<button type="button" class="btn btn-primary" data-approve {{ 'disabled' if ck.blocking }}>Approve and submit</button>{% endif %}
+      <form method="post" action="{{ url_for('telemetry_autofill', token=ctx.token, event_id=event.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn {{ 'btn-primary' if af.status == 'waiting' else 'btn-ghost' }}">{{ 'Fill it in now' if af.status == 'waiting' else 'Fill blanks again from the game' }}</button></form>
+    </div>
+  </section>
+  {% endif %}
   {# optional details nobody has to enter, listed so they're a choice rather than a surprise #}
   {% set optional_left = [] %}
   {% if wx and wx.can_edit %}{% for s in ws.sessions if not wx.recorded.get(wx_key[s.key]) %}{% set _ = optional_left.append({'text': s.label ~ ' weather not recorded', 'session': s.key, 'anchor': 'sec-weather' ~ ('' if s.key == 'r' else '-' ~ wx_key[s.key])}) %}{% endfor %}{% endif %}

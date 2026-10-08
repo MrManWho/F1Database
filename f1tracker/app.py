@@ -24,7 +24,7 @@ from . import (battle, circuits, delivery, demo, gates, league_profile, library,
 from . import (ai3, ai_track, announcements, audit_trail, calc3, engine, impacts, maintenance, migration, offsite,
                ops, outbox, stats, testsite, ultimatums)
 from . import weekend as raceweek
-from . import navigation, telemetry, tracking, workspace
+from . import autofill, navigation, telemetry, testleagues, tracking, workspace
 from . import constants as C
 from .auth import AuthError
 from .services import ValidationError
@@ -616,6 +616,7 @@ def career_page(master_only=False, ops_only=False, read_only=False):
                             g.ctx["race_now"] = {"event": nxt, "phase": raceweek.phase(nxt)}
                     g.ctx["accent"], g.ctx["on_accent"] = _accent(storage.get_meta(conn, "accent_color"))
                     g.ctx["is_demo"] = storage.get_meta(conn, "demo") == "1"
+                    g.ctx["is_test"] = storage.get_meta(conn, "test_league") == "1"
                     g.ctx["my_todo"] = gates.my_todo(conn, g.ctx["current_season_id"], mine["id"]) \
                         if mine and not request.path.startswith("/api/") and not read_only else None
                     if not read_only:
@@ -1276,6 +1277,49 @@ def register_routes(app):
         flash("Added a fictional league with 23 of 24 rounds played. You drive Player One. Enter the last round, "
               "then start the new season from Seasons.", "success")
         return redirect(url_for("dashboard", token=token))
+
+    # ---- 4.1.0: test leagues (Account → Test leagues): fictional leagues for trying a situation safely
+    @app.route("/settings/tests")
+    @master_required
+    def test_leagues_page():
+        return render_template("tests.html", scenarios=testleagues.SCENARIOS, leagues=testleagues.leagues())
+
+    @app.route("/settings/tests/new", methods=["POST"])
+    @master_required
+    def test_league_new():
+        scenario = request.form.get("scenario")
+        if scenario not in testleagues.SCENARIOS:
+            abort(400)
+        token = testleagues.create(scenario, g.user["username"])
+        label = testleagues.SCENARIOS[scenario][0]
+        if scenario == "game_round":
+            flash(f"Added a test league: {label}. Qualifying is in from the game. Press Send the race from the game "
+                  "on the Test leagues page (or below) when you're ready.", "success")
+            return redirect(url_for("test_leagues_page") + "#test-leagues")
+        flash(f"Added a test league: {label}. You're its Race Master, driving Player One.", "success")
+        return redirect(url_for("dashboard", token=token))
+
+    @app.route("/settings/tests/<league>/send-race", methods=["POST"])
+    @master_required
+    def test_league_send_race(league):
+        token = league
+        try:
+            event_id = testleagues.send_race(token)
+        except (ValueError, CareerNotFound) as exc:
+            flash(str(exc) if isinstance(exc, ValueError) else "That test league no longer exists.", "error")
+            return redirect(url_for("test_leagues_page"))
+        flash("The race arrived from the game and the round filled itself in. Check it, then approve.", "success")
+        return redirect(url_for("weekend", token=token, event_id=event_id, stage="review"))
+
+    @app.route("/settings/tests/<league>/delete", methods=["POST"])
+    @master_required
+    def test_league_delete(league):
+        try:
+            testleagues.delete(league)
+            flash("Test league deleted.", "success")
+        except (ValueError, CareerNotFound):
+            flash("Only test leagues can be deleted here.", "error")
+        return redirect(url_for("test_leagues_page") + "#test-leagues")
 
     @app.route("/healthz")
     def healthz():
@@ -2062,6 +2106,8 @@ def register_routes(app):
                     entrants=_entrants(conn, event_id, rows),
                     telemetry_uploads=(telemetry.recent(conn) if ctx["features"].get("telemetry") and ctx["can_run"]
                                        and ctx["perms"]["telemetry_import"] else None),
+                    autofill_state=(autofill.state(conn, event_id) if ctx["features"].get("telemetry") and ctx["can_run"]
+                                    and event["status"] != C.EVENT_COMPLETE else None),
                     telemetry_round=(telemetry.round_summary(telemetry.for_round(conn, event))
                                      if ctx["features"].get("telemetry") and ctx["can_run"]
                                      and ctx["perms"]["telemetry_import"] and event["status"] != C.EVENT_COMPLETE else []),
@@ -4573,6 +4619,14 @@ def register_routes(app):
                     # the same answer either way, so the address can't be used to test keys or leagues
                     return jsonify(ok=False, error="This upload link isn't active"), 403
                 upload_id = telemetry.store(conn, payload)
+                conn.execute("SAVEPOINT autofill")
+                try:   # 4.1.0: a round's race gets the round ready to approve (a failure here never loses the upload)
+                    autofill.after_upload(conn, upload_id)
+                except Exception:
+                    conn.execute("ROLLBACK TO autofill")
+                    feed.take_outbox()
+                    app.logger.exception("filling a round from the game failed")
+                conn.execute("RELEASE autofill")
         except CareerNotFound:
             return jsonify(ok=False, error="This upload link isn't active"), 403
         except ValidationError as exc:
@@ -4629,7 +4683,6 @@ def register_routes(app):
     def telemetry_extras(conn, ctx, event_id):
         """The rest of a weekend filled from the game: each session's weather and the players' race times. Only
         blanks are filled; anything already recorded is kept. Results themselves go into the results table (a draft)."""
-        from . import weather
         if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"]:
             abort(403)
         event = S.get_event(conn, event_id)
@@ -4638,76 +4691,8 @@ def register_routes(app):
         if event["status"] == C.EVENT_COMPLETE:
             return jsonify(ok=False, error="This round is complete; reopen it to change it"), 409
         data = request.get_json(silent=True) or {}
-        notes, done = [], []
-        wx_in = {}   # each session's conditions, from the game sessions used for it
-        for key, ids in (data.get("sessions") or {}).items() if isinstance(data.get("sessions"), dict) else ():
-            ups = [telemetry.get(conn, i) for i in (ids or [])[:6] if isinstance(i, int)]
-            seen = [w for u in ups if u for w in (u["session"].get("weather_seen") or []) + [u["session"].get("weather")]]
-            wx_in[key] = telemetry.weather_key({"weather_seen": seen}) if seen else None
-        have = weather.get(conn, event_id)
-        form = {f"weather_{k}": v for k, v in have.items()}
-        added = [k for k in weather.sessions_for(event) if not have.get(k) and wx_in.get(k) in weather.CONDITIONS]
-        form.update({f"weather_{k}": wx_in[k] for k in added})
-        if added:
-            weather.save(conn, event, form, g.user["username"])
-            done.append("weather for " + ", ".join(weather.SESSIONS[k].lower() for k in added))
-        if engine.round_v3(conn, event):
-            # the winner's race time, shared by every player's +gap times: P1's time in the game's race (or sprint)
-            for key, sess in (("race", "gp"), ("sprint", "sprint")):
-                ids = (data.get("sessions") or {}).get(key) if isinstance(data.get("sessions"), dict) else None
-                if not ids or ai3.winner_time(conn, event_id, sess) is not None:
-                    continue
-                ups = [u for u in (telemetry.get(conn, i) for i in ids[:6] if isinstance(i, int)) if u]
-                p1 = [r for u in ups if u["session"].get("kind") in ("race", "sprint_or_race") for r in u.get("results") or []
-                      if r.get("position") == 1 and r.get("status") == "Finished" and r.get("race_time_s")]
-                if p1:
-                    ai3.save_winner_time(conn, event_id, sess, ai3.format_time(round(p1[-1]["race_time_s"] + (p1[-1].get("penalty_s") or 0), 3)),
-                                         g.user["username"])
-                    done.append(("sprint" if sess == "sprint" else "race") + " winner's time")
-            players = {r[0] for r in conn.execute("SELECT r.driver_id FROM results r JOIN drivers d ON d.id = r.driver_id "
-                                                  "WHERE r.event_id = ? AND d.is_player = 1", (event_id,))}
-            dmap = S.driver_map(conn)
-            for p in (data.get("pace") or [])[:20]:
-                if not isinstance(p, dict) or p.get("driver_id") not in players or p.get("session") not in ("gp", "sprint"):
-                    continue
-                old = ai3.pace_input(conn, event_id, p["driver_id"], p["session"])
-                if old and old["untracked"]:
-                    continue
-                form = {k: ai3.format_time(old[k]) if old and old[k] is not None else ""
-                        for k in ("quali_time", "mate_quali_time", "comp_quali_time", "race_time", "bench_race_time")}
-                form.update(laps=str(old["laps"]) if old and old["laps"] else "",
-                            race_gap=str(old["race_gap"]) if old and old["race_gap"] is not None and not old["race_time"] else "",
-                            comp_driver_id=str(old["comp_driver_id"] or "") if old else "",
-                            representative="" if not old or old["representative"] is None else str(old["representative"]),
-                            race_dnf="1" if old and old["race_dnf"] else "", bench_dnf="1" if old and old["bench_dnf"] else "",
-                            untracked="", **{f"flag_{f}": "1" for f in (old["flag_list"] if old else [])})
-                filled = []
-                for key in ("quali_time", "mate_quali_time") if p["session"] == "gp" and not form["comp_quali_time"] else ():
-                    if not form[key] and isinstance(p.get(key), (int, float)) and p[key] > 0:
-                        form[key] = ai3.format_time(round(p[key], 3)); filled.append(key)
-                if (not form["race_time"] and not form["bench_race_time"] and not form["race_gap"]
-                        and not form["comp_driver_id"] and all(isinstance(p.get(k), (int, float)) and p[k] > 0
-                                                                for k in ("race_time", "bench_race_time"))):
-                    form["race_time"] = ai3.format_time(round(p["race_time"], 3))
-                    form["bench_race_time"] = ai3.format_time(round(p["bench_race_time"], 3))
-                    filled.append("race_time")
-                elif (not form["race_time"] and not form["bench_race_time"] and not form["race_gap"] and not form["race_dnf"]
-                        and not form["bench_dnf"] and not form["comp_driver_id"] and (p.get("race_dnf") or p.get("bench_dnf"))):
-                    form["race_dnf"], form["bench_dnf"] = ("1" if p.get("race_dnf") else ""), ("1" if p.get("bench_dnf") else "")
-                    for key in ("race_time", "bench_race_time"):     # the one who finished keeps their time
-                        if isinstance(p.get(key), (int, float)) and p[key] > 0:
-                            form[key] = ai3.format_time(round(p[key], 3))
-                    filled.append("race_time")
-                if not form["laps"] and isinstance(p.get("laps"), int) and 1 <= p["laps"] <= 200:
-                    form["laps"] = str(p["laps"]); filled.append("laps")
-                if not filled:
-                    continue
-                try:
-                    ai3.save_pace_input(conn, event_id, p["driver_id"], p["session"], form, g.user["username"])
-                except ValueError as exc:
-                    notes.append(f"{dmap[p['driver_id']]['name']}'s times weren't saved: {exc}")
-                    continue
-                done.append(f"{dmap[p['driver_id']]['name']}'s {'Sprint' if p['session'] == 'sprint' else 'Grand Prix'} times")
+        done, notes = autofill.fill_extras(conn, event, data.get("sessions"), data.get("pace") if isinstance(data.get("pace"), list) else [],
+                                           g.user["username"])
         names = data.get("names") if isinstance(data.get("names"), dict) else {}
         for uid in [u for u in (data.get("upload_ids") or []) if isinstance(u, int)][:8] or [None]:
             telemetry.applied(conn, uid, event_id, names)
@@ -4716,6 +4701,28 @@ def register_routes(app):
             g.audit_link = f"weekend/{event_id}"
             g.audit_summary = f"filled {event_label(event, year)} from the game's telemetry: " + "; ".join(done)
         return jsonify(ok=True, done=done, notes=notes)
+
+    @app.route("/career/<token>/weekend/<int:event_id>/telemetry/autofill", methods=["POST"])
+    @career_page(ops_only=True)
+    def telemetry_autofill(conn, ctx, event_id):
+        """4.1.0: fill the round from the game now, the same way it fills itself when the race arrives."""
+        if not ctx["features"].get("telemetry") or not ctx["perms"]["telemetry_import"] or not ctx["can_run"]:
+            abort(403)
+        event = S.get_event(conn, event_id)
+        if not event:
+            abort(404)
+        if event["status"] == C.EVENT_COMPLETE:
+            flash("This round is complete; reopen it to change it.", "error")
+            return redirect(url_for("weekend", token=ctx["token"], event_id=event_id))
+        info = autofill.run(conn, event, username=g.user["username"], notify=False)
+        if not info:
+            flash("Nothing from the game matches this round's circuit yet.", "error")
+        elif info["status"] == "waiting":
+            flash(info["why"], "error")
+        else:
+            flash("Filled in from the game. Check it, then approve and submit." if info["filled"] else
+                  "Nothing new to fill in: everything the game sent is already entered.", "success")
+        return redirect(url_for("weekend", token=ctx["token"], event_id=event_id, stage="review"))
 
     @app.route("/career/<token>/telemetry/data")
     @career_page(ops_only=True)
@@ -4735,7 +4742,8 @@ def register_routes(app):
             abort(403)
         key = telemetry.upload_key(conn)
         link = url_for("telemetry_upload", token=ctx["token"], key=key, _external=True) if key else None
-        return page("telemetry.html", ctx, telemetry_link=link, uploads=telemetry.recent(conn))
+        return page("telemetry.html", ctx, telemetry_link=link, uploads=telemetry.recent(conn),
+                    autofill_on=autofill.enabled(conn))
 
     @app.route("/career/<token>/settings/telemetry", methods=["POST"])
     @career_page(ops_only=True)
@@ -4751,6 +4759,11 @@ def register_routes(app):
             telemetry.revoke_key(conn)
             g.audit_summary = "turned off the telemetry upload link"
             flash("Upload link turned off.", "success")
+        elif action in ("autofill_on", "autofill_off"):
+            storage.set_meta(conn, "telemetry_autofill", "1" if action == "autofill_on" else "0")
+            g.audit_summary = ("turned on" if action == "autofill_on" else "turned off") + " filling rounds in from the game"
+            flash("Rounds now fill themselves in when the race arrives from the game." if action == "autofill_on" else
+                  "Rounds no longer fill themselves in. Use Fill weekend from the game on the round page.", "success")
         return redirect(url_for("telemetry_page", token=ctx["token"]))
 
     @app.route("/api/career/<token>/weekend/<int:event_id>", methods=["POST"])
@@ -4809,6 +4822,7 @@ def register_routes(app):
                 if newly_complete:
                     conn.execute("UPDATE events SET submitted_at = COALESCE(submitted_at, ?) WHERE id = ?",
                                  (storage.now_iso(), event_id))
+                    autofill.clear(conn, event_id)
                 if result["complete"]:
                     completed_event = S.get_event(conn, event_id)
                     if engine.round_v3(conn, completed_event):

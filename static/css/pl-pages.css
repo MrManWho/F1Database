@@ -681,3 +681,20 @@ button { font-family: inherit; }
 /* Light theme: team codes and player names stay readable on white. */
 html[data-theme="light"] .team-card .code { color: var(--sub); }
 html[data-theme="light"] .is-player, html[data-theme="light"] a.is-player { color: color-mix(in srgb, var(--player, var(--blue)) 60%, #000); }
+
+/* 4.1.0: a round filled in from the game, waiting for one tap to approve */
+.af-card { border-left: 4px solid var(--good-line, var(--orange)); }
+.af-card.is-waiting { border-left-color: var(--warn-line, var(--orange)); }
+.af-card .af-head { display: flex; gap: .7rem; align-items: flex-start; margin-bottom: .4rem; }
+.af-card .af-head h3 { margin: 0; font-size: 1.05rem; }
+.af-card .af-head p { margin: .15rem 0 0; }
+.af-card .button-row { margin-top: .6rem; }
+.af-banner { display: flex; gap: .8rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .8rem; }
+.test-scenarios { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.test-scenario { display: flex; flex-direction: column; gap: .4rem; padding: .9rem; border: 1px solid var(--edge); border-radius: 10px; }
+.test-scenario h3 { margin: 0; font-size: 1rem; }
+.test-scenario p { margin: 0; flex: 1; }
+.test-scenario .btn { align-self: flex-start; }
+.test-league-list li { display: flex; gap: .6rem; justify-content: space-between; align-items: center; flex-wrap: wrap; padding: .55rem 0; border-bottom: 1px solid var(--edge); }
+.test-league-list li:last-child { border-bottom: 0; }
+.steps-list li { margin-bottom: .35rem; }

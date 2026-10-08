@@ -1,0 +1,7 @@
+{# 4.1.0: the site owner's pages under My account. Needs: here ('account' or 'tests'). #}
+{% if user and user.is_master %}
+<nav class="tabs" aria-label="Site owner">
+  <a class="tab {{ 'is-on' if here == 'account' }}" href="{{ url_for('accounts_page') }}" {% if here == 'account' %}aria-current="page"{% endif %}>My account</a>
+  <a class="tab {{ 'is-on' if here == 'tests' }}" href="{{ url_for('test_leagues_page') }}" {% if here == 'tests' %}aria-current="page"{% endif %}>Test leagues</a>
+</nav>
+{% endif %}
