@@ -59,12 +59,13 @@
           <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal" data-pace-q="comp" {{ 'hidden disabled' if not comp_ }}></label>
         {% endif %}
         <span class="pace-rh">Race time</span>
-        <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123" inputmode="decimal" data-race-time></label>
-        <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700" inputmode="decimal" data-bench-time></label>
+        <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123 or +12.345" inputmode="decimal" data-race-time></label>
+        <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700 or +12.345" inputmode="decimal" data-bench-time></label>
         <span class="pace-rh">Race laps</span>
         <label><span class="sr-only">Race laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
         <span class="small muted pace-note">Laps you finished in the race (not qualifying). Turns the gap into seconds a lap.</span>
       </div>
+      <p class="small muted pace-plus-hint">Race times as the game shows them: the winner's full time, and <b>+12.345</b> for anyone behind the winner.</p>
       <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
       <details class="small pace-gap-alt"><summary>Don't have both race times? Type the gap instead</summary>
         <label>Gap to them at the finish (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
@@ -112,7 +113,7 @@
       if (head && opt) head.textContent = opt.dataset.name || opt.textContent;
     });
   });
-  function secs(v) { v = (v || "").trim().replace(",", "."); if (!v) return null; var t = 0, parts = v.split(":");
+  function secs(v) { v = (v || "").trim().replace(",", ".").replace(/^\+/, ""); if (!v) return null; var t = 0, parts = v.split(":");
     for (var i = 0; i < parts.length; i++) { var n = parseFloat(parts[i]); if (isNaN(n)) return null; t = t * 60 + n; } return t; }
   document.querySelectorAll(".pace-form").forEach(function (f) {
     if (!fresh(f)) return;
@@ -121,6 +122,9 @@
     if (!a || !b || !out) return;
     function show() { var x = secs(a.value), y = secs(b.value);
       if (x === null || y === null) { out.textContent = ""; return; }
+      var pa = /^\s*\+/.test(a.value), pb = /^\s*\+/.test(b.value);
+      /* "+gap" is behind the winner, whose full time is in the other box (or both are gaps: compare them) */
+      if (pa && !pb) x = y + x; else if (pb && !pa) y = x + y;
       var gap = x - y, l = parseInt(laps.value, 10);
       out.textContent = "Gap: " + (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s (" + (gap >= 0 ? "behind" : "ahead") + ")" +
         (l > 0 ? ", " + (gap >= 0 ? "+" : "") + (gap / l).toFixed(2) + " s a lap" : ""); }

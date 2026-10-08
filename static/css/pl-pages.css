@@ -640,3 +640,6 @@ tr.shuffle-locked td { opacity: .7; }
 .shuffle-options label.track-tile { flex-direction: row; align-items: center; margin: 0; font-weight: 400; }
 .track-tile input[type=checkbox] { flex: 0 0 auto; width: auto; margin: 0; }
 .shuffle-options label.track-tile:has(input:checked) { border-color: var(--orange); }
+
+/* A wide results table (all session columns on a finished round) scrolls inside its card instead of running under the overview column. */
+@media (min-width: 651px) { .ws-main .table-wrap { overflow-x: auto; } }

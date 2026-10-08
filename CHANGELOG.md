@@ -14,19 +14,30 @@ _Released October 7, 2026_
 - **Home starts with one next action,** then the current weekend, your tasks, what the league is waiting on, the last race, the championship and your career.
 - **Each race weekend is one page with four steps:** Prepare, Sessions, Review & submit and Debrief. It opens on the step you need, and each session (Qualifying, Sprint, Race) has its own results, race times, weather and incidents.
 - **Save & continue never submits.** The bar at the bottom says whether your changes are saved, even when the connection drops. Review & submit lists anything that must be fixed with a **Fix** button, and pressing **Submit weekend** twice still submits once.
-- **Just type the two race times.** Enter your race time and your AI teammate's straight from the game's results screen and the site works out the gap. Each player who finished a tracked round enters their times, or ticks "Don't submit times".
+- **Just type the two race times.** Enter your race time and your AI teammate's (or any driver you compare with) straight from the game's results screen, just as it shows them: the winner's full time, or **+12.345** for anyone behind the winner. The site works out the gap. Each player who finished a tracked round enters their times, or ticks "Don't submit times".
 - **A track-aware AI recommendation.** Each round starts from what players really use at that circuit in F1 26, then learns from how your league races. It's fair to bad luck (DNFs and incidents never count as "too hard") and explains every step.
 - **One stewards' story per race** instead of a headline for every incident, and incidents now belong to the session they happened in.
 - **Your earlier seasons are kept under their own rules.** Things the old site never tracked are marked "Not tracked under this season's rules" and never count as missing. The first time you open your league, a short note explains where the new tracking begins.
 - **League Readiness Check** (Manage League): one page that tells the Race Master what needs attention before submitting a weekend, closing a season or starting the next one, and where to fix it.
-- **Results straight from the game.** Turn on **Telemetry import** and anyone in your league running the free telemetry recorder sends each session's results to the site. Open them in a round's **Import results**, check the preview and apply: positions, DNFs, fastest lap and the AI level fill in, and nothing is submitted until you do.
-- **Role permissions.** The Race Master chooses what Scorekeepers may do (Joining & roles → Role permissions), starting with importing telemetry and managing the league's upload link.
+- **Results straight from the game.** Turn on **Telemetry import** and anyone in your league running the free telemetry recorder sends each session's results to the site. **Fill weekend from the game** fills a whole round in one click: qualifying, the Sprint and the race, the fastest lap, the AI level, each session's weather and your race and qualifying times against your AI teammate. Times and weather you already entered are kept, and nothing is submitted until you do. Single sessions can still be checked one at a time in **Import results**.
+- **Role permissions.** The Race Master chooses what Scorekeepers may do (Joining & roles → Role permissions): import telemetry, manage the league's upload link, set race times and edit the calendar. Everyone can still see the calendar.
+- **A living calendar.** **Shuffle calendar** lets some races sit out a season while others come back, with a preview before anything changes. Only rounds that haven't been run move. Every circuit in the game is on the list, including Imola and the reverse layouts, each with its track map, and Qatar is no longer mistaken for Austin.
+- **Cars carry over between seasons.** A new season starts each car where last season left it, just like the game, with no random winter development. Old "Winter testing" stories are cleared away.
+- **Realistic team goals.** Points targets now match what each car can really score (Safe, Competitive and Ambitious), and are never more than the points still available. Every goal that wasn't settled yet is chosen again once, with a note on the Team goals page explaining why.
+- **News that matters.** News shows the stories worth reading from this season, without routine paddock chatter. Mark stories as read and they move to a Read tab, so Home only shows what you haven't seen.
+- **Clearer race weekend screens.** The race times form puts you and the driver you compare with side by side for qualifying and the race. The Paddock & lights out card shows who is ready at a glance, the "How the AI level is worked out" card is a short plain sum, and sessions stay tucked under Sessions until you open it.
+- **Fixing mixed-up results** (Paddock admin): **Match results to the grid** puts this season's results under the driver now in each car, and **Move results** can swap two drivers in a round they both raced. Both take a backup first.
 - **Link a login to any player driver** from Members & roles, and asking to join as a driver who's already on the grid hands you that driver.
 - **Forms bring you back to where you were,** say plainly when something didn't save and keep what you typed. Pages open two to four times faster.
 
 ### Fixed
+- Review & submit now shows the AI level you saved on the Race step instead of "Not tracked".
 - Older rounds no longer ask their press questions again, and Silly Season closes by itself once every deal is done (the 3.2.4–3.2.6 fixes, included).
 - Creating a league keeps everything you typed if it fails, and opens at the step with the problem.
+
+### Also new
+- **What's New** shows 4.0 on its own, with 3.x and older on a second tab.
+- The maintenance page now matches the new look.
 
 ### Nothing changed in
 - Your results, standings, Form, Reputation, relationships, contracts or offers. Your league is backed up automatically the first time 4.0 opens it.

@@ -70,6 +70,25 @@ def test_one_race_time_alone_is_refused_and_a_typed_gap_still_works(app, master_
     assert p["race_gap"] == 7.5 and p["race_time"] is None
 
 
+def test_a_plus_gap_behind_the_winner_works_like_the_game_shows_it(app, master_client):
+    """The game shows the winner's full time and "+gap" for everyone behind: either box takes either."""
+    token, one, ev = _league(master_client)
+    _pace(master_client, token, ev, one, race_time="27:58.361", bench_race_time="+12.5", laps="20")   # you won
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_gap"] == pytest.approx(-12.5) and p["bench_race_time"] == pytest.approx(1690.861)
+    _pace(master_client, token, ev, one, race_time="+3.250", bench_race_time="27:58.361", laps="20")   # they won
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_gap"] == pytest.approx(3.25) and p["race_time"] == pytest.approx(1681.611)
+    _pace(master_client, token, ev, one, race_time="+20.000", bench_race_time="+1:05.500", laps="20")  # both behind
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_gap"] == pytest.approx(-45.5) and p["race_time"] is None
+    res = _pace(master_client, token, ev, one, race_time="+4.0", laps="20")
+    assert "Enter both race times" in master_client.get(res.headers["Location"]).get_data(as_text=True)
+
+
 def test_the_evidence_uses_the_worked_out_gap(app, master_client):
     token, one, ev = _league(master_client)
     with storage.session(token) as conn:
