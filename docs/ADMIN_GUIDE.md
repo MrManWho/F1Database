@@ -2,6 +2,21 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## Calendar permissions (after 4.0.0)
+
+Everyone in a league (Race Master, Scorekeepers, members and spectators) can see the calendar under Seasons &
+Calendar, and anyone can download the .ics file. Only the Race Master changes it by default. Under League settings →
+Joining & roles → **Role permissions** the Race Master can let Scorekeepers:
+
+- **Set race times and mark rounds postponed** (the Race time step on a round, and the "Set a time" links on the
+  calendar). Saving a time still tells the league, as before.
+- **Edit the calendar**: rename rounds, change round order and Sprint weekends, add rounds, and remove rounds that
+  haven't run.
+
+Both are off by default. Historical correction mode, switching the current season and starting a new season stay
+with the Race Master. Members and spectators are always view only. The server checks each of these (`roles.GRANTS`
+keys `race_times` and `calendar_edit`), and changes show in the Activity Log.
+
 ## Telemetry import (after 4.0.0)
 
 Off by default, per league. Results can come straight from F1 25's UDP telemetry instead of being typed in.

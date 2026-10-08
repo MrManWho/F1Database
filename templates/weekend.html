@@ -201,9 +201,9 @@
   {% endcall %}
   {% endif %}
 
-  {# ---- Race Master: when the race is #}
-  {% if ctx.is_master and not ws.complete and hub %}
-  {% call sec('sec-racetime', 'Race time', 'done' if event.race_at else 'optional', summary=(event.race_at|race_time if event.race_at else 'Not scheduled: set one so the paddock opens by itself an hour before'), tag=('Postponed' if event.postponed else ''), who='Race Master', edit=true) %}
+  {# ---- Race Master (or a Scorekeeper they allow): when the race is #}
+  {% if ctx.perms.race_times and not ws.complete and hub %}
+  {% call sec('sec-racetime', 'Race time', 'done' if event.race_at else 'optional', summary=(event.race_at|race_time if event.race_at else 'Not scheduled: set one so the paddock opens by itself an hour before'), tag=('Postponed' if event.postponed else ''), who=('Race Master' if ctx.is_master else 'Scorekeeper'), edit=true) %}
   <form method="post" action="{{ url_for('race_time', token=ctx.token, event_id=event.id) }}" class="inline-form race-time-form" id="race-time">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Race time ({{ ctx.timezone.replace('_', ' ') }})<input type="datetime-local" name="race_at" value="{{ event.race_at|time_input }}"></label>
