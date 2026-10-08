@@ -72,6 +72,57 @@ def parse_race_entry(value):
     return parse_time(text), False
 
 
+def race_box(seconds, winner=None):
+    """A saved race time as the game's results screen shows it: the winner's full time, "+gap" for anyone behind."""
+    if seconds is None:
+        return ""
+    if winner is not None and seconds > winner + 0.0005:
+        return "+" + format_time(round(seconds - winner, 3))
+    return format_time(seconds)
+
+
+def _winner_table(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS race_winner_times (
+        event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        session TEXT NOT NULL, seconds REAL NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL,
+        PRIMARY KEY (event_id, session))""")
+
+
+def winner_time(conn, event_id, session="gp"):
+    """The round winner's race time (gp or sprint), shared by every player's +gap times; None if not entered."""
+    _winner_table(conn)
+    row = conn.execute("SELECT seconds FROM race_winner_times WHERE event_id = ? AND session = ?",
+                       (event_id, session)).fetchone()
+    return row[0] if row else None
+
+
+def save_winner_time(conn, event_id, session, value, username):
+    """Store (or, when blank, clear) the winner's race time. Times already saved as +gaps move with it."""
+    if session not in ("gp", "sprint"):
+        raise ValueError("Unknown session")
+    try:
+        seconds = parse_time(value)
+    except ValueError:
+        raise ValueError("The winner's race time looks like 1:32:45.123 (hours:minutes:seconds) or 27:58.361")
+    _winner_table(conn)
+    old = winner_time(conn, event_id, session)
+    if seconds is None:
+        conn.execute("DELETE FROM race_winner_times WHERE event_id = ? AND session = ?", (event_id, session))
+        return None
+    conn.execute("""INSERT INTO race_winner_times(event_id, session, seconds, updated_by, updated_at) VALUES(?,?,?,?,?)
+                    ON CONFLICT(event_id, session) DO UPDATE SET seconds = excluded.seconds,
+                    updated_by = excluded.updated_by, updated_at = excluded.updated_at""",
+                 (event_id, session, seconds, username, now_iso()))
+    if old is not None and abs(old - seconds) > 0.0005:
+        # a corrected winner's time: saved times keep their gap to the winner
+        # (both of a player's times move together, so the gap between them, the only thing scored, never changes)
+        shift = round(seconds - old, 3)
+        conn.execute("UPDATE pace_inputs SET race_time = ROUND(race_time + ?, 3), bench_race_time = "
+                     "ROUND(bench_race_time + ?, 3) WHERE event_id = ? AND session = ? AND race_time IS NOT NULL "
+                     "AND bench_race_time IS NOT NULL", (shift, shift, event_id, session))
+    return seconds
+
+
 def format_time(seconds):
     if seconds is None:
         return ""
@@ -106,25 +157,26 @@ def save_pace_input(conn, event_id, driver_id, session, form, username):
         bench_time, bench_plus = parse_race_entry(form.get("bench_race_time"))
     except ValueError:
         raise ValueError("Race times look like 1:32:45.123 (hours:minutes:seconds), or +12.345 behind the winner")
-    plus_gap = None
-    if race_plus and bench_plus:                     # both behind the winner: the gap is the difference of their gaps
-        plus_gap = round(race_time - bench_time, 3)
-        race_time = bench_time = None
-    elif race_plus and bench_time is not None:       # they won: the full time is theirs, yours is theirs plus your gap
-        race_time = round(bench_time + race_time, 3)
-    elif bench_plus and race_time is not None:       # you won
-        bench_time = round(race_time + bench_time, 3)
-    elif race_plus or bench_plus:
-        raise ValueError("Enter both race times (yours and theirs), or neither")
+    if race_plus or bench_plus:                      # "+gap" is behind the round winner
+        winner = winner_time(conn, event_id, session)
+        other = bench_time if race_plus else race_time
+        if winner is None and race_plus != bench_plus and other is not None:   # the other box is the winner's: share it
+            winner = save_winner_time(conn, event_id, session, format_time(other), username)
+        if winner is None and race_plus and bench_plus:
+            raise ValueError("Neither of you won, so enter the winner's race time at the top of Race times first")
+        if winner is None:
+            raise ValueError("Enter both race times (yours and theirs), or neither")
+        if race_plus:
+            race_time = round(winner + race_time, 3)
+        if bench_plus:
+            bench_time = round(winner + bench_time, 3)
     gap_text = (form.get("race_gap") or "").strip().replace(",", ".")
     try:
         gap = float(gap_text) if gap_text else None
         laps = int(form.get("laps")) if (form.get("laps") or "").strip() else None
     except ValueError:
         raise ValueError("The race gap is seconds (e.g. 12.4, or -3 if you finished ahead) and laps a whole number")
-    if plus_gap is not None:
-        gap = plus_gap
-    elif race_time is not None and bench_time is not None:
+    if race_time is not None and bench_time is not None:
         gap = round(race_time - bench_time, 3)       # 4.0: the site works the gap out (+ behind, - ahead)
     elif (race_time is None) != (bench_time is None):
         raise ValueError("Enter both race times (yours and theirs), or neither")

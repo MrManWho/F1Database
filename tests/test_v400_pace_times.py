@@ -84,9 +84,30 @@ def test_a_plus_gap_behind_the_winner_works_like_the_game_shows_it(app, master_c
     _pace(master_client, token, ev, one, race_time="+20.000", bench_race_time="+1:05.500", laps="20")  # both behind
     with storage.session(token) as conn:
         p = ai3.pace_input(conn, ev["id"], one)
-    assert p["race_gap"] == pytest.approx(-45.5) and p["race_time"] is None
+        assert ai3.winner_time(conn, ev["id"]) == pytest.approx(1678.361)    # shared from the first save
+        assert ai3.race_box(p["race_time"], ai3.winner_time(conn, ev["id"])) == "+20.000"
+    assert p["race_gap"] == pytest.approx(-45.5) and p["race_time"] == pytest.approx(1698.361)
     res = _pace(master_client, token, ev, one, race_time="+4.0", laps="20")
     assert "Enter both race times" in master_client.get(res.headers["Location"]).get_data(as_text=True)
+
+
+def test_the_winners_race_time_is_shared_and_both_players_can_be_behind(app, master_client):
+    token, one, ev = _league(master_client)
+    res = _pace(master_client, token, ev, one, race_time="+6.332", bench_race_time="+12.664", laps="20")
+    assert "enter the winner" in master_client.get(res.headers["Location"]).get_data(as_text=True)
+    master_client.post(f"/career/{token}/weekend/{ev['id']}/pace",
+                       data={"csrf_token": "tok", "session": "gp", "winner_time": "27:58.361"})
+    _pace(master_client, token, ev, one, race_time="+6.332", bench_race_time="+12.664", laps="20")
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_gap"] == pytest.approx(-6.332) and p["race_time"] == pytest.approx(1684.693)
+    page = master_client.get(f"/career/{token}/weekend/{ev['id']}?stage=sessions&session=r").get_data(as_text=True)
+    assert 'value="27:58.361"' in page and 'value="+6.332"' in page and 'value="+12.664"' in page
+    master_client.post(f"/career/{token}/weekend/{ev['id']}/pace",                  # a corrected winner's time
+                       data={"csrf_token": "tok", "session": "gp", "winner_time": "28:00.000"})
+    with storage.session(token) as conn:
+        p = ai3.pace_input(conn, ev["id"], one)
+    assert p["race_gap"] == pytest.approx(-6.332) and p["race_time"] == pytest.approx(1686.332)
 
 
 def test_the_evidence_uses_the_worked_out_gap(app, master_client):

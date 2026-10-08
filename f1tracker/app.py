@@ -2095,7 +2095,8 @@ def register_routes(app):
                 out.append({"row": r, "session": sess, "input": ai3.pace_input(conn, event["id"], r["driver_id"], sess)})
         return {"entries": out, "can_edit": ctx["can_run"] or ctx["is_master"], "flags": C.AI_FLAGS,
                 "drivers": [r for r in all_rows if not r["driver"]["is_player"]],
-                "fmt": ai3.format_time, "legacy": not tracking.round_tracked(conn, event, "race_times"),
+                "fmt": ai3.format_time, "race_box": ai3.race_box,
+                "winner": {sess: ai3.winner_time(conn, event["id"], sess) for sess in sessions}, "legacy": not tracking.round_tracked(conn, event, "race_times"),
                 "required": ai3.pace_required(conn) and tracking.round_tracked(conn, event, "race_times"),
                 "missing": ai3.missing_pace(conn, event, rows) if event["status"] != C.EVENT_COMPLETE else []}
 
@@ -3018,6 +3019,20 @@ def register_routes(app):
         ev = S.get_event(conn, event_id)
         if not ev or not engine.round_v3(conn, ev):
             abort(404)
+        sess = "sprint" if request.form.get("session") == "sprint" else "gp"
+        back = url_for("weekend", token=ctx["token"], event_id=event_id) + \
+            ("?stage=sessions&session=s#pace-sprint" if sess == "sprint" else "?stage=sessions&session=r#pace")
+        if "winner_time" in request.form:         # the round winner's race time, shared by every player's +gaps
+            try:
+                ai3.save_winner_time(conn, event_id, sess, request.form["winner_time"], g.user["username"])
+            except ValueError as exc:
+                raise ValidationError(str(exc))
+            if ev["status"] == C.EVENT_COMPLETE:
+                ai3.store(conn, event_id)
+            g.audit_summary = f"saved the winner's race time at {event_label(ev, S.get_season(conn, ev['season_id'])['year'])}"
+            g.audit_link = f"weekend/{event_id}"
+            flash("Winner's race time saved. Each player can now enter their times as +gaps.", "success")
+            return redirect(navigation.back(back, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
         try:
             driver_id = int(request.form.get("driver_id") or 0)
         except ValueError:
@@ -3041,10 +3056,7 @@ def register_routes(app):
         g.audit_link = f"weekend/{event_id}"
         flash("Race times saved. The AI recommendation uses them straight away.", "success")
         # 4.0: back to the session it was saved from (its stage and session are in the address it came from)
-        sess = "sprint" if request.form.get("session") == "sprint" else "gp"
-        default = url_for("weekend", token=ctx["token"], event_id=event_id) + \
-            ("?stage=sessions&session=s#pace-sprint" if sess == "sprint" else "?stage=sessions&session=r#pace")
-        return redirect(navigation.back(default, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
+        return redirect(navigation.back(back, ctx["token"], anchor="#pace-sprint" if sess == "sprint" else "#pace"))
 
     @app.route("/career/<token>/weekend/<int:event_id>/start", methods=["POST"])
     @career_page(ops_only=True)
@@ -4624,6 +4636,18 @@ def register_routes(app):
             weather.save(conn, event, form, g.user["username"])
             done.append("weather for " + ", ".join(weather.SESSIONS[k].lower() for k in added))
         if engine.round_v3(conn, event):
+            # the winner's race time, shared by every player's +gap times: P1's time in the game's race (or sprint)
+            for key, sess in (("race", "gp"), ("sprint", "sprint")):
+                ids = (data.get("sessions") or {}).get(key) if isinstance(data.get("sessions"), dict) else None
+                if not ids or ai3.winner_time(conn, event_id, sess) is not None:
+                    continue
+                ups = [u for u in (telemetry.get(conn, i) for i in ids[:6] if isinstance(i, int)) if u]
+                p1 = [r for u in ups if u["session"].get("kind") in ("race", "sprint_or_race") for r in u.get("results") or []
+                      if r.get("position") == 1 and r.get("status") == "Finished" and r.get("race_time_s")]
+                if p1:
+                    ai3.save_winner_time(conn, event_id, sess, ai3.format_time(round(p1[-1]["race_time_s"] + (p1[-1].get("penalty_s") or 0), 3)),
+                                         g.user["username"])
+                    done.append(("sprint" if sess == "sprint" else "race") + " winner's time")
             players = {r[0] for r in conn.execute("SELECT r.driver_id FROM results r JOIN drivers d ON d.id = r.driver_id "
                                                   "WHERE r.event_id = ? AND d.is_player = 1", (event_id,))}
             dmap = S.driver_map(conn)

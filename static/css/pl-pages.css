@@ -643,3 +643,7 @@ tr.shuffle-locked td { opacity: .7; }
 
 /* A wide results table (all session columns on a finished round) scrolls inside its card instead of running under the overview column. */
 @media (min-width: 651px) { .ws-main .table-wrap { overflow-x: auto; } }
+/* Race times: the winner's race time, shared by every player's +gaps */
+.pace-winner { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .8rem; margin: .6rem 0 1rem; }
+.pace-winner label { display: grid; gap: .25rem; flex: 1 1 260px; max-width: 420px; }
+.pace-winner > .small { flex-basis: 100%; }

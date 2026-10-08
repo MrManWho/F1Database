@@ -16,6 +16,16 @@
     Flag anything that made the session unrepresentative and it's left out or counts less.</p>
   {% if missing_ %}<div class="banner banner-warn" role="status"><b>Still needed before submitting:</b> race times for {% for n, s in missing_ %}{{ n }}{{ ' (' ~ s ~ ')' if not only_ }}{{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}
   {% if wx and wx.wet %}<p class="small">🌧️ This round's weather is recorded as wet or changing. If it made a player's session unrepresentative, tick <em>Wet or changing conditions</em> for them below. Nothing is ticked for you.</p>{% endif %}
+  {% set wsess_ = only_ or 'gp' %}{% set winner_ = pace.winner[wsess_] if pace.winner else none %}
+  {% if pace.can_edit %}
+  <form method="post" action="{{ url_for('pace_save', token=ctx.token, event_id=event.id) }}" class="pace-winner">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="session" value="{{ wsess_ }}">
+    <label>Winner's race time <small class="muted">(P1's time on the game's results screen, shared by everyone)</small>
+      <input name="winner_time" value="{{ pace.fmt(winner_) if winner_ }}" placeholder="1:32:32.700" inputmode="decimal" data-winner-time></label>
+    <button class="btn btn-sm btn-ghost">Save winner's time</button>
+    <span class="small muted">Then anyone behind the winner types their time as <b>+12.345</b>, just like the game shows it.</span>
+  </form>
+  {% elif winner_ %}<p class="small muted">Winner's race time: <b>{{ pace.fmt(winner_) }}</b></p>{% endif %}
   {% if bare_ and entries_|length > 1 %}
   <div class="pace-tabs" role="tablist" aria-label="Player">
     {% for item in entries_ %}{% set p = item.input %}{% set miss_ = (item.row.driver.name, label_[item.session]) in pace.missing %}
@@ -59,13 +69,13 @@
           <input name="comp_quali_time" value="{{ pace.fmt(p.comp_quali_time) if p }}" placeholder="1:23.123" inputmode="decimal" data-pace-q="comp" {{ 'hidden disabled' if not comp_ }}></label>
         {% endif %}
         <span class="pace-rh">Race time</span>
-        <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.fmt(p.race_time) if p and p.race_time }}" placeholder="1:32:45.123 or +12.345" inputmode="decimal" data-race-time></label>
-        <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.fmt(p.bench_race_time) if p and p.bench_race_time }}" placeholder="1:32:32.700 or +12.345" inputmode="decimal" data-bench-time></label>
+        <label><span class="sr-only">{{ r.driver.name }}'s race time</span><input name="race_time" value="{{ pace.race_box(p.race_time, pace.winner[item.session]) if p and p.race_time }}" placeholder="1:32:45.123 or +12.345" inputmode="decimal" data-race-time></label>
+        <label><span class="sr-only">Their race time</span><input name="bench_race_time" value="{{ pace.race_box(p.bench_race_time, pace.winner[item.session]) if p and p.bench_race_time }}" placeholder="1:32:32.700 or +12.345" inputmode="decimal" data-bench-time></label>
         <span class="pace-rh">Race laps</span>
         <label><span class="sr-only">Race laps {{ r.driver.name }} completed</span><input name="laps" type="number" min="1" max="200" value="{{ p.laps if p and p.laps }}" placeholder="e.g. 57"></label>
         <span class="small muted pace-note">Laps you finished in the race (not qualifying). Turns the gap into seconds a lap.</span>
       </div>
-      <p class="small muted pace-plus-hint">Race times as the game shows them: the winner's full time, and <b>+12.345</b> for anyone behind the winner.</p>
+      <p class="small muted pace-plus-hint">Race times as the game shows them: the winner's full time, and <b>+12.345</b> for anyone behind the winner (fill in the winner's race time above if neither of you won).</p>
       <p class="small muted gap-preview" data-gap-preview aria-live="polite"></p>
       <details class="small pace-gap-alt"><summary>Don't have both race times? Type the gap instead</summary>
         <label>Gap to them at the finish (seconds) <input name="race_gap" value="{{ p.race_gap if p and p.race_gap is not none and not p.race_time }}" placeholder="+12.4 behind, -3 ahead" inputmode="decimal"></label>
@@ -123,12 +133,15 @@
     function show() { var x = secs(a.value), y = secs(b.value);
       if (x === null || y === null) { out.textContent = ""; return; }
       var pa = /^\s*\+/.test(a.value), pb = /^\s*\+/.test(b.value);
-      /* "+gap" is behind the winner, whose full time is in the other box (or both are gaps: compare them) */
-      if (pa && !pb) x = y + x; else if (pb && !pa) y = x + y;
+      /* "+gap" is behind the winner: the shared winner's time above, else the full time in the other box */
+      var wt = win ? secs(win.value) : null;
+      if (pa && pb) { if (wt === null) { out.textContent = "Neither of you won: fill in the winner's race time above."; return; } }
+      else if (pa) x = (wt !== null ? wt : y) + x; else if (pb) y = (wt !== null ? wt : x) + y;
       var gap = x - y, l = parseInt(laps.value, 10);
       out.textContent = "Gap: " + (gap >= 0 ? "+" : "") + gap.toFixed(3) + " s (" + (gap >= 0 ? "behind" : "ahead") + ")" +
         (l > 0 ? ", " + (gap >= 0 ? "+" : "") + (gap / l).toFixed(2) + " s a lap" : ""); }
-    [a, b, laps].forEach(function (el) { el.addEventListener("input", show); }); show();
+    var card = f.closest(".pace-card"), win = card && card.querySelector("[data-winner-time]");
+    [a, b, laps, win].forEach(function (el) { if (el) el.addEventListener("input", show); }); show();
   });
 })();
 </script>
