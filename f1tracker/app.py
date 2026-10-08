@@ -3991,8 +3991,30 @@ def register_routes(app):
                 move = S.results_transfer_preview(conn, src, dst, sid)
             except ValidationError as exc:
                 flash(str(exc), "error")
+        align = None
+        if request.args.get("align"):
+            try:
+                align = S.align_results_preview(conn, sid)
+            except ValidationError as exc:
+                flash(str(exc), "error")
         return page("paddock.html", ctx, all_drivers=all_drivers, all_teams=all_teams,
-                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid), move=move)
+                    ratings=S.car_ratings(conn, sid), season=S.get_season(conn, sid), move=move, align=align)
+
+    @app.route("/career/<token>/paddock/align-results", methods=["POST"])
+    @career_page(master_only=True)
+    def paddock_align_results(conn, ctx):
+        sid = ctx["current_season_id"]
+        if request.form.get("confirm", "").strip().upper() != "MATCH":
+            raise ValidationError("Type MATCH to confirm")
+        storage.auto_backup(ctx["token"], "before-matching-results", force=True)
+        done = S.align_results(conn, sid)
+        moved = sum(len(r["changes"]) for r in done["rounds"])
+        g.audit_summary = (f"matched {moved} result(s) in "
+                           + ", ".join(f"R{r['event']['round_number']}" for r in done["rounds"])
+                           + " to the drivers now in those cars")
+        flash(f"Re-filed {moved} result(s) under the drivers now in those cars. Standings, Form and Reputation are "
+              "recalculated. A backup was made first (Backups & data).", "success")
+        return redirect(url_for("paddock_admin", token=ctx["token"]))
 
     @app.route("/career/<token>/paddock/move-results", methods=["POST"])
     @career_page(master_only=True)
@@ -4004,13 +4026,24 @@ def register_routes(app):
             raise ValidationError(f"Type {preview['to']['name']} exactly to confirm")
         storage.auto_backup(ctx["token"], "before-moving-results", force=True)
         done = S.transfer_results(conn, src, dst, sid, request.form.getlist("event_id"),
-                                  swap_seats=bool(request.form.get("swap_seats")))
-        g.audit_summary = (f"moved {done['from']['name']}'s results in "
-                           + ", ".join(f"R{r}" for r in done["rounds"]) + f" ({done['points']} pts) to {done['to']['name']}"
-                           + (" and swapped their seats" if request.form.get("swap_seats") else ""))
+                                  swap_seats=bool(request.form.get("swap_seats")),
+                                  swap_event_ids=request.form.getlist("swap_event_id"))
+        rounds = lambda rs: ", ".join(f"R{r}" for r in rs)  # noqa: E731
+        parts = []
+        if done["rounds"]:
+            parts.append(f"moved {done['from']['name']}'s results in {rounds(done['rounds'])} ({done['points']} pts) "
+                         f"to {done['to']['name']}")
+        if done["swapped"]:
+            parts.append(f"swapped {done['from']['name']}'s and {done['to']['name']}'s results in {rounds(done['swapped'])}")
+        g.audit_summary = "; ".join(parts) + (" and swapped their seats" if request.form.get("swap_seats") else "")
         g.audit_link = f"driver/{dst}"
-        flash(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
-              f"{done['to']['name']}. Standings, Form and Reputation are recalculated. A backup was made first "
+        msg = []
+        if done["rounds"]:
+            msg.append(f"Moved {done['moved']} round(s) and {done['points']} points from {done['from']['name']} to "
+                       f"{done['to']['name']}.")
+        if done["swapped"]:
+            msg.append(f"Swapped their results in {rounds(done['swapped'])}.")
+        flash(" ".join(msg) + " Standings, Form and Reputation are recalculated. A backup was made first "
               "(Backups & data).", "success")
         return redirect(url_for("paddock_admin", token=ctx["token"]))
 
