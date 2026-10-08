@@ -67,3 +67,15 @@ def test_clear_removes_the_race_time(app, master_client):
         assert not S.get_event(conn, ev["id"])["race_at"]
     page = master_client.get(f"/career/{token}/weekend/{ev['id']}?stage=prepare").get_data(as_text=True)
     assert 'name="clear" value="1"' not in page   # nothing to clear any more
+
+
+def test_submit_summary_carries_the_saved_ai_level(db):
+    # Review's "What will be submitted" is refilled from this after saving, so the AI level typed in shows there.
+    from conftest import run_event
+    ev = S.events(db, S.current_season_id(db))[0]
+    run_event(db, ev, complete=False)
+    sm = S.submission_check(db, ev["id"])["summary"]
+    assert sm["ai_difficulty"] is None and sm["ai_untracked"] is False
+    run_event(db, ev, difficulty=87, complete=False)
+    sm = S.submission_check(db, ev["id"])["summary"]
+    assert sm["ai_difficulty"] == 87 and S.get_event(db, ev["id"])["ai_difficulty"] == 87

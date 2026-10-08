@@ -560,21 +560,21 @@
     </div>
   </section>
 
-  <section class="card ws-summary-card">
+  <section class="card ws-summary-card" data-submit-summary>
     <div class="card-head"><h2>What will be submitted</h2><span class="muted small">{{ 'Sprint weekend' if sm.sprint else 'Standard weekend' }}</span></div>
     <dl class="submit-summary">
-      <div><dt>Pole</dt><dd>{{ sm.pole or '—' }}</dd></div>
-      {% if sm.sprint %}<div><dt>Sprint winner</dt><dd>{{ sm.sprint_winner or '—' }}</dd></div>{% endif %}
-      <div><dt>Grand Prix winner</dt><dd>{{ sm.winner or '—' }}</dd></div>
-      <div><dt>Podium</dt><dd>{{ sm.podium|join(', ') or '—' }}</dd></div>
-      <div><dt>DNF / DNS / DSQ</dt><dd>{{ sm.out.DNF|join(', ') or '—' }} / {{ sm.out.DNS|join(', ') or '—' }} / {{ sm.out.DSQ|join(', ') or '—' }}</dd></div>
-      <div><dt>Fastest Lap</dt><dd>{{ sm.fastest_lap or '—' }}</dd></div>
-      <div><dt>Driver of the Day</dt><dd>{{ sm.dotd or '—' }}</dd></div>
-      <div><dt>AI used</dt><dd>{{ sm.ai_difficulty if sm.ai_difficulty is not none else 'Not tracked' }}</dd></div>
+      <div><dt>Pole</dt><dd data-sm="pole">{{ sm.pole or '—' }}</dd></div>
+      {% if sm.sprint %}<div><dt>Sprint winner</dt><dd data-sm="sprint_winner">{{ sm.sprint_winner or '—' }}</dd></div>{% endif %}
+      <div><dt>Grand Prix winner</dt><dd data-sm="winner">{{ sm.winner or '—' }}</dd></div>
+      <div><dt>Podium</dt><dd data-sm="podium">{{ sm.podium|join(', ') or '—' }}</dd></div>
+      <div><dt>DNF / DNS / DSQ</dt><dd data-sm="out">{{ sm.out.DNF|join(', ') or '—' }} / {{ sm.out.DNS|join(', ') or '—' }} / {{ sm.out.DSQ|join(', ') or '—' }}</dd></div>
+      <div><dt>Fastest Lap</dt><dd data-sm="fastest_lap">{{ sm.fastest_lap or '—' }}</dd></div>
+      <div><dt>Driver of the Day</dt><dd data-sm="dotd">{{ sm.dotd or '—' }}</dd></div>
+      <div><dt>AI used</dt><dd data-sm="ai">{{ sm.ai_difficulty if sm.ai_difficulty is not none else ('Not tracked' if sm.ai_untracked else 'Not entered yet') }}</dd></div>
     </dl>
     {% if sm.players %}<h3 class="mini-head">Player results</h3>
     <table class="data-table compact review-players"><thead><tr><th>Driver</th><th>Quali</th>{% if sm.sprint %}<th>Sprint</th>{% endif %}<th>Race</th><th class="num">Points</th></tr></thead>
-      <tbody>{% for p in sm.players %}<tr class="player-row"><td><b>{{ p.name }}</b></td><td>{{ 'P' ~ p.quali if p.quali else '—' }}</td>{% if sm.sprint %}<td>{{ p.sprint or '—' }}</td>{% endif %}<td>{{ p.race }}</td><td class="num">{{ p.points }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+      <tbody data-sm="players">{% for p in sm.players %}<tr class="player-row"><td><b>{{ p.name }}</b></td><td>{{ 'P' ~ p.quali if p.quali else '—' }}</td>{% if sm.sprint %}<td>{{ p.sprint or '—' }}</td>{% endif %}<td>{{ p.race }}</td><td class="num">{{ p.points }}</td></tr>{% endfor %}</tbody></table>{% endif %}
     <h3 class="mini-head">Incidents &amp; penalties · {{ incidents|length }} recorded</h3>
     {% if incidents %}
     <ul class="plain-list small incident-summary">{% for i in incidents %}<li>{{ i.session_label }} · <b>{{ i.accused.name if i.accused else 'Unknown' }}</b>: {{ i.ruling_label if i.status != 'Open' else 'Under review' }}</li>{% endfor %}</ul>
