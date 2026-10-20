@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.1.3 · Back-to-back races from one online lobby
+_Released October 20, 2026_
+> Races run one after another in the same online lobby now each reach the site.
+
+### Highlights
+- **Every race in an online lobby is sent.** F1 26 can keep one session for a whole online lobby, so after the first race the telemetry recorder thought later races were the one it had already sent and skipped them. Recorder 0.9 starts a new session whenever the track or session changes, and the site no longer mixes up two races that share the game's session number.
+- **Missed races aren't lost.** Everything was still in the recorder's recording file. Press **Rebuild results...** in recorder 0.9, pick the recording and every race and qualifying in it is sent to the site.
+
+### Nothing changed in
+- Your results, standings or any calculation.
+
 ## 4.1.2 · The game fill notice clears itself
 _Released October 20, 2026_
 > Review & submit no longer says the race hasn't started once it has.

@@ -2,6 +2,15 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.1.3: back-to-back races in one online lobby (October 20, 2026)
+
+- F1 26 online lobbies can keep one `sessionUID` across events (seen 2026-10-19: Suzuka race then Bahrain race under
+  one id, and a Bahrain qualifying reusing an earlier session's id). `telemetry.store` now replaces an earlier copy
+  only when the session id, session type **and track** all match, so a later race never overwrites an earlier one.
+- Recorder 0.9 starts a new session (and a new recording file) when the Session packet's track or session type
+  changes, or when a session starts after the current one's results were saved. Rebuilding a recording that holds
+  several events now writes and sends each one, named by the time it was recorded.
+
 ## 4.1.2: the game fill notice clears itself (October 20, 2026)
 
 - A race that arrives while the round can't be filled in yet is saved as `autofill_<event_id>` with status `waiting`.
