@@ -407,3 +407,5 @@ def test_game_data_stays_linked_to_its_round(master_client, app):
     assert "Race: race times" not in page and "Race: weather through the session" in page
     with storage.session(token) as conn:
         assert conn.execute("SELECT used_event_id FROM telemetry_uploads WHERE id = ?", (race,)).fetchone()[0] == ev["id"]
+    # An online lobby keeps one session id from race to race: the next track's race is its own upload, not a copy.
+    assert send("r1", 16, track="Nowhere") != race

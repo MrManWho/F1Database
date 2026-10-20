@@ -158,8 +158,9 @@ def store(conn, payload):
     sess = data["session"]
     row = None
     if data["session_uid"]:
-        row = conn.execute("SELECT id FROM telemetry_uploads WHERE session_uid = ? AND session_type_id IS ?",
-                           (data["session_uid"], sess["session_type_id"])).fetchone()
+        # An online lobby keeps one session id from race to race, so the track has to match too.
+        row = conn.execute("SELECT id FROM telemetry_uploads WHERE session_uid = ? AND session_type_id IS ? AND track IS ?",
+                           (data["session_uid"], sess["session_type_id"], sess["track"])).fetchone()
     values = (now_iso(), data["session_uid"], sess["session_type_id"], sess["track"], sess["session_type"],
               len(data["results"]), json.dumps(data, ensure_ascii=False), json.dumps(payload, ensure_ascii=False),
               _text(payload.get("recorder"), 60))
