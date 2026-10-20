@@ -165,13 +165,14 @@ def start_race(conn, event_id, username, is_master, note=""):
                                     ". Only the Race Master can start it anyway.")
         gates.bypass(conn, event_id, username, note)
     conn.execute("UPDATE events SET lights_at = ?, lights_by = ? WHERE id = ?", (now_iso(), username, event_id))
-    from . import teamlife
+    from . import autofill, teamlife
     teamlife.lock_unchosen(conn, event_id)          # anyone who didn't choose races for the Standard target
     label = f"R{event['round_number']} {event['name']}"
     feed.post(conn, event["season_id"], "paddock", f"Lights out at {label}!", "The race is under way.",
               f"weekend/{event_id}", ref=f"lights:{event_id}")
     feed.notify(conn, None, f"🚦 Lights out at {label}! Good luck out there.", f"weekend/{event_id}",
                 category="raceday", dedupe=f"lights:{event_id}")
+    autofill.after_start(conn, event_id)            # a race already in from the game is filled in now
     return gate
 
 

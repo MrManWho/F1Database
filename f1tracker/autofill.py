@@ -407,6 +407,45 @@ def state(conn, event_id):
     return data if isinstance(data, dict) else None
 
 
+def blocked(conn, event):
+    """Why a round can't be filled in from the game yet (None when it can)."""
+    from . import gates
+    from . import weekend as raceweek
+    why = raceweek.results_blocked(conn, event)
+    if not why and not event.get("lights_at"):
+        gate = gates.status(conn, event["id"], issue=False)
+        if gate.get("blocking"):
+            why = "This round can't start yet. Waiting on: " + gates.waiting_text(gate) + "."
+    return why
+
+
+def shown(conn, event):
+    """The state the round page shows. A "waiting" fill whose reason has gone (the race was started, or the round
+    was filled in by hand since) isn't shown: it would keep saying the race hasn't started."""
+    info = state(conn, event["id"])
+    if info and info.get("status") == "waiting" and not blocked(conn, event):
+        return None
+    return info
+
+
+def after_start(conn, event_id):
+    """Lights out: a race that arrived from the game while the round was waiting is filled in now (blanks only)."""
+    info = state(conn, event_id)
+    if not enabled(conn) or not info or info.get("status") != "waiting":
+        return None
+    event = S.get_event(conn, event_id)
+    conn.execute("SAVEPOINT autofill_start")
+    try:
+        out = run(conn, event)
+    except Exception:  # starting the race must never fail because of the game fill
+        conn.execute("ROLLBACK TO autofill_start")
+        out = None
+    conn.execute("RELEASE autofill_start")
+    if out is None:
+        clear(conn, event_id)
+    return out
+
+
 def clear(conn, event_id):
     conn.execute("DELETE FROM meta WHERE key = ?", (_meta_key(event_id),))
 
@@ -422,18 +461,13 @@ def is_final_session(event, upload):
 def run(conn, event, username=GAME_USER, notify=True):
     """Fill a round from its game sessions, mark it ready to approve and (once per race) alert the league.
     Returns the saved state, or None when there's nothing from the game for this round."""
-    from . import community, feed, gates
-    from . import weekend as raceweek
+    from . import community, feed
     if event["status"] == C.EVENT_COMPLETE:
         return None
     bundle = telemetry.for_round(conn, event)
     if not bundle:
         return None
-    why = raceweek.results_blocked(conn, event)
-    if not why and not event.get("lights_at"):
-        gate = gates.status(conn, event["id"], issue=False)
-        if gate.get("blocking"):
-            why = "This round can't start yet. Waiting on: " + gates.waiting_text(gate) + "."
+    why = blocked(conn, event)
     before = state(conn, event["id"])
     info = {"at": now_iso(), "race_id": (bundle.get("race") or {}).get("id"), "filled": [], "kept": [], "missing": [],
             "review": 0, "notes": [], "why": None}
