@@ -182,6 +182,26 @@
     });
   }
 
+  // 4.1.1: the round moving on (the paddock opening, lights out, results in) changes what this page should show,
+  // and moving between steps never reloads it. A light check on returning to the tab, on each step change and
+  // once a minute: when the stage has moved, save anything pending and reload.
+  const phaseUrl = layout && layout.dataset.phaseUrl;
+  let reloading = false;
+  function checkPhase() {
+    if (!phaseUrl || reloading || document.hidden || !window.fetch) return;
+    fetch(phaseUrl, { credentials: "same-origin", cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok || !d.phase || d.phase === layout.dataset.phase || reloading) return;
+      reloading = true;
+      flush().then(function (ok) { if (ok === false) { reloading = false; return; } location.reload(); },
+                   function () { reloading = false; });
+    }).catch(function () { /* offline: try again later */ });
+  }
+  if (phaseUrl) {
+    setInterval(checkPhase, 60000);
+    document.addEventListener("visibilitychange", checkPhase);
+    document.addEventListener("click", function (e) { if (e.target.closest("[data-stage-link], [data-ws-next], [data-ws-back]")) setTimeout(checkPhase, 300); });
+  }
+
   // Review: the checklist is the server's own, fetched again each time the stage opens (after saving).
   function where(text) {
     const m = text.toLowerCase();

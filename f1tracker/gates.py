@@ -86,7 +86,7 @@ def status(conn, event_id, issue=True, only_driver=None):
                 answered = len(pen["questions"]) - pen["open"]
                 items.append({"kind": "prerace", "done": pen["open"] == 0, "open": pen["open"],
                               "label": (f"Pre-race press ({answered}/{len(pen['questions'])} answered)"
-                                        if weekend.phase(event) == "paddock" else "Pre-race press (opens with the paddock)")})
+                                        if weekend.phase(event) == "paddock" else "Pre-race press (once the paddock opens)")})
         if check_targets:
             t = teamlife.target_for(conn, event_id, driver_id)
             offered = bool(t) or bool(teamlife.options_for(conn, event_id, driver_id))

@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.1.1 · The round page keeps up when the paddock opens
+_Released October 20, 2026_
+> An open round page now notices the paddock opening, and an empty Pre-race press card says who it's waiting on.
+
+### Highlights
+- **The round page refreshes itself when the paddock opens.** Moving between Prepare, Sessions and the other steps never reloads the page, so the pre-race questions could stay hidden until you refreshed. Now the page checks when you change step, come back to the tab or once a minute, and reloads on its own (saving anything you'd typed) as soon as the paddock opens or the race starts.
+- **Clearer Pre-race press before the paddock opens.** Until the paddock is open there's nothing to answer, and the card now says so plainly: it's waiting on the Scorekeeper or Race Master to open the paddock (or tells you when it opens by itself). Scorekeepers and the Race Master get an **Open the paddock** button right there in the card, or the reason it can't open yet.
+
+### Nothing changed in
+- Your results, standings or any calculation.
+
 ## 4.1.0 · Races fill themselves in from the game
 _Released October 8, 2026_
 > When the recorder sends the race, the round fills itself in and waits for one tap to approve.

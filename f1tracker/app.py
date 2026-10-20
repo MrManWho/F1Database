@@ -4894,6 +4894,15 @@ def register_routes(app):
             return jsonify(ok=False, error="League not found"), 404
         return jsonify(ok=True, **check)
 
+    @app.route("/api/career/<token>/weekend/<int:event_id>/phase")
+    @career_page()
+    def api_weekend_phase(conn, ctx, event_id):
+        """4.1.1: the round's stage, so an open round page notices the paddock opening (or lights out) and reloads."""
+        ev = S.get_event(conn, event_id)
+        if not ev:
+            abort(404)
+        return jsonify(ok=True, phase=raceweek.phase(ev))
+
     @app.route("/api/career/<token>/notifications")
     @career_page()
     def api_notifications(conn, ctx):

@@ -73,7 +73,7 @@
   {{ 'This round was filled in from the game.' if autofill_state.status == 'ready' else autofill_state.why }}</span>
   <a class="btn btn-sm btn-primary" href="{{ wk_url }}?stage=review#from-the-game" data-stage-link="review">Review and approve</a></div>
 {% endif %}
-<div class="ws-layout" data-stage-now="{{ ws.stage }}">
+<div class="ws-layout" data-stage-now="{{ ws.stage }}"{% if wk and wk.on and wk.phase in ('upcoming', 'paddock') %} data-phase="{{ wk.phase }}" data-phase-url="{{ url_for('api_weekend_phase', token=ctx.token, event_id=event.id) }}"{% endif %}>
 {# ============================================================== steps (left rail) #}
 <nav class="ws-rail" aria-label="This weekend">
   <div class="ws-rail-title">This weekend</div>
@@ -155,9 +155,10 @@
   {% if wk and wk.on and ctx.my_driver and not ctx.is_spectator %}{% set pen_ = wk.pen if wk.pen and wk.pen.questions else none %}
   {% set p_req = ctx.team_life.gates and ctx.team_life.gate_press %}
   {% set p_open = pen_ and wk.phase == 'paddock' and pen_.open %}
+  {% set p_wait = ('Opens once the round before it is complete' if not wk.is_next else 'Opens when you open the paddock: the media ask two questions' if ctx.can_run else 'Waiting on the ' ~ staff ~ ' to open the paddock') %}
   {% set p_state = 'done' if (pen_ and not pen_.open) else ('attention' if p_open and p_req else 'current' if p_open else 'upcoming' if wk.phase == 'upcoming' else 'locked') %}
   {% call sec('sec-interview', 'Pre-race press', p_state,
-      summary=(pen_.open ~ ' question' ~ ('s' if pen_.open != 1 else '') ~ ' waiting: answer before lights out' if p_open else 'Answered' if pen_ and not pen_.open else 'Opens with the paddock: the media ask two questions' if wk.phase == 'upcoming' else 'Pre-race press closed at lights out'),
+      summary=(pen_.open ~ ' question' ~ ('s' if pen_.open != 1 else '') ~ ' waiting: answer before lights out' if p_open else 'Answered' if pen_ and not pen_.open else p_wait if wk.phase == 'upcoming' else 'Pre-race press closed at lights out'),
       tag=('Required' if p_req else 'Optional'), who='You', open=p_open) %}
     {% if pen_ %}{% set pen = pen_ %}
     <div class="press-pen prerace" id="prerace">
@@ -176,7 +177,23 @@
       {% endfor %}
       </div>
     </div>
-    {% else %}<p class="muted small" id="prerace">{% if wk.phase == 'upcoming' %}The media ask two questions once the paddock opens. You answer them here before lights out.{% else %}There's no pre-race interview to answer for this round.{% endif %}</p>{% endif %}
+    {% elif wk.phase == 'upcoming' %}
+    <div class="prerace-wait" id="prerace">
+      {% if not wk.is_next %}<p class="muted small">This round's paddock opens once the round before it is complete. The media ask two questions then, and you answer them here before lights out.</p>
+      {% elif ctx.can_run %}
+      <p class="small">The questions appear here once the paddock is open{% if wk.opens_at %} (it opens by itself at <b>{{ wk.opens_at|stamp }}</b>){% endif %}. Every driver answers before lights out.</p>
+      {% if wk.can_open %}
+      <form method="post" action="{{ url_for('paddock_open', token=ctx.token, event_id=event.id) }}" class="button-row tight">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary btn-sm">🏁 Open the paddock</button>
+        <span class="muted small">Opens pre-race press for every driver and tells everyone.</span>
+      </form>
+      {% elif wk.why_not %}<p class="muted small">The paddock can't open yet: {{ wk.why_not }}.</p>{% endif %}
+      {% else %}
+      <p class="small"><b>Nothing to answer yet.</b> The media ask two questions once a {{ staff }} opens the paddock{% if wk.opens_at %}, or it opens by itself at <b>{{ wk.opens_at|stamp }}</b>{% endif %}. Ask them to open it when you're getting ready to race, then answer here before lights out.</p>
+      {% endif %}
+    </div>
+    {% else %}<p class="muted small" id="prerace">There's no pre-race interview to answer for this round.</p>{% endif %}
   {% endcall %}
   {% endif %}
 
