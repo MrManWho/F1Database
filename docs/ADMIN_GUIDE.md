@@ -2,6 +2,14 @@
 
 This is for site admins and Race Masters. The What's New screen and Help cover everyday use.
 
+## 4.1.2: the game fill notice clears itself (October 20, 2026)
+
+- A race that arrives while the round can't be filled in yet is saved as `autofill_<event_id>` with status `waiting`.
+  The round page now reads it through `autofill.shown`, which hides a `waiting` state once `autofill.blocked` has no
+  reason left (the race was started or the gate opened), so it never says "the race hasn't started" on a started
+  round. `weekend.start_race` calls `autofill.after_start`, which fills a waiting round in from the game straight away
+  (blanks only, in a savepoint so starting the race can't fail because of it). Tests: `tests/test_v412_autofill_waiting.py`.
+
 ## 4.1.0: rounds fill themselves in from the game, and Test leagues (October 8, 2026)
 
 - **Auto-fill** (`f1tracker/autofill.py`). After `telemetry.store` links an upload to its round, the upload route calls

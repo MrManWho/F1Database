@@ -3,6 +3,17 @@
 Every version of Paddock Legacy, newest first: what changed for the people using it. The same list is in the app under
 **account menu → What's new**. Hosting and admin notes are in the admin guide.
 
+## 4.1.2 · The game fill notice clears itself
+_Released October 20, 2026_
+> Review & submit no longer says the race hasn't started once it has.
+
+### Highlights
+- **No more stale "The race is in from the game" notice.** If the race arrived from the game before the round was started, Review & submit kept saying "The race hasn't started yet" even after the race was started and the results were in. The notice now goes away as soon as the race is started.
+- **Starting the race fills it in.** When the race is already in from the game, pressing **Start the race** fills the round in straight away (empty boxes only) and the round shows **Ready to approve**.
+
+### Nothing changed in
+- Your results, standings or any calculation.
+
 ## 4.1.0 · Races fill themselves in from the game
 _Released October 8, 2026_
 > When the recorder sends the race, the round fills itself in and waits for one tap to approve.

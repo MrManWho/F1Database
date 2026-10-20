@@ -2106,7 +2106,7 @@ def register_routes(app):
                     entrants=_entrants(conn, event_id, rows),
                     telemetry_uploads=(telemetry.recent(conn) if ctx["features"].get("telemetry") and ctx["can_run"]
                                        and ctx["perms"]["telemetry_import"] else None),
-                    autofill_state=(autofill.state(conn, event_id) if ctx["features"].get("telemetry") and ctx["can_run"]
+                    autofill_state=(autofill.shown(conn, event) if ctx["features"].get("telemetry") and ctx["can_run"]
                                     and event["status"] != C.EVENT_COMPLETE else None),
                     telemetry_round=(telemetry.round_summary(telemetry.for_round(conn, event))
                                      if ctx["features"].get("telemetry") and ctx["can_run"]
